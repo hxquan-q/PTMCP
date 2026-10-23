@@ -26,8 +26,9 @@ OAuth原型与guard可以在契约固定后并行；前端可用契约mock并行
 | --- | --- | --- |
 | T01-backend-baseline | 将既有公共设计/规则、工程/质量配置纳入可复现Git基线，保留视觉在制品/私有资产；分支提交推送 | 无；完整根检查、暂存差异/秘密与资产边界检查、远端SHA；[工作项](work-items/T01-backend-baseline.md) |
 | T01-a/b | 真实父子POM格式与依赖禁令正反例、三进程自动启动测试及构件版本证据 | 基线；validate负例、effective POM/tree、HTTP健康与业务未开放检查 |
-| T02-a | 纯Java十进制ID、方言命名空间与物理资源身份，不丢精度、不粗暴折叠大小写 | T01；值对象边界/相等性与后续适配序列化；[工作项](work-items/T02-a.md) |
-| T02-b/c | 登记表一致的稳定错误、纯领域错误；服务端身份/安全版本/Schema上下文，HTTP不能覆盖 | T02-a；补齐现行API已使用但遗漏登记的AUTHENTICATION_FAILED/SELF_PRIVILEGE_ESCALATION/CONNECTION_BUDGET_EXCEEDED，修正总体方案残留旧REST外壳；登记一致性、不可变性、边界/越权契约测试；REST的实际R仅在admin适配 |
+| T02-a | 纯Java正整数BIGINT身份、ASCII十进制解析/规范化，不丢精度 | T01；值对象边界/相等性；HTTP序列化另在适配层验收；[工作项](work-items/T02-a.md) |
+| T02-b | 登记表一致的稳定错误与纯领域错误，为REST/MCP适配预留同一符号契约 | T02-a；补齐现行API已使用但遗漏登记的AUTHENTICATION_FAILED/SELF_PRIVILEGE_ESCALATION/CONNECTION_BUDGET_EXCEEDED，修正总体方案残留旧REST外壳；登记一致性/错误可重试语义测试；实际R仅在admin适配 |
+| T02-c/d | 方言命名空间/物理资源身份与引号标识符；服务端身份/安全版本/Schema上下文，HTTP不能覆盖 | T02-a/b；不粗暴折叠大小写，跨源/跨schema/世代区分，不可变性、边界/越权契约测试 |
 | T03-a/b/c | 元库组织/登录适配、安全epoch/outbox、资源/授权/令牌/审计分表组迁移和仓储 | T02；MySQL8.4实库空库/升级、唯一键竞争、事务回滚与通用字段检查，不使用H2替代 |
 | T04-a/b | PAT哈希、一次展示/幂等不重放secret、寿命/撤销/平台绑定及个人接口 | T03、安全会话边界；API/跨用户跨平台/到期/竞争测试，不伪造身份以演示 |
 | T05-a/b/c | 方言词法与输入预算、单SELECT与递归只读、节点/函数/类型白名单 | T02；先反例再实现，写CTE/注释/多语句/未知节点/深度与解析任务预算 |

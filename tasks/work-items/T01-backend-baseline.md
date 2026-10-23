@@ -1,10 +1,10 @@
 # T01-backend-baseline：后端实施任务与可复现公共基线
 
 ID: T01-backend-baseline
-Status: in_progress
+Status: done
 Owner: coordinator
 Acceptance: not-required
-Verification: NOT_RUN
+Verification: PASS
 Updated: 2026-10-23
 
 ## 目标与边界
@@ -33,6 +33,8 @@ Git远端读取成功，origin/main仍为7315b2b。分段提交/推送尚待执�
 
 ## 交接
 
-当前聚焦：收敛只读调查、保存依赖拆分、审核公共基线后提交推送。T02-a为下一切片；真实业务、接口、OpenAPI、集成/安全/恢复/性能均未完成。私有29VQ资产已在G-12记录缺失，不妨碍推进不依赖它的实现，但最终不得将其记PASS。
+本项已完成：公共基线及任务计划提交cec14ae6dbcc2038202a233f0cc6300538da0959并推送至origin/xquan/feat-backend，git ls-remote返回同一SHA。远端提示仓库已迁移至hxquan-q/PTMCP，现有origin重定向推送成功；未改远端配置、未合入main、未发布。提交后仅 .impeccable、DESIGN.md、PRODUCT.md、docs/frontend/design、T17-sap-visual 为原有未跟踪在制品，均保留。此状态回填随下一切片提交。
+
+T02-a为下一切片；真实业务、接口、OpenAPI、集成/安全/恢复/性能均未完成。私有29VQ资产已在G-12记录缺失，不妨碍推进不依赖它的实现，但最终不得将其记PASS。
 
 Git身份沿用本机Windows Git既有配置，不伪造作者。用户已明确授权按部分提交和推送；未授权发布、生产操作、收费外部调用或真实业务数据读取。

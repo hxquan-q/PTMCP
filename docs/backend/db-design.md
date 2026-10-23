@@ -6,7 +6,7 @@
 
 一期元数据库固定 MySQL 8.4 / InnoDB / utf8mb4。连接、数据库会话和应用时钟统一 UTC，时间字段为 DATETIME(6)，API 使用 RFC3339 的 Z 时间；用户界面才转换 Asia/Taipei。禁止使用无时区本地时间计算到期。业务 MySQL / PostgreSQL 是被查询目标，不能混用为元库；本项目不分库分表，审计一期不分区。
 
-内部主键 BIGINT（分配算法由工程实现锁定），REST/MCP 中所有 ID 使用十进制字符串；request_id、事件 ID 使用 UUID 字符串 CHAR(36) ASCII。配置表有 version BIGINT NOT NULL DEFAULT 1、create_time/update_time DATETIME(6)、created_by/updated_by BIGINT；安全修改 version 乐观锁失败返回 409。所有新表名称、状态、长度以本文为迁移输入，迁移产物必须补上显式 CHECK、NOT NULL、索引名称与外键名称；不允许 ORM 自动改生产表。
+内部主键使用正整数有符号 BIGINT（1～9223372036854775807，分配算法由工程实现锁定），REST/MCP 中这些 ID 使用 ASCII 十进制字符串，禁止经过浮点数转换；输入前导零按数值规范化，0、符号、空白、非ASCII数字及溢出拒绝。common 的 ResourceId 已实现此内部值契约，不代表 HTTP 序列化或业务身份认证已实现；适配层必须显式输出十进制字符串而非直接序列化领域对象。request_id、事件 ID 使用 UUID 字符串 CHAR(36) ASCII。配置表有 version BIGINT NOT NULL DEFAULT 1、create_time/update_time DATETIME(6)、created_by/updated_by BIGINT；安全修改 version 乐观锁失败返回 409。所有新表名称、状态、长度以本文为迁移输入，迁移产物必须补上显式 CHECK、NOT NULL、索引名称与外键名称；不允许 ORM 自动改生产表。
 
 本文表格中 N 表示可空，未标 N 为非空；所有布尔值 TINYINT(1) 加 CHECK IN (0,1)。状态使用 VARCHAR + CHECK 集合而非 MySQL ENUM，便于受控迁移。标识符原文/规范值使用二进制排序规则，业务连接名称规则由方言适配决定，不依赖元库不区分大小写排序。密钥材料不进入数据库备份明文，所有密码/原 SQL 用 KMS 信封加密。
 
