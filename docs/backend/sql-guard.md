@@ -34,7 +34,7 @@ ptmcp-guard 为纯 Java 21 模块，依赖 common 与唯一 JSQLParser 5.4。入
 
 物理关系 ResourceRef=(datasourceId,catalog,schema,objectName,objectId,generation,objectVersion,snapshotVersion)。公开四元组是数据源/库/schema/对象名，内部再绑定世代和版本。MySQL catalog=database，schema空；PG catalog=database、schema必填。连接database只能等于资源上下文，禁止SQL跨database跳转；MySQL显式other_database.table即使同实例也需请求上下文/平台允许且一期默认拒绝跨database引用。PG三段database.schema.table若database不等当前连接拒绝；四段foreign server无支持。
 
-标识符保存raw、normalized、quoted；PG未引号标识符折小写，带引号按原样；MySQL按已采集lower_case_table_names与操作系统组合规则，不能在元库统一lower()后判同一表。quoted原文与Unicode编码不做不安全归一化。绑定只查当前已发布且未过期的快照；未知表/列、重复候选、快照过期均拒绝。系统关系先按显式/隐式名称拒绝，再做快照查找，不能因DB默认search_path解析成功就放行。
+标识符保存raw、normalized、quoted；内部ResourceIdentifier的raw指解码后的标识符拼写，而非含外层SQL引号/转义的token；normalized由方言producer/binder明确提供，common只原样保存并验证长度/编码，不凭quoted自动变换，也不据此签发可信上下文。AST保留词法引号信息以便安全重渲染。PG未引号标识符折小写，带引号按原样；MySQL按已采集lower_case_table_names与操作系统组合规则，不能在元库统一lower()后判同一表。quoted原文与Unicode编码不做不安全归一化。绑定只查当前已发布且未过期的快照；未知表/列、重复候选、快照过期均拒绝。系统关系先按显式/隐式名称拒绝，再做快照查找，不能因DB默认search_path解析成功就放行。
 
 系统命名空间拒绝至少包括：MySQL mysql/information_schema/performance_schema/sys；PG pg_catalog/information_schema/pg_toast/临时schema及保留pg_*命名空间。无schema的 pg_class/pg_authid 等系统目录也拒绝；PG pg_*关系/函数名默认保留，业务若误用须改名或单独ADR。错误响应不向无META用户泄露存在性。数据库超级用户/可改DDL的DBA属于受信边界，网关不能靠限定名对抗恶意DBA把合法表换成有副作用对象。
 

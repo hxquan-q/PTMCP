@@ -149,11 +149,26 @@ class ResourceKeyTest {
     }
 
     @Test
-    void canonicallyEquivalentUnicodeNamesStillHaveDifferentKeys() {
-        ResourceKey composed = new ResourceKey(NAMESPACE, "é");
-        ResourceKey decomposed = new ResourceKey(NAMESPACE, "e\u0301");
-
-        assertNotEquals(composed, decomposed);
+    void canonicallyEquivalentUnicodeNamesRemainDistinctInEveryNameComponent() {
+        assertNotEquals(new ResourceKey(NAMESPACE, "é"), new ResourceKey(NAMESPACE, "e\u0301"));
+        assertNotEquals(
+                new ResourceKey(
+                        new ResourceNamespace(
+                                new ResourceId(1), DatabaseEngine.POSTGRESQL, "é", "sales"),
+                        "orders"),
+                new ResourceKey(
+                        new ResourceNamespace(
+                                new ResourceId(1), DatabaseEngine.POSTGRESQL, "e\u0301", "sales"),
+                        "orders"));
+        assertNotEquals(
+                new ResourceKey(
+                        new ResourceNamespace(
+                                new ResourceId(1), DatabaseEngine.POSTGRESQL, "erp", "é"),
+                        "orders"),
+                new ResourceKey(
+                        new ResourceNamespace(
+                                new ResourceId(1), DatabaseEngine.POSTGRESQL, "erp", "e\u0301"),
+                        "orders"));
     }
 
     @Test
