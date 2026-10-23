@@ -16,6 +16,12 @@ rg '^Status:' tasks/work-items
 rg '^Status: (ready|in_progress|verifying|blocked)$' tasks/work-items
 ```
 
+## 并行实施 Prompt
+
+剩余工作的多窗口并发 Prompt 集见[parallel-prompts-20261024](parallel-prompts-20261024.md)：
+按 A→B→C→D 波次给出每切片独立 Prompt、写入范围、RED 要求与验收命令；每窗口只推自己的分支，
+协调者负责评审、cherry-pick、组合 `--all` 重验与推送。
+
 ## 直接给 Agent 的任务示例
 
 **实现**：“按仓库规范实现 T01 的最小依赖基线。自行调查、拆分工作项、实施并验证，保留现有未提交文档，交付可评审结果。”
