@@ -6,7 +6,7 @@ Java21 / Spring Boot4.1.2 / Maven3.9.9，版本由父POM和Wrapper固定。当�
 
 | 模块 | 当前内容 |
 | --- | --- |
-| ptmcp-common | 纯Java资源ID、精确方言命名空间/物理键、标识符与世代/版本引用；ErrorCode生成枚举和安全DomainException。均不代表已认证/授权上下文 |
+| ptmcp-common | 纯Java资源ID、精确方言命名空间/物理键、标识符与世代/版本引用；ErrorCode生成枚举与DomainException；单资源有效权限判定（Allow/Deny、时间窗、平台交集、nextBoundary）。均不代表已认证/授权上下文 |
 | ptmcp-guard | 纯Java词法预检（UTF-8预算、方言引号/注释/美元引用、多语句拒绝）与AST门禁（语句形状：非SELECT/递归CTE/INTO/锁/提示；表达式：函数白名单、CAST基础类型、系统命名空间；作用域：CTE/派生表/UNION 物理关系绑定；改写：外层行数上限收敛）；列绑定、限定名改写、预算未实现 |
 | ptmcp-persistence | [元库迁移基础](ptmcp-persistence/README.md)：三张安全表的Flyway资源及真实MySQL测试；三应用尚未依赖或自动执行迁移 |
 | ptmcp-admin | 管理后台启动应用，127.0.0.1:8080 |
