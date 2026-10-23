@@ -39,8 +39,16 @@ jobs:
           java-version: '21'
           cache: maven
           cache-dependency-path: 'ptmcp-parent/**/pom.xml'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Verify backend framework and module boundaries
         run: sh ./mvnw -B -ntp verify
+      # Only after a successful real build: copy its dependency cache read-only
+      # into a disposable repository, then prove the actual gates reject defects.
+      - name: Probe actual Maven quality gates in isolated copies
+        working-directory: .
+        run: python scripts/check_backend_quality.py --seed-repository "$HOME/.m2/repository" --timeout 180
   frontend-framework:
     runs-on: ubuntu-latest
     timeout-minutes: 10
