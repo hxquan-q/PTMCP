@@ -1,4 +1,4 @@
-"""Repository checks; --all also builds the backend and frontend frameworks."""
+"""Repository checks; --all also verifies projects and actual backend quality probes."""
 
 import argparse
 import os
@@ -18,26 +18,33 @@ CHECKS = (
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--all', dest='all_projects', action='store_true', help='Also run Maven verify and pnpm check; select the development environment first.')
+    parser.add_argument('--all', dest='all_projects', action='store_true', help='Also run Maven verify, isolated quality probes and pnpm check; select the development environment first.')
+    parser.add_argument('--maven-cache-seed', help='Optional read-only cache seed for isolated Maven probes; requires --all.')
     args = parser.parse_args()
+    if args.maven_cache_seed and not args.all_projects:
+        parser.error('--maven-cache-seed requires --all')
     for arguments in CHECKS:
         print(f"CHECK: {' '.join(arguments)}", flush=True)
         result = subprocess.run([sys.executable, "-B", *arguments], cwd=ROOT)
         if result.returncode:
             return result.returncode
     if args.all_projects:
+        probes = [sys.executable, '-B', str(ROOT / 'scripts/check_backend_quality.py')]
+        if args.maven_cache_seed:
+            probes.extend(['--seed-repository', args.maven_cache_seed])
         commands = (
             (['mvnw.cmd', '-B', '-ntp', 'verify'] if os.name == 'nt' else ['sh', './mvnw', '-B', '-ntp', 'verify'], ROOT / 'ptmcp-parent'),
+            (probes, ROOT),
             (['pnpm.cmd', 'check'] if os.name == 'nt' else ['pnpm', 'check'], ROOT / 'ptmcp-ui'),
         )
         for command, directory in commands:
-            if os.name == 'nt':
+            if os.name == 'nt' and command[0].lower().endswith('.cmd'):
                 command = [os.environ.get('COMSPEC', 'cmd.exe'), '/d', '/c', *command]
             print(f"CHECK: {directory.name}: {' '.join(command)}", flush=True)
             result = subprocess.run(command, cwd=directory)
             if result.returncode:
                 return result.returncode
-        print('PASS: repository and framework builds. Business implementation and verification remain separate.')
+        print('PASS: repository checks, backend verification/quality probes and frontend checks. Business implementation and verification remain separate.')
     else:
         print('PASS: repository documentation/workflow/configuration checks; use --all for actual framework builds.')
     return 0

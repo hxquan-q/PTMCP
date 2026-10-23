@@ -42,6 +42,6 @@ Linux/macOS使用 `sh ./mvnw`。可打包后使用 `java -jar ptmcp-admin/target
 .\mvnw.cmd dependency:tree
 ```
 
-validate阶段执行Spotless、Checkstyle、Enforcer，CI只检查不自动修改。稳定错误分配仅编辑config/quality/rest-error-codes.json，再在仓库根执行 `python scripts/generate_error_codes.py`；根检查拒绝生成枚举缺失/漂移，禁止手改生成物。MCP使用符号名，REST适配使用restCode业务码（不是HTTP状态），OAuth保持标准错误。已增加ResourceId/ErrorCode纯单元测试及三应用随机端口HTTP启动回归；其余业务/安全测试仍按切片补齐。领域异常没有raw-message/cause构造入口，边界必须按稳定码转换，不能直接序列化Throwable。值对象/领域异常单测不等于HTTP序列化、身份认证或业务流程通过，不能用框架构建成功证明这些能力完成。包名前缀暂用 local.ptmcp，正式发布前由组织确认。
+validate阶段执行Spotless、Checkstyle、Enforcer，CI只检查不自动修改。根 `python scripts/check.py --all` 同时执行实际Maven隔离门禁正反例；可选 `--maven-cache-seed D:/config/ptmcp/cache/maven` 只读复制现有缓存加速，未指定也不跳过探针。稳定错误分配仅编辑config/quality/rest-error-codes.json，再在仓库根执行 `python scripts/generate_error_codes.py`；根检查拒绝生成枚举缺失/漂移，禁止手改生成物。MCP使用符号名，REST适配使用restCode业务码（不是HTTP状态），OAuth保持标准错误。已增加ResourceId/ErrorCode纯单元测试及三应用随机端口HTTP启动回归；其余业务/安全测试仍按切片补齐。领域异常没有raw-message/cause构造入口，边界必须按稳定码转换，不能直接序列化Throwable。值对象/领域异常单测不等于HTTP序列化、身份认证或业务流程通过，不能用框架构建成功证明这些能力完成。包名前缀暂用 local.ptmcp，正式发布前由组织确认。
 
 总体方案、接口与安全合同见[文档导航](../docs/README.md)，环境和基础服务见[环境指南](../docs/ops/development-environment.md)。

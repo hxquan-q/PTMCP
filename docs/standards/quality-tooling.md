@@ -24,7 +24,7 @@
 
 父 POM 必须显式定义 `ptmcp.qualityRoot`：父工程在 `ptmcp-parent/` 时用 `${maven.multiModuleProjectDirectory}/../config/quality`，POM 就在仓库根时用 `${maven.multiModuleProjectDirectory}/config/quality`。Wrapper 的 `.mvn` 根、`-f` 和当前工作目录可能不同，M0 以实际目录和子模块继承验证，不能靠本机绝对路径或猜测相对根。
 
-以下命令已可在实际ptmcp-parent目录执行；全仓框架检查为 python scripts/check.py --all：
+以下命令已可在实际ptmcp-parent目录执行；全仓检查 `python scripts/check.py --all` 还在Maven verify后运行实际隔离门禁正反例，再检查前端，与CI相同。可选 `--maven-cache-seed <现成Maven仓库目录>` 仅只读复制种子到临时仓库以加速（例如本机D:/config/ptmcp/cache/maven），不改变检查范围、不写种子；未指定仍运行而非跳过。实际探针只在临时工程注入main/test格式、已规范通配import和common Spring边界反例，不修改项目源码/全局Maven缓存，不把下载失败或超时当拒绝通过。
 
 ```powershell
 # Maven Wrapper 就绪后，在实际父工程执行
@@ -69,7 +69,7 @@ p3c 文档对外键、分页 total 等给出通用规则；本项目是单元库
 
 `python scripts/check.py` 检查配置 XML/JSON、REST码段及生成的Java错误枚举一致性，CI自动使用同一入口。分配错误码只修改唯一JSON登记，再执行 `python scripts/generate_error_codes.py`；`--check` 与门禁只读，不自动修复漂移。生成器反例覆盖缺失/漂移、非法登记不写入和--check不覆盖；它不证明实际R<T>/MCP/OAuth错误映射已实现。真实 Java/前端工具探针结果登记在[本轮工作项](../../tasks/work-items/DEV-20261023-quality-standards.md)；它们只验证配置，不是产品构建。
 
-M0 必须在 T01/T03/T17 分别提供：父 POM 继承且故意错格式/通配导入使 CI 失败；Vue 错命名/Props 修改使 ESLint 失败且 Prettier 错格式使 CI 失败；真实元库 DDL 每表主键/时间字段断言及项目 SQL AST 规则；REST 序列化/错误映射契约。缺一项保持待验收，不用模板解析 PASS 代替。合入格式修复的重复 diff 与行为变更分开审查。
+T01-b已提供实际父子POM的隔离正反例入口 `python scripts/check_backend_quality.py`（可选--seed-repository/--timeout），并纳入CI及根--all；验证脚本的mock单测不替代实际Maven输出。解析器唯一性/Sa-Token的专用动态反例仍待T01后续片，不能因此勾选父T01。M0仍须在T01/T03/T17分别具备全部对应证据：父POM继承且故意错格式/通配导入使CI失败；Vue 错命名/Props 修改使 ESLint 失败且 Prettier 错格式使 CI 失败；真实元库 DDL 每表主键/时间字段断言及项目 SQL AST 规则；REST 序列化/错误映射契约。缺一项保持待验收，不用模板解析 PASS 代替。合入格式修复的重复 diff 与行为变更分开审查。
 
 来源补充：[Spotless Maven 文档](https://github.com/diffplug/spotless/blob/main/plugin-maven/README.md)、[google-java-format 1.28.0](https://github.com/google/google-java-format/tree/v1.28.0)、[Checkstyle](https://checkstyle.org/checks.html)、[eslint-plugin-vue 配置](https://eslint.vuejs.org/user-guide/)、[eslint-config-prettier](https://github.com/prettier/eslint-config-prettier)。
 
