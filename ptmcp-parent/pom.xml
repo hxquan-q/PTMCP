@@ -20,6 +20,7 @@
   </properties>
   <modules>
     <module>ptmcp-common</module>
+    <module>ptmcp-persistence</module>
     <module>ptmcp-guard</module>
     <module>ptmcp-admin</module>
     <module>ptmcp-authz</module>
