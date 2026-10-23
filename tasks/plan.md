@@ -30,9 +30,10 @@ OAuth原型与guard可以在契约固定后并行；前端可用契约mock并行
 | T02-b1/b2 | b1：登记源生成纯Java错误枚举并用门禁拒绝漂移；b2：领域异常与安全错误载体，为REST/MCP适配预留同一符号契约 | T02-a；b1补齐现行API已使用但遗漏登记的AUTHENTICATION_FAILED/SELF_PRIVILEGE_ESCALATION/CONNECTION_BUDGET_EXCEEDED，修正总体方案残留旧REST外壳；[b1工作项](work-items/T02-b1.md)、[b2工作项](work-items/T02-b2.md)；实际R、HTTP/Tool重试语义映射在适配层验收 |
 | T02-c1/c2 | 精确方言命名空间/物理键；显式raw/normalized/quoted标识符及世代/版本引用 | T02-a；[c1](work-items/T02-c1.md)/[c2](work-items/T02-c2.md)的值对象与名称诊断边界，不冒称已完成实库绑定/权限 |
 | T02-d | 服务端身份/安全版本/Schema可信上下文，HTTP不能覆盖 | T02-a/b/c；与实际认证/权威读取适配共同验收，不用可自由构造record假称已验证主体，不以纯单测替代Web越权反例 |
-| T03-a/b/c | 元库组织/登录适配、安全epoch/outbox、资源/授权/令牌/审计分表组迁移和仓储 | T02；MySQL8.4实库空库/升级、唯一键竞争、事务回滚与通用字段检查，不使用H2替代 |
+| T03-a1/a2 | a1：安全基础三表与Flyway实库边界；a2：受信元库变更+epoch/outbox原子事务 | T02-a/b；[a1工作项](work-items/T03-a1.md)，不等T02-d/全部业务才能验证独立元库基础，但不代勾父任务；真MySQL，不用H2 |
+| T03-b/c/d | 组织/登录适配、资源/授权/令牌/审计分表组迁移与仓储 | T02相关合同、T03-a；实库空库/升级、唯一/FK竞争、完整业务写事务/恢复与通用字段检查 |
 | T04-a/b | PAT哈希、一次展示/幂等不重放secret、寿命/撤销/平台绑定及个人接口 | T03、安全会话边界；API/跨用户跨平台/到期/竞争测试，不伪造身份以演示 |
-| T05-a/b/c | 方言词法与输入预算、单SELECT与递归只读、节点/函数/类型白名单 | T02；先反例再实现，写CTE/注释/多语句/未知节点/深度与解析任务预算 |
+| T05-a/b/c | a：UTF-8预算与方言词法/多语句拒绝；b：单SELECT+递归只读+节点/函数/类型白名单；c：预算与解析隔离任务 | T02；a已实施[工作项](work-items/T05-a.md)；b/c 待实现，先反例后实现，不以词法通过冒充只读 |
 | T06-a/b/c | CTE定义顺序、JOIN/派生表/UNION/相关子查询关系与列作用域绑定 | T05；R1六例分别核对，四反例无权拒绝且0业务连接 |
 | T07-a/b/c | 物理/列限定、星号展开、LIMIT/FETCH改写、final SQL复核与不可伪造ApprovedQuery | T06；双方言原SQL/final SQL结果等价、同名对象/歧义/系统关系拒绝 |
 | T08-a/b | 主体/继承/时间区间/Allow-Deny/平台交集与权限预览领域服务 | T03,T06；TC-ACL边界，未来Deny/自然到期、META与READ及schema-only token语义 |

@@ -37,7 +37,7 @@ Agent 的自然语言推理、prompt、模型凭证和工具选择都在系统�
 
 ## 3. 代码模块与依赖方向
 
-以下为完整计划目录；根目录目前已创建parent/common/guard/admin/authz/gateway和ptmcp-ui框架。只有标准启动类、基础健康检查、前端最小壳和依赖/质量配置；datasource/persistence/内部评测及业务逻辑尚未创建。
+以下为完整计划目录；根目录目前已创建parent/common/guard/admin/authz/gateway和ptmcp-ui框架。后续已逐片增加common资源/错误合同、persistence安全基础三表迁移与真实数据库测试，应用仍仅有标准启动/健康检查和前端最小壳；datasource/内部评测及业务认证、查询/管理接口尚未实现。
 
 ```text
 ptmcp-parent/

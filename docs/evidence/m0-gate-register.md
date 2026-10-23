@@ -14,7 +14,7 @@
 | G-08 | 宽行/驱动/内存 | 指定驱动、10MiB单格、Unicode/JSON/BLOB、批次/并发峰值 | NOT_RUN：输出限幅与测试库未建立 | 执行器/QA |
 | G-09 | 安全取消 | 在途任务与迟到取消时间线、rollback/evict、下一请求无误杀 | NOT_RUN：执行状态机未实现 | 执行器/QA |
 | G-10 | 审计持久性 | START前后杀进程、terminal/WAL重放、UNKNOWN、磁盘满 | NOT_RUN：审计通道未实现 | 后端/运维 |
-| G-11 | 元库迁移与恢复 | MySQL8.4 DDL、唯一键竞争、恢复后令牌作废 | NOT_RUN：迁移与部署产物未建立 | 数据/运维 |
+| G-11 | 元库迁移与恢复 | MySQL8.4 DDL、唯一键竞争、恢复后令牌作废 | PARTIAL：[T03-a1](../../tasks/work-items/T03-a1.md)安全三表V1已有真实MySQL边界候选；完整元库、写事务/令牌恢复和部署演练仍NOT_RUN，不以三表代替全域验收 | 数据/运维 |
 | G-12 | 私有29VQ与≥300回归 | fixture清单、参数渲染、预期、CI日志及脱敏证明 | BLOCKED：原始私有资产未提供 | 业务/QA |
 | G-13 | 四客户端矩阵 | WorkBuddy/Cursor/Claude Code/VS Code实际版本与流程记录 | NOT_RUN：不能由文档推断兼容 | 集成 |
 | G-14 | UI/权限委派 | 可运行页面、会话/CSRF、跨部门/跨资源、自授权拒绝 | NOT_RUN：UI/管理API未实现 | 前端/QA |
@@ -30,7 +30,7 @@
 | mcp-security | 0.1.14 | 待适配层契约与回归 |
 | JSQLParser | 5.4 | 历史jar SHA-256在原复现；新构建需重复锁定 |
 | HikariCP | 7.0.2 | 随Boot BOM，待驱动/取消验证 |
-| 业务库/元库驱动 | BOM解析的实际版本 | 待依赖锁定，不用历史pgJDBC探针版本冒充生产版本 |
+| 业务库/元库驱动 | BOM解析的实际版本 | 元库T03-a1定向记录Connector/J9.7.0、Flyway12.4.0；业务MySQL/PG与宽行/取消组合仍待冻结，不用元库或历史探针冒充业务通过 |
 | RuoYi / plus-ui | 本地参考6.X / 前端待引入 | 待tag/commit、许可与构建校验 |
 | MySQL / PG / Redis / Nginx | 8.4 / 18 / 待M0锁定 / 待M0锁定 | 待精确补丁和部署清单 |
 

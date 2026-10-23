@@ -1,6 +1,6 @@
 # 数据库详细设计
 
-版本：1.0-design · 2026-10-23 · 状态：待实现、待迁移验证。本文是设计契约，不是现有建表脚本。跨文档参数以 [总体方案](../总体方案.md) 为准。
+版本：1.0-design · 2026-10-23 · 状态：T03-a1已增加安全基础三表迁移，余表与完整事务/恢复仍待实现验证。本文为设计契约，实际迁移范围见[基础模块](../../ptmcp-parent/ptmcp-persistence/README.md)，不将全表格冒称已实现。跨文档参数以 [总体方案](../总体方案.md) 为准。
 
 ## 1. 存储边界与约定
 
@@ -16,7 +16,7 @@
 
 不可变快照/事件首次插入时两时间相同，禁止 `ON UPDATE` 自动改写历史；outbox 投递状态、审计 START→terminal 等允许状态变化的表只在合法状态迁移时更新 update_time，不能用它替代 occurred_at/started_at/published_at 等领域时间。OAuth 锁定标准 schema 的协议字段保留，补通用列须同步 JDBC/仓储映射和迁移测试。
 
-自有 Mapper/仓储/运维 SQL 禁止投影 SELECT * / t.*，保留 COUNT(*) 行数语义，禁止拼接用户值。迁移在 MySQL 8.4 测试实例断言每表主键/时间字段、命名/唯一索引和事务完整性；当前尚无迁移，不能声称已扫描通过。阿里手册采用及架构差异见[工程标准](../standards/quality-tooling.md)。外部业务源只读，不因本规范给接入库加字段或改名。
+自有 Mapper/仓储/运维 SQL 禁止投影 SELECT * / t.*，保留 COUNT(*) 行数语义，禁止拼接用户值。迁移在 MySQL 8.4 测试实例断言每表主键/时间字段、命名/唯一索引和事务完整性；当前仅sys_security_state/sys_security_event/security_consumer_cursor有版本化DDL和实库结构/约束测试；其余表及完整自有SQL AST扫描门禁未完成，不能以三表结果宣称全部通过。阿里手册采用及架构差异见[工程标准](../standards/quality-tooling.md)。外部业务源只读，不因本规范给接入库加字段或改名。
 
 ~~~mermaid
 erDiagram

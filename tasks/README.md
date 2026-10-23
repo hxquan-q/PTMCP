@@ -1,8 +1,8 @@
 # 研发任务与会话恢复
 
-[plan.md](plan.md) 说明产品实施顺序，[todo.md](todo.md) 保留 T01～T20 的稳定父 ID。当前业务任务尚未实施；不能因为本轮开发规范落地而勾选它们。
+[plan.md](plan.md) 说明产品实施顺序，[todo.md](todo.md) 保留 T01～T20 的稳定父 ID。后端已按依赖分片实施；子片通过不等于稳定父任务或业务里程碑已完成，勾选须覆盖相应完整验收。
 
-本机环境按[T01-env](work-items/T01-env.md)配置；根目录前后端框架见[T01-bootstrap](work-items/T01-bootstrap.md)。构建前先按[环境指南](../docs/ops/development-environment.md)选择工具。当前只搭框架，业务任务不因此完成。
+本机环境按[T01-env](work-items/T01-env.md)配置；根目录前后端框架见[T01-bootstrap](work-items/T01-bootstrap.md)。构建前先按[环境指南](../docs/ops/development-environment.md)选择工具。业务实现的依赖与顺序续接plan.md，状态和当前交接从工作项检索，不将框架或环境验证算作业务完成。
 
 ## 工作项
 

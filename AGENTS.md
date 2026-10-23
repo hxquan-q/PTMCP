@@ -4,7 +4,7 @@
 
 ## 当前事实
 
-PTMCP 是权限管控型问数 MCP 网关。根目录已有 [Spring Boot 框架](ptmcp-parent/README.md)与[Vue 框架](ptmcp-ui/README.md)，当前只搭框架和环境，没有业务接口、认证、SQL执行或业务页面。`Reference/` 是选型参考，不是产品源码。业务目标与候选依赖见[总体方案](docs/总体方案.md)，实际构建版本以工程POM/package/锁文件为准。
+PTMCP 是权限管控型问数 MCP 网关。根目录已有[后端工程](ptmcp-parent/README.md)与[Vue 框架](ptmcp-ui/README.md)；业务按[工作项](tasks/README.md)分片实施，能力与验证状态以工程说明、源码和工作项证据为准，框架构建不代表业务验收。`Reference/` 是选型参考，不是产品源码。业务目标与候选依赖见[总体方案](docs/总体方案.md)，实际构建版本以工程POM/package/锁文件为准。
 
 开发 Agent 负责调查、方案、拆分、实现、验证、评审、记录和反馈修复；用户负责目标、限制及必要决策。用户已要求实施时，完成必要调查后继续做到可验收结果；仅讨论、计划或评审时按该范围交付。
 
