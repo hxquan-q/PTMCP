@@ -1,0 +1,64 @@
+name: Repository quality
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  documentation-and-workflow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check documentation, workflow contracts and checker regressions
+        env:
+          AGENT_ARCHIVE_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+        run: python scripts/check.py
+  backend-framework:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ptmcp-parent
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: 'ptmcp-parent/**/pom.xml'
+      - name: Verify backend framework and module boundaries
+        run: sh ./mvnw -B -ntp verify
+  frontend-framework:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ptmcp-ui
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11.9.0'
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.1'
+          cache: pnpm
+          cache-dependency-path: ptmcp-ui/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm check

@@ -1,0 +1,12 @@
+/Reference
+__pycache__/
+*.pyc
+node_modules/
+config/dev/secrets/
+target/
+dist/
+.local/
+.playwright-mcp/
+.env
+.env.*
+!.env.example

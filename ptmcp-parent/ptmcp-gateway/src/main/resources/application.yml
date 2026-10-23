@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: ptmcp-gateway
+server:
+  address: 127.0.0.1
+  port: ${PTMCP_GATEWAY_PORT:8082}
+  error:
+    include-message: never
+    include-stacktrace: never
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

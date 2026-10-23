@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Merge into the real root POM build/plugins in M0, not only pluginManagement.
+     Define ptmcp.qualityRoot in that POM, pointing to repo/config/quality. -->
+<plugins>
+  <plugin>
+    <groupId>com.diffplug.spotless</groupId>
+    <artifactId>spotless-maven-plugin</artifactId>
+    <version>3.1.0</version>
+    <configuration>
+      <java>
+        <googleJavaFormat>
+          <version>1.28.0</version>
+          <style>AOSP</style>
+          <reorderImports>true</reorderImports>
+        </googleJavaFormat>
+      </java>
+    </configuration>
+    <executions>
+      <execution>
+        <id>format-check</id>
+        <phase>validate</phase>
+        <goals><goal>check</goal></goals>
+      </execution>
+    </executions>
+  </plugin>
+  <plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-checkstyle-plugin</artifactId>
+    <version>3.6.0</version>
+    <dependencies>
+      <dependency>
+        <groupId>com.puppycrawl.tools</groupId>
+        <artifactId>checkstyle</artifactId>
+        <version>10.26.1</version>
+      </dependency>
+    </dependencies>
+    <configuration>
+      <configLocation>${ptmcp.qualityRoot}/checkstyle.xml</configLocation>
+      <includeTestSourceDirectory>true</includeTestSourceDirectory>
+      <consoleOutput>true</consoleOutput>
+      <failOnViolation>true</failOnViolation>
+      <linkXRef>false</linkXRef>
+    </configuration>
+    <executions>
+      <execution>
+        <id>semantic-style-check</id>
+        <phase>validate</phase>
+        <goals><goal>check</goal></goals>
+      </execution>
+    </executions>
+  </plugin>
+</plugins>

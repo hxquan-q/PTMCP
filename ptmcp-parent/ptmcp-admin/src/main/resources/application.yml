@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: ptmcp-admin
+server:
+  address: 127.0.0.1
+  port: ${PTMCP_ADMIN_PORT:8080}
+  error:
+    include-message: never
+    include-stacktrace: never
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

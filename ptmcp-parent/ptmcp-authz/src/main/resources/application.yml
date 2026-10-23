@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: ptmcp-authz
+server:
+  address: 127.0.0.1
+  port: ${PTMCP_AUTHZ_PORT:8081}
+  error:
+    include-message: never
+    include-stacktrace: never
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

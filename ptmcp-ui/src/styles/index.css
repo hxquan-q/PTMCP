@@ -1,0 +1,18 @@
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'element-plus/dist/index.css' layer(components);
+@import 'tailwindcss/utilities.css' layer(utilities);
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body,
+#app {
+  min-height: 100%;
+  margin: 0;
+}
+body {
+  font-family: var(--el-font-family);
+}

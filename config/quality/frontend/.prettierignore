@@ -1,0 +1,7 @@
+node_modules/
+dist/
+coverage/
+pnpm-lock.yaml
+.eslintrc-auto-import.json
+auto-imports.d.ts
+components.d.ts
