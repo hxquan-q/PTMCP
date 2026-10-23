@@ -64,6 +64,8 @@ class SecuritySchemaMigrationTest {
                                     mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())
                             .locations("classpath:db/ptmcp-migration")
                             .initSql("SET time_zone = '+00:00'")
+                            // This class pins the V1 release unit; V2 head is covered separately.
+                            .target("1")
                             .cleanDisabled(true)
                             .baselineOnMigrate(false)
                             .load();
@@ -484,6 +486,7 @@ class SecuritySchemaMigrationTest {
                         .dataSource(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())
                         .locations("classpath:db/ptmcp-migration")
                         .table("unknown_schema_history")
+                        .target("1")
                         .cleanDisabled(true)
                         .baselineOnMigrate(false)
                         .load();
