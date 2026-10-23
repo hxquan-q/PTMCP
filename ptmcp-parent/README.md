@@ -1,12 +1,12 @@
 # PTMCP 后端框架
 
-Java21 / Spring Boot4.1.2 / Maven3.9.9，版本由父POM和Wrapper固定。当前为基础框架及逐片实施的纯Java契约：已增加ResourceId与单元测试，仍没有业务控制器、认证、数据库迁移或SQL执行实现。
+Java21 / Spring Boot4.1.2 / Maven3.9.9，版本由父POM和Wrapper固定。当前为基础框架及逐片实施的纯Java契约：已增加ResourceId与单元测试、生成的稳定错误枚举，仍没有业务控制器、认证、数据库迁移或SQL执行实现。
 
 ## 模块
 
 | 模块 | 当前内容 |
 | --- | --- |
-| ptmcp-common | 纯Java资源ID值契约（正整数BIGINT、ASCII十进制、无浮点精度损失）；其余领域合同待实现 |
+| ptmcp-common | 纯Java资源ID值契约；由唯一登记源生成的ErrorCode符号/REST业务码枚举；其余领域合同待实现 |
 | ptmcp-guard | 纯Java模块，锁定JSQLParser5.4；守门算法未实现 |
 | ptmcp-admin | 管理后台启动应用，127.0.0.1:8080 |
 | ptmcp-authz | 授权服务启动应用，127.0.0.1:8081；OAuth未实现 |
@@ -42,6 +42,6 @@ Linux/macOS使用 `sh ./mvnw`。可打包后使用 `java -jar ptmcp-admin/target
 .\mvnw.cmd dependency:tree
 ```
 
-validate阶段执行Spotless、Checkstyle、Enforcer，CI只检查不自动修改。已增加ResourceId纯单元测试；三应用启动测试和其余业务/安全测试仍按切片补齐。值对象单测不等于HTTP序列化、身份认证或业务流程通过，不能用框架构建成功证明这些能力完成。包名前缀暂用 local.ptmcp，正式发布前由组织确认。
+validate阶段执行Spotless、Checkstyle、Enforcer，CI只检查不自动修改。稳定错误分配仅编辑config/quality/rest-error-codes.json，再在仓库根执行 `python scripts/generate_error_codes.py`；根检查拒绝生成枚举缺失/漂移，禁止手改生成物。MCP使用符号名，REST适配使用restCode业务码（不是HTTP状态），OAuth保持标准错误。已增加ResourceId/ErrorCode纯单元测试及三应用随机端口HTTP启动回归；其余业务/安全测试仍按切片补齐。值对象单测不等于HTTP序列化、身份认证或业务流程通过，不能用框架构建成功证明这些能力完成。包名前缀暂用 local.ptmcp，正式发布前由组织确认。
 
 总体方案、接口与安全合同见[文档导航](../docs/README.md)，环境和基础服务见[环境指南](../docs/ops/development-environment.md)。

@@ -55,12 +55,26 @@ def validate_registry(registry: dict) -> list[str]:
     return errors
 
 
+def validate_generated_errors(root: Path, registry: dict) -> list[str]:
+    """Fail closed on missing/drifted compiled contracts; never regenerate in a gate."""
+    from generate_error_codes import JAVA_PATH, render_java
+
+    try:
+        if (root / JAVA_PATH).read_text(encoding='utf-8-sig') == render_java(registry):
+            return []
+    except (OSError, UnicodeError):
+        pass
+    return ['generated ErrorCode.java is missing or stale; run python scripts/generate_error_codes.py']
+
+
 def main() -> int:
     directory = ROOT / 'config/quality'
     errors = []
     try:
         registry = json.loads((directory / 'rest-error-codes.json').read_text(encoding='utf-8'))
         errors.extend(validate_registry(registry))
+        if not errors:
+            errors.extend(validate_generated_errors(ROOT, registry))
         for name, expected in (('checkstyle.xml', 'module'), ('java-plugins.xml', 'plugins')):
             if ET.parse(directory / name).getroot().tag != expected:
                 errors.append(f'invalid XML root: {name}')
@@ -70,7 +84,7 @@ def main() -> int:
         errors.append(str(exc))
     print(json.dumps({
         'status': 'FAIL' if errors else 'PASS', 'errors': errors,
-        'limits': 'Parses templates and validates error allocation; does not run Maven, ESLint, Prettier or ASVS verification.',
+        'limits': 'Parses templates, validates error allocation and generated enum consistency; does not run Maven, ESLint, Prettier or ASVS verification.',
     }, ensure_ascii=False, indent=2))
     return int(bool(errors))
 

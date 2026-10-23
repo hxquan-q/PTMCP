@@ -4,7 +4,7 @@
 
 | ID | 验证项 | 预期材料 | 当前状态/阻塞 | 责任角色 |
 | --- | --- | --- | --- | --- |
-| G-01 | 依赖收敛与三进程启动 | effective POM/tree、锁定依赖、自动配置/启动日志 | NOT_RUN：尚无PTMCP工程 | 后端 |
+| G-01 | 依赖收敛与三进程启动 | effective POM/tree、锁定依赖、自动配置/启动日志 | PARTIAL：框架effective POM/tree见[框架证据](framework-bootstrap-validation.md)，新增[三应用HTTP启动回归](../../tasks/work-items/T01-a.md)已组合verify；业务/安全依赖接入后仍须重验，T01-b正反例未完成 | 后端 |
 | G-02 | 关系/列作用域绑定 | 六例各自集合、列限定/相关子查询/双源同名fixture | NOT_RUN：仅有原版组件缺陷证据 | 内核 |
 | G-03 | SQL改写等价 | 原SQL/final_sql、列序/类型/结果比较与截断转换预期 | NOT_RUN：guard与测试库未建立 | 内核/QA |
 | G-04 | 单MySQL+PAT+ACL纵切 | 允许/拒绝、静态拒绝0业务连接、持久START/terminal | NOT_RUN：实现未建立 | 后端/QA |

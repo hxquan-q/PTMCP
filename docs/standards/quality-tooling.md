@@ -11,7 +11,7 @@
 | Vue 组件/Props/事件/模板 | [Vue 风格指南](https://cn.vuejs.org/style-guide/) | ESLint + eslint-plugin-vue；命名/Props 等在错误级别阻断 |
 | JS/TS/Vue 排版 | plus-ui Prettier 基线 | Prettier 独立执行；eslint-config-prettier 最后关闭冲突规则 |
 | MySQL 表与项目 SQL | p3c MySQL 章节与[数据库设计](../backend/db-design.md) | M0 接入迁移实库结构断言、SQL AST/Mapper 检查；当前无迁移/Mapper，未执行此门禁 |
-| REST/错误分段 | [API 契约](../backend/api-spec.md) | 当前校验码段/唯一性；M0 从登记生成/核对枚举、OpenAPI 与序列化契约测试 |
+| REST/错误分段 | [API 契约](../backend/api-spec.md) | 已校验码段/唯一性及从登记生成的纯Java ErrorCode一致性；OpenAPI、前端类型和实际协议序列化/映射仍待适配片测试 |
 | 提交与安全自查 | Conventional Commits / ASVS 5.0.0 | Git 规范及[ASVS 清单](../test/asvs-checklist.md)；格式器不替代安全验证 |
 
 代码格式由工具结果决定，人工/Agent 评审只处理正确性、边界、兼容和安全，不逐行讨论缩进、换行、引号或导入排序。禁止通过全局关闭规则、跳过检查或修改生成结果消除失败。
@@ -67,7 +67,7 @@ p3c 文档对外键、分页 total 等给出通用规则；本项目是单元库
 
 ## 当前门禁与 M0 接线验收
 
-`python scripts/check.py` 新增配置 XML/JSON 解析和 REST 码段检查，CI 自动使用同一入口。真实 Java/前端工具探针结果登记在[本轮工作项](../../tasks/work-items/DEV-20261023-quality-standards.md)；它们只验证配置，不是产品构建。
+`python scripts/check.py` 检查配置 XML/JSON、REST码段及生成的Java错误枚举一致性，CI自动使用同一入口。分配错误码只修改唯一JSON登记，再执行 `python scripts/generate_error_codes.py`；`--check` 与门禁只读，不自动修复漂移。生成器反例覆盖缺失/漂移、非法登记不写入和--check不覆盖；它不证明实际R<T>/MCP/OAuth错误映射已实现。真实 Java/前端工具探针结果登记在[本轮工作项](../../tasks/work-items/DEV-20261023-quality-standards.md)；它们只验证配置，不是产品构建。
 
 M0 必须在 T01/T03/T17 分别提供：父 POM 继承且故意错格式/通配导入使 CI 失败；Vue 错命名/Props 修改使 ESLint 失败且 Prettier 错格式使 CI 失败；真实元库 DDL 每表主键/时间字段断言及项目 SQL AST 规则；REST 序列化/错误映射契约。缺一项保持待验收，不用模板解析 PASS 代替。合入格式修复的重复 diff 与行为变更分开审查。
 
