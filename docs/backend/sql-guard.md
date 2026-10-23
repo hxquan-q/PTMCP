@@ -30,7 +30,7 @@ ptmcp-guard 为纯 Java 21 模块，依赖 common 与唯一 JSQLParser 5.4。入
 
 词法扫描是带状态机的单次扫描，区分字符串、方言引号、注释和转义；不靠正则把引号内的分号当多语句。拒NUL、非法编码、客户端命令\G、任何多语句；可接受一个最终终止分号后仅空白/普通注释，解析仍必须恰好一条Select。引号内出现危险词只是数据，不误判授权；/*!、/*+在引号外一律拒绝。拒sql_mode等影响解析语义的会话修改，MySQL执行配置的ANSI_QUOTES/NO_BACKSLASH_ESCAPES必须与lexer/parser方言一致并在连接借出核对。
 
-T05-a 已按此实现 `ptmcp-guard/lexing/SqlLexicalPolicy` 与 `LexicalPrecheck`，输出为 void 检查，**不表示只读/已批准**；方言事实（PG 18 `scan.l` 续接/嵌套注释、MySQL 8.4 普通注释不嵌套）已核对并留存证据。其余流水线阶段仍未实现。
+T05-a 已按此实现 `ptmcp-guard/lexing/SqlLexicalPolicy` 与 `LexicalPrecheck`，输出为 void 检查，**不表示只读/已批准**；方言事实（PG 18 `scan.l` 续接/嵌套注释、MySQL 8.4 普通注释不嵌套）已核对并留存证据。T05-b1 另行实现 `guard/ast/SqlStatementGate`：在真实 AST 上拒绝非SELECT/多语句/递归CTE/SELECT INTO/锁与提示，但**尚未实现表达式/函数/类型白名单**，因此函数级危险调用仍须后续阶段拒绝；预算/解析隔离、绑定与改写同样未完成。其余流水线阶段仍未实现。
 
 
 ## 3. 资源身份与标识符
