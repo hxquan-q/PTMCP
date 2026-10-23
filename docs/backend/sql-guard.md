@@ -1,6 +1,6 @@
 # SQL 守门、作用域绑定与改写详细设计
 
-版本：1.0-design · 2026-10-23 · 状态：安全扩展待实现，M0/M1 通过后逐条开放。JSQLParser是语法工具，不提供完整安全证明；本方案不沿用 TablesNamesFinder 作为 ACL。
+版本：1.0-design · 2026-10-23 · 状态：词法/输入预算子集已实施（T05-a，纯Java），AST/白名单/绑定/改写/ApprovedQuery 与执行器待实现；M0/M1 通过后逐条开放。JSQLParser是语法工具，不提供完整安全证明；本方案不沿用 TablesNamesFinder 作为 ACL。
 
 ## 1. 边界与处理顺序
 
@@ -29,6 +29,9 @@ ptmcp-guard 为纯 Java 21 模块，依赖 common 与唯一 JSQLParser 5.4。入
 | 未枚举Statement/SelectItem/FromItem/Expression/窗口frame节点 | 拒绝 | 新解析器版本新增节点不会自动放行 |
 
 词法扫描是带状态机的单次扫描，区分字符串、方言引号、注释和转义；不靠正则把引号内的分号当多语句。拒NUL、非法编码、客户端命令\G、任何多语句；可接受一个最终终止分号后仅空白/普通注释，解析仍必须恰好一条Select。引号内出现危险词只是数据，不误判授权；/*!、/*+在引号外一律拒绝。拒sql_mode等影响解析语义的会话修改，MySQL执行配置的ANSI_QUOTES/NO_BACKSLASH_ESCAPES必须与lexer/parser方言一致并在连接借出核对。
+
+T05-a 已按此实现 `ptmcp-guard/lexing/SqlLexicalPolicy` 与 `LexicalPrecheck`，输出为 void 检查，**不表示只读/已批准**；方言事实（PG 18 `scan.l` 续接/嵌套注释、MySQL 8.4 普通注释不嵌套）已核对并留存证据。其余流水线阶段仍未实现。
+
 
 ## 3. 资源身份与标识符
 
