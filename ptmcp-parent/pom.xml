@@ -25,6 +25,7 @@
     <module>ptmcp-admin</module>
     <module>ptmcp-authz</module>
     <module>ptmcp-gateway</module>
+    <module>ptmcp-datasource</module>
   </modules>
   <dependencyManagement>
     <dependencies>
