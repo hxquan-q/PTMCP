@@ -34,7 +34,7 @@ OAuth原型与guard可以在契约固定后并行；前端可用契约mock并行
 | T03-b/c/d | 组织/登录适配、资源/授权/令牌/审计分表组迁移与仓储 | T02相关合同、T03-a；实库空库/升级、唯一/FK竞争、完整业务写事务/恢复与通用字段检查 |
 | T04-a/b | PAT哈希、一次展示/幂等不重放secret、寿命/撤销/平台绑定及个人接口 | T03、安全会话边界；API/跨用户跨平台/到期/竞争测试，不伪造身份以演示 |
 | T05-a/b1/b2/c | a：UTF-8预算与方言词法；b1：单SELECT形状/递归CTE/INTO/锁拒绝；b2：表达式/函数/类型白名单与系统命名空间；c：预算/解析隔离任务 | T02；a已实施[工作项](work-items/T05-a.md)，b1/b2已实施[工作项](work-items/T05-b1.md)、[b2](work-items/T05-b2.md)；c 待实现，不以语句形状通过冒充只读或授权 |
-| T06-a/b/c | CTE定义顺序、JOIN/派生表/UNION/相关子查询关系与列作用域绑定 | T05；R1六例分别核对，四反例无权拒绝且0业务连接 |
+| T06-a/b/c | a：CTE定义顺序/派生表/UNION/相关子查询物理关系集合；b：列引用与`t.*`展开；c：歧义/相关列解析 | T05；a已实施[工作项](work-items/T06-a.md)，R1六例关系集合断言；b/c 待实现，越权拒绝与0业务连接随 T08/T10 验证 |
 | T07-a/b/c | 物理/列限定、星号展开、LIMIT/FETCH改写、final SQL复核与不可伪造ApprovedQuery | T06；双方言原SQL/final SQL结果等价、同名对象/歧义/系统关系拒绝 |
 | T08-a/b | 主体/继承/时间区间/Allow-Deny/平台交集与权限预览领域服务 | T03,T06；TC-ACL边界，未来Deny/自然到期、META与READ及schema-only token语义 |
 | T09-a/b/c | 最小START准入、terminal幂等持久、加密WAL恢复/UNKNOWN、原SQL信封与脱敏 | T03；kill进程、DB/WAL不可写、fsync/重放、日志泄漏测试与独立安全评审 |

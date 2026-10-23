@@ -30,7 +30,7 @@ ptmcp-guard 为纯 Java 21 模块，依赖 common 与唯一 JSQLParser 5.4。入
 
 词法扫描是带状态机的单次扫描，区分字符串、方言引号、注释和转义；不靠正则把引号内的分号当多语句。拒NUL、非法编码、客户端命令\G、任何多语句；可接受一个最终终止分号后仅空白/普通注释，解析仍必须恰好一条Select。引号内出现危险词只是数据，不误判授权；/*!、/*+在引号外一律拒绝。拒sql_mode等影响解析语义的会话修改，MySQL执行配置的ANSI_QUOTES/NO_BACKSLASH_ESCAPES必须与lexer/parser方言一致并在连接借出核对。
 
-T05-a 已按此实现 `ptmcp-guard/lexing/SqlLexicalPolicy` 与 `LexicalPrecheck`，输出为 void 检查，**不表示只读/已批准**；方言事实（PG 18 `scan.l` 续接/嵌套注释、MySQL 8.4 普通注释不嵌套）已核对并留存证据。T05-b1 实现 `guard/ast/SqlStatementGate`（拒绝非SELECT/多语句/递归CTE/SELECT INTO/锁与提示），T05-b2 实现 `guard/ast/SqlAllowlistGate`（正向函数白名单、CAST 基础类型、系统命名空间拒绝；未列入即拒绝）。二者仍不证明只读表达式、类型/宽度推导、绑定或授权，函数签名与方言差异、预算/解析隔离、绑定与改写均未完成。其余流水线阶段仍未实现。
+T05-a 已按此实现 `ptmcp-guard/lexing/SqlLexicalPolicy` 与 `LexicalPrecheck`，输出为 void 检查，**不表示只读/已批准**；方言事实（PG 18 `scan.l` 续接/嵌套注释、MySQL 8.4 普通注释不嵌套）已核对并留存证据。T05-b1 实现 `guard/ast/SqlStatementGate`（拒绝非SELECT/多语句/递归CTE/SELECT INTO/锁与提示），T05-b2 实现 `guard/ast/SqlAllowlistGate`（正向函数白名单、CAST 基础类型、系统命名空间拒绝；未列入即拒绝）。二者仍不证明只读表达式、类型/宽度推导、绑定或授权。T06-a 另实现 `guard/scope/ScopeTableBinder`：按"定义体先于自身名称"引入非递归 CTE、派生别名不删除物理表、UNION 分支独立作用域、表达式子查询继承 CTE 环境，R1 六例已逐例断言物理关系集合。列引用绑定/星号展开（T06-b）、限定名与 LIMIT 改写（T07）、函数签名与方言差异、预算/解析隔离仍未完成。其余流水线阶段仍未实现。
 
 
 ## 3. 资源身份与标识符
