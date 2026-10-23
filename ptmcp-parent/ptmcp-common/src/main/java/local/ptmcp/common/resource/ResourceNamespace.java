@@ -27,4 +27,10 @@ public record ResourceNamespace(
             case POSTGRESQL -> IdentifierNames.requireValid(schema, "schema");
         }
     }
+
+    /** Name-free diagnostics; accessors still return the unchanged snapshot names. */
+    @Override
+    public String toString() {
+        return "ResourceNamespace[datasourceId=" + datasourceId + ", engine=" + engine + "]";
+    }
 }

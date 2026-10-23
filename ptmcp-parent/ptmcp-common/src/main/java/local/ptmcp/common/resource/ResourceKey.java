@@ -17,4 +17,10 @@ public record ResourceKey(ResourceNamespace namespace, String objectName) {
         Objects.requireNonNull(namespace, "namespace");
         IdentifierNames.requireValid(objectName, "objectName");
     }
+
+    /** Name-free diagnostics, including the namespace's name-free representation. */
+    @Override
+    public String toString() {
+        return "ResourceKey[namespace=" + namespace + "]";
+    }
 }

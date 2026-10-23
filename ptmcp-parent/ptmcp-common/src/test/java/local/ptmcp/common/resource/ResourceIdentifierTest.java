@@ -162,16 +162,37 @@ class ResourceIdentifierTest {
         assertNotEquals(composed, normalizedDecomposed);
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void diagnosticsOmitBothSpellingsWithoutChangingAccessors(boolean quoted) {
+        String raw = "SYNTHETIC_PRIVATE_RAW_62fa";
+        String normalized = "SYNTHETIC_PRIVATE_NORMALIZED_62fa";
+        ResourceIdentifier identifier = new ResourceIdentifier(raw, normalized, quoted);
+
+        assertAll(
+                () -> assertEquals(raw, identifier.raw()),
+                () -> assertEquals(normalized, identifier.normalized()),
+                () -> assertEquals(quoted, identifier.quoted()),
+                () ->
+                        assertEquals(
+                                "ResourceIdentifier[quoted=" + quoted + "]",
+                                identifier.toString()));
+    }
+
     @Test
     void invalidNameErrorsDoNotEchoRawOrNormalizedSnapshotData() {
         IllegalArgumentException rawError =
                 assertThrows(
                         IllegalArgumentException.class,
-                        () -> new ResourceIdentifier("private\0", "orders", true));
+                        () ->
+                                new ResourceIdentifier(
+                                        "SYNTHETIC_PRIVATE_RAW_62fa\0", "orders", true));
         IllegalArgumentException normalizedError =
                 assertThrows(
                         IllegalArgumentException.class,
-                        () -> new ResourceIdentifier("orders", "private\0", true));
+                        () ->
+                                new ResourceIdentifier(
+                                        "orders", "SYNTHETIC_PRIVATE_NORMALIZED_62fa\0", true));
 
         assertEquals(
                 "raw must be 1 to 128 Unicode codepoints without NUL or malformed UTF-16",

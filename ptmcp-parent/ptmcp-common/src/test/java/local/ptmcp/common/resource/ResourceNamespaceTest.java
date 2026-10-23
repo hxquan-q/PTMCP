@@ -6,11 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import java.util.List;
+import java.util.Set;
 
 class ResourceNamespaceTest {
     private static final ResourceId DATASOURCE_ID = new ResourceId(1);
@@ -18,8 +19,8 @@ class ResourceNamespaceTest {
     @Test
     void supportsOnlyTheTwoContractedDatabaseEngines() {
         assertEquals(
-                List.of(DatabaseEngine.MYSQL, DatabaseEngine.POSTGRESQL),
-                List.of(DatabaseEngine.values()));
+                Set.of(DatabaseEngine.MYSQL, DatabaseEngine.POSTGRESQL),
+                Set.of(DatabaseEngine.values()));
     }
 
     @Test
@@ -164,6 +165,22 @@ class ResourceNamespaceTest {
         assertEquals(name, postgresql.schema());
     }
 
+    @ParameterizedTest
+    @EnumSource(DatabaseEngine.class)
+    void diagnosticsOmitSnapshotNamesWithoutChangingAccessors(DatabaseEngine engine) {
+        String catalog = "SYNTHETIC_PRIVATE_CATALOG_62fa";
+        String schema = engine == DatabaseEngine.MYSQL ? "" : "SYNTHETIC_PRIVATE_SCHEMA_62fa";
+        ResourceNamespace namespace = new ResourceNamespace(DATASOURCE_ID, engine, catalog, schema);
+
+        assertAll(
+                () -> assertEquals(catalog, namespace.catalog()),
+                () -> assertEquals(schema, namespace.schema()),
+                () ->
+                        assertEquals(
+                                "ResourceNamespace[datasourceId=1, engine=" + engine + "]",
+                                namespace.toString()));
+    }
+
     @Test
     void invalidNameErrorsDoNotEchoSnapshotData() {
         IllegalArgumentException catalogError =
@@ -171,7 +188,10 @@ class ResourceNamespaceTest {
                         IllegalArgumentException.class,
                         () ->
                                 new ResourceNamespace(
-                                        DATASOURCE_ID, DatabaseEngine.MYSQL, "private\0", ""));
+                                        DATASOURCE_ID,
+                                        DatabaseEngine.MYSQL,
+                                        "SYNTHETIC_PRIVATE_CATALOG_62fa\0",
+                                        ""));
         IllegalArgumentException schemaError =
                 assertThrows(
                         IllegalArgumentException.class,
@@ -180,13 +200,16 @@ class ResourceNamespaceTest {
                                         DATASOURCE_ID,
                                         DatabaseEngine.POSTGRESQL,
                                         "erp",
-                                        "private\0"));
+                                        "SYNTHETIC_PRIVATE_SCHEMA_62fa\0"));
         IllegalArgumentException mysqlSchemaError =
                 assertThrows(
                         IllegalArgumentException.class,
                         () ->
                                 new ResourceNamespace(
-                                        DATASOURCE_ID, DatabaseEngine.MYSQL, "erp", "private"));
+                                        DATASOURCE_ID,
+                                        DatabaseEngine.MYSQL,
+                                        "erp",
+                                        "SYNTHETIC_PRIVATE_SCHEMA_62fa"));
 
         assertEquals(
                 "catalog must be 1 to 128 Unicode codepoints without NUL or malformed UTF-16",

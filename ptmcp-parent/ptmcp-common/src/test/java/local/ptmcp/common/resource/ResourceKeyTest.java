@@ -1,5 +1,6 @@
 package local.ptmcp.common.resource;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -56,12 +57,15 @@ class ResourceKeyTest {
     }
 
     @Test
-    void engineIsPartOfThePhysicalNamespace() {
+    void keysFromLegalMysqlAndPostgresqlNamespacesAreDifferent() {
         ResourceKey mysql =
                 new ResourceKey(
                         new ResourceNamespace(new ResourceId(1), DatabaseEngine.MYSQL, "erp", ""),
                         "orders");
 
+        // Both engine and schema differ: valid MySQL/PG schemas cannot be held equal.
+        // Independent engine participation follows ResourceNamespace's generated record equality.
+        assertNotEquals(NAMESPACE, mysql.namespace());
         assertNotEquals(new ResourceKey(NAMESPACE, "orders"), mysql);
     }
 
@@ -153,11 +157,48 @@ class ResourceKeyTest {
     }
 
     @Test
+    void diagnosticsOmitObjectAndNamespaceNamesWithoutChangingAccessors() {
+        ResourceNamespace namespace =
+                new ResourceNamespace(
+                        new ResourceId(1),
+                        DatabaseEngine.POSTGRESQL,
+                        "SYNTHETIC_PRIVATE_CATALOG_62fa",
+                        "SYNTHETIC_PRIVATE_SCHEMA_62fa");
+        String objectName = "SYNTHETIC_PRIVATE_OBJECT_62fa";
+        ResourceKey key = new ResourceKey(namespace, objectName);
+
+        assertAll(
+                () -> assertEquals(namespace, key.namespace()),
+                () -> assertEquals(objectName, key.objectName()),
+                () ->
+                        assertEquals(
+                                "ResourceKey[namespace=ResourceNamespace[datasourceId=1, engine=POSTGRESQL]]",
+                                key.toString()));
+    }
+
+    @Test
+    void defaultResourceRefDiagnosticsOnlyRecurseIntoSafeKeyAndNumericVersions() {
+        ResourceNamespace namespace =
+                new ResourceNamespace(
+                        new ResourceId(1),
+                        DatabaseEngine.POSTGRESQL,
+                        "SYNTHETIC_PRIVATE_CATALOG_62fa",
+                        "SYNTHETIC_PRIVATE_SCHEMA_62fa");
+        ResourceKey key = new ResourceKey(namespace, "SYNTHETIC_PRIVATE_OBJECT_62fa");
+        ResourceRef reference = new ResourceRef(key, new ResourceId(2), 3, 4, 5);
+
+        assertEquals(
+                "ResourceRef[key=ResourceKey[namespace=ResourceNamespace[datasourceId=1, engine=POSTGRESQL]], "
+                        + "objectId=2, generation=3, objectVersion=4, snapshotVersion=5]",
+                reference.toString());
+    }
+
+    @Test
     void invalidObjectNameErrorsDoNotEchoSnapshotData() {
         IllegalArgumentException error =
                 assertThrows(
                         IllegalArgumentException.class,
-                        () -> new ResourceKey(NAMESPACE, "private\0"));
+                        () -> new ResourceKey(NAMESPACE, "SYNTHETIC_PRIVATE_OBJECT_62fa\0"));
 
         assertEquals(
                 "objectName must be 1 to 128 Unicode codepoints without NUL or malformed UTF-16",

@@ -15,4 +15,10 @@ public record ResourceIdentifier(String raw, String normalized, boolean quoted) 
         IdentifierNames.requireValid(raw, "raw");
         IdentifierNames.requireValid(normalized, "normalized");
     }
+
+    /** Name-free diagnostics; neither spelling is included or changed. */
+    @Override
+    public String toString() {
+        return "ResourceIdentifier[quoted=" + quoted + "]";
+    }
 }
