@@ -234,7 +234,11 @@ class OAuthAuthorizationCodeFlowTest {
         assertTrue(token.contentType().startsWith("application/json"));
         JsonNode body = JSON.readTree(token.body());
         assertEquals("Bearer", body.get("token_type").asString());
-        assertEquals(600, body.get("expires_in").asInt());
+        // Spring Authorization Server truncates expires_in against the response clock, so a
+        // request that crosses a second boundary reports 599; the authoritative 600s TTL is
+        // asserted below against the JWT exp-iat difference.
+        int expiresIn = body.get("expires_in").asInt();
+        assertTrue(expiresIn == 600 || expiresIn == 599, "unexpected expires_in: " + expiresIn);
         assertEquals(Set.of("mcp:query", "mcp:catalog"), csv(body.get("scope").asString()));
         assertFalse(body.has("refresh_token"), "refresh tokens are out of scope for this slice");
         String accessToken = body.get("access_token").asString();
