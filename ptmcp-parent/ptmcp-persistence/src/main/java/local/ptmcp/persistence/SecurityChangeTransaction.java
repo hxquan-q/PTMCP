@@ -23,15 +23,15 @@ import javax.sql.DataSource;
  * external post-commit work. This is a trusted-code contract, not a sandbox for arbitrary
  * callbacks.
  */
-final class SecurityChangeTransaction {
+public final class SecurityChangeTransaction {
     private static final int STATEMENT_SECONDS = 5;
     private final DataSource primaryMetadata;
 
-    SecurityChangeTransaction(DataSource primaryMetadata) {
+    public SecurityChangeTransaction(DataSource primaryMetadata) {
         this.primaryMetadata = Objects.requireNonNull(primaryMetadata, "primaryMetadata");
     }
 
-    Receipt execute(SecurityEvent event, Change change) {
+    public Receipt execute(SecurityEvent event, Change change) {
         if (event == null || change == null) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
@@ -196,12 +196,12 @@ final class SecurityChangeTransaction {
     }
 
     @FunctionalInterface
-    interface Change {
+    public interface Change {
         void apply(Connection connection) throws SQLException;
     }
 
     /**
      * A confirmed commit; cleanupFailed requires operational attention, not replay of the command.
      */
-    record Receipt(UUID eventId, long epoch, boolean cleanupFailed) {}
+    public record Receipt(UUID eventId, long epoch, boolean cleanupFailed) {}
 }

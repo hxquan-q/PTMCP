@@ -6,8 +6,8 @@ import local.ptmcp.common.error.ErrorCode;
 import java.util.UUID;
 
 /** Internal ID/version-only event. No free-form producer payload is accepted. */
-record SecurityEvent(UUID eventId, Kind kind, AggregateId aggregateId, long version) {
-    SecurityEvent {
+public record SecurityEvent(UUID eventId, Kind kind, AggregateId aggregateId, long version) {
+    public SecurityEvent {
         if (eventId == null
                 || kind == null
                 || aggregateId == null
@@ -26,7 +26,7 @@ record SecurityEvent(UUID eventId, Kind kind, AggregateId aggregateId, long vers
                 + "}";
     }
 
-    enum Kind {
+    public enum Kind {
         USER_SECURITY_CHANGED("USER", false),
         ACL_CHANGED("ACL", false),
         REFRESH_FAMILY_CHANGED("REFRESH_FAMILY", true);
@@ -40,12 +40,12 @@ record SecurityEvent(UUID eventId, Kind kind, AggregateId aggregateId, long vers
         }
     }
 
-    sealed interface AggregateId permits NumericId, UuidId {
+    public sealed interface AggregateId permits NumericId, UuidId {
         String text();
     }
 
-    record NumericId(long value) implements AggregateId {
-        NumericId {
+    public record NumericId(long value) implements AggregateId {
+        public NumericId {
             if (value <= 0) {
                 throw new DomainException(ErrorCode.INVALID_ARGUMENT);
             }
@@ -57,8 +57,8 @@ record SecurityEvent(UUID eventId, Kind kind, AggregateId aggregateId, long vers
         }
     }
 
-    record UuidId(UUID value) implements AggregateId {
-        UuidId {
+    public record UuidId(UUID value) implements AggregateId {
+        public UuidId {
             if (value == null) {
                 throw new DomainException(ErrorCode.INVALID_ARGUMENT);
             }
