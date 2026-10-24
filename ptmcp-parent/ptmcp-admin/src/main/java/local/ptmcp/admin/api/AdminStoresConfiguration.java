@@ -3,6 +3,10 @@ package local.ptmcp.admin.api;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
+import local.ptmcp.admin.me.MeService;
+import local.ptmcp.admin.me.PersonalTokenService;
+import local.ptmcp.admin.session.AdminSessionService;
+import local.ptmcp.admin.session.SessionAuthFilter;
 import local.ptmcp.persistence.org.AclDirectory;
 import local.ptmcp.persistence.org.AclGrantStore;
 import local.ptmcp.persistence.org.IdempotencyRecorder;
@@ -35,6 +39,8 @@ public class AdminStoresConfiguration {
         config.setPassword(password);
         config.setMaximumPoolSize(4);
         config.setPoolName("ptmcp-admin-meta");
+        // Database may still be booting behind a container port-forward; fail only after 15s.
+        config.setInitializationFailTimeout(15_000L);
         return new HikariDataSource(config);
     }
 
@@ -59,7 +65,44 @@ public class AdminStoresConfiguration {
     }
 
     @Bean
+    public AdminSessionService adminSessionService(DataSource dataSource) {
+        return new AdminSessionService(dataSource);
+    }
+
+    @Bean
+    public PersonalTokenService personalTokenService(DataSource dataSource) {
+        return new PersonalTokenService(dataSource);
+    }
+
+    @Bean
+    public MeService meService(
+            DataSource dataSource,
+            AclDirectory aclDirectory,
+            @Value("${ptmcp.mcp.url:}") String mcpUrl) {
+        return new MeService(dataSource, aclDirectory, mcpUrl);
+    }
+
+    @Bean
+    public FilterRegistrationBean<SessionAuthFilter> sessionAuthFilter(
+            AdminSessionService sessions) {
+        FilterRegistrationBean<SessionAuthFilter> registration =
+                new FilterRegistrationBean<>(new SessionAuthFilter(sessions));
+        registration.addUrlPatterns("/api/v1/*");
+        registration.setOrder(10);
+        return registration;
+    }
+
+    /**
+     * Identity shim for the C5 admin API tests. It must be explicitly enabled; production starts
+     * with session authentication only.
+     */
+    @Bean
+    @ConditionalOnProperty("ptmcp.admin.test-principal")
     public FilterRegistrationBean<TestPrincipalFilter> testPrincipalFilter() {
-        return new FilterRegistrationBean<>(new TestPrincipalFilter());
+        FilterRegistrationBean<TestPrincipalFilter> registration =
+                new FilterRegistrationBean<>(new TestPrincipalFilter());
+        registration.addUrlPatterns("/api/v1/*");
+        registration.setOrder(20);
+        return registration;
     }
 }

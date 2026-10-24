@@ -35,7 +35,7 @@ import java.util.Base64;
 import java.util.List;
 
 /** Admin org/ACL APIs against the real MySQL schema; identity uses the documented test shim. */
-@SpringBootTest(classes = AdminApplication.class)
+@SpringBootTest(classes = AdminApplication.class, properties = "ptmcp.admin.test-principal=true")
 @AutoConfigureMockMvc
 class AdminApiTest {
     private static final String MYSQL_IMAGE =
