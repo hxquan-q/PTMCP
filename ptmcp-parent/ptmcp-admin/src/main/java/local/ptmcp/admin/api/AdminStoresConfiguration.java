@@ -3,14 +3,25 @@ package local.ptmcp.admin.api;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
+import local.ptmcp.admin.datasource.CredentialCipher;
+import local.ptmcp.admin.datasource.DatasourceAdminService;
+import local.ptmcp.admin.datasource.DatasourceConnectionFactory;
+import local.ptmcp.admin.datasource.DatasourceJobService;
+import local.ptmcp.admin.datasource.DatasourceJobStore;
+import local.ptmcp.admin.datasource.DatasourceStore;
+import local.ptmcp.admin.datasource.DestinationPolicy;
 import local.ptmcp.admin.me.MeService;
 import local.ptmcp.admin.me.PersonalTokenService;
+import local.ptmcp.admin.metadata.MetadataCatalogService;
 import local.ptmcp.admin.session.AdminSessionService;
 import local.ptmcp.admin.session.SessionAuthFilter;
 import local.ptmcp.persistence.org.AclDirectory;
 import local.ptmcp.persistence.org.AclGrantStore;
 import local.ptmcp.persistence.org.IdempotencyRecorder;
 import local.ptmcp.persistence.org.OrgStore;
+import local.ptmcp.persistence.schema.MetadataSyncJobRunner;
+import local.ptmcp.persistence.schema.MetadataSyncJobStore;
+import local.ptmcp.persistence.schema.SchemaSnapshotStore;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -80,6 +91,85 @@ public class AdminStoresConfiguration {
             AclDirectory aclDirectory,
             @Value("${ptmcp.mcp.url:}") String mcpUrl) {
         return new MeService(dataSource, aclDirectory, mcpUrl);
+    }
+
+    @Bean
+    public CredentialCipher credentialCipher(@Value("${ptmcp.admin.credential-key:}") String key) {
+        return new CredentialCipher(key);
+    }
+
+    @Bean
+    public DestinationPolicy destinationPolicy(
+            @Value("${ptmcp.admin.datasource.allowed-cidrs:}") String cidrs) {
+        return new DestinationPolicy(cidrs);
+    }
+
+    @Bean
+    public DatasourceStore datasourceStore(DataSource dataSource) {
+        return new DatasourceStore(dataSource);
+    }
+
+    @Bean
+    public DatasourceJobStore datasourceJobStore(DataSource dataSource) {
+        return new DatasourceJobStore(dataSource);
+    }
+
+    @Bean
+    public DatasourceConnectionFactory datasourceConnectionFactory(
+            CredentialCipher cipher,
+            DestinationPolicy destinationPolicy,
+            @Value("${ptmcp.admin.datasource.truststore-path:}") String truststorePath,
+            @Value("${ptmcp.admin.datasource.truststore-password:}") String truststorePassword) {
+        return new DatasourceConnectionFactory(
+                destinationPolicy, cipher, truststorePath, truststorePassword);
+    }
+
+    @Bean
+    public DatasourceAdminService datasourceAdminService(
+            DatasourceStore store, CredentialCipher cipher, DestinationPolicy destinationPolicy) {
+        return new DatasourceAdminService(store, cipher, destinationPolicy);
+    }
+
+    @Bean
+    public MetadataSyncJobStore metadataSyncJobStore(DataSource dataSource) {
+        return new MetadataSyncJobStore(dataSource);
+    }
+
+    @Bean
+    public SchemaSnapshotStore schemaSnapshotStore(DataSource dataSource) {
+        return new SchemaSnapshotStore(dataSource);
+    }
+
+    @Bean
+    public MetadataSyncJobRunner metadataSyncJobRunner(
+            DataSource dataSource,
+            MetadataSyncJobStore jobStore,
+            SchemaSnapshotStore snapshotStore,
+            DatasourceConnectionFactory connections,
+            DatasourceStore datasources) {
+        return new MetadataSyncJobRunner(
+                dataSource,
+                jobStore,
+                snapshotStore,
+                datasourceId ->
+                        connections.open(
+                                datasources.connectionSpec(datasources.get(datasourceId))));
+    }
+
+    @Bean
+    public DatasourceJobService datasourceJobService(
+            DatasourceStore store,
+            DatasourceJobStore jobStore,
+            MetadataSyncJobRunner runner,
+            DatasourceConnectionFactory connections,
+            DatasourceAdminService admin) {
+        return new DatasourceJobService(store, jobStore, runner, connections, admin);
+    }
+
+    @Bean
+    public MetadataCatalogService metadataCatalogService(
+            DataSource dataSource, SchemaSnapshotStore snapshots) {
+        return new MetadataCatalogService(dataSource, snapshots);
     }
 
     @Bean

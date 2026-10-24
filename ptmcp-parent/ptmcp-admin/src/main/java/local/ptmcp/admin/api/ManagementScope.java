@@ -12,17 +12,17 @@ import local.ptmcp.persistence.org.AclDirectory;
  * platform admins may exercise the admin surface; every other caller gets MANAGEMENT_SCOPE_DENIED
  * instead of a narrower decision.
  */
-final class ManagementScope {
+public final class ManagementScope {
     private ManagementScope() {}
 
-    static void requirePlatformAdmin(HttpServletRequest request) {
+    public static void requirePlatformAdmin(HttpServletRequest request) {
         AdminPrincipal principal = AdminPrincipal.require(request);
         if (!principal.platformAdmin()) {
             throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
         }
     }
 
-    static AdminPrincipal requirePlatformAdminPrincipal(HttpServletRequest request) {
+    public static AdminPrincipal requirePlatformAdminPrincipal(HttpServletRequest request) {
         AdminPrincipal principal = AdminPrincipal.require(request);
         if (!principal.platformAdmin()) {
             throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
@@ -30,7 +30,7 @@ final class ManagementScope {
         return principal;
     }
 
-    static SubjectScope callerScopeOrNull(AclDirectory directory, AdminPrincipal principal) {
+    public static SubjectScope callerScopeOrNull(AclDirectory directory, AdminPrincipal principal) {
         try {
             return directory.subjectScope(principal.userId());
         } catch (DomainException error) {

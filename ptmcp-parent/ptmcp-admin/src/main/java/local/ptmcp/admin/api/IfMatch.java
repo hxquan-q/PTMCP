@@ -6,10 +6,10 @@ import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 
 /** If-Match carries the expected aggregate version; absence is a precondition failure. */
-final class IfMatch {
+public final class IfMatch {
     private IfMatch() {}
 
-    static long requireVersion(HttpServletRequest request) {
+    public static long requireVersion(HttpServletRequest request) {
         String header = request.getHeader("If-Match");
         if (header == null || header.isBlank()) {
             throw new DomainException(ErrorCode.PRECONDITION_REQUIRED);
@@ -29,7 +29,7 @@ final class IfMatch {
         }
     }
 
-    static String etag(long version) {
+    public static String etag(long version) {
         return "\"" + version + "\"";
     }
 }
