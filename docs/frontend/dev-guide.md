@@ -1,38 +1,36 @@
 # PTMCP 前端开发设计规范
 
-版本：1.1-bootstrap · 日期：2026-10-23 · 状态：前端基础框架已建立，业务页面/认证/接口待实现。
+版本：1.2-business · 日期：2026-10-25 · 状态：业务页面与会话适配已进入实现/联调，逐页验收仍待证据确认。
 
-本文定义后续业务实施规范；当前可运行工程与命令见[ptmcp-ui README](../../ptmcp-ui/README.md)。[总体方案](../总体方案.md)、[PRD](../product/PRD.md)和[API 契约](../backend/api-spec.md)优先定义业务/接口；[页面规格](page-spec.md)定义尚待实现的逐页行为。
+本文定义前端实施与验收要求；当前可运行工程与命令见[ptmcp-ui README](../../ptmcp-ui/README.md)。[总体方案](../总体方案.md)、[PRD](../product/PRD.md)和[API 契约](../backend/api-spec.md)优先定义业务/接口；[页面规格](page-spec.md)定义逐页目标，[业务覆盖矩阵](business-coverage.md)记录源码映射与已知差距。运行结果、人工接受和未验证项由 `tasks/work-items/T17-ui-business.md` 维护。
 
 ## 1. 来源与工程边界
 
 采用 Vue3/TypeScript/Element Plus，根目录ptmcp-ui已按plus-ui入口与配置最小裁剪建立，具体来源与边界见[UPSTREAM](../../ptmcp-ui/UPSTREAM.md)。Reference中的后台参考源码不是UI运行入口。
 
-当前package/锁文件固定Node24/pnpm与框架依赖，已接入Iconify、Tailwind、Animate.css和VueUse Motion，未引入业务页面、租户/token持久化或自动请求重试。后续M0继续验证真实接口与安全适配，不直接修改Reference，也不把最小骨架当作全量plus-ui业务系统。
+当前package/锁文件固定Node24/pnpm，已接入Iconify、Tailwind、Animate.css和VueUse Motion。现有管理/个人工作台、统一请求层、内存会话/权限store与业务页面在本工程实施；Reference仍仅用于参考。缺少后端契约的页面明确展示不可用，不使用模拟成功替代联调。
 
-后续完整计划目录（当前只有基础入口/router/views/styles，不为未实现业务预建代码）：
+当前目录分工（以源码为准，新增目录应由实际职责驱动）：
 
 ```text
 ptmcp-ui/
   src/
-    api/                 # session/admin/me 按服务资源封装
-    contracts/           # 从OpenAPI生成或核对的DTO；不写页面逻辑
-    adapters/            # REST DTO与页面模型转换
-    components/          # 可复用权限树、时间窗、状态、字典表格
-    composables/         # 游标分页、异步任务轮询、版本冲突
+    services/            # 统一HTTP传输、资源API及核对的DTO
+    adapters/            # 资源身份、传输字段与页面模型转换
+    components/common/   # 页面头部、状态、错误页与工作台壳
     layouts/             # 管理与个人布局、导航、错误页
     router/              # 路由、菜单能力、登录恢复
     stores/              # 仅内存会话/权限、非敏感UI偏好
-    views/admin/         # 数据源/组织/平台/授权/审计
+    views/auth/          # 控制台登录
+    views/admin/         # 数据源、任务、元数据、组织与ACL
     views/me/            # 字典/配置/PAT/授权族/历史/安全
     styles/              # 主题变量与Element Plus统一适配
-  tests/                 # 权限/安全交互/适配器测试
-  e2e/                   # 管理闭环与个人隔离
+  tests/                 # 已有传输与资源适配契约测试
   package.json
-  <锁文件>               # M0确定一种包管理器后生成
+  pnpm-lock.yaml
 ```
 
-当前实际命令为pnpm dev、lint、format:check、typecheck、build/check，CI使用相同锁文件与版本。业务测试尚未编写，不提供虚构通过或passWithNoTests；新增行为时再补真实测试入口。框架构建/启动证据与业务验收分开。
+实际命令以package.json为准：`pnpm check`包含lint、格式、类型与构建，`pnpm test:contracts`单独执行脚本列出的契约回归。契约测试覆盖范围与页面浏览器验收分别报告；构建通过不能支持全部业务已验收的结论。
 
 ## 2. 命名、类型和模块规则
 
@@ -48,15 +46,11 @@ ESLint 的 Vue/TS 规则负责上述行为，Prettier 负责排版；不让评�
 - 原始注释、SQL、字典文字和错误消息纯文本展示。SQL 高亮器只生成受控 token，不使用未经转义的 `v-html`。
 
 ```ts
-// 契约形状示例；最终字段以api-spec/OpenAPI为准。
+// 当前传输与页面使用的基础形状；字段按服务端DTO/OpenAPI核对。
 type Id = string;
-type ApiSuccess<T> = { code: 200; msg: string; data: T };
 type CursorPage<T> = { items: T[]; nextCursor: string | null };
-type ApiFailure = {
-  code: number;
-  msg: string;
-  data: { requestId: string; errorCode: string; retryable: boolean; details: Record<string, unknown> };
-};
+type TransportResult<T> = { data: T; etag: string | null; requestId: string | null };
+type CurrentApiFailure = { code: string; codeNumber: number; retryable: boolean };
 
 interface ResourceLabel {
   datasourceId: Id;
@@ -69,11 +63,11 @@ interface ResourceLabel {
 
 ## 3. 会话、CSRF 与凭证
 
-控制台采用 Sa-Token 服务端会话，Cookie 为 `PTMCP_ADMIN_SESSION`，HttpOnly、Secure、SameSite=Lax，由服务端写入。前端不读取/拼装管理 token，不在 localStorage、sessionStorage、IndexedDB、URL、日志、埋点或错误上报中保存 token。管理 API 优先经 Nginx 同源转发，以 `credentials: 'same-origin'` 请求。
+控制台当前由后端 `AdminSessionService` 维护单实例内存不透明会话与主库撤销索引；不能把设计中Sa-Token选型当成已完成的运行集成。Cookie 为 `PTMCP_ADMIN_SESSION`，HttpOnly、Secure、SameSite=Lax，由服务端写入。前端不读取/拼装管理 token，不在 localStorage、sessionStorage、IndexedDB、URL、日志、埋点或错误上报中保存 token。管理 API 经同源转发，以 `credentials: 'same-origin'` 请求。
 
 启动顺序：
 
-1. 调用 `GET /api/v1/session/csrf`，读取 `data.csrfToken/expiresAt` 并只放内存；不能读取管理 Cookie 来伪造 CSRF。
+1. 调用 `GET /api/v1/session/csrf`，读取 `TransportResult.data` 中的 `csrfToken/expiresAt` 并只放内存；不能读取管理 Cookie 来伪造 CSRF。
 2. `POST /api/v1/session/login` 带 `X-CSRF-Token`；登录后重新获取 CSRF，再调用 `GET /api/v1/session/me` 获取用户与功能权限。
 3. 所有 POST/PUT/PATCH/DELETE 都带 CSRF；退出、改密、创建 PAT、解密、连接测试/同步也不例外。Session/CSRF 轮换遵守服务端值，不缓存旧值跨登录使用。
 4. 401 清空会话、权限、资源缓存、临时 PAT 和解密 SQL，回登录页。登录成功恢复安全的同源路由，但不自动重放原写请求或 SQL。
@@ -96,7 +90,7 @@ PAT 创建成功只在一次性弹窗内存中展示完整值；关闭、路由�
 
 ## 5. HTTP 适配与状态管理
 
-每个资源 API 模块只处理传输，页面使用明确的表单/展示模型。REST 成功读取 `{code:200,msg,data}`，失败读取 `{code:模块数字码,msg,data:{requestId,errorCode,retryable,details}}`；先按 HTTP 状态处理认证/权限/可用性，再验证正文 code，不能照搬上游“所有错误 HTTP200”或无条件解包。requestId 从 X-Request-Id 响应头取得，错误也从 data.requestId 取得。OAuth 标准端点和 `/mcp` 不套 REST 适配器。
+每个资源 API 模块只处理传输，页面使用明确的表单/展示模型。当前管理/个人接口成功为DTO直出，`ApiExceptionAdvice`失败返回 `{code,codeNumber,retryable}`；ADR0010定义的 `{code:200,msg,data}` 与嵌套错误外壳仍有后端迁移差距。`services/http.ts`按真实HTTP状态处理错误，并只对可识别的外壳解包；页面统一读取 `TransportResult.data`。requestId优先取 `X-Request-Id`，存在规范错误外壳时兼容 `data.requestId`。OAuth标准端点和 `/mcp` 不套REST适配器。
 
 个人门户用 `GET /api/v1/me/access-context` 按 `level=PLATFORM/DATASOURCE/NAMESPACE` 逐级初始化选项；DATASOURCE需platformId，NAMESPACE需platformId+datasourceId，各层均支持pageSize/cursor，返回 `data={items,nextCursor,evaluatedAt,versions}`。item由type区分：PLATFORM含id/name/tier/catalogMode，DATASOURCE含id/name/engine，NAMESPACE含id/databaseName/schemaName/displayName。不能调用管理全局列表；上下文按平台Scope/目录语义过滤、不含列，权限或版本变化后重新读取。选择上级变化要清空下级选择及游标，PG databaseName只是命名空间属性/展示分组，不产生CATALOG授权级。
 
@@ -160,4 +154,4 @@ POST 创建/启动任务/撤销/解密按契约发送随机 `Idempotency-Key`，
 
 必要检查覆盖：Cookie/CSRF适配；直接路由/按钮/API越权；组织委派边界；无READ结构不在响应或缓存；多身份缓存隔离；创建PAT一次展示与无存储泄漏；409人工合并；游标重置；任务失败/恢复；个人历史所有权；截断及类型精度；键盘与焦点。
 
-UI 测试不能取代服务端鉴权、双引擎 SQL 安全和客户端 OAuth 联调。构建后还需在真实浏览器验证网络、控制台错误、表格/矩阵响应式和敏感存储；测试脚本与实际构建命令在引入 plus-ui 后确定。交付记录必须标构件版本、浏览器版本、执行结果及截图；当前全部待执行。
+UI测试不能取代服务端鉴权、双引擎SQL安全和客户端OAuth联调。构建后还需在真实浏览器验证网络、控制台错误、表格/矩阵响应式和敏感存储。命令见工程README与package.json；每次交付在工作项记录构件版本、浏览器版本、执行结果、截图和 `NOT_RUN` 原因，按实际证据确认，不能由页面存在推导通过。
