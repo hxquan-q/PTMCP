@@ -31,6 +31,11 @@ body {
   --ptmcp-surface: #ffffff;
   --ptmcp-danger: #c9372c;
   --ptmcp-shadow: 0 8px 24px rgba(24, 57, 88, 0.08);
+  --ptmcp-ink: var(--ptmcp-text);
+  --ptmcp-muted: var(--ptmcp-text-muted);
+  --ptmcp-line: var(--ptmcp-border);
+  --ptmcp-panel: var(--ptmcp-surface);
+  --ptmcp-accent: var(--ptmcp-blue);
   --el-color-primary: var(--ptmcp-blue);
   --el-color-primary-light-3: #6aa7df;
   --el-color-primary-light-5: #9bc6eb;

@@ -30,6 +30,7 @@ declare module 'vue' {
     PageState: typeof import('./components/common/PageState.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    StaticErrorPage: typeof import('./components/common/StaticErrorPage.vue')['default']
     UnavailableView: typeof import('./components/common/UnavailableView.vue')['default']
     WorkspaceLayout: typeof import('./components/common/WorkspaceLayout.vue')['default']
   }

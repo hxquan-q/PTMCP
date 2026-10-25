@@ -4,6 +4,7 @@ import { useSessionStore } from '../stores/session';
 import AdminLayout from '../layouts/AdminLayout.vue';
 import PersonalLayout from '../layouts/PersonalLayout.vue';
 import UnavailableView from '../components/common/UnavailableView.vue';
+import StaticErrorPage from '../components/common/StaticErrorPage.vue';
 
 type ViewLoader = () => Promise<{ default: Component }>;
 const viewModules = import.meta.glob('../views/**/*.vue') as Record<string, ViewLoader>;
@@ -97,22 +98,27 @@ const adminRoutes: RouteRecordRaw[] = [
 const personalRoutes: RouteRecordRaw[] = [
   { path: '', redirect: '/me/dictionary' },
   { path: 'dictionary', name: 'me-dictionary', component: view('../views/me/DictionaryView.vue'), meta: { title: '我的数据字典' } },
-  { path: 'dictionary/:objectId', name: 'me-dictionary-detail', component: view('../views/me/DictionaryView.vue'), meta: { title: '数据字典详情' } },
+  {
+    path: 'dictionary/:objectId',
+    name: 'me-dictionary-detail',
+    component: view('../views/me/DictionaryDetailView.vue'),
+    meta: { title: '数据字典详情' }
+  },
   { path: 'integrations', name: 'me-integrations', component: view('../views/me/IntegrationsView.vue'), meta: { title: '接入配置' } },
   { path: 'tokens', name: 'me-tokens', component: view('../views/me/TokensView.vue'), meta: { title: '个人令牌' } },
   { path: 'authorizations', name: 'me-authorizations', component: view('../views/me/AuthorizationsView.vue'), meta: { title: '授权管理' } },
   { path: 'history', name: 'me-history', component: view('../views/me/HistoryView.vue'), meta: { title: '查询历史' } },
-  { path: 'history/:requestId', name: 'me-history-detail', component: view('../views/me/HistoryView.vue'), meta: { title: '查询详情' } },
+  { path: 'history/:requestId', name: 'me-history-detail', component: view('../views/me/HistoryDetailView.vue'), meta: { title: '查询详情' } },
   { path: 'security', name: 'me-security', component: view('../views/me/SecurityView.vue'), meta: { title: '账号安全' } }
 ];
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    { path: '/', name: 'home', component: view('../views/HomeView.vue'), meta: { title: '工作台' } },
+    { path: '/', name: 'home', component: UnavailableView, meta: { title: '工作台' } },
     { path: '/login', name: 'login', component: view('../views/auth/LoginView.vue'), meta: { title: '登录' } },
-    { path: '/403', name: 'forbidden', component: view('../views/ForbiddenView.vue'), meta: { title: '无权访问' } },
-    { path: '/404', name: 'not-found', component: view('../views/NotFoundView.vue'), meta: { title: '页面不存在' } },
+    { path: '/403', name: 'forbidden', component: StaticErrorPage, meta: { title: '无权访问' } },
+    { path: '/404', name: 'not-found', component: StaticErrorPage, meta: { title: '页面不存在' } },
     { path: '/admin', component: AdminLayout, children: adminRoutes, meta: { requiresAuth: true, layout: 'admin' } },
     { path: '/me', component: PersonalLayout, children: personalRoutes, meta: { requiresAuth: true, layout: 'personal' } },
     { path: '/:pathMatch(.*)*', redirect: '/404' }
@@ -121,10 +127,11 @@ const router = createRouter({
 });
 
 function safeReturnTo(path: string): string {
-  return path.startsWith('/') && !path.startsWith('//') && !path.startsWith('/login') ? path : '/';
+  return /^\/(?:admin|me)(?:\/|\?|$)/.test(path) && !path.includes('\\') && [...path].every((character) => character.charCodeAt(0) >= 32) ? path : '/';
 }
 
 router.beforeEach(async (to) => {
+  if (to.name === 'forbidden' || to.name === 'not-found') return true;
   const session = useSessionStore();
   await session.init();
   if (to.name === 'login') {
@@ -132,6 +139,10 @@ router.beforeEach(async (to) => {
     return true;
   }
   if (!session.isAuthenticated) return { name: 'login', query: { returnTo: safeReturnTo(to.fullPath) } };
+  if (to.name === 'home') {
+    const first = adminRoutes.find((route) => typeof route.meta?.permission === 'string' && session.can(route.meta.permission));
+    return first ? `/admin/${first.path}` : '/me/dictionary';
+  }
   const permission = to.meta.permission;
   if (typeof permission === 'string' && !session.can(permission)) return { name: 'forbidden' };
   return true;

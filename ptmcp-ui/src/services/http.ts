@@ -14,16 +14,26 @@ export interface RequestOptions {
 }
 
 export class ApiError extends Error {
+  readonly status: number;
+  readonly code: string;
+  readonly requestId: string | null;
+  readonly retryable: boolean;
+  readonly details: Record<string, unknown>;
   constructor(
-    public readonly status: number,
-    public readonly code: string,
+    status: number,
+    code: string,
     message: string,
-    public readonly requestId: string | null = null,
-    public readonly retryable = false,
-    public readonly details: Record<string, unknown> = {}
+    requestId: string | null = null,
+    retryable = false,
+    details: Record<string, unknown> = {}
   ) {
     super(message);
     this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.requestId = requestId;
+    this.retryable = retryable;
+    this.details = details;
   }
 }
 
@@ -170,4 +180,13 @@ export function errorMessage(error: unknown): string {
 
 export function idempotencyKey(): string {
   return crypto.randomUUID();
+}
+
+export function queryString(values: Record<string, string | number | boolean | null | undefined>): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(values)) {
+    if (value !== null && value !== undefined && value !== '') params.set(key, String(value));
+  }
+  const encoded = params.toString();
+  return encoded ? `?${encoded}` : '';
 }

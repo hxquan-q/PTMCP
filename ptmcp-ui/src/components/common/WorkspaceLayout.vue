@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, type Component } from 'vue';
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
 import { useSessionStore } from '../../stores/session';
 
 export interface NavigationItem {
   label: string;
   to: string;
-  icon: string;
+  icon: Component;
   permission?: string;
 }
 const props = defineProps<{ mode: 'admin' | 'personal'; items: NavigationItem[]; title: string; subtitle: string }>();
