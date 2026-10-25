@@ -4,6 +4,7 @@ import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.common.resource.DatabaseEngine;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -14,11 +15,19 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
  * Executes an already-approved MySQL request inside a read-only transaction. It exposes no public
  * SQL-string entry point and never maps a driver message into an error response.
+ *
+ * <p>Lifecycle: audit/security admission gates the borrow (db-design §7 — nothing touches the
+ * business pool before the START is durably admitted and the security state is fresh); queue and
+ * connect budgets bound the checkout; the server-side {@code max_execution_time} bounds execution
+ * and fetch, backed by a wall-clock read budget; the accumulated output stays inside the byte
+ * budget; and a generation or owner mismatch at return time quarantines the connection instead of
+ * returning it.
  */
 public final class MysqlReadOnlyExecutor {
     public static final int FETCH_SIZE = 100;
@@ -32,6 +41,7 @@ public final class MysqlReadOnlyExecutor {
     private final DataSourcePoolRegistry registry;
     private final ExecutorSettings settings;
     private final Consumer<ExecutionTrace> observer;
+    private final ExecutionAdmission admission;
 
     public MysqlReadOnlyExecutor(DataSourcePoolRegistry registry) {
         this(registry, ExecutorSettings.defaults(), trace -> {});
@@ -45,15 +55,30 @@ public final class MysqlReadOnlyExecutor {
             DataSourcePoolRegistry registry,
             ExecutorSettings settings,
             Consumer<ExecutionTrace> observer) {
+        this(registry, settings, observer, ExecutionAdmission.internalPermissive());
+    }
+
+    /**
+     * The production constructor: no business connection is touched unless the admission gate
+     * confirms the audit START and the security state for this execution.
+     */
+    public MysqlReadOnlyExecutor(
+            DataSourcePoolRegistry registry,
+            ExecutorSettings settings,
+            Consumer<ExecutionTrace> observer,
+            ExecutionAdmission admission) {
         this.registry = Objects.requireNonNull(registry, "registry");
         this.settings = Objects.requireNonNull(settings, "settings");
         this.observer = Objects.requireNonNull(observer, "observer");
+        this.admission = Objects.requireNonNull(admission, "admission");
     }
 
     public ReadOnlyResult execute(
             long datasourceId, ReadOnlyRequest request, ReadOnlyCancellation cancellation) {
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(cancellation, "cancellation");
+        UUID executionId = UUID.randomUUID();
+        admission.requireAdmission(datasourceId, executionId);
         PoolHandle handle =
                 registry.current(datasourceId)
                         .orElseThrow(
@@ -61,16 +86,18 @@ public final class MysqlReadOnlyExecutor {
         if (handle.key().engine() != DatabaseEngine.MYSQL) {
             throw new DomainException(ErrorCode.DIALECT_CONTEXT_INVALID);
         }
+        TraceRecorder trace = new TraceRecorder();
+        trace.poolGeneration(handle.generation());
+        trace.record(ExecutionStage.QUEUE, ExecutionState.QUEUED);
         Connection connection;
         try {
+            trace.record(ExecutionStage.CONNECT, ExecutionState.CONNECTED);
             connection = handle.dataSource().getConnection();
         } catch (SQLException failure) {
             throw new DomainException(ErrorCode.CONNECTION_POOL_UNAVAILABLE);
         }
-        TraceRecorder trace = new TraceRecorder();
-        trace.poolGeneration(handle.generation());
         trace.record(ExecutionStage.CHECKOUT, ExecutionState.ACQUIRED);
-        return run(connection, handle, request, cancellation, trace);
+        return run(connection, handle, request, cancellation, trace, datasourceId);
     }
 
     private ReadOnlyResult run(
@@ -78,11 +105,13 @@ public final class MysqlReadOnlyExecutor {
             PoolHandle handle,
             ReadOnlyRequest request,
             ReadOnlyCancellation cancellation,
-            TraceRecorder trace) {
+            TraceRecorder trace,
+            long datasourceId) {
         DomainException failure = null;
         QueryData data = null;
         long executeStarted = 0;
         boolean interrupted = false;
+        boolean unknown = false;
         try {
             validateBorrowed(connection, handle.key());
             configure(connection);
@@ -92,15 +121,17 @@ public final class MysqlReadOnlyExecutor {
                 failure = new DomainException(ErrorCode.CLIENT_CANCELLED);
             } else {
                 trace.record(ExecutionStage.EXECUTE, ExecutionState.EXECUTING);
+                trace.record(ExecutionStage.READ, ExecutionState.READING);
                 executeStarted = System.nanoTime();
                 try {
-                    data = read(connection, request, cancellation);
+                    data = read(connection, request, cancellation, trace, executeStarted);
                     trace.record(ExecutionStage.DRAIN, ExecutionState.DRAINING);
                 } catch (SQLException readFailure) {
                     DomainException mapped =
                             mapExecutionFailure(readFailure, cancellation, executeStarted);
                     if (mapped.errorCode() == ErrorCode.CLIENT_CANCELLED
-                            || mapped.errorCode() == ErrorCode.QUERY_TIMEOUT) {
+                            || mapped.errorCode() == ErrorCode.QUERY_TIMEOUT
+                            || mapped.errorCode() == ErrorCode.SQL_BUDGET_EXCEEDED) {
                         trace.record(ExecutionStage.CANCEL, ExecutionState.CANCELLING);
                         interrupted = true;
                     } else {
@@ -113,6 +144,13 @@ public final class MysqlReadOnlyExecutor {
             failure = new DomainException(ErrorCode.DRIVER_ERROR);
         } catch (DomainException domainFailure) {
             failure = domainFailure;
+        } catch (RuntimeException unexpected) {
+            /*
+             * An unexpected runtime failure has no trustworthy connection state and no mapped
+             * code: report it as the UNKNOWN terminal class and never return the connection.
+             */
+            failure = new DomainException(ErrorCode.INTERNAL_ERROR);
+            unknown = true;
         }
 
         if (cancellation.isTainted()) {
@@ -127,15 +165,24 @@ public final class MysqlReadOnlyExecutor {
         }
         trace.record(ExecutionStage.CLEAN, ExecutionState.CLEANING);
         ExecutionState finalState;
-        if (interrupted) {
+        if (interrupted || unknown) {
             /*
              * Connector/J cannot confirm that a killed cursor fetch quiesced, and its response
-             * stream stays desynchronized after such an interrupt. The design forbids returning
-             * that connection, so it is aborted and the primary timeout/cancel error is reported.
+             * stream stays desynchronized after such an interrupt; an UNKNOWN failure has no
+             * trustworthy state either. The connection is aborted and never returned.
              */
             handle.evict(connection);
             trace.record(ExecutionStage.EVICT, ExecutionState.EVICTED);
             finalState = ExecutionState.EVICTED;
+        } else if (isStaleGeneration(handle, datasourceId)) {
+            /*
+             * The active generation moved on while this execution held a connection from an older
+             * one. The connection is quarantined (aborted, never returned) even though the query
+             * itself succeeded; the result of the execution is unaffected.
+             */
+            handle.evict(connection);
+            trace.record(ExecutionStage.EVICT, ExecutionState.QUARANTINED);
+            finalState = ExecutionState.QUARANTINED;
         } else {
             boolean clean = cleanup(connection);
             if (clean) {
@@ -157,6 +204,15 @@ public final class MysqlReadOnlyExecutor {
             throw failure;
         }
         return new ReadOnlyResult(data.columns(), data.rows(), data.limitReached(), finished);
+    }
+
+    private boolean isStaleGeneration(PoolHandle handle, long datasourceId) {
+        if (handle.state() != PoolHandle.State.ACTIVE) {
+            return true;
+        }
+        return registry.current(datasourceId)
+                .map(current -> current.generation() != handle.generation())
+                .orElse(true);
     }
 
     private static void validateBorrowed(Connection connection, PoolKey key) {
@@ -192,7 +248,11 @@ public final class MysqlReadOnlyExecutor {
     }
 
     private QueryData read(
-            Connection connection, ReadOnlyRequest request, ReadOnlyCancellation cancellation)
+            Connection connection,
+            ReadOnlyRequest request,
+            ReadOnlyCancellation cancellation,
+            TraceRecorder trace,
+            long executeStartedNanos)
             throws SQLException {
         try (Statement statement = connection.createStatement()) {
             statement.setFetchSize(FETCH_SIZE);
@@ -215,13 +275,30 @@ public final class MysqlReadOnlyExecutor {
                                     metadata.getColumnType(index)));
                 }
                 List<List<String>> rows = new ArrayList<>();
+                long outputBytes = 0;
+                long readDeadline = System.nanoTime() + settings.readTimeoutMillis() * 1_000_000L;
                 while (rows.size() < request.maxRows() && resultSet.next()) {
                     if (cancellation.isCancelled()) {
                         throw new CancelledQueryException();
                     }
+                    if (System.nanoTime() > readDeadline) {
+                        // The wall-clock read budget backs the server-side execution budget: a
+                        // fetch that dribbles past it is a controlled timeout, not a hang.
+                        throw new ReadBudgetExceededException();
+                    }
                     List<String> row = new ArrayList<>(columnCount);
                     for (int index = 1; index <= columnCount; index++) {
-                        row.add(resultSet.getString(index));
+                        String cell = resultSet.getString(index);
+                        if (cell != null) {
+                            outputBytes += cell.getBytes(StandardCharsets.UTF_8).length;
+                        }
+                        row.add(cell);
+                    }
+                    outputBytes += 8L * columnCount;
+                    if (outputBytes > settings.outputBudgetBytes()) {
+                        // Exceeding the output budget stops the fetch as a controlled interrupt;
+                        // a mid-cursor stop never returns the connection.
+                        throw new OutputBudgetExceededException();
                     }
                     rows.add(row);
                 }
@@ -239,6 +316,12 @@ public final class MysqlReadOnlyExecutor {
             SQLException failure, ReadOnlyCancellation cancellation, long executeStartedNanos) {
         if (cancellation.isCancelled()) {
             return new DomainException(ErrorCode.CLIENT_CANCELLED);
+        }
+        if (failure instanceof ReadBudgetExceededException) {
+            return new DomainException(ErrorCode.QUERY_TIMEOUT);
+        }
+        if (failure instanceof OutputBudgetExceededException) {
+            return new DomainException(ErrorCode.SQL_BUDGET_EXCEEDED);
         }
         if (failure instanceof SQLTimeoutException) {
             return new DomainException(ErrorCode.QUERY_TIMEOUT);
@@ -324,6 +407,22 @@ public final class MysqlReadOnlyExecutor {
 
         CancelledQueryException() {
             super("cancelled", "70100", 1317);
+        }
+    }
+
+    private static final class ReadBudgetExceededException extends SQLException {
+        private static final long serialVersionUID = 1L;
+
+        ReadBudgetExceededException() {
+            super("read budget exceeded", "70100", 1317);
+        }
+    }
+
+    private static final class OutputBudgetExceededException extends SQLException {
+        private static final long serialVersionUID = 1L;
+
+        OutputBudgetExceededException() {
+            super("output budget exceeded", "S1009", 0);
         }
     }
 }

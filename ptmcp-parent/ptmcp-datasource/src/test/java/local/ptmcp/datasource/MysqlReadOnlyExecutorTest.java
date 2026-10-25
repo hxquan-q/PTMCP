@@ -27,6 +27,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -135,18 +136,24 @@ class MysqlReadOnlyExecutorTest {
         ExecutionTrace trace = TRACES.get(0);
         assertEquals(
                 List.of(
+                        ExecutionState.QUEUED,
+                        ExecutionState.CONNECTED,
                         ExecutionState.ACQUIRED,
                         ExecutionState.CONFIGURED,
                         ExecutionState.EXECUTING,
+                        ExecutionState.READING,
                         ExecutionState.DRAINING,
                         ExecutionState.CLEANING,
                         ExecutionState.RETURNED),
                 trace.states());
         assertEquals(
                 List.of(
+                        ExecutionStage.QUEUE,
+                        ExecutionStage.CONNECT,
                         ExecutionStage.CHECKOUT,
                         ExecutionStage.CONFIGURE,
                         ExecutionStage.EXECUTE,
+                        ExecutionStage.READ,
                         ExecutionStage.DRAIN,
                         ExecutionStage.CLEAN,
                         ExecutionStage.RETURN),
@@ -223,9 +230,12 @@ class MysqlReadOnlyExecutorTest {
         assertEquals(ExecutionState.EVICTED, trace.finalState());
         assertEquals(
                 List.of(
+                        ExecutionState.QUEUED,
+                        ExecutionState.CONNECTED,
                         ExecutionState.ACQUIRED,
                         ExecutionState.CONFIGURED,
                         ExecutionState.EXECUTING,
+                        ExecutionState.READING,
                         ExecutionState.CANCELLING,
                         ExecutionState.CLEANING,
                         ExecutionState.EVICTED),
@@ -271,9 +281,12 @@ class MysqlReadOnlyExecutorTest {
         assertEquals(ExecutionState.EVICTED, TRACES.get(0).finalState());
         assertEquals(
                 List.of(
+                        ExecutionState.QUEUED,
+                        ExecutionState.CONNECTED,
                         ExecutionState.ACQUIRED,
                         ExecutionState.CONFIGURED,
                         ExecutionState.EXECUTING,
+                        ExecutionState.READING,
                         ExecutionState.CANCELLING,
                         ExecutionState.CLEANING,
                         ExecutionState.EVICTED),
@@ -313,9 +326,12 @@ class MysqlReadOnlyExecutorTest {
         assertEquals(ExecutionState.EVICTED, TRACES.get(0).finalState());
         assertEquals(
                 List.of(
+                        ExecutionState.QUEUED,
+                        ExecutionState.CONNECTED,
                         ExecutionState.ACQUIRED,
                         ExecutionState.CONFIGURED,
                         ExecutionState.EXECUTING,
+                        ExecutionState.READING,
                         ExecutionState.DRAINING,
                         ExecutionState.CLEANING,
                         ExecutionState.EVICTED),
@@ -554,6 +570,201 @@ class MysqlReadOnlyExecutorTest {
     }
 
     @Test
+    void admissionFailureRejectsBeforeAnyBusinessConnection() {
+        int[] connections = {0};
+        DataSourcePoolRegistry counting =
+                new DataSourcePoolRegistry(
+                        (key, credential, limits) -> {
+                            DataSource real =
+                                    new HikariPoolFactory().create(key, credential, limits);
+                            return new CountingDataSource(real, connections);
+                        });
+        try {
+            counting.activate(key(9, 1), password.toCharArray(), PoolLimits.of(1));
+            MysqlReadOnlyExecutor gated =
+                    new MysqlReadOnlyExecutor(
+                            counting,
+                            ExecutorSettings.defaults(),
+                            TRACES::add,
+                            (datasourceId, executionId) -> {
+                                throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+                            });
+            DomainException failure =
+                    assertThrows(
+                            DomainException.class,
+                            () ->
+                                    gated.execute(
+                                            9, request("SELECT 1", 1), new ReadOnlyCancellation()));
+            assertEquals(ErrorCode.AUDIT_UNAVAILABLE, failure.errorCode());
+            assertEquals(0, connections[0], "no business connection may be borrowed");
+            assertEquals(0, TRACES.size(), "rejection happens before the lifecycle trace");
+        } finally {
+            counting.close();
+        }
+    }
+
+    @Test
+    void outputByteBudgetStopsTheFetchAndQuarantinesTheConnection() throws Exception {
+        try (Connection connection =
+                        DriverManager.getConnection(
+                                mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword());
+                Statement statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE wide_rows (id BIGINT PRIMARY KEY, payload LONGTEXT)");
+            char[] chunk = new char[20_000];
+            Arrays.fill(chunk, 'x');
+            String payload = new String(chunk);
+            for (int id = 1; id <= 20; id++) {
+                try (var insert =
+                        connection.prepareStatement(
+                                "INSERT INTO wide_rows (id, payload) VALUES (?, ?)")) {
+                    insert.setLong(1, id);
+                    insert.setString(2, payload);
+                    insert.executeUpdate();
+                }
+            }
+        }
+        ExecutorSettings tight = new ExecutorSettings(15_000, 3_000, 2_000, 64 * 1024, 15_000);
+        MysqlReadOnlyExecutor budgeted = new MysqlReadOnlyExecutor(registry, tight, TRACES::add);
+        DomainException failure =
+                assertThrows(
+                        DomainException.class,
+                        () ->
+                                budgeted.execute(
+                                        1,
+                                        request("SELECT id, payload FROM wide_rows", 100),
+                                        new ReadOnlyCancellation()));
+        assertEquals(ErrorCode.SQL_BUDGET_EXCEEDED, failure.errorCode());
+        assertTrue(handle.evictedConnections() >= 1, "mid-cursor stop evicts the connection");
+        ReadOnlyResult after =
+                executor.execute(
+                        1,
+                        request("SELECT COUNT(*) AS total FROM wide_rows", 1),
+                        new ReadOnlyCancellation());
+        assertEquals("20", after.rows().getFirst().get(0));
+        assertNotEquals(ExecutionState.QUARANTINED, after.trace().finalState());
+    }
+
+    @Test
+    void largeFieldUnicodeDuplicateLabelsAndEmptyResultsAreSafe() throws Exception {
+        try (Connection connection =
+                        DriverManager.getConnection(
+                                mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword());
+                Statement statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE wide_cell (id BIGINT PRIMARY KEY, payload LONGTEXT)");
+            char[] big = new char[300_000];
+            Arrays.fill(big, '\u5b57');
+            String unicode =
+                    new String(big)
+                            + "emoji-\uD83D\uDE80-ends-\u65e5\u672c\u8a9e-\u00dcn\u00efc\u00f6d\u00e9";
+            try (var insert =
+                    connection.prepareStatement(
+                            "INSERT INTO wide_cell (id, payload) VALUES (?, ?)")) {
+                insert.setLong(1, 1);
+                insert.setString(2, unicode);
+                insert.executeUpdate();
+            }
+        }
+        ReadOnlyResult result =
+                executor.execute(
+                        1,
+                        request(
+                                "SELECT id AS dup, payload AS dup, 'const' AS dup FROM wide_cell",
+                                10),
+                        new ReadOnlyCancellation());
+        assertEquals(
+                List.of("dup", "dup", "dup"),
+                result.columns().stream().map(ReadOnlyResult.Column::label).toList());
+        assertEquals(1, result.rows().size());
+        assertTrue(result.rows().getFirst().get(1).startsWith("\u5b57"));
+        assertTrue(result.rows().getFirst().get(1).endsWith("\u00dcn\u00efc\u00f6d\u00e9"));
+
+        ReadOnlyResult empty =
+                executor.execute(
+                        1,
+                        request("SELECT id, name FROM probe WHERE id < 0", 10),
+                        new ReadOnlyCancellation());
+        assertTrue(empty.rows().isEmpty());
+        assertFalse(empty.limitReached());
+        assertEquals(ExecutionState.RETURNED, empty.trace().finalState());
+    }
+
+    @Test
+    void staleGenerationMidExecutionQuarantinesInsteadOfReturning() throws Exception {
+        // beginDrain marks the generation stale without closing the pool, so the in-flight query
+        // completes and the return path must quarantine instead of returning the connection.
+        ExecutorService scheduler = Executors.newSingleThreadExecutor();
+        try {
+            Future<?> switcher =
+                    scheduler.submit(
+                            () -> {
+                                try {
+                                    Thread.sleep(150);
+                                    handle.beginDrain();
+                                } catch (Exception failure) {
+                                    throw new IllegalStateException(failure);
+                                }
+                                return null;
+                            });
+            ReadOnlyResult result =
+                    executor.execute(
+                            1,
+                            request("SELECT SLEEP(0.4) AS waited", 1),
+                            new ReadOnlyCancellation());
+            switcher.get(5, TimeUnit.SECONDS);
+            assertEquals(ExecutionState.QUARANTINED, result.trace().finalState());
+            assertTrue(handle.evictedConnections() >= 1, "stale generation connection is aborted");
+        } finally {
+            scheduler.shutdownNow();
+        }
+    }
+
+    @Test
+    void unknownInternalFailureMapsToUnknownTerminalAndNeverReturnsTheConnection() {
+        DataSourcePoolRegistry proxied =
+                new DataSourcePoolRegistry(
+                        (key, credential, limits) -> {
+                            DataSource real =
+                                    new HikariPoolFactory().create(key, credential, limits);
+                            return new ThrowingCreateStatementDataSource(real);
+                        });
+        try {
+            proxied.activate(key(8, 1), password.toCharArray(), PoolLimits.of(1));
+            MysqlReadOnlyExecutor broken =
+                    new MysqlReadOnlyExecutor(proxied, ExecutorSettings.defaults(), TRACES::add);
+            DomainException failure =
+                    assertThrows(
+                            DomainException.class,
+                            () ->
+                                    broken.execute(
+                                            8, request("SELECT 1", 1), new ReadOnlyCancellation()));
+            assertEquals(ErrorCode.INTERNAL_ERROR, failure.errorCode());
+            assertFalse(
+                    failure.getMessage() != null && failure.getMessage().contains("boom"),
+                    "internal failure details never surface");
+            assertEquals(ExecutionState.EVICTED, TRACES.getLast().finalState());
+        } finally {
+            proxied.close();
+        }
+    }
+
+    @Test
+    void unknownOutputKindAndNewBudgetBoundsAreRejected() {
+        assertThrows(IllegalArgumentException.class, () -> ReadOnlyRequest.of("SELECT 1", 1, null));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new ExecutorSettings(15_000, 3_000, 2_000, 64 * 1024 - 1, 15_000));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new ExecutorSettings(15_000, 3_000, 2_000, 8L * 1024 * 1024 + 1, 15_000));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new ExecutorSettings(15_000, 3_000, 2_000, 1024 * 1024, 0));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new ExecutorSettings(15_000, 3_000, 2_000, 1024 * 1024, 60_001));
+    }
+
+    @Test
     void poolLimitsAndReadOnlyRequestsValidateTheirBounds() {
         assertThrows(IllegalArgumentException.class, () -> new PoolLimits(0, 3_000));
         assertThrows(IllegalArgumentException.class, () -> new PoolLimits(9, 3_000));
@@ -561,5 +772,146 @@ class MysqlReadOnlyExecutorTest {
         assertThrows(IllegalArgumentException.class, () -> new ExecutorSettings(0, 3_000, 2_000));
         assertThrows(
                 IllegalArgumentException.class, () -> new ExecutorSettings(60_001, 3_000, 2_000));
+    }
+
+    /** Counts the physical business connections the pools actually hand out. */
+    private static final class CountingDataSource implements DataSource, AutoCloseable {
+        private final DataSource delegate;
+        private final int[] counter;
+
+        CountingDataSource(DataSource delegate, int[] counter) {
+            this.delegate = delegate;
+            this.counter = counter;
+        }
+
+        @Override
+        public Connection getConnection() throws SQLException {
+            counter[0]++;
+            return delegate.getConnection();
+        }
+
+        @Override
+        public Connection getConnection(String username, String credential) throws SQLException {
+            counter[0]++;
+            return delegate.getConnection(username, credential);
+        }
+
+        @Override
+        public PrintWriter getLogWriter() throws SQLException {
+            return delegate.getLogWriter();
+        }
+
+        @Override
+        public void setLogWriter(PrintWriter out) throws SQLException {
+            delegate.setLogWriter(out);
+        }
+
+        @Override
+        public void setLoginTimeout(int seconds) throws SQLException {
+            delegate.setLoginTimeout(seconds);
+        }
+
+        @Override
+        public int getLoginTimeout() throws SQLException {
+            return delegate.getLoginTimeout();
+        }
+
+        @Override
+        public Logger getParentLogger() {
+            return Logger.getLogger("ptmcp-test");
+        }
+
+        @Override
+        public <T> T unwrap(Class<T> type) throws SQLException {
+            return delegate.unwrap(type);
+        }
+
+        @Override
+        public boolean isWrapperFor(Class<?> type) throws SQLException {
+            return delegate.isWrapperFor(type);
+        }
+
+        @Override
+        public void close() throws Exception {
+            if (delegate instanceof AutoCloseable closeable) {
+                closeable.close();
+            }
+        }
+    }
+
+    /** Wraps every connection so createStatement fails with an internal runtime failure. */
+    private static final class ThrowingCreateStatementDataSource
+            implements DataSource, AutoCloseable {
+        private final DataSource delegate;
+
+        ThrowingCreateStatementDataSource(DataSource delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public Connection getConnection() throws SQLException {
+            Connection real = delegate.getConnection();
+            return (Connection)
+                    Proxy.newProxyInstance(
+                            Connection.class.getClassLoader(),
+                            new Class<?>[] {Connection.class},
+                            (proxy, method, arguments) -> {
+                                if ("createStatement".equals(method.getName())) {
+                                    throw new IllegalStateException("boom");
+                                }
+                                try {
+                                    return method.invoke(real, arguments);
+                                } catch (InvocationTargetException failure) {
+                                    throw failure.getCause();
+                                }
+                            });
+        }
+
+        @Override
+        public Connection getConnection(String username, String credential) throws SQLException {
+            return delegate.getConnection(username, credential);
+        }
+
+        @Override
+        public PrintWriter getLogWriter() throws SQLException {
+            return delegate.getLogWriter();
+        }
+
+        @Override
+        public void setLogWriter(PrintWriter out) throws SQLException {
+            delegate.setLogWriter(out);
+        }
+
+        @Override
+        public void setLoginTimeout(int seconds) throws SQLException {
+            delegate.setLoginTimeout(seconds);
+        }
+
+        @Override
+        public int getLoginTimeout() throws SQLException {
+            return delegate.getLoginTimeout();
+        }
+
+        @Override
+        public Logger getParentLogger() {
+            return Logger.getLogger("ptmcp-test");
+        }
+
+        @Override
+        public <T> T unwrap(Class<T> type) throws SQLException {
+            return delegate.unwrap(type);
+        }
+
+        @Override
+        public boolean isWrapperFor(Class<?> type) throws SQLException {
+            return delegate.isWrapperFor(type);
+        }
+
+        @Override
+        public void close() throws Exception {
+            if (delegate instanceof AutoCloseable closeable) {
+                closeable.close();
+            }
+        }
     }
 }
