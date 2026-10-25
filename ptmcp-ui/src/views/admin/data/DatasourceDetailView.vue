@@ -13,6 +13,8 @@ import {
   type DatasourceWrite
 } from '../../../services/data';
 import { useSessionStore } from '../../../stores/session';
+import { datasourceDifferences, isVersionConflict } from '../../../adapters/edit-conflict';
+import VersionConflictPanel from '../../../components/data/VersionConflictPanel.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -25,6 +27,10 @@ const error = ref('');
 const requestId = ref<string>();
 const etag = ref('');
 const datasource = ref<DatasourceRead | null>(null);
+const conflict = ref<{ base: DatasourceRead; latest: DatasourceRead; etag: string; resolved: boolean } | null>(null);
+const conflictRequired = ref(false);
+const conflictLoading = ref(false);
+const conflictRows = computed(() => (conflict.value ? datasourceDifferences(conflict.value.base, conflict.value.latest, form) : []));
 const formRef = ref<FormInstance>();
 const form = reactive<DatasourceWrite>(emptyForm());
 let controller: AbortController | null = null;
@@ -82,7 +88,8 @@ function statusType(value: string): 'success' | 'warning' | 'info' {
 function errorMessage(value: unknown): string {
   if (value instanceof DataRequestError) {
     requestId.value = value.requestId;
-    return value.message;
+    if (value.code === 'REFERENCES_EXIST') return '数据源仍有活动依赖。请先停用并处理相关授权，再删除。';
+    return `${value.message}${value.code ? `（${value.code}）` : ''}`;
   }
   return value instanceof Error ? value.message : '请求失败，请稍后重试';
 }
@@ -93,11 +100,54 @@ function resetKeys(): void {
   deleteKey = crypto.randomUUID();
 }
 function clearSensitive(): void {
-  form.credential = '';
+  Object.assign(form, emptyForm());
   datasource.value = null;
   etag.value = '';
+  conflict.value = null;
+  conflictRequired.value = false;
+  conflictLoading.value = false;
+  saving.value = false;
+  actionLoading.value = false;
   controller?.abort();
   generation += 1;
+}
+function recordFailure(cause: unknown): void {
+  const message = errorMessage(cause);
+  if (cause instanceof DataRequestError && (cause.status === 401 || cause.status === 404 || (cause.status === 403 && cause.code !== 'CSRF_INVALID')))
+    clearSensitive();
+  error.value = message;
+}
+async function readConflict(): Promise<void> {
+  if (conflictLoading.value || !datasource.value || !session.can('ptmcp:datasource:read')) return;
+  const current = generation;
+  const base = conflict.value?.base ?? datasource.value;
+  const targetId = id.value;
+  conflictLoading.value = true;
+  error.value = '';
+  try {
+    const result = await getDatasource(targetId, controller?.signal);
+    if (!active || current !== generation) return;
+    conflict.value = { base, latest: result.data, etag: result.etag ?? `"${result.data.configVersion}"`, resolved: false };
+  } catch (cause) {
+    if (active && current === generation && !aborted(cause)) recordFailure(cause);
+  } finally {
+    if (active && current === generation) conflictLoading.value = false;
+  }
+}
+function resolveConflict(keepDraft: boolean): void {
+  if (!conflict.value || conflictLoading.value || saving.value || actionLoading.value || !session.can('ptmcp:datasource:read')) return;
+  const latest = conflict.value.latest;
+  datasource.value = latest;
+  etag.value = conflict.value.etag;
+  form.credential = '';
+  if (keepDraft) conflict.value.resolved = true;
+  else {
+    copyForm(latest);
+    conflict.value = null;
+  }
+  conflictRequired.value = false;
+  error.value = '';
+  resetKeys();
 }
 function copyForm(value: DatasourceRead): void {
   Object.assign(form, {
@@ -124,6 +174,9 @@ async function load(): Promise<void> {
   datasource.value = null;
   etag.value = '';
   form.credential = '';
+  conflict.value = null;
+  conflictRequired.value = false;
+  conflictLoading.value = false;
   loading.value = true;
   error.value = '';
   if (!session.can('ptmcp:datasource:read')) {
@@ -152,31 +205,54 @@ async function validate(): Promise<boolean> {
     : false;
 }
 async function save(): Promise<void> {
-  if (!etag.value || saving.value || !session.can('ptmcp:datasource:update') || !(await validate())) return;
+  if (!etag.value || saving.value || actionLoading.value || conflictRequired.value || !session.can('ptmcp:datasource:update')) return;
   const current = generation;
   const targetId = id.value;
   saving.value = true;
   error.value = '';
   try {
+    if (!(await validate()) || !active || current !== generation || !session.can('ptmcp:datasource:update')) return;
+    if (form.status === 'DISABLED' && datasource.value?.status !== 'DISABLED') {
+      try {
+        await ElMessageBox.confirm('停用后此数据源将不能继续用于查询或同步，相关授权的实际访问也会受影响。', '确认停用数据源', {
+          type: 'warning',
+          confirmButtonText: '停用并保存',
+          cancelButtonText: '取消'
+        });
+      } catch {
+        return;
+      }
+      if (!active || current !== generation || !session.can('ptmcp:datasource:update')) return;
+    }
     const result = await updateDatasource(targetId, { ...form }, etag.value, saveKey);
     if (!active || current !== generation) return;
     datasource.value = result.data;
     etag.value = result.etag ?? `"${result.data.configVersion}"`;
     copyForm(result.data);
+    conflict.value = null;
     saveKey = crypto.randomUUID();
     ElMessage.success('数据源配置已保存');
   } catch (cause) {
-    if (active && current === generation) error.value = errorMessage(cause);
+    if (!active || current !== generation) return;
+    if (cause instanceof DataRequestError && isVersionConflict(cause)) {
+      form.credential = '';
+      conflict.value = null;
+      conflictRequired.value = true;
+      await readConflict();
+    } else recordFailure(cause);
   } finally {
-    form.credential = '';
-    saving.value = false;
+    if (active && current === generation) {
+      form.credential = '';
+      saving.value = false;
+    }
   }
 }
 async function testConnection(): Promise<void> {
-  if (actionLoading.value || !datasource.value || !session.can('ptmcp:datasource:test') || !(await validate())) return;
+  if (actionLoading.value || saving.value || conflictRequired.value || !datasource.value || !session.can('ptmcp:datasource:test')) return;
   const current = generation;
   actionLoading.value = true;
   try {
+    if (!(await validate()) || !active || current !== generation || !session.can('ptmcp:datasource:test')) return;
     const result = await testDatasource(id.value, { ...form }, testKey);
     if (!active || current !== generation) return;
     form.credential = '';
@@ -184,14 +260,17 @@ async function testConnection(): Promise<void> {
     ElMessage.success('连接测试已提交');
     if (session.can('ptmcp:job:read')) await router.push(`/admin/jobs/${result.data.id}`);
   } catch (cause) {
-    if (active && current === generation) error.value = errorMessage(cause);
+    if (active && current === generation) recordFailure(cause);
   } finally {
-    form.credential = '';
-    actionLoading.value = false;
+    if (active && current === generation) {
+      form.credential = '';
+      actionLoading.value = false;
+    }
   }
 }
 async function syncMetadata(): Promise<void> {
-  if (actionLoading.value || !datasource.value || !session.can('ptmcp:datasource:sync')) return;
+  if (actionLoading.value || saving.value || conflictRequired.value || datasource.value?.status !== 'ACTIVE' || !session.can('ptmcp:datasource:sync'))
+    return;
   const current = generation;
   actionLoading.value = true;
   try {
@@ -201,13 +280,16 @@ async function syncMetadata(): Promise<void> {
     ElMessage.success('元数据同步已提交');
     if (session.can('ptmcp:job:read')) await router.push(`/admin/jobs/${result.data.id}`);
   } catch (cause) {
-    if (active && current === generation) error.value = errorMessage(cause);
+    if (active && current === generation) recordFailure(cause);
   } finally {
-    actionLoading.value = false;
+    if (active && current === generation) actionLoading.value = false;
   }
 }
 async function removeDatasource(): Promise<void> {
-  if (!etag.value || actionLoading.value || !session.can('ptmcp:datasource:delete')) return;
+  if (!etag.value || saving.value || actionLoading.value || conflictRequired.value || !session.can('ptmcp:datasource:delete')) return;
+  const current = generation;
+  const targetId = id.value;
+  actionLoading.value = true;
   try {
     await ElMessageBox.confirm('删除后将无法继续使用此数据源。若仍有活动授权，服务端会拒绝删除。', '确认删除数据源', {
       type: 'warning',
@@ -215,19 +297,28 @@ async function removeDatasource(): Promise<void> {
       cancelButtonText: '取消'
     });
   } catch {
+    if (active && current === generation) actionLoading.value = false;
     return;
   }
-  const current = generation;
-  actionLoading.value = true;
+  if (!active || current !== generation || !session.can('ptmcp:datasource:delete')) {
+    if (active && current === generation) actionLoading.value = false;
+    return;
+  }
   try {
-    await deleteDatasource(id.value, etag.value, deleteKey);
+    await deleteDatasource(targetId, etag.value, deleteKey);
     if (!active || current !== generation) return;
     ElMessage.success('数据源已删除');
     await router.replace('/admin/datasources');
   } catch (cause) {
-    if (active && current === generation) error.value = errorMessage(cause);
+    if (!active || current !== generation) return;
+    if (cause instanceof DataRequestError && isVersionConflict(cause)) {
+      form.credential = '';
+      conflict.value = null;
+      conflictRequired.value = true;
+      await readConflict();
+    } else recordFailure(cause);
   } finally {
-    actionLoading.value = false;
+    if (active && current === generation) actionLoading.value = false;
   }
 }
 function openMetadata(): void {
@@ -269,12 +360,14 @@ onBeforeUnmount(() => {
         <p class="subtitle">{{ datasource?.code || '加载中…' }}</p>
       </div>
       <div v-if="datasource" class="heading-actions">
-        <ElButton v-if="session.can('ptmcp:datasource:test')" :loading="actionLoading" @click="testConnection">测试连接</ElButton>
+        <ElButton v-if="session.can('ptmcp:datasource:test')" :loading="actionLoading" :disabled="saving || conflictRequired" @click="testConnection"
+          >测试连接</ElButton
+        >
         <ElButton
           v-if="session.can('ptmcp:datasource:sync')"
           type="primary"
           :loading="actionLoading"
-          :disabled="datasource.status !== 'ACTIVE'"
+          :disabled="datasource.status !== 'ACTIVE' || saving || conflictRequired"
           @click="syncMetadata"
           >同步元数据</ElButton
         >
@@ -286,6 +379,18 @@ onBeforeUnmount(() => {
         >{{ error }}<span v-if="requestId">（请求 ID：{{ requestId }}）</span></span
       ></ElAlert
     >
+    <VersionConflictPanel
+      v-if="conflictRequired || conflict"
+      :rows="conflictRows"
+      :loading="conflictLoading || saving || actionLoading"
+      :ready="!!conflict"
+      :resolved="conflict?.resolved ?? false"
+      :versions="conflict ? `配置版本 ${conflict.base.configVersion} → ${conflict.latest.configVersion}` : ''"
+      credential-cleared
+      @refresh="readConflict"
+      @latest="resolveConflict(false)"
+      @draft="resolveConflict(true)"
+    />
     <ElSkeleton v-if="loading" :rows="8" animated />
     <template v-else-if="datasource">
       <div class="status-strip">
@@ -306,7 +411,7 @@ onBeforeUnmount(() => {
           ref="formRef"
           :model="form"
           :rules="rules"
-          :disabled="!session.can('ptmcp:datasource:update')"
+          :disabled="!session.can('ptmcp:datasource:update') || saving || actionLoading || conflictRequired"
           label-position="top"
           class="datasource-form"
         >
@@ -333,13 +438,26 @@ onBeforeUnmount(() => {
             <ElFormItem label="连接池上限" prop="poolMax"><ElInputNumber v-model="form.poolMax" :min="1" :max="8" class="full-width" /></ElFormItem>
           </div>
           <ElAlert type="info" :closable="false">TLS 固定为 VERIFY_FULL。凭据不回显，留空表示保持现有值。</ElAlert>
-          <div class="form-actions">
-            <ElButton v-if="session.can('ptmcp:datasource:update')" type="primary" :loading="saving" @click="save">保存更改</ElButton
-            ><ElButton v-if="session.can('ptmcp:datasource:delete')" type="danger" plain :loading="actionLoading" @click="removeDatasource"
-              >删除数据源</ElButton
-            >
-          </div>
         </ElForm>
+        <div class="form-actions">
+          <ElButton
+            v-if="session.can('ptmcp:datasource:update')"
+            type="primary"
+            :loading="saving"
+            :disabled="actionLoading || conflictRequired"
+            @click="save"
+            >保存更改</ElButton
+          >
+          <ElButton
+            v-if="session.can('ptmcp:datasource:delete')"
+            type="danger"
+            plain
+            :loading="actionLoading"
+            :disabled="saving || conflictRequired"
+            @click="removeDatasource"
+            >删除数据源</ElButton
+          >
+        </div>
       </ElCard>
       <ElCard shadow="never" class="meta-card">
         <template #header

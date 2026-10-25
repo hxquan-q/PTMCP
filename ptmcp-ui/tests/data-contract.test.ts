@@ -174,3 +174,23 @@ test('numeric BIGINT literals retain their original digits through transport and
     globalThis.fetch = originalFetch;
   }
 });
+
+test('a version conflict is returned to the editor without replacing If-Match or replaying the write', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ method: string | undefined; version: string | null }> = [];
+  setCsrfToken('synthetic-csrf');
+  globalThis.fetch = async (_input, init) => {
+    calls.push({ method: init?.method, version: new Headers(init?.headers).get('If-Match') });
+    return new Response(JSON.stringify({ code: 'VERSION_CONFLICT' }), { status: 409, headers: { ETag: '"3"' } });
+  };
+  try {
+    await assert.rejects(
+      () => api.updateDatasource('12', draft, '"2"'),
+      (error: unknown) => error instanceof api.DataRequestError && error.status === 409 && error.code === 'VERSION_CONFLICT'
+    );
+    assert.deepEqual(calls, [{ method: 'PUT', version: '"2"' }]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    setCsrfToken(null);
+  }
+});
