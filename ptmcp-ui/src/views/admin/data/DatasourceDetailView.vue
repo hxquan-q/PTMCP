@@ -1,0 +1,382 @@
+<script setup lang="ts">
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import {
+  DataRequestError,
+  deleteDatasource,
+  getDatasource,
+  syncDatasource,
+  testDatasource,
+  updateDatasource,
+  type DatasourceRead,
+  type DatasourceWrite
+} from '../../../services/data';
+
+const route = useRoute();
+const router = useRouter();
+const id = String(route.params.id);
+const loading = ref(true);
+const saving = ref(false);
+const actionLoading = ref(false);
+const error = ref('');
+const requestId = ref<string>();
+const etag = ref('');
+const datasource = ref<DatasourceRead | null>(null);
+const form = reactive<DatasourceWrite>(emptyForm());
+
+function emptyForm(): DatasourceWrite {
+  return {
+    code: '',
+    name: '',
+    engine: 'MYSQL',
+    host: '',
+    port: 3306,
+    databaseName: '',
+    username: '',
+    credential: '',
+    tlsMode: 'VERIFY_FULL',
+    poolMax: 4,
+    status: 'DRAFT'
+  };
+}
+function formatDate(value: string | null | undefined): string {
+  return value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
+}
+function statusLabel(value: string): string {
+  return { ACTIVE: '运行中', DRAFT: '草稿', DISABLED: '已停用' }[value] ?? value;
+}
+function statusType(value: string): 'success' | 'warning' | 'info' {
+  return value === 'ACTIVE' ? 'success' : value === 'DISABLED' ? 'info' : 'warning';
+}
+function errorMessage(value: unknown): string {
+  if (value instanceof DataRequestError) {
+    requestId.value = value.requestId;
+    return value.message;
+  }
+  return value instanceof Error ? value.message : '请求失败，请稍后重试';
+}
+function copyForm(value: DatasourceRead): void {
+  Object.assign(form, {
+    code: value.code,
+    name: value.name,
+    engine: value.engine,
+    host: value.host,
+    port: value.port,
+    databaseName: value.databaseName,
+    username: value.username,
+    credential: '',
+    tlsMode: 'VERIFY_FULL',
+    poolMax: value.poolMax,
+    status: value.status
+  });
+}
+async function load(): Promise<void> {
+  loading.value = true;
+  error.value = '';
+  try {
+    const result = await getDatasource(id);
+    datasource.value = result.data;
+    etag.value = result.etag ?? `"${result.data.configVersion}"`;
+    copyForm(result.data);
+  } catch (cause) {
+    error.value = errorMessage(cause);
+  } finally {
+    loading.value = false;
+  }
+}
+async function save(): Promise<void> {
+  if (!etag.value || saving.value) return;
+  saving.value = true;
+  error.value = '';
+  try {
+    const result = await updateDatasource(id, { ...form }, etag.value);
+    datasource.value = result.data;
+    etag.value = result.etag ?? `"${result.data.configVersion}"`;
+    copyForm(result.data);
+    ElMessage.success('数据源配置已保存');
+  } catch (cause) {
+    error.value = errorMessage(cause);
+  } finally {
+    saving.value = false;
+  }
+}
+async function testConnection(): Promise<void> {
+  if (actionLoading.value || !datasource.value) return;
+  actionLoading.value = true;
+  try {
+    const result = await testDatasource(id, { ...form });
+    ElMessage.success('连接测试已提交');
+    await router.push(`/admin/jobs/${result.data.id}`);
+  } catch (cause) {
+    error.value = errorMessage(cause);
+  } finally {
+    actionLoading.value = false;
+  }
+}
+async function syncMetadata(): Promise<void> {
+  if (actionLoading.value || !datasource.value) return;
+  actionLoading.value = true;
+  try {
+    const result = await syncDatasource(id);
+    ElMessage.success('元数据同步已提交');
+    await router.push(`/admin/jobs/${result.data.id}`);
+  } catch (cause) {
+    error.value = errorMessage(cause);
+  } finally {
+    actionLoading.value = false;
+  }
+}
+async function removeDatasource(): Promise<void> {
+  if (!etag.value || actionLoading.value) return;
+  try {
+    await ElMessageBox.confirm('删除后将无法继续使用此数据源。若仍有活动授权，服务端会拒绝删除。', '确认删除数据源', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消'
+    });
+  } catch {
+    return;
+  }
+  actionLoading.value = true;
+  try {
+    await deleteDatasource(id, etag.value);
+    ElMessage.success('数据源已删除');
+    await router.replace('/admin/datasources');
+  } catch (cause) {
+    error.value = errorMessage(cause);
+  } finally {
+    actionLoading.value = false;
+  }
+}
+function openMetadata(): void {
+  if (datasource.value?.activeSnapshotId) void router.push({ path: '/admin/metadata', query: { datasourceId: id } });
+}
+onMounted(() => void load());
+onBeforeUnmount(() => {
+  error.value = '';
+});
+</script>
+
+<template>
+  <section class="page-shell" aria-labelledby="detail-title">
+    <div class="page-heading">
+      <div>
+        <ElButton link class="back-link" @click="router.push('/admin/datasources')">← 返回数据源</ElButton>
+        <p class="eyebrow">连接资源 / 详情</p>
+        <h1 id="detail-title">{{ datasource?.name || '数据源详情' }}</h1>
+        <p class="subtitle">{{ datasource?.code || '加载中…' }}</p>
+      </div>
+      <div v-if="datasource" class="heading-actions">
+        <ElButton :loading="actionLoading" @click="testConnection">测试连接</ElButton>
+        <ElButton type="primary" :loading="actionLoading" :disabled="datasource.status !== 'ACTIVE'" @click="syncMetadata">同步元数据</ElButton>
+      </div>
+    </div>
+
+    <ElAlert v-if="error" type="error" show-icon :closable="false" class="state-alert"
+      ><span
+        >{{ error }}<span v-if="requestId">（请求 ID：{{ requestId }}）</span></span
+      ></ElAlert
+    >
+    <ElSkeleton v-if="loading" :rows="8" animated />
+    <template v-else-if="datasource">
+      <div class="status-strip">
+        <span class="status-label">当前状态</span><ElTag :type="statusType(datasource.status)">{{ statusLabel(datasource.status) }}</ElTag>
+        <span>健康：{{ datasource.health || 'UNKNOWN' }}</span
+        ><span>凭据：{{ datasource.credentialConfigured ? '已配置' : '未配置' }}</span>
+        <ElButton v-if="datasource.activeSnapshotId" link type="primary" @click="openMetadata">查看元数据</ElButton>
+      </div>
+      <ElCard shadow="never" class="detail-card">
+        <template #header
+          ><div class="card-title">
+            <span>连接配置</span><span class="version">版本 {{ datasource.configVersion }}</span>
+          </div></template
+        >
+        <ElForm :model="form" label-position="top" class="datasource-form">
+          <div class="form-grid">
+            <ElFormItem label="编码"><ElInput v-model="form.code" disabled /></ElFormItem>
+            <ElFormItem label="名称"><ElInput v-model="form.name" maxlength="128" /></ElFormItem>
+            <ElFormItem label="引擎"
+              ><ElSelect v-model="form.engine" disabled
+                ><ElOption label="MySQL" value="MYSQL" /><ElOption label="PostgreSQL" value="POSTGRESQL" /></ElSelect
+            ></ElFormItem>
+            <ElFormItem label="状态"
+              ><ElSelect v-model="form.status"
+                ><ElOption label="草稿" value="DRAFT" /><ElOption label="运行中" value="ACTIVE" /><ElOption
+                  label="已停用"
+                  value="DISABLED" /></ElSelect
+            ></ElFormItem>
+            <ElFormItem label="主机"><ElInput v-model="form.host" /></ElFormItem>
+            <ElFormItem label="端口"><ElInputNumber v-model="form.port" :min="1" :max="65535" class="full-width" /></ElFormItem>
+            <ElFormItem label="数据库名"><ElInput v-model="form.databaseName" /></ElFormItem>
+            <ElFormItem label="用户名"><ElInput v-model="form.username" /></ElFormItem>
+            <ElFormItem label="替换凭据"
+              ><ElInput v-model="form.credential" type="password" show-password autocomplete="new-password" placeholder="留空保持已配置凭据"
+            /></ElFormItem>
+            <ElFormItem label="连接池上限"><ElInputNumber v-model="form.poolMax" :min="1" :max="8" class="full-width" /></ElFormItem>
+          </div>
+          <ElAlert type="info" :closable="false">TLS 固定为 VERIFY_FULL。凭据不回显，留空表示保持现有值。</ElAlert>
+          <div class="form-actions">
+            <ElButton type="primary" :loading="saving" @click="save">保存更改</ElButton
+            ><ElButton type="danger" plain :loading="actionLoading" @click="removeDatasource">删除数据源</ElButton>
+          </div>
+        </ElForm>
+      </ElCard>
+      <ElCard shadow="never" class="meta-card">
+        <template #header
+          ><div class="card-title"><span>同步信息</span></div></template
+        >
+        <dl class="facts">
+          <div>
+            <dt>最近同步</dt>
+            <dd>{{ formatDate(datasource.lastSyncAt) }}</dd>
+          </div>
+          <div>
+            <dt>活动快照</dt>
+            <dd>{{ datasource.activeSnapshotId || '待同步' }}</dd>
+          </div>
+          <div>
+            <dt>资源版本</dt>
+            <dd>{{ datasource.resourceVersion }}</dd>
+          </div>
+          <div>
+            <dt>更新时间</dt>
+            <dd>{{ formatDate(datasource.updatedAt) }}</dd>
+          </div>
+        </dl>
+      </ElCard>
+    </template>
+    <ElEmpty v-else description="数据源不存在或你已失去访问权限"
+      ><ElButton type="primary" @click="router.push('/admin/datasources')">返回列表</ElButton></ElEmpty
+    >
+  </section>
+</template>
+
+<style scoped>
+.page-shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 26px clamp(16px, 3vw, 40px) 44px;
+}
+.page-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-end;
+  margin-bottom: 20px;
+}
+.back-link {
+  margin-bottom: 16px;
+  padding: 0;
+  color: #467078;
+}
+.eyebrow {
+  margin: 0 0 6px;
+  color: #0f6f68;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+h1 {
+  margin: 0;
+  color: #1d2938;
+  font-size: clamp(26px, 3vw, 34px);
+}
+.subtitle {
+  margin: 7px 0 0;
+  color: #6d7986;
+}
+.heading-actions {
+  display: flex;
+  gap: 10px;
+}
+.status-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 16px 0;
+  padding: 12px 16px;
+  border: 1px solid #dce5e9;
+  border-radius: 8px;
+  background: #f8fafb;
+  color: #5f6d7a;
+  font-size: 13px;
+}
+.status-label {
+  color: #293644;
+  font-weight: 700;
+}
+.state-alert {
+  margin-bottom: 16px;
+}
+.detail-card,
+.meta-card {
+  margin-top: 16px;
+  border-color: #dce5e9;
+}
+.card-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #253545;
+  font-weight: 700;
+}
+.version {
+  color: #778492;
+  font-size: 12px;
+  font-weight: 400;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 18px;
+}
+.full-width,
+.datasource-form :deep(.el-select) {
+  width: 100%;
+}
+.form-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 22px;
+}
+.facts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin: 0;
+}
+.facts div {
+  min-width: 0;
+}
+dt {
+  color: #7b8792;
+  font-size: 12px;
+}
+dd {
+  margin: 5px 0 0;
+  color: #263646;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 760px) {
+  .page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .heading-actions {
+    width: 100%;
+  }
+  .heading-actions .el-button {
+    flex: 1;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .facts {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+</style>
