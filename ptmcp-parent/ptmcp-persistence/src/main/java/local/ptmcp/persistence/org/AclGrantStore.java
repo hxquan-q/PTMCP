@@ -174,6 +174,158 @@ public final class AclGrantStore {
         }
     }
 
+    /**
+     * The grant matrix row: every field the admin surface displays (effect, window, version,
+     * resource generation) plus the live resource generation and whether the grant has gone stale
+     * because the resource was deleted and recreated. All filtering happens in this query.
+     */
+    public MatrixRow matrixRow(AclGrantRecord record, long liveGeneration) {
+        return new MatrixRow(
+                record.id(),
+                record.subjectType(),
+                record.subjectId(),
+                record.resourceType(),
+                record.resourceId(),
+                record.resourceGeneration(),
+                record.action(),
+                record.effect(),
+                record.includeDescendants(),
+                record.validFrom(),
+                record.validTo(),
+                record.status(),
+                record.reason(),
+                record.version(),
+                liveGeneration,
+                liveGeneration != record.resourceGeneration());
+    }
+
+    public record MatrixRow(
+            long id,
+            String subjectType,
+            long subjectId,
+            String resourceType,
+            long resourceId,
+            long resourceGeneration,
+            String action,
+            String effect,
+            boolean includeDescendants,
+            Instant validFrom,
+            Instant validTo,
+            String status,
+            String reason,
+            long version,
+            long liveGeneration,
+            boolean stale) {}
+
+    private static final String LIVE_GENERATION_SQL =
+            "CASE g.resource_type"
+                    + " WHEN 'DATASOURCE' THEN COALESCE((SELECT d.config_version FROM datasource d"
+                    + "   WHERE d.id = g.resource_id AND d.status = 'ACTIVE'), -1)"
+                    + " WHEN 'NAMESPACE' THEN COALESCE((SELECT n.generation FROM resource_namespace n"
+                    + "   WHERE n.id = g.resource_id AND n.status = 'ACTIVE'), -1)"
+                    + " ELSE COALESCE((SELECT o.generation FROM resource_object o"
+                    + "   WHERE o.id = g.resource_id AND o.status = 'ACTIVE'), -1)"
+                    + " END";
+
+    /**
+     * Grant matrix with every filter applied in this query — callers never post-filter. The live
+     * generation and the stale flag are computed per row against the live resource tables.
+     */
+    public List<MatrixRow> matrix(
+            String subjectType,
+            Long subjectId,
+            String resourceType,
+            Long resourceId,
+            String status,
+            String effect,
+            Boolean stale,
+            int limit) {
+        if (limit < 1 || limit > 500) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
+        StringBuilder sql =
+                new StringBuilder(
+                        "SELECT t.id, t.subject_type, t.subject_id, t.resource_type, t.resource_id,"
+                                + " t.resource_generation, t.action, t.effect, t.include_descendants,"
+                                + " t.valid_from, t.valid_to, t.status, t.reason, t.version, t.live"
+                                + " FROM (SELECT g.id, g.subject_type, g.subject_id, g.resource_type,"
+                                + " g.resource_id, g.resource_generation, g.action, g.effect,"
+                                + " g.include_descendants, g.valid_from, g.valid_to, g.status,"
+                                + " g.reason, g.version, "
+                                + LIVE_GENERATION_SQL
+                                + " AS live"
+                                + " FROM acl_grant g WHERE 1 = 1");
+        List<Object> parameters = new ArrayList<>();
+        if (subjectType != null) {
+            sql.append(" AND g.subject_type = ?");
+            parameters.add(subjectType);
+        }
+        if (subjectId != null) {
+            sql.append(" AND g.subject_id = ?");
+            parameters.add(subjectId);
+        }
+        if (resourceType != null) {
+            sql.append(" AND g.resource_type = ?");
+            parameters.add(resourceType);
+        }
+        if (resourceId != null) {
+            sql.append(" AND g.resource_id = ?");
+            parameters.add(resourceId);
+        }
+        if (status != null) {
+            sql.append(" AND g.status = ?");
+            parameters.add(status);
+        }
+        if (effect != null) {
+            sql.append(" AND g.effect = ?");
+            parameters.add(effect);
+        }
+        sql.append(" ORDER BY g.id LIMIT ?) t WHERE 1 = 1");
+        if (stale != null) {
+            sql.append(
+                    stale
+                            ? " AND t.live <> t.resource_generation"
+                            : " AND t.live = t.resource_generation");
+        }
+        sql.append(" ORDER BY t.id");
+        parameters.add(limit);
+        try (Connection connection = OrgSql.configure(primary);
+                PreparedStatement statement = OrgSql.statement(connection, sql.toString())) {
+            for (int index = 0; index < parameters.size(); index++) {
+                statement.setObject(index + 1, parameters.get(index));
+            }
+            try (ResultSet result = statement.executeQuery()) {
+                List<MatrixRow> rows = new ArrayList<>();
+                while (result.next()) {
+                    java.sql.Timestamp validTo = result.getTimestamp(11);
+                    long live = result.getLong(15);
+                    rows.add(
+                            new MatrixRow(
+                                    result.getLong(1),
+                                    result.getString(2),
+                                    result.getLong(3),
+                                    result.getString(4),
+                                    result.getLong(5),
+                                    result.getLong(6),
+                                    result.getString(7),
+                                    result.getString(8),
+                                    result.getInt(9) == 1,
+                                    OrgSql.toInstant(
+                                            result.getObject(10, java.time.LocalDateTime.class)),
+                                    validTo == null ? null : validTo.toInstant(),
+                                    result.getString(12),
+                                    result.getString(13),
+                                    result.getLong(14),
+                                    live,
+                                    live != result.getLong(6)));
+                }
+                return rows;
+            }
+        } catch (SQLException error) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+    }
+
     public AclGrantRecord get(long id) {
         try (Connection connection = OrgSql.configure(primary);
                 PreparedStatement statement =

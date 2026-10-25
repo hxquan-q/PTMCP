@@ -112,7 +112,17 @@ public final class AclDirectory {
                                 connection,
                                 "SELECT id, subject_type, subject_id, resource_type, resource_id,"
                                         + " action, effect, include_descendants, valid_from, valid_to"
-                                        + " FROM acl_grant WHERE status = 'ACTIVE' ORDER BY id");
+                                        + " FROM acl_grant WHERE status = 'ACTIVE'"
+                                        + " AND resource_generation = CASE resource_type"
+                                        + " WHEN 'DATASOURCE' THEN COALESCE((SELECT config_version"
+                                        + "   FROM datasource WHERE id = resource_id"
+                                        + "   AND status = 'ACTIVE'), -1)"
+                                        + " WHEN 'NAMESPACE' THEN COALESCE((SELECT generation"
+                                        + "   FROM resource_namespace WHERE id = resource_id"
+                                        + "   AND status = 'ACTIVE'), -1)"
+                                        + " ELSE COALESCE((SELECT generation FROM resource_object"
+                                        + "   WHERE id = resource_id AND status = 'ACTIVE'), -1)"
+                                        + " END ORDER BY id");
                 ResultSet result = statement.executeQuery()) {
             List<GrantRow> grants = new ArrayList<>();
             while (result.next()) {

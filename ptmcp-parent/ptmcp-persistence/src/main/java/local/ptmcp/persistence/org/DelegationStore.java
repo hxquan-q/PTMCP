@@ -129,7 +129,6 @@ public final class DelegationStore {
                 throw failure;
             }
         } catch (SQLException failure) {
-            failure.printStackTrace();
             throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
         return get(createdId[0]);

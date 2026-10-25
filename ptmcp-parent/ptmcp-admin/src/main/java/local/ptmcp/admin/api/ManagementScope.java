@@ -55,15 +55,13 @@ public final class ManagementScope {
         if (principal.platformAdmin()) {
             return principal;
         }
-        if (targetSubjectDeptId == null) {
-            throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
-        }
         DelegationStore.DelegationRecord delegation =
                 delegations.findValid(principal.userId(), resourceType, resourceId, Instant.now());
         if (delegation == null || !delegation.coversAction(action)) {
             throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
         }
-        if (!withinSubtree(orgStore, targetSubjectDeptId, delegation.departmentRootId())) {
+        if (targetSubjectDeptId != null
+                && !withinSubtree(orgStore, targetSubjectDeptId, delegation.departmentRootId())) {
             throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
         }
         return principal;
