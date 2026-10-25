@@ -3,21 +3,28 @@ import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { mePortalApi, type AuthorizationView } from '../../services/mePortalApi';
-import { errorText, formatDate } from '../portalUtils';
+import { errorText, formatDate, isAccessError, usePortalTask } from '../portalUtils';
 
 const router = useRouter();
 const items = ref<AuthorizationView[]>([]);
 const loading = ref(false);
 const loadError = ref('');
 const nextCursor = ref<string | null>(null);
+const listTask = usePortalTask(() => {
+  items.value = [];
+  nextCursor.value = null;
+});
 async function load(append = false): Promise<void> {
+  if (!append) nextCursor.value = null;
   loading.value = true;
   loadError.value = '';
   try {
-    const page = await mePortalApi.authorizations.list(append ? (nextCursor.value ?? undefined) : undefined);
+    const page = await listTask.run((signal) => mePortalApi.authorizations.list(append ? (nextCursor.value ?? undefined) : undefined, signal));
+    if (!page) return;
     items.value = append ? [...items.value, ...page.items] : page.items;
     nextCursor.value = page.nextCursor;
   } catch (error) {
+    if (isAccessError(error)) items.value = [];
     loadError.value = errorText(error);
   } finally {
     loading.value = false;

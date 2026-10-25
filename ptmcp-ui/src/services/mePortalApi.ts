@@ -1,3 +1,4 @@
+import { normalizeMeResponse } from './portalIds';
 import { request as transportRequest, setCsrfToken } from './http';
 
 export interface PlatformItem {
@@ -129,7 +130,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers: init.headers,
     signal: init.signal ?? undefined
   });
-  return result.data;
+  return normalizeMeResponse(path, result.data) as T;
 }
 
 function query(values: Record<string, string | undefined>): string {
@@ -142,37 +143,43 @@ function query(values: Record<string, string | undefined>): string {
 
 export const mePortalApi = {
   accessContext: {
-    platforms: (cursor?: string) =>
-      request<AccessContext<PlatformItem>>(`/api/v1/me/access-context${query({ level: 'PLATFORM', cursor, pageSize: '100' })}`),
-    datasources: (platformId: string, cursor?: string) =>
-      request<AccessContext<DatasourceItem>>(`/api/v1/me/access-context${query({ level: 'DATASOURCE', platformId, cursor, pageSize: '100' })}`),
-    namespaces: (platformId: string, datasourceId: string, cursor?: string) =>
+    platforms: (cursor?: string, signal?: AbortSignal) =>
+      request<AccessContext<PlatformItem>>(`/api/v1/me/access-context${query({ level: 'PLATFORM', cursor, pageSize: '100' })}`, { signal }),
+    datasources: (platformId: string, cursor?: string, signal?: AbortSignal) =>
+      request<AccessContext<DatasourceItem>>(`/api/v1/me/access-context${query({ level: 'DATASOURCE', platformId, cursor, pageSize: '100' })}`, {
+        signal
+      }),
+    namespaces: (platformId: string, datasourceId: string, cursor?: string, signal?: AbortSignal) =>
       request<AccessContext<NamespaceItem>>(
-        `/api/v1/me/access-context${query({ level: 'NAMESPACE', platformId, datasourceId, cursor, pageSize: '100' })}`
+        `/api/v1/me/access-context${query({ level: 'NAMESPACE', platformId, datasourceId, cursor, pageSize: '100' })}`,
+        { signal }
       )
   },
   dictionary: {
-    list: (params: { platformId: string; datasourceId: string; databaseName?: string; schemaName?: string; keyword?: string; cursor?: string }) =>
-      request<{ items: ObjectSummary[]; nextCursor: string | null }>(`/api/v1/me/dictionary${query({ ...params, pageSize: '20' })}`),
-    detail: (platformId: string, objectId: string) =>
-      request<ObjectDetail>(`/api/v1/me/dictionary/${encodeURIComponent(objectId)}${query({ platformId })}`)
+    list: (
+      params: { platformId: string; datasourceId: string; databaseName?: string; schemaName?: string; keyword?: string; cursor?: string },
+      signal?: AbortSignal
+    ) => request<{ items: ObjectSummary[]; nextCursor: string | null }>(`/api/v1/me/dictionary${query({ ...params, pageSize: '20' })}`, { signal }),
+    detail: (platformId: string, objectId: string, signal?: AbortSignal) =>
+      request<ObjectDetail>(`/api/v1/me/dictionary/${encodeURIComponent(objectId)}${query({ platformId })}`, { signal })
   },
   tokens: {
-    list: (status?: string, cursor?: string) =>
-      request<{ items: TokenView[]; nextCursor: string | null }>(`/api/v1/me/tokens${query({ status, cursor, pageSize: '20' })}`),
+    list: (status?: string, cursor?: string, signal?: AbortSignal) =>
+      request<{ items: TokenView[]; nextCursor: string | null }>(`/api/v1/me/tokens${query({ status, cursor, pageSize: '20' })}`, { signal }),
     create: (body: { name: string; platformId: string; scopes: string[]; expiresAt?: string }) =>
       request<{ token: string; metadata: TokenView }>('/api/v1/me/tokens', { method: 'POST', body: JSON.stringify(body) }),
     revoke: (id: string) => request<TokenView>(`/api/v1/me/tokens/${encodeURIComponent(id)}`, { method: 'DELETE' })
   },
   history: {
-    list: (params: { from?: string; to?: string; tool?: string; result?: string; verdict?: string; cursor?: string } = {}) =>
-      request<{ items: AuditSummary[]; nextCursor: string | null }>(`/api/v1/me/history${query({ ...params, pageSize: '20' })}`),
-    detail: (requestId: string) => request<AuditDetail>(`/api/v1/me/history/${encodeURIComponent(requestId)}`)
+    list: (params: { from?: string; to?: string; tool?: string; result?: string; verdict?: string; cursor?: string } = {}, signal?: AbortSignal) =>
+      request<{ items: AuditSummary[]; nextCursor: string | null }>(`/api/v1/me/history${query({ ...params, pageSize: '20' })}`, { signal }),
+    detail: (requestId: string, signal?: AbortSignal) => request<AuditDetail>(`/api/v1/me/history/${encodeURIComponent(requestId)}`, { signal })
   },
-  mcpConfig: (platformId: string, clientType: string) => request<McpConfig>(`/api/v1/me/mcp-config${query({ platformId, clientType })}`),
+  mcpConfig: (platformId: string, clientType: string, signal?: AbortSignal) =>
+    request<McpConfig>(`/api/v1/me/mcp-config${query({ platformId, clientType })}`, { signal }),
   authorizations: {
-    list: (cursor?: string) =>
-      request<{ items: AuthorizationView[]; nextCursor: string | null }>(`/api/v1/me/authorizations${query({ cursor, pageSize: '20' })}`),
+    list: (cursor?: string, signal?: AbortSignal) =>
+      request<{ items: AuthorizationView[]; nextCursor: string | null }>(`/api/v1/me/authorizations${query({ cursor, pageSize: '20' })}`, { signal }),
     revoke: (id: string) =>
       request<{ id: string; status: string; revoked: boolean }>(`/api/v1/me/authorizations/${encodeURIComponent(id)}`, { method: 'DELETE' })
   },

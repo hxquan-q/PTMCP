@@ -1,25 +1,48 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { mePortalApi, type AuditDetail } from '../../services/mePortalApi';
-import { errorText, formatDate } from '../portalUtils';
+import { errorText, formatDate, usePortalTask } from '../portalUtils';
 
 const route = useRoute();
 const router = useRouter();
 const item = ref<AuditDetail | null>(null);
 const loading = ref(true);
 const error = ref('');
-const requestId = String(route.params.requestId ?? '');
+const requestId = computed(() => (typeof route.params.requestId === 'string' ? route.params.requestId : ''));
+const detailTask = usePortalTask(() => {
+  item.value = null;
+});
+const guidance = computed(() => {
+  if (!item.value) return '';
+  if (item.value.result === 'UNKNOWN' || item.value.result === 'START' || item.value.errorCode?.includes('TIMEOUT'))
+    return '执行结局不确定或请求超时，请按 requestId 排查；不要直接认定未执行或自动重复查询。';
+  if (item.value.verdict === 'DENY' || item.value.errorCode?.includes('AUTHORIZED'))
+    return '请求被权限规则拒绝，请联系管理员核对平台范围与个人授权。';
+  if (item.value.truncated) return '服务端已报告截断，请让 Agent 收窄条件或使用聚合查询。';
+  return '排障请使用 requestId 联系管理员。语法或只读规则拒绝时，请让 Agent 修正请求。';
+});
 async function load(): Promise<void> {
+  detailTask.cancel();
+  item.value = null;
+  loading.value = true;
+  error.value = '';
   try {
-    item.value = await mePortalApi.history.detail(requestId);
+    const result = await detailTask.run((signal) => mePortalApi.history.detail(requestId.value, signal));
+    if (result) item.value = result;
   } catch (reason) {
     error.value = errorText(reason);
   } finally {
     loading.value = false;
   }
 }
-onMounted(load);
+watch(
+  requestId,
+  () => {
+    void load();
+  },
+  { immediate: true }
+);
 </script>
 
 <template>
@@ -55,8 +78,24 @@ onMounted(load);
         ><template #header>脱敏请求摘要</template>
         <pre class="plain-text">{{ item.sqlMasked || '服务端未提供摘要' }}</pre>
         <p v-if="item.errorCode" class="error-text">错误码：{{ item.errorCode }}</p>
-        <ElAlert type="info" :closable="false" title="排障请使用 requestId 联系管理员。个人门户不提供原始 SQL 解密、结果集下载或自动重试。" /></ElCard
-    ></template>
+        <ElAlert type="info" :closable="false" :title="guidance" />
+        <p class="page-description">个人门户不提供原始 SQL 解密、结果集下载或自动重试。</p></ElCard
+      ><ElCard shadow="never" class="portal-card"
+        ><template #header>调用上下文与执行证据</template
+        ><ElDescriptions :column="2" border
+          ><ElDescriptionsItem label="平台 ID">{{ item.platformId ?? '—' }}</ElDescriptionsItem
+          ><ElDescriptionsItem label="数据源 ID">{{ item.datasourceId ?? '—' }}</ElDescriptionsItem
+          ><ElDescriptionsItem label="完成时间（台北）">{{ formatDate(item.completedAt) }}</ElDescriptionsItem
+          ><ElDescriptionsItem label="响应字节">{{ item.responseBytes ?? '—' }}</ElDescriptionsItem
+          ><ElDescriptionsItem label="排队时间">{{ item.queueMs ?? '—' }} ms</ElDescriptionsItem
+          ><ElDescriptionsItem label="数据库时间">{{ item.dbMs ?? '—' }} ms</ElDescriptionsItem></ElDescriptions
+        >
+        <h2>可见资源引用</h2>
+        <pre class="plain-text">{{ JSON.stringify(item.resourceRefs, null, 2) ?? '—' }}</pre>
+        <h2>使用版本</h2>
+        <pre class="plain-text">{{ JSON.stringify(item.versions, null, 2) ?? '—' }}</pre>
+      </ElCard></template
+    >
   </section>
 </template>
 
@@ -111,6 +150,10 @@ h1 {
   margin: 0 0 16px;
   white-space: pre-wrap;
   word-break: break-word;
+}
+h2 {
+  font-size: 14px;
+  margin: 18px 0 8px;
 }
 .error-text {
   color: var(--el-color-danger);

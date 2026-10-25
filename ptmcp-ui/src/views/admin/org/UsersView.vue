@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useSessionStore } from '../../../stores/session';
 import { orgPortalApi, type Department, type Role, type User } from '../../../services/orgPortalApi';
-import { errorText, isConflict } from '../../portalUtils';
+import { userChangePlan } from '../../../services/portalMutations';
+import { errorText, isAccessError, isConflict, usePortalTask } from '../../portalUtils';
 
 const loading = ref(false);
 const session = useSessionStore();
@@ -18,9 +19,28 @@ const keyword = ref('');
 const departmentFilter = ref('');
 const dialogVisible = ref(false);
 const editing = ref<User | null>(null);
+const conflict = ref<User | null>(null);
+const conflictDetected = ref(false);
+const roleOptionsLoaded = ref(false);
 const form = reactive({ username: '', displayName: '', deptId: '', roleIds: [] as string[], enabled: true });
+const clearPage = (): void => {
+  users.value = [];
+  departments.value = [];
+  roles.value = [];
+  editing.value = null;
+  conflict.value = null;
+  conflictDetected.value = false;
+  dialogVisible.value = false;
+  roleOptionsLoaded.value = false;
+};
+const usersTask = usePortalTask(clearPage);
+const detailTask = usePortalTask(clearPage);
 
-const canEdit = computed(() => roles.value.length > 0 || !editing.value);
+const canEdit = computed(
+  () => !editing.value || ['ptmcp:user:update', 'ptmcp:user:move', 'ptmcp:user:assign-role', 'ptmcp:user:status'].some(session.can)
+);
+const canMove = computed(() => !editing.value || session.can('ptmcp:user:move'));
+const canAssignRoles = computed(() => session.can('ptmcp:user:assign-role') && roleOptionsLoaded.value);
 
 function resetForm(): void {
   form.username = '';
@@ -32,12 +52,16 @@ function resetForm(): void {
 
 function openCreate(): void {
   editing.value = null;
+  conflict.value = null;
+  conflictDetected.value = false;
   resetForm();
   dialogVisible.value = true;
 }
 
 function openEdit(user: User): void {
   editing.value = user;
+  conflict.value = null;
+  conflictDetected.value = false;
   form.username = user.username;
   form.displayName = user.displayName;
   form.deptId = user.deptId;
@@ -46,21 +70,30 @@ function openEdit(user: User): void {
   dialogVisible.value = true;
 }
 
-async function loadLookups(): Promise<void> {
-  const [departmentResult, roleResult] = await Promise.allSettled([orgPortalApi.departments.list(), orgPortalApi.roles.list()]);
-  if (departmentResult.status === 'fulfilled') departments.value = departmentResult.value;
-  if (roleResult.status === 'fulfilled') roles.value = roleResult.value;
-  // A failed role request must not replace an existing role list with an empty array.
-  if (roleResult.status === 'rejected' && roles.value.length === 0) ElMessage.warning('角色列表暂时不可用，角色选择已禁用');
-}
-
 async function load(): Promise<void> {
   loading.value = true;
   loadError.value = '';
   try {
-    await loadLookups();
-    users.value = await orgPortalApi.users.list({ departmentId: departmentFilter.value || undefined, keyword: keyword.value.trim() || undefined });
+    const result = await usersTask.run(async (signal) => {
+      const [departmentResult, roleResult] = await Promise.allSettled([orgPortalApi.departments.list(signal), orgPortalApi.roles.list(signal)]);
+      const items = await orgPortalApi.users.list(
+        { departmentId: departmentFilter.value || undefined, keyword: keyword.value.trim() || undefined },
+        signal
+      );
+      return { departmentResult, roleResult, items };
+    });
+    if (!result) return;
+    if (result.departmentResult.status === 'fulfilled') departments.value = result.departmentResult.value;
+    if (result.roleResult.status === 'fulfilled') {
+      roles.value = result.roleResult.value;
+      roleOptionsLoaded.value = true;
+    } else {
+      roleOptionsLoaded.value = false;
+      ElMessage.warning('角色列表暂时不可用，角色选择已禁用');
+    }
+    users.value = result.items;
   } catch (error) {
+    if (isAccessError(error)) clearPage();
     loadError.value = errorText(error);
   } finally {
     loading.value = false;
@@ -68,33 +101,91 @@ async function load(): Promise<void> {
 }
 
 async function save(): Promise<void> {
-  if (!session.can(editing.value ? 'ptmcp:user:update' : 'ptmcp:user:create')) return;
+  if (saving.value || !canEdit.value || conflictDetected.value) return;
+  if (!editing.value && !session.can('ptmcp:user:create')) return;
   if (!form.username.trim() || !form.displayName.trim() || !form.deptId) {
     ElMessage.warning('请填写用户名、显示名称和部门');
     return;
   }
-  if (!canEdit.value) {
-    ElMessage.warning('角色信息加载失败，无法安全保存');
-    return;
-  }
   saving.value = true;
+  let completed = 0;
   try {
     const body = {
       username: form.username.trim(),
       displayName: form.displayName.trim(),
       deptId: form.deptId,
-      roleIds: [...form.roleIds],
-      enabled: form.enabled
+      roleIds: canAssignRoles.value ? [...form.roleIds] : [],
+      enabled: session.can('ptmcp:user:status') ? form.enabled : true
     };
-    if (editing.value) await orgPortalApi.users.update(editing.value.id, body, editing.value.version);
-    else await orgPortalApi.users.create(body);
+    if (editing.value) {
+      let current = editing.value;
+      const plan = userChangePlan(current, form, session.can, roleOptionsLoaded.value);
+      if (plan.includes('department')) {
+        await ElMessageBox.confirm(
+          `将“${current.displayName}”从“${departmentName(current.deptId)}”移动到“${departmentName(form.deptId)}”。服务端将重新计算该用户的有效授权。`,
+          '确认迁移用户部门',
+          { type: 'warning' }
+        );
+      }
+      if (plan.includes('status') && !form.enabled) {
+        await ElMessageBox.confirm(`停用“${current.displayName}”后，该用户的后续请求可能失效。继续吗？`, '确认停用用户', { type: 'warning' });
+      }
+      if (plan.includes('profile')) {
+        current = await orgPortalApi.users.update(
+          current.id,
+          { displayName: form.displayName.trim(), deptId: current.deptId, enabled: current.enabled },
+          current.version
+        );
+        editing.value = current;
+        completed += 1;
+      }
+      if (plan.includes('department')) {
+        current = await orgPortalApi.users.setDepartment(current.id, form.deptId, current.version);
+        editing.value = current;
+        completed += 1;
+      }
+      if (plan.includes('roles')) {
+        current = await orgPortalApi.users.setRoles(current.id, [...form.roleIds], current.version);
+        editing.value = current;
+        completed += 1;
+      }
+      if (plan.includes('status')) {
+        current = await orgPortalApi.users.setStatus(current.id, form.enabled ? 'ACTIVE' : 'DISABLED', current.version);
+        editing.value = current;
+        completed += 1;
+      }
+    } else await orgPortalApi.users.create(body);
     dialogVisible.value = false;
     ElMessage.success(editing.value ? '用户已更新' : '用户已创建');
     await load();
   } catch (error) {
-    ElMessage.error(isConflict(error) ? '用户已被其他人修改，请刷新后重试' : errorText(error));
+    if (error === 'cancel' || error === 'close') return;
+    if (completed) loadError.value = `已完成 ${completed} 项独立变更，后续操作未完成。请核对保留的草稿和服务端状态后继续。`;
+    if (isConflict(error) && editing.value) {
+      conflictDetected.value = true;
+      await refreshConflict();
+      ElMessage.warning('检测到版本冲突，草稿已保留。请核对服务器版本后继续。');
+    } else ElMessage.error(errorText(error));
   } finally {
     saving.value = false;
+  }
+}
+
+function mergeServerVersion(): void {
+  if (!conflict.value) return;
+  editing.value = conflict.value;
+  conflict.value = null;
+  conflictDetected.value = false;
+}
+
+async function refreshConflict(): Promise<void> {
+  if (!editing.value) return;
+  const id = editing.value.id;
+  try {
+    const item = await detailTask.run((signal) => orgPortalApi.users.get(id, signal));
+    if (item) conflict.value = item;
+  } catch (error) {
+    ElMessage.error(errorText(error));
   }
 }
 
@@ -110,7 +201,9 @@ async function toggleStatus(user: User): Promise<void> {
     await load();
   } catch (error) {
     if (error === 'cancel' || error === 'close') return;
-    ElMessage.error(isConflict(error) ? '用户版本已变化，请刷新后重试' : errorText(error));
+    if (isConflict(error)) {
+      loadError.value = '用户版本已变化，状态操作尚未完成。请重新加载并核对当前状态。';
+    } else ElMessage.error(errorText(error));
   }
 }
 
@@ -122,16 +215,40 @@ function departmentName(id: string): string {
   return departments.value.find((department) => department.id === id)?.name ?? `部门 ${id}`;
 }
 
-onMounted(async () => {
-  await load();
+async function loadRouteDetail(): Promise<void> {
+  detailTask.cancel();
   const id = typeof route.params.id === 'string' ? route.params.id : null;
   if (id) {
     try {
-      openEdit(await orgPortalApi.users.get(id));
+      const item = await detailTask.run((signal) => orgPortalApi.users.get(id, signal));
+      if (item) openEdit(item);
     } catch (error) {
+      if (isAccessError(error)) {
+        editing.value = null;
+        dialogVisible.value = false;
+      }
       ElMessage.error(errorText(error));
     }
   }
+}
+watch(
+  () => route.params.id,
+  () => {
+    void loadRouteDetail();
+  }
+);
+watch(
+  () => session.can('ptmcp:user:list'),
+  (allowed) => {
+    if (!allowed) {
+      usersTask.cancel();
+      users.value = [];
+    }
+  }
+);
+onMounted(async () => {
+  await load();
+  await loadRouteDetail();
 });
 </script>
 
@@ -176,7 +293,12 @@ onMounted(async () => {
         >
         <ElTableColumn label="操作" fixed="right" width="180"
           ><template #default="{ row }"
-            ><ElButton v-if="session.can('ptmcp:user:update')" link type="primary" @click="openEdit(row as User)">编辑</ElButton
+            ><ElButton
+              v-if="['ptmcp:user:update', 'ptmcp:user:move', 'ptmcp:user:assign-role'].some(session.can)"
+              link
+              type="primary"
+              @click="openEdit(row as User)"
+              >编辑</ElButton
             ><ElButton v-if="session.can('ptmcp:user:status')" link :type="row.enabled ? 'danger' : 'success'" @click="toggleStatus(row as User)">{{
               row.enabled ? '停用' : '启用'
             }}</ElButton></template
@@ -185,24 +307,53 @@ onMounted(async () => {
       </ElTable>
     </ElCard>
     <ElDialog v-model="dialogVisible" :title="editing ? '编辑用户' : '新建用户'" width="min(600px, calc(100vw - 32px))">
-      <ElForm label-position="top">
+      <ElAlert
+        v-if="conflictDetected"
+        type="warning"
+        :closable="false"
+        title="服务器版本已变化，当前草稿已保留。请核对后显式选择继续或重置。"
+        class="mb-4"
+      >
+        <template v-if="conflict"
+          ><p>
+            服务器：{{ conflict.displayName }} · {{ departmentName(conflict.deptId) }} · {{ roleNames(conflict.roleIds) }} ·
+            {{ conflict.enabled ? '启用' : '停用' }}（版本 {{ conflict.version }}）
+          </p>
+          <ElButton size="small" @click="mergeServerVersion">已核对，以新版本继续编辑</ElButton
+          ><ElButton size="small" @click="openEdit(conflict)">使用服务器值重置</ElButton></template
+        ><ElButton v-else size="small" @click="refreshConflict">读取当前版本并比较</ElButton>
+      </ElAlert>
+      <ElAlert
+        v-if="!editing"
+        type="info"
+        :closable="false"
+        title="当前创建接口只创建外部身份记录，不设置初始密码。创建成功不代表用户已能通过密码登录。"
+        class="mb-4"
+      />
+      <ElForm label-position="top" :disabled="saving">
         <div class="form-grid">
           <ElFormItem label="用户名" required><ElInput v-model="form.username" :disabled="Boolean(editing)" maxlength="100" /></ElFormItem
-          ><ElFormItem label="显示名称" required><ElInput v-model="form.displayName" maxlength="100" /></ElFormItem>
+          ><ElFormItem label="显示名称" required
+            ><ElInput v-model="form.displayName" :disabled="Boolean(editing) && !session.can('ptmcp:user:update')" maxlength="100"
+          /></ElFormItem>
         </div>
         <ElFormItem label="部门" required
-          ><ElSelect v-model="form.deptId" class="wide-select"
+          ><ElSelect v-model="form.deptId" :disabled="!canMove" class="wide-select"
             ><ElOption v-for="item in departments" :key="item.id" :label="item.name" :value="item.id" /></ElSelect
         ></ElFormItem>
         <ElFormItem label="角色"
-          ><ElSelect v-model="form.roleIds" multiple collapse-tags :disabled="roles.length === 0" class="wide-select"
+          ><ElSelect v-model="form.roleIds" multiple collapse-tags :disabled="!canAssignRoles" class="wide-select"
             ><ElOption v-for="item in roles" :key="item.id" :label="item.name" :value="item.id" /></ElSelect
-          ><span v-if="roles.length === 0" class="helper">角色列表不可用时不会覆盖现有角色</span></ElFormItem
+          ><span v-if="!roleOptionsLoaded" class="helper">角色列表不可用时不会覆盖现有角色</span></ElFormItem
         >
-        <ElFormItem label="状态"><ElSwitch v-model="form.enabled" active-text="启用" inactive-text="停用" /></ElFormItem>
+        <ElFormItem label="状态"
+          ><ElSwitch v-model="form.enabled" :disabled="!session.can('ptmcp:user:status')" active-text="启用" inactive-text="停用"
+        /></ElFormItem>
+        <p class="helper">重置密码、删除用户和设置初始密码的后端接口当前未提供。</p>
       </ElForm>
       <template #footer
-        ><ElButton @click="dialogVisible = false">取消</ElButton><ElButton type="primary" :loading="saving" @click="save">保存</ElButton></template
+        ><ElButton @click="dialogVisible = false">取消</ElButton
+        ><ElButton type="primary" :disabled="conflictDetected || !canEdit" :loading="saving" @click="save">保存</ElButton></template
       >
     </ElDialog>
   </section>

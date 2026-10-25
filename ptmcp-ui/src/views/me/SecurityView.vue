@@ -3,16 +3,27 @@ import { onBeforeUnmount, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useSessionStore } from '../../stores/session';
-import { errorText } from '../portalUtils';
+import { errorText, usePortalTask } from '../portalUtils';
 
 const router = useRouter();
 const session = useSessionStore();
 const saving = ref(false);
 const form = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' });
+function clearPasswords(): void {
+  form.oldPassword = '';
+  form.newPassword = '';
+  form.confirmPassword = '';
+}
+usePortalTask(clearPasswords);
 function byteLength(value: string): number {
   return new TextEncoder().encode(value).length;
 }
 async function changePassword(): Promise<void> {
+  if (saving.value) return;
+  if (!form.oldPassword) {
+    ElMessage.warning('请输入当前密码');
+    return;
+  }
   if (form.newPassword.length < 12 || form.newPassword.length > 64 || byteLength(form.newPassword) > 72) {
     ElMessage.warning('新密码需 12～64 个字符且 UTF-8 不超过 72 字节');
     return;
@@ -38,9 +49,7 @@ async function changePassword(): Promise<void> {
 }
 
 onBeforeUnmount(() => {
-  form.oldPassword = '';
-  form.newPassword = '';
-  form.confirmPassword = '';
+  clearPasswords();
 });
 </script>
 
@@ -55,7 +64,7 @@ onBeforeUnmount(() => {
     </div>
     <ElCard shadow="never" class="portal-card"
       ><template #header>修改密码</template
-      ><ElForm label-position="top" class="security-form" @submit.prevent="changePassword"
+      ><ElForm label-position="top" class="security-form" :disabled="saving" @submit.prevent="changePassword"
         ><ElFormItem label="当前密码" required
           ><ElInput v-model="form.oldPassword" type="password" show-password autocomplete="current-password" /></ElFormItem
         ><ElFormItem label="新密码" required

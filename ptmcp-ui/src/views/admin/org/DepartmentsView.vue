@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useSessionStore } from '../../../stores/session';
 import { orgPortalApi, type Department } from '../../../services/orgPortalApi';
-import { errorText, isConflict } from '../../portalUtils';
+import { departmentDescendants } from '../../../services/portalMutations';
+import { errorText, isAccessError, isConflict, usePortalTask } from '../../portalUtils';
 
 type DepartmentNode = Department & { children: DepartmentNode[] };
 
@@ -14,7 +15,18 @@ const loadError = ref('');
 const departments = ref<Department[]>([]);
 const dialogVisible = ref(false);
 const editing = ref<Department | null>(null);
+const conflict = ref<Department | null>(null);
+const conflictDetected = ref(false);
 const form = reactive({ parentId: '', name: '', enabled: true });
+const clearPage = (): void => {
+  departments.value = [];
+  editing.value = null;
+  conflict.value = null;
+  conflictDetected.value = false;
+  dialogVisible.value = false;
+};
+const departmentsTask = usePortalTask(clearPage);
+const conflictTask = usePortalTask(clearPage);
 
 const treeData = computed<DepartmentNode[]>(() => {
   const nodes = new Map<string, DepartmentNode>();
@@ -32,7 +44,25 @@ const treeData = computed<DepartmentNode[]>(() => {
   return roots;
 });
 
-const parentOptions = computed(() => departments.value.filter((item) => item.id !== editing.value?.id));
+function descendantIds(id: string): Set<string> {
+  return departmentDescendants(departments.value, id);
+}
+const parentOptions = computed(() => {
+  const excluded = editing.value ? descendantIds(editing.value.id) : new Set<string>();
+  return departments.value.filter((item) => !excluded.has(item.id));
+});
+function pathLabel(id: string | null): string {
+  const labels: string[] = [];
+  const visited = new Set<string>();
+  let current = id;
+  while (current && !visited.has(current)) {
+    visited.add(current);
+    const department = departments.value.find((item) => item.id === current);
+    labels.unshift(department?.name ?? current);
+    current = department?.parentId ?? null;
+  }
+  return labels.length ? labels.join(' / ') : '根节点';
+}
 
 function resetForm(): void {
   form.parentId = '';
@@ -42,12 +72,16 @@ function resetForm(): void {
 
 function openCreate(): void {
   editing.value = null;
+  conflict.value = null;
+  conflictDetected.value = false;
   resetForm();
   dialogVisible.value = true;
 }
 
 function openEdit(item: Department): void {
   editing.value = item;
+  conflict.value = null;
+  conflictDetected.value = false;
   form.parentId = item.parentId ?? '';
   form.name = item.name;
   form.enabled = item.enabled;
@@ -58,8 +92,10 @@ async function load(): Promise<void> {
   loading.value = true;
   loadError.value = '';
   try {
-    departments.value = await orgPortalApi.departments.list();
+    const items = await departmentsTask.run((signal) => orgPortalApi.departments.list(signal));
+    if (items) departments.value = items;
   } catch (error) {
+    if (isAccessError(error)) clearPage();
     loadError.value = errorText(error);
   } finally {
     loading.value = false;
@@ -67,23 +103,54 @@ async function load(): Promise<void> {
 }
 
 async function save(): Promise<void> {
+  if (saving.value || conflictDetected.value) return;
   if (!session.can(editing.value ? 'ptmcp:department:update' : 'ptmcp:department:create')) return;
-  if (!form.name.trim()) {
-    ElMessage.warning('请输入部门名称');
+  if (!form.name.trim() || form.name.trim().length > 30) {
+    ElMessage.warning('部门名称需 1～30 个字符');
     return;
   }
   saving.value = true;
   try {
     const body = { parentId: form.parentId || null, name: form.name.trim(), enabled: form.enabled };
+    if (editing.value && body.parentId !== editing.value.parentId) {
+      if (body.parentId && descendantIds(editing.value.id).has(body.parentId)) throw new Error('不能移动到当前部门或其子部门');
+      await ElMessageBox.confirm(
+        `将“${pathLabel(editing.value.id)}”移动到“${pathLabel(body.parentId)} / ${form.name}”。影响子树共 ${descendantIds(editing.value.id).size} 个部门，成员授权将重新计算。`,
+        '确认移动部门',
+        { type: 'warning' }
+      );
+    }
     if (editing.value) await orgPortalApi.departments.update(editing.value.id, body, editing.value.version);
     else await orgPortalApi.departments.create(body);
     dialogVisible.value = false;
     ElMessage.success(editing.value ? '部门已更新' : '部门已创建');
     await load();
   } catch (error) {
-    ElMessage.error(isConflict(error) ? '部门已被其他人修改，请刷新后重试' : errorText(error));
+    if (error === 'cancel' || error === 'close') return;
+    if (isConflict(error) && editing.value) {
+      conflictDetected.value = true;
+      await refreshConflict();
+      ElMessage.warning('部门版本冲突，草稿已保留。请核对后继续。');
+    } else ElMessage.error(errorText(error));
   } finally {
     saving.value = false;
+  }
+}
+
+function mergeServerVersion(): void {
+  if (!conflict.value) return;
+  editing.value = conflict.value;
+  conflict.value = null;
+  conflictDetected.value = false;
+}
+async function refreshConflict(): Promise<void> {
+  if (!editing.value) return;
+  const id = editing.value.id;
+  try {
+    const item = await conflictTask.run((signal) => orgPortalApi.departments.get(id, signal));
+    if (item) conflict.value = item;
+  } catch (error) {
+    ElMessage.error(errorText(error));
   }
 }
 
@@ -96,10 +163,20 @@ async function remove(item: Department): Promise<void> {
     await load();
   } catch (error) {
     if (error === 'cancel' || error === 'close') return;
-    ElMessage.error(isConflict(error) ? '部门版本已变化，请刷新后重试' : errorText(error));
+    if (isConflict(error)) loadError.value = '删除未完成：部门版本已变化，或仍存在子部门/用户。请刷新树并处理关联项后手动重试。';
+    else ElMessage.error(errorText(error));
   }
 }
 
+watch(
+  () => session.can('ptmcp:department:list'),
+  (allowed) => {
+    if (!allowed) {
+      departmentsTask.cancel();
+      clearPage();
+    }
+  }
+);
 onMounted(load);
 </script>
 
@@ -110,6 +187,7 @@ onMounted(load);
         <p class="eyebrow">组织与范围</p>
         <h1 id="departments-title">部门</h1>
         <p class="page-description">维护部门树和管理范围。移动部门由服务端重算祖先关系。</p>
+        <p class="page-description">当前版本暂不提供部门排序与成员数量。</p>
       </div>
       <ElButton v-if="session.can('ptmcp:department:create')" type="primary" @click="openCreate">新建部门</ElButton>
     </div>
@@ -141,8 +219,18 @@ onMounted(load);
     </ElCard>
 
     <ElDialog v-model="dialogVisible" :title="editing ? '编辑部门' : '新建部门'" width="min(520px, calc(100vw - 32px))">
-      <ElForm label-position="top" @submit.prevent="save">
-        <ElFormItem label="部门名称" required><ElInput v-model="form.name" maxlength="100" show-word-limit /></ElFormItem>
+      <ElAlert v-if="conflictDetected" type="warning" :closable="false" title="服务器版本已变化，当前草稿已保留。" class="mb-4"
+        ><template v-if="conflict"
+          ><p>
+            服务器：{{ conflict.name }} · 上级 {{ pathLabel(conflict.parentId) }} · {{ conflict.enabled ? '启用' : '停用' }}（版本
+            {{ conflict.version }}）
+          </p>
+          <ElButton size="small" @click="mergeServerVersion">已核对，以新版本继续编辑</ElButton
+          ><ElButton size="small" @click="openEdit(conflict)">使用服务器值重置</ElButton></template
+        ><ElButton v-else size="small" @click="refreshConflict">读取当前版本并比较</ElButton></ElAlert
+      >
+      <ElForm label-position="top" :disabled="saving" @submit.prevent="save">
+        <ElFormItem label="部门名称" required><ElInput v-model="form.name" maxlength="30" show-word-limit /></ElFormItem>
         <ElFormItem label="上级部门">
           <ElSelect v-model="form.parentId" clearable placeholder="顶级部门">
             <ElOption v-for="item in parentOptions" :key="item.id" :label="item.name" :value="item.id" />
@@ -151,7 +239,8 @@ onMounted(load);
         <ElFormItem label="状态"><ElSwitch v-model="form.enabled" active-text="启用" inactive-text="停用" /></ElFormItem>
       </ElForm>
       <template #footer
-        ><ElButton @click="dialogVisible = false">取消</ElButton><ElButton type="primary" :loading="saving" @click="save">保存</ElButton></template
+        ><ElButton @click="dialogVisible = false">取消</ElButton
+        ><ElButton type="primary" :disabled="conflictDetected" :loading="saving" @click="save">保存</ElButton></template
       >
     </ElDialog>
   </section>

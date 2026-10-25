@@ -3,7 +3,7 @@ import { onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { mePortalApi, type DatasourceItem, type NamespaceItem, type ObjectSummary, type PlatformItem } from '../../services/mePortalApi';
-import { errorText } from '../portalUtils';
+import { errorText, usePortalTask } from '../portalUtils';
 
 const router = useRouter();
 const platforms = ref<PlatformItem[]>([]);
@@ -21,12 +21,44 @@ const loadingContext = ref(false);
 const loadError = ref('');
 const nextCursor = ref<string | null>(null);
 const namespaceCursor = ref<string | null>(null);
+const platformCursor = ref<string | null>(null);
+const datasourceCursor = ref<string | null>(null);
+const platformTask = usePortalTask(() => {
+  platforms.value = [];
+  platformId.value = '';
+  platformCursor.value = null;
+});
+const datasourceTask = usePortalTask(() => {
+  datasources.value = [];
+  datasourceId.value = '';
+  datasourceCursor.value = null;
+});
+const namespaceTask = usePortalTask(() => {
+  namespaces.value = [];
+  namespaceId.value = '';
+  namespaceCursor.value = null;
+});
+const objectTask = usePortalTask(() => {
+  objects.value = [];
+  nextCursor.value = null;
+});
 
-async function loadPlatforms(): Promise<void> {
+function clearObjects(): void {
+  objectTask.cancel();
+  objects.value = [];
+  nextCursor.value = null;
+  loading.value = false;
+}
+
+async function loadPlatforms(append = false): Promise<void> {
   loadingContext.value = true;
   try {
-    const page = await mePortalApi.accessContext.platforms();
-    platforms.value = page.items;
+    const page = await platformTask.run((signal) =>
+      mePortalApi.accessContext.platforms(append ? (platformCursor.value ?? undefined) : undefined, signal)
+    );
+    if (!page) return;
+    platforms.value = append ? [...platforms.value, ...page.items] : page.items;
+    platformCursor.value = page.nextCursor;
     if (!platformId.value && page.items[0]) platformId.value = page.items[0].id;
   } catch (error) {
     loadError.value = errorText(error);
@@ -34,36 +66,59 @@ async function loadPlatforms(): Promise<void> {
     loadingContext.value = false;
   }
 }
-async function loadDatasources(): Promise<void> {
-  datasources.value = [];
-  namespaces.value = [];
-  datasourceId.value = '';
-  namespaceId.value = '';
-  objects.value = [];
-  nextCursor.value = null;
+async function loadDatasources(append = false): Promise<void> {
+  if (!append) {
+    datasourceTask.cancel();
+    namespaceTask.cancel();
+    clearObjects();
+    datasources.value = [];
+    namespaces.value = [];
+    datasourceId.value = '';
+    namespaceId.value = '';
+    datasourceCursor.value = null;
+    namespaceCursor.value = null;
+    databaseName.value = '';
+    schemaName.value = '';
+  }
   if (!platformId.value) return;
   try {
-    datasources.value = (await mePortalApi.accessContext.datasources(platformId.value)).items;
+    const page = await datasourceTask.run((signal) =>
+      mePortalApi.accessContext.datasources(platformId.value, append ? (datasourceCursor.value ?? undefined) : undefined, signal)
+    );
+    if (!page) return;
+    datasources.value = append ? [...datasources.value, ...page.items] : page.items;
+    datasourceCursor.value = page.nextCursor;
   } catch (error) {
     ElMessage.error(errorText(error));
   }
 }
-async function loadNamespaces(): Promise<void> {
-  namespaces.value = [];
-  namespaceId.value = '';
-  objects.value = [];
-  namespaceCursor.value = null;
-  nextCursor.value = null;
+async function loadNamespaces(append = false): Promise<void> {
+  if (!append) {
+    namespaceTask.cancel();
+    clearObjects();
+    namespaces.value = [];
+    namespaceId.value = '';
+    namespaceCursor.value = null;
+    databaseName.value = '';
+    schemaName.value = '';
+  }
   if (!platformId.value || !datasourceId.value) return;
   try {
-    const page = await mePortalApi.accessContext.namespaces(platformId.value, datasourceId.value);
-    namespaces.value = page.items;
+    const page = await namespaceTask.run((signal) =>
+      mePortalApi.accessContext.namespaces(platformId.value, datasourceId.value, append ? (namespaceCursor.value ?? undefined) : undefined, signal)
+    );
+    if (!page) return;
+    namespaces.value = append ? [...namespaces.value, ...page.items] : page.items;
     namespaceCursor.value = page.nextCursor;
   } catch (error) {
     ElMessage.error(errorText(error));
   }
 }
 async function loadObjects(append = false): Promise<void> {
+  if (!append) {
+    nextCursor.value = null;
+    objects.value = [];
+  }
   if (!platformId.value || !datasourceId.value) {
     objects.value = [];
     return;
@@ -71,14 +126,20 @@ async function loadObjects(append = false): Promise<void> {
   loading.value = true;
   loadError.value = '';
   try {
-    const page = await mePortalApi.dictionary.list({
-      platformId: platformId.value,
-      datasourceId: datasourceId.value,
-      databaseName: databaseName.value || undefined,
-      schemaName: schemaName.value || undefined,
-      keyword: keyword.value.trim() || undefined,
-      cursor: append ? (nextCursor.value ?? undefined) : undefined
-    });
+    const page = await objectTask.run((signal) =>
+      mePortalApi.dictionary.list(
+        {
+          platformId: platformId.value,
+          datasourceId: datasourceId.value,
+          databaseName: databaseName.value || undefined,
+          schemaName: schemaName.value || undefined,
+          keyword: keyword.value.trim() || undefined,
+          cursor: append ? (nextCursor.value ?? undefined) : undefined
+        },
+        signal
+      )
+    );
+    if (!page) return;
     objects.value = append ? [...objects.value, ...page.items] : page.items;
     nextCursor.value = page.nextCursor;
   } catch (error) {
@@ -93,6 +154,7 @@ watch(platformId, () => {
 });
 watch(datasourceId, () => {
   void loadNamespaces();
+  void loadObjects();
 });
 watch(namespaceId, (value) => {
   const item = namespaces.value.find((entry) => entry.id === value);
@@ -100,7 +162,10 @@ watch(namespaceId, (value) => {
   schemaName.value = item?.schemaName ?? '';
   void loadObjects();
 });
-onMounted(loadPlatforms);
+watch(keyword, clearObjects);
+onMounted(() => {
+  void loadPlatforms();
+});
 </script>
 
 <template>
@@ -117,15 +182,29 @@ onMounted(loadPlatforms);
       ><div class="filters">
         <ElFormItem label="平台"
           ><ElSelect v-model="platformId" :loading="loadingContext" placeholder="选择平台" class="select"
-            ><ElOption v-for="item in platforms" :key="item.id" :label="`${item.name} · Tier ${item.tier}`" :value="item.id" /></ElSelect></ElFormItem
+            ><ElOption v-for="item in platforms" :key="item.id" :label="`${item.name} · Tier ${item.tier}`" :value="item.id" /><template
+              v-if="platformCursor"
+              #footer
+              ><ElButton link type="primary" @click="loadPlatforms(true)">加载更多平台</ElButton></template
+            ></ElSelect
+          ></ElFormItem
         ><ElFormItem label="数据源"
           ><ElSelect v-model="datasourceId" :disabled="!platformId" placeholder="选择数据源" class="select"
-            ><ElOption v-for="item in datasources" :key="item.id" :label="`${item.name} · ${item.engine}`" :value="item.id" /></ElSelect></ElFormItem
+            ><ElOption v-for="item in datasources" :key="item.id" :label="`${item.name} · ${item.engine}`" :value="item.id" /><template
+              v-if="datasourceCursor"
+              #footer
+              ><ElButton link type="primary" @click="loadDatasources(true)">加载更多数据源</ElButton></template
+            ></ElSelect
+          ></ElFormItem
         ><ElFormItem label="命名空间"
           ><ElSelect v-model="namespaceId" :disabled="!datasourceId" clearable placeholder="全部命名空间" class="select"
-            ><ElOption v-for="item in namespaces" :key="item.id" :label="item.displayName" :value="item.id" /></ElSelect
-        ></ElFormItem></div
-    ></ElCard>
+            ><ElOption v-for="item in namespaces" :key="item.id" :label="item.displayName" :value="item.id" /><template v-if="namespaceCursor" #footer
+              ><ElButton link type="primary" @click="loadNamespaces(true)">加载更多命名空间</ElButton></template
+            ></ElSelect
+          ></ElFormItem
+        >
+      </div></ElCard
+    >
     <ElCard shadow="never" class="portal-card">
       <div class="filters second">
         <ElInput v-model="keyword" placeholder="搜索表名或业务说明" clearable class="keyword" @keyup.enter="loadObjects()" /><ElButton
@@ -145,6 +224,7 @@ onMounted(loadPlatforms);
             ><button
               class="object-link"
               type="button"
+              :disabled="!row.authorized"
               @click="router.push({ name: 'me-dictionary-detail', params: { objectId: row.objectId }, query: { platformId } })"
             >
               {{ row.tableName }}</button

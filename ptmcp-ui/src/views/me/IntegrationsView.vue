@@ -2,7 +2,7 @@
 import { onMounted, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { mePortalApi, type PlatformItem, type McpConfig } from '../../services/mePortalApi';
-import { errorText } from '../portalUtils';
+import { errorText, usePortalTask } from '../portalUtils';
 
 const platforms = ref<PlatformItem[]>([]);
 const platformId = ref('');
@@ -10,6 +10,15 @@ const clientType = ref('GENERIC');
 const config = ref<McpConfig | null>(null);
 const loading = ref(false);
 const error = ref('');
+const nextPlatformCursor = ref<string | null>(null);
+const platformTask = usePortalTask(() => {
+  platforms.value = [];
+  platformId.value = '';
+  nextPlatformCursor.value = null;
+});
+const configTask = usePortalTask(() => {
+  config.value = null;
+});
 const clientTypes = [
   { label: '通用客户端', value: 'GENERIC' },
   { label: 'WorkBuddy', value: 'WORKBUDDY' },
@@ -18,21 +27,28 @@ const clientTypes = [
   { label: 'VS Code', value: 'VSCODE' }
 ];
 
-async function loadPlatforms(): Promise<void> {
+async function loadPlatforms(append = false): Promise<void> {
   try {
-    platforms.value = (await mePortalApi.accessContext.platforms()).items;
+    const page = await platformTask.run((signal) =>
+      mePortalApi.accessContext.platforms(append ? (nextPlatformCursor.value ?? undefined) : undefined, signal)
+    );
+    if (!page) return;
+    platforms.value = append ? [...platforms.value, ...page.items] : page.items;
+    nextPlatformCursor.value = page.nextCursor;
     if (!platformId.value && platforms.value[0]) platformId.value = platforms.value[0].id;
   } catch (reason) {
     error.value = errorText(reason);
   }
 }
 async function loadConfig(): Promise<void> {
+  configTask.cancel();
   config.value = null;
   error.value = '';
   if (!platformId.value) return;
   loading.value = true;
   try {
-    config.value = await mePortalApi.mcpConfig(platformId.value, clientType.value);
+    const result = await configTask.run((signal) => mePortalApi.mcpConfig(platformId.value, clientType.value, signal));
+    if (result) config.value = result;
   } catch (reason) {
     error.value = errorText(reason);
   } finally {
@@ -51,7 +67,9 @@ async function copyConfig(): Promise<void> {
 watch([platformId, clientType], () => {
   void loadConfig();
 });
-onMounted(loadPlatforms);
+onMounted(() => {
+  void loadPlatforms();
+});
 </script>
 
 <template>
@@ -68,7 +86,12 @@ onMounted(loadPlatforms);
       ><div class="filters">
         <ElFormItem label="平台"
           ><ElSelect v-model="platformId" placeholder="选择平台" class="select"
-            ><ElOption v-for="item in platforms" :key="item.id" :label="`${item.name} · Tier ${item.tier}`" :value="item.id" /></ElSelect></ElFormItem
+            ><ElOption v-for="item in platforms" :key="item.id" :label="`${item.name} · Tier ${item.tier}`" :value="item.id" /><template
+              v-if="nextPlatformCursor"
+              #footer
+              ><ElButton link type="primary" @click="loadPlatforms(true)">加载更多平台</ElButton></template
+            ></ElSelect
+          ></ElFormItem
         ><ElFormItem label="客户端"
           ><ElSelect v-model="clientType" class="select"
             ><ElOption v-for="item in clientTypes" :key="item.value" :label="item.label" :value="item.value" /></ElSelect

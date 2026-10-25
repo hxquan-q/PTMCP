@@ -1,32 +1,46 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { mePortalApi, type ObjectDetail } from '../../services/mePortalApi';
-import { errorText } from '../portalUtils';
+import { errorText, usePortalTask } from '../portalUtils';
 
 const route = useRoute();
 const router = useRouter();
 const detail = ref<ObjectDetail | null>(null);
 const loading = ref(true);
 const loadError = ref('');
-const platformId = String(route.query.platformId ?? '');
-const objectId = String(route.params.objectId ?? '');
+const platformId = computed(() => (typeof route.query.platformId === 'string' ? route.query.platformId : ''));
+const objectId = computed(() => (typeof route.params.objectId === 'string' ? route.params.objectId : ''));
+const detailTask = usePortalTask(() => {
+  detail.value = null;
+});
 
 async function load(): Promise<void> {
-  if (!platformId || !objectId) {
+  detailTask.cancel();
+  detail.value = null;
+  loading.value = true;
+  loadError.value = '';
+  if (!platformId.value || !objectId.value) {
     loadError.value = '缺少对象上下文';
     loading.value = false;
     return;
   }
   try {
-    detail.value = await mePortalApi.dictionary.detail(platformId, objectId);
+    const result = await detailTask.run((signal) => mePortalApi.dictionary.detail(platformId.value, objectId.value, signal));
+    if (result) detail.value = result;
   } catch (error) {
     loadError.value = errorText(error);
   } finally {
     loading.value = false;
   }
 }
-onMounted(load);
+watch(
+  [platformId, objectId],
+  () => {
+    void load();
+  },
+  { immediate: true }
+);
 </script>
 
 <template>

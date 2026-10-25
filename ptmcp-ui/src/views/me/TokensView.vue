@@ -2,7 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { mePortalApi, type PlatformItem, type TokenView } from '../../services/mePortalApi';
-import { errorText } from '../portalUtils';
+import { PortalWriteIntent } from '../../services/portalMutations';
+import { errorText, formatDate, isAccessError, usePortalTask } from '../portalUtils';
 
 const tokens = ref<TokenView[]>([]);
 const platforms = ref<PlatformItem[]>([]);
@@ -14,14 +15,16 @@ const dialogVisible = ref(false);
 const secretVisible = ref(false);
 const tokenPlaintext = ref('');
 const saving = ref(false);
-const form = reactive({ name: '', platformId: '', scopes: ['mcp:catalog'], expiresAt: '' });
+const platformCursor = ref<string | null>(null);
+const createIntent = new PortalWriteIntent();
+const form = reactive({ name: '', platformId: '', scopes: ['mcp:catalog'], expiresAt: new Date() as Date | null });
 const tier3Platforms = computed(() => platforms.value.filter((item) => item.tier === 3));
 const scopes = ['mcp:catalog', 'mcp:schema', 'mcp:query'];
 
-function defaultExpiry(): string {
+function defaultExpiry(): Date {
   const date = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
   date.setSeconds(0, 0);
-  return date.toISOString().slice(0, 16);
+  return date;
 }
 function resetForm(): void {
   form.name = '';
@@ -37,47 +40,85 @@ function closeSecret(): void {
   secretVisible.value = false;
   tokenPlaintext.value = '';
 }
+function closeCreate(done: () => void): void {
+  if (saving.value) {
+    ElMessage.info('创建请求正在处理中，请等待返回后关闭');
+    return;
+  }
+  done();
+}
+
+function invalidateSecrets(): void {
+  createIntent.dispose();
+  closeSecret();
+  dialogVisible.value = false;
+  tokens.value = [];
+  platforms.value = [];
+}
+
+const tokenTask = usePortalTask(invalidateSecrets);
+const platformTask = usePortalTask(() => {
+  platforms.value = [];
+});
 
 onBeforeUnmount(() => {
   closeSecret();
   form.name = '';
-  window.removeEventListener('ptmcp:sensitive-clear', closeSecret);
+  createIntent.dispose();
 });
 
-async function loadPlatforms(): Promise<void> {
+async function loadPlatforms(append = false): Promise<void> {
   try {
-    platforms.value = (await mePortalApi.accessContext.platforms()).items;
+    const page = await platformTask.run((signal) =>
+      mePortalApi.accessContext.platforms(append ? (platformCursor.value ?? undefined) : undefined, signal)
+    );
+    if (page) {
+      platforms.value = append ? [...platforms.value, ...page.items] : page.items;
+      platformCursor.value = page.nextCursor;
+    }
   } catch (error) {
     ElMessage.error(errorText(error));
   }
 }
 async function load(append = false): Promise<void> {
+  if (!append) nextCursor.value = null;
   loading.value = true;
   loadError.value = '';
   try {
-    const page = await mePortalApi.tokens.list(status.value || undefined, append ? (nextCursor.value ?? undefined) : undefined);
+    const page = await tokenTask.run((signal) =>
+      mePortalApi.tokens.list(status.value || undefined, append ? (nextCursor.value ?? undefined) : undefined, signal)
+    );
+    if (!page) return;
     tokens.value = append ? [...tokens.value, ...page.items] : page.items;
     nextCursor.value = page.nextCursor;
   } catch (error) {
     loadError.value = errorText(error);
-    if (!append) tokens.value = [];
+    if (!append || isAccessError(error)) tokens.value = [];
   } finally {
     loading.value = false;
   }
 }
 async function create(): Promise<void> {
+  if (saving.value) return;
   if (form.name.trim().length < 1 || !form.platformId || !form.scopes.length) {
     ElMessage.warning('请填写名称、Tier3 平台并至少选择一个 Scope');
     return;
   }
+  if (!form.expiresAt || form.expiresAt.getTime() <= Date.now() || form.expiresAt.getTime() > Date.now() + 90 * 86400000) {
+    ElMessage.warning('到期时间必须在未来 90 天内');
+    return;
+  }
+  const intent = createIntent.begin();
+  if (intent === null) return;
   saving.value = true;
   try {
     const result = await mePortalApi.tokens.create({
       name: form.name.trim(),
       platformId: form.platformId,
       scopes: [...form.scopes],
-      expiresAt: new Date(form.expiresAt).toISOString()
+      expiresAt: form.expiresAt.toISOString()
     });
+    if (!createIntent.accepts(intent)) return;
     dialogVisible.value = false;
     tokenPlaintext.value = result.token;
     secretVisible.value = true;
@@ -86,6 +127,7 @@ async function create(): Promise<void> {
   } catch (error) {
     ElMessage.error(errorText(error));
   } finally {
+    createIntent.finish(intent);
     saving.value = false;
   }
 }
@@ -112,7 +154,6 @@ function platformName(id: string | null): string {
   return id ? (platforms.value.find((item) => item.id === id)?.name ?? id) : '—';
 }
 onMounted(async () => {
-  window.addEventListener('ptmcp:sensitive-clear', closeSecret);
   await loadPlatforms();
   await load();
 });
@@ -131,7 +172,7 @@ onMounted(async () => {
     <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError" />
     <ElCard shadow="never" class="portal-card"
       ><div class="filters">
-        <ElSelect v-model="status" clearable placeholder="全部状态" @change="load"
+        <ElSelect v-model="status" clearable placeholder="全部状态" @change="load(false)"
           ><ElOption label="活跃" value="ACTIVE" /><ElOption label="已撤销" value="REVOKED" /><ElOption label="已过期" value="EXPIRED"
         /></ElSelect>
       </div>
@@ -148,7 +189,11 @@ onMounted(async () => {
           ><template #default="{ row }"
             ><ElTag v-for="scope in row.scopes" :key="scope" size="small" effect="plain" class="scope-tag">{{ scope }}</ElTag></template
           ></ElTableColumn
-        ><ElTableColumn prop="expiresAt" label="到期" min-width="170" /><ElTableColumn label="状态" width="100"
+        ><ElTableColumn label="到期（台北）" min-width="170"
+          ><template #default="{ row }">{{ formatDate(row.expiresAt) }}</template></ElTableColumn
+        ><ElTableColumn label="最近使用" min-width="170"
+          ><template #default="{ row }">{{ formatDate(row.lastUsedAt) }}</template></ElTableColumn
+        ><ElTableColumn label="状态" width="100"
           ><template #default="{ row }"
             ><ElTag :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ row.status }}</ElTag></template
           ></ElTableColumn
@@ -160,27 +205,30 @@ onMounted(async () => {
       >
       <div v-if="nextCursor" class="load-more"><ElButton link type="primary" @click="load(true)">加载更多</ElButton></div></ElCard
     >
-    <ElDialog v-model="dialogVisible" title="创建 PAT" width="min(520px, calc(100vw - 32px))"
-      ><ElForm label-position="top"
+    <ElDialog v-model="dialogVisible" title="创建 PAT" :before-close="closeCreate" width="min(520px, calc(100vw - 32px))"
+      ><ElForm label-position="top" :disabled="saving"
         ><ElFormItem label="名称" required
           ><ElInput v-model="form.name" maxlength="64" show-word-limit placeholder="例如：本地开发客户端" /></ElFormItem
         ><ElFormItem label="Tier3 平台" required
           ><ElSelect v-model="form.platformId" class="wide"
-            ><ElOption v-for="item in tier3Platforms" :key="item.id" :label="item.name" :value="item.id" /></ElSelect></ElFormItem
+            ><ElOption v-for="item in tier3Platforms" :key="item.id" :label="item.name" :value="item.id" /><template v-if="platformCursor" #footer
+              ><ElButton link type="primary" @click="loadPlatforms(true)">加载更多平台</ElButton></template
+            ></ElSelect
+          ></ElFormItem
         ><ElFormItem label="Scope" required
           ><ElCheckboxGroup v-model="form.scopes"><ElCheckbox v-for="scope in scopes" :key="scope" :label="scope" /></ElCheckboxGroup></ElFormItem
-        ><ElFormItem label="到期时间" required
+        ><ElFormItem label="到期时间（本机时区）" required
           ><ElDatePicker
             v-model="form.expiresAt"
             type="datetime"
-            value-format="YYYY-MM-DDTHH:mm"
             :disabled-date="(date: Date) => date.getTime() < Date.now()"
             class="wide" /></ElFormItem></ElForm
       ><ElAlert type="info" :closable="false" title="默认有效期 30 天，最长 90 天。服务端会再次校验平台等级与期限。" /><template #footer
-        ><ElButton @click="dialogVisible = false">取消</ElButton><ElButton type="primary" :loading="saving" @click="create">创建</ElButton></template
+        ><ElButton :disabled="saving" @click="dialogVisible = false">取消</ElButton
+        ><ElButton type="primary" :loading="saving" @click="create">创建</ElButton></template
       ></ElDialog
     >
-    <ElDialog v-model="secretVisible" title="请立即保存 PAT" width="min(620px, calc(100vw - 32px))" :before-close="closeSecret"
+    <ElDialog v-model="secretVisible" title="请立即保存 PAT" width="min(620px, calc(100vw - 32px))" :before-close="closeSecret" @closed="closeSecret"
       ><ElAlert type="warning" :closable="false" title="这是唯一一次显示完整 PAT。关闭后无法找回，遗失时请撤销并重新创建。" />
       <div class="secret-block">
         <code>{{ tokenPlaintext }}</code
