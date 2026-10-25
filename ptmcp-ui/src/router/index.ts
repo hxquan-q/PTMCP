@@ -127,7 +127,9 @@ const router = createRouter({
 });
 
 function safeReturnTo(path: string): string {
-  return /^\/(?:admin|me)(?:\/|\?|$)/.test(path) && !path.includes('\\') && [...path].every((character) => character.charCodeAt(0) >= 32) ? path : '/';
+  return /^\/(?:admin|me)(?:\/|\?|$)/.test(path) && !path.includes('\\') && [...path].every((character) => character.charCodeAt(0) >= 32)
+    ? path
+    : '/';
 }
 
 router.beforeEach(async (to) => {
