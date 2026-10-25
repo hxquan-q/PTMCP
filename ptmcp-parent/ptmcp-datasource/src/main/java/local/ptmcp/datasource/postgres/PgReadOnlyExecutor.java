@@ -79,6 +79,19 @@ public final class PgReadOnlyExecutor {
 
     public PgReadOnlyResult execute(
             long poolGeneration, PgReadOnlyRequest request, ReadOnlyCancellation cancellation) {
+        return execute(poolGeneration, request, null, cancellation);
+    }
+
+    /**
+     * Executes with an output plan: the live metadata is verified against the plan before any cell
+     * is read. A mismatch terminates the execution as RESULT_TYPE_UNSUPPORTED, marks the trace
+     * {@code VERSION_DRIFT} and evicts the connection (datasource.md §6).
+     */
+    public PgReadOnlyResult execute(
+            long poolGeneration,
+            PgReadOnlyRequest request,
+            PgOutputPlan plan,
+            ReadOnlyCancellation cancellation) {
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(cancellation, "cancellation");
         Connection connection;
@@ -89,12 +102,13 @@ public final class PgReadOnlyExecutor {
         }
         Trace trace = new Trace(poolGeneration);
         trace.record(ExecutionStage.CHECKOUT, ExecutionState.ACQUIRED);
-        return run(connection, request, cancellation, trace);
+        return run(connection, request, plan, cancellation, trace);
     }
 
     private PgReadOnlyResult run(
             Connection connection,
             PgReadOnlyRequest request,
+            PgOutputPlan plan,
             ReadOnlyCancellation cancellation,
             Trace trace) {
         DomainException failure = null;
@@ -102,6 +116,7 @@ public final class PgReadOnlyExecutor {
         SessionState baseline = null;
         boolean configured = false;
         boolean interrupted = false;
+        boolean drift = false;
         try {
             validateBorrowed(connection);
             baseline = sessionState(connection);
@@ -114,18 +129,23 @@ public final class PgReadOnlyExecutor {
             } else {
                 trace.record(ExecutionStage.EXECUTE, ExecutionState.EXECUTING);
                 try {
-                    data = read(connection, request, cancellation);
+                    data = read(connection, request, plan, cancellation);
                     trace.record(ExecutionStage.DRAIN, ExecutionState.DRAINING);
                 } catch (SQLException readFailure) {
-                    DomainException mapped = mapExecutionFailure(readFailure, cancellation);
-                    if (mapped.errorCode() == ErrorCode.CLIENT_CANCELLED
-                            || mapped.errorCode() == ErrorCode.QUERY_TIMEOUT) {
-                        trace.record(ExecutionStage.CANCEL, ExecutionState.CANCELLING);
-                        interrupted = true;
+                    if (readFailure instanceof PlanDriftException) {
+                        drift = true;
+                        failure = new DomainException(ErrorCode.RESULT_TYPE_UNSUPPORTED);
                     } else {
-                        trace.record(ExecutionStage.DRAIN, ExecutionState.DRAINING);
+                        DomainException mapped = mapExecutionFailure(readFailure, cancellation);
+                        if (mapped.errorCode() == ErrorCode.CLIENT_CANCELLED
+                                || mapped.errorCode() == ErrorCode.QUERY_TIMEOUT) {
+                            trace.record(ExecutionStage.CANCEL, ExecutionState.CANCELLING);
+                            interrupted = true;
+                        } else {
+                            trace.record(ExecutionStage.DRAIN, ExecutionState.DRAINING);
+                        }
+                        failure = mapped;
                     }
-                    failure = mapped;
                 } catch (DomainException domainFailure) {
                     trace.record(ExecutionStage.DRAIN, ExecutionState.DRAINING);
                     failure = domainFailure;
@@ -143,7 +163,16 @@ public final class PgReadOnlyExecutor {
         }
 
         ExecutionState finalState;
-        if (!configured) {
+        if (drift) {
+            /*
+             * The live result diverged from the approved output plan. The execution terminated
+             * before any cell was read; the connection is not trusted and the drift is what the
+             * trace records (datasource.md §6 version drift).
+             */
+            evict(connection);
+            trace.record(ExecutionStage.EVICT, ExecutionState.VERSION_DRIFT);
+            finalState = ExecutionState.VERSION_DRIFT;
+        } else if (!configured) {
             evict(connection);
             trace.record(ExecutionStage.EVICT, ExecutionState.EVICTED);
             finalState = ExecutionState.EVICTED;
@@ -233,7 +262,10 @@ public final class PgReadOnlyExecutor {
     }
 
     private ResultData read(
-            Connection connection, PgReadOnlyRequest request, ReadOnlyCancellation cancellation)
+            Connection connection,
+            PgReadOnlyRequest request,
+            PgOutputPlan plan,
+            ReadOnlyCancellation cancellation)
             throws SQLException {
         List<PgReadOnlyResult.Column> columns;
         Map<Integer, Set<Integer>> baseColumns;
@@ -249,6 +281,7 @@ public final class PgReadOnlyExecutor {
             try (ResultSet resultSet = statement.executeQuery(request.sql())) {
                 ResultSetMetaData metadata = resultSet.getMetaData();
                 columns = ColumnProjection.columns(metadata);
+                verifyAgainstPlan(metadata, columns, plan);
                 baseColumns = ColumnProjection.referencedBaseColumns(metadata, columns.size());
                 long used = columnMetadataBytes(columns);
                 if (used > responseBudgetBytes) {
@@ -294,6 +327,40 @@ public final class PgReadOnlyExecutor {
         // The portal must be closed before another statement can run on this connection.
         ColumnProjection.rejectDomainColumns(connection, baseColumns);
         return new ResultData(columns, rows, truncations, rowLimitReached, responseLimitReached);
+    }
+
+    /**
+     * The live result shape must equal the approved plan: same column count, same labels, and every
+     * column's derived logical type equal to the planned one. Anything else is a version drift —
+     * the execution stops before a single cell is read.
+     */
+    private static void verifyAgainstPlan(
+            java.sql.ResultSetMetaData metadata,
+            List<PgReadOnlyResult.Column> columns,
+            PgOutputPlan plan)
+            throws SQLException {
+        if (plan == null) {
+            return;
+        }
+        if (metadata.getColumnCount() != plan.columns().size()) {
+            throw new PlanDriftException();
+        }
+        for (int index = 0; index < plan.columns().size(); index++) {
+            PgOutputPlan.ExpectedColumn expected = plan.columns().get(index);
+            PgReadOnlyResult.Column actual = columns.get(index);
+            if (!expected.label().equals(actual.label())
+                    || expected.logicalType() != actual.logicalType()) {
+                throw new PlanDriftException();
+            }
+        }
+    }
+
+    private static final class PlanDriftException extends SQLException {
+        private static final long serialVersionUID = 1L;
+
+        PlanDriftException() {
+            super("result metadata diverged from the output plan", "PTMCP", 0);
+        }
     }
 
     private static long columnMetadataBytes(List<PgReadOnlyResult.Column> columns) {

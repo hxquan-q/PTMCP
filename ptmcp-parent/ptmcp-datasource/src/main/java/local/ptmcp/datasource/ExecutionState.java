@@ -9,5 +9,6 @@ public enum ExecutionState {
     CLEANING,
     CANCELLING,
     RETURNED,
+    VERSION_DRIFT,
     EVICTED
 }

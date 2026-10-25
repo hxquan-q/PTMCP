@@ -118,6 +118,12 @@ class PgReadOnlyExecutorTest {
                 statement.execute("CREATE TYPE pg_pair AS (a integer, b text)");
                 statement.execute("CREATE TABLE pg_domain_cols (id integer, value pg_posint)");
                 statement.execute("INSERT INTO pg_domain_cols VALUES (1, 7)");
+                statement.execute("CREATE TABLE pg_plan (id integer PRIMARY KEY, label text)");
+                statement.execute(
+                        "INSERT INTO pg_plan SELECT n, 'label-' || n "
+                                + "FROM generate_series(1, 20) n");
+                statement.execute("CREATE TABLE pg_huge (id integer PRIMARY KEY, body text)");
+                statement.execute("INSERT INTO pg_huge VALUES (1, repeat('y', 104857600))");
             }
             executor = new PgReadOnlyExecutor(dataSource, PgExecutorSettings.defaults());
         } catch (Exception | AssertionError failure) {
@@ -642,6 +648,156 @@ class PgReadOnlyExecutorTest {
                 }
             }
         }
+    }
+
+    @Test
+    void planDriftTerminatesBeforeReadingCellsAndAuditsTheDrift() {
+        List<ExecutionTrace> traces = new ArrayList<>();
+        PgReadOnlyExecutor observed =
+                new PgReadOnlyExecutor(dataSource, PgExecutorSettings.defaults(), traces::add);
+        PgReadOnlyRequest request =
+                PgReadOnlyRequest.of("SELECT id, label FROM public.pg_plan", 10);
+        ReadOnlyCancellation cancellation = new ReadOnlyCancellation();
+
+        // Column count drift.
+        PgOutputPlan fewer =
+                PgOutputPlan.of(
+                        new PgOutputPlan.ExpectedColumn(
+                                "id", PgReadOnlyResult.LogicalType.INTEGER));
+        DomainException countDrift =
+                assertThrows(
+                        DomainException.class,
+                        () -> observed.execute(9, request, fewer, cancellation));
+        assertEquals(ErrorCode.RESULT_TYPE_UNSUPPORTED, countDrift.errorCode());
+
+        // Label drift.
+        PgOutputPlan wrongLabel =
+                PgOutputPlan.of(
+                        new PgOutputPlan.ExpectedColumn("id", PgReadOnlyResult.LogicalType.INTEGER),
+                        new PgOutputPlan.ExpectedColumn(
+                                "name", PgReadOnlyResult.LogicalType.STRING));
+        DomainException labelDrift =
+                assertThrows(
+                        DomainException.class,
+                        () -> observed.execute(9, request, wrongLabel, cancellation));
+        assertEquals(ErrorCode.RESULT_TYPE_UNSUPPORTED, labelDrift.errorCode());
+
+        // Type drift: the plan promised INTEGER, the column is text.
+        PgOutputPlan wrongType =
+                PgOutputPlan.of(
+                        new PgOutputPlan.ExpectedColumn("id", PgReadOnlyResult.LogicalType.INTEGER),
+                        new PgOutputPlan.ExpectedColumn(
+                                "label", PgReadOnlyResult.LogicalType.INTEGER));
+        DomainException typeDrift =
+                assertThrows(
+                        DomainException.class,
+                        () -> observed.execute(9, request, wrongType, cancellation));
+        assertEquals(ErrorCode.RESULT_TYPE_UNSUPPORTED, typeDrift.errorCode());
+
+        assertEquals(3, traces.size());
+        for (ExecutionTrace trace : traces) {
+            assertEquals(ExecutionState.VERSION_DRIFT, trace.finalState());
+            assertFalse(trace.toString().contains("label-"));
+        }
+    }
+
+    @Test
+    void matchingPlanAllowsTheExecution() {
+        PgOutputPlan plan =
+                PgOutputPlan.of(
+                        new PgOutputPlan.ExpectedColumn("id", PgReadOnlyResult.LogicalType.INTEGER),
+                        new PgOutputPlan.ExpectedColumn(
+                                "label", PgReadOnlyResult.LogicalType.STRING));
+        PgReadOnlyResult result =
+                executor.execute(
+                        9,
+                        PgReadOnlyRequest.of(
+                                "SELECT id, label FROM public.pg_plan ORDER BY id LIMIT 3", 10),
+                        plan,
+                        new ReadOnlyCancellation());
+        assertEquals(3, result.rows().size());
+        assertEquals(ExecutionState.RETURNED, result.trace().finalState());
+    }
+
+    @Test
+    void aggregateUnionAndWindowOutputsProjectSafely() {
+        PgReadOnlyResult aggregate =
+                query("SELECT COUNT(*) AS total, SUM(id) AS sum_ids FROM public.pg_plan");
+        assertEquals(1, aggregate.rows().size());
+        assertEquals("20", aggregate.rows().getFirst().get(0));
+        assertEquals("210", aggregate.rows().getFirst().get(1));
+
+        PgReadOnlyResult union =
+                query(
+                        "SELECT id FROM public.pg_plan WHERE id <= 2 UNION SELECT id FROM public.pg_plan WHERE id = 1 ORDER BY id");
+        assertEquals(2, union.rows().size());
+
+        PgReadOnlyResult window =
+                query(
+                        "SELECT id, ROW_NUMBER() OVER (ORDER BY id) AS rn FROM public.pg_plan WHERE id <= 3 ORDER BY id");
+        assertEquals(3, window.rows().size());
+        assertEquals("1", window.rows().getFirst().get(1));
+        assertEquals(ExecutionState.RETURNED, window.trace().finalState());
+    }
+
+    @Test
+    void hundredMiBTextFieldStreamsBounded() throws Exception {
+        for (MemoryPoolMXBean pool : ManagementFactory.getMemoryPoolMXBeans()) {
+            if (pool.getType() == MemoryType.HEAP) {
+                try {
+                    pool.resetPeakUsage();
+                } catch (UnsupportedOperationException ignored) {
+                    // Conservative bound stays.
+                }
+            }
+        }
+        // datasource.md §7 warns pgJDBC may buffer an unbounded cell before the stream starts,
+        // so the safe shape is the server-side bounded prefix: the 100 MiB row stays in the
+        // database and only the 4 KiB prefix ever reaches the driver.
+        PgReadOnlyResult result = query("SELECT left(body, 4096) AS prefix FROM public.pg_huge", 5);
+        assertFalse(result.rows().isEmpty());
+        String cell = (String) result.rows().getFirst().get(0);
+        assertEquals(MAX_CELL_BYTES, cell.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
+        assertTrue(result.cellTruncations().isEmpty());
+        long peak = heapPeak();
+        assertTrue(peak < 96L * 1024 * 1024, "heap peak " + peak + " must stay bounded");
+    }
+
+    @Test
+    void lateCancellationAfterCompletionDoesNotAffectTheNextRequest() {
+        ReadOnlyCancellation late = new ReadOnlyCancellation();
+        PgReadOnlyResult done = query("SELECT COUNT(*) AS total FROM public.pg_plan");
+        assertEquals("20", done.rows().getFirst().get(0));
+        // The user disappears after the response: a cancel arriving now must not poison anything.
+        late.cancel();
+        PgReadOnlyResult next = query("SELECT COUNT(*) AS total FROM public.pg_plan");
+        assertEquals("20", next.rows().getFirst().get(0));
+        assertEquals(ExecutionState.RETURNED, next.trace().finalState());
+    }
+
+    @Test
+    void cursorPagingStreamsFiveHundredRowsWithinBudget() {
+        try (Connection connection = dataSource.getConnection();
+                Statement statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE pg_many (id integer PRIMARY KEY)");
+            statement.execute("INSERT INTO pg_many SELECT generate_series(1, 500)");
+        } catch (SQLException failure) {
+            throw new IllegalStateException(failure);
+        }
+        for (MemoryPoolMXBean pool : ManagementFactory.getMemoryPoolMXBeans()) {
+            if (pool.getType() == MemoryType.HEAP) {
+                try {
+                    pool.resetPeakUsage();
+                } catch (UnsupportedOperationException ignored) {
+                    // Conservative bound stays.
+                }
+            }
+        }
+        PgReadOnlyResult result = query("SELECT id FROM public.pg_many", 500);
+        assertEquals(500, result.rows().size());
+        assertFalse(result.responseLimitReached());
+        assertTrue(result.rowLimitReached());
+        assertTrue(heapPeak() < 128L * 1024 * 1024, "heap peak " + heapPeak());
     }
 
     private static long heapPeak() {
