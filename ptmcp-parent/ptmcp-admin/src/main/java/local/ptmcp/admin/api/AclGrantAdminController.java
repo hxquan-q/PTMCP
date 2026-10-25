@@ -11,6 +11,8 @@ import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.persistence.org.AclDirectory;
 import local.ptmcp.persistence.org.AclGrantStore;
+import local.ptmcp.persistence.org.DelegationStore;
+import local.ptmcp.persistence.org.OrgStore;
 import local.ptmcp.persistence.org.ResourceIds;
 import local.ptmcp.persistence.org.SelfEscalationGuard;
 
@@ -41,10 +43,18 @@ import java.util.List;
 public class AclGrantAdminController {
     private final AclGrantStore grantStore;
     private final AclDirectory directory;
+    private final DelegationStore delegations;
+    private final OrgStore orgStore;
 
-    public AclGrantAdminController(AclGrantStore grantStore, AclDirectory directory) {
+    public AclGrantAdminController(
+            AclGrantStore grantStore,
+            AclDirectory directory,
+            DelegationStore delegations,
+            OrgStore orgStore) {
         this.grantStore = grantStore;
         this.directory = directory;
+        this.delegations = delegations;
+        this.orgStore = orgStore;
     }
 
     public record GrantWrite(
@@ -99,8 +109,17 @@ public class AclGrantAdminController {
     @PostMapping("/grants")
     public ResponseEntity<GrantRead> create(
             @RequestBody GrantWrite write, HttpServletRequest request) {
-        AdminPrincipal principal = ManagementScope.requirePlatformAdminPrincipal(request);
         AclGrantStore.AclGrantRecord draft = toDraft(write);
+        Long targetDept = requireTargetDepartment(draft.subjectType(), draft.subjectId());
+        AdminPrincipal principal =
+                ManagementScope.requireGrantOperator(
+                        request,
+                        delegations,
+                        orgStore,
+                        "acl:grant",
+                        draft.resourceType(),
+                        draft.resourceId(),
+                        targetDept);
         List<GrantRow> before = callerGrantsOrNull(directory, principal);
         if (before != null) {
             List<GrantRow> after = new ArrayList<>(before);
@@ -123,12 +142,22 @@ public class AclGrantAdminController {
     public ResponseEntity<GrantRead> update(
             @PathVariable long id, @RequestBody GrantWrite write, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
-        AdminPrincipal principal = ManagementScope.requirePlatformAdminPrincipal(request);
         AclGrantStore.AclGrantRecord current = grantStore.get(id);
         if ("REVOKED".equals(current.status())) {
             throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
         }
         AclGrantStore.AclGrantRecord replacement = toDraft(write);
+        Long updateDept =
+                requireTargetDepartment(replacement.subjectType(), replacement.subjectId());
+        AdminPrincipal principal =
+                ManagementScope.requireGrantOperator(
+                        request,
+                        delegations,
+                        orgStore,
+                        "acl:grant",
+                        replacement.resourceType(),
+                        replacement.resourceId(),
+                        updateDept);
         List<GrantRow> before = callerGrantsOrNull(directory, principal);
         if (before != null) {
             long encodedResource =
@@ -158,10 +187,31 @@ public class AclGrantAdminController {
     @DeleteMapping("/grants/{id}")
     public ResponseEntity<GrantRead> revoke(@PathVariable long id, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
-        AdminPrincipal principal = ManagementScope.requirePlatformAdminPrincipal(request);
+        // Re-revoking is an idempotent replay handled by the store; the gate still checks the
+        // coordinates of the grant being touched.
+        AclGrantStore.AclGrantRecord current = grantStore.get(id);
+        Long revokeDept = requireTargetDepartment(current.subjectType(), current.subjectId());
+        AdminPrincipal principal =
+                ManagementScope.requireGrantOperator(
+                        request,
+                        delegations,
+                        orgStore,
+                        "acl:revoke",
+                        current.resourceType(),
+                        current.resourceId(),
+                        revokeDept);
         AclGrantStore.AclGrantRecord revoked =
                 grantStore.revoke(id, expectedVersion, "revoked via API", principal.userId());
         return ResponseEntity.ok().body(toRead(revoked));
+    }
+
+    private Long requireTargetDepartment(String subjectType, long subjectId) {
+        try {
+            return ManagementScope.subjectDepartment(orgStore, subjectType, subjectId);
+        } catch (DomainException error) {
+            // An unknown subject is out of every scope; the platform path reports 404 later.
+            return null;
+        }
     }
 
     @PostMapping("/preview")

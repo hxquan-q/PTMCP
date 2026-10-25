@@ -1,5 +1,7 @@
 package local.ptmcp.admin;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -392,13 +394,20 @@ class AdminApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("REVOKED"));
 
-        mockMvc.perform(
-                        delete("/api/v1/admin/acl/grants/" + grantId)
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true")
-                                .header("If-Match", "2"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("REVOKED"));
+        MvcResult secondDelete =
+                mockMvc.perform(
+                                delete("/api/v1/admin/acl/grants/" + grantId)
+                                        .header("X-Test-User-Id", ADMIN_ID)
+                                        .header("X-Test-Platform-Admin", "true")
+                                        .header("If-Match", "2"))
+                        .andReturn();
+        assertEquals(
+                200,
+                secondDelete.getResponse().getStatus(),
+                "body=" + secondDelete.getResponse().getContentAsString());
+        assertTrue(
+                secondDelete.getResponse().getContentAsString().contains("REVOKED"),
+                secondDelete.getResponse().getContentAsString());
 
         mockMvc.perform(
                         get("/api/v1/admin/acl/grants")
