@@ -35,7 +35,7 @@ function copyDictionary(value: MetadataDetail): void {
   Object.assign(form, {
     title: value.dictionary?.title ?? '',
     description: value.dictionary?.description ?? '',
-    ownerUserId: value.dictionary?.ownerUserId ? Number(value.dictionary.ownerUserId) : null,
+    ownerUserId: value.dictionary?.ownerUserId ?? null,
     columns: (value.dictionary?.columns ?? []).map((column) => ({
       columnName: column.columnName,
       title: column.title ?? '',
@@ -154,7 +154,7 @@ onMounted(() => void load());
         ><ElForm :model="form" label-position="top"
           ><ElFormItem label="业务标题" required><ElInput v-model="form.title" maxlength="128" show-word-limit /></ElFormItem
           ><ElFormItem label="业务说明"><ElInput v-model="form.description" type="textarea" :rows="4" maxlength="8000" show-word-limit /></ElFormItem
-          ><ElFormItem label="负责人 ID"><ElInputNumber v-model="form.ownerUserId" :min="1" :controls="false" placeholder="可留空" /></ElFormItem>
+          ><ElFormItem label="负责人 ID"><ElInput v-model="form.ownerUserId" inputmode="numeric" placeholder="可留空" /></ElFormItem>
           <div class="column-heading"><span>列级说明</span><small>列名来自当前快照，不能新增或执行 DDL。</small></div>
           <div class="column-dictionary">
             <div v-for="column in columns" :key="column.name" class="column-row">

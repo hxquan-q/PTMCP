@@ -183,7 +183,7 @@ export interface MetadataDetail {
 export interface DictionaryWrite {
   title: string;
   description: string;
-  ownerUserId: number | null;
+  ownerUserId: string | null;
   columns: Array<{ columnName: string; title: string; description: string }>;
 }
 
