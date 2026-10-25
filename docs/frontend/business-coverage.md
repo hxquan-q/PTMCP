@@ -9,7 +9,7 @@
 - 前端页面路径以下均相对 `ptmcp-ui/src/views/`；请求模块位于 `ptmcp-ui/src/services/`。路由与操作码映射见[router](../../ptmcp-ui/src/router/index.ts)，统一HTTP实现见[http](../../ptmcp-ui/src/services/http.ts)。
 - 管理Controller位于 `ptmcp-parent/ptmcp-admin/src/main/java/local/ptmcp/admin/api/`；个人门户与会话分别在同模块的 `me/`、`session/`。
 - API实施证据入口：[数据源与元数据](../../tasks/work-items/T15-b.md)、[组织与ACL](../../tasks/work-items/T16-a.md)、[会话与个人门户](../../tasks/work-items/T17-api-b.md)。这些后端记录不能替代本轮浏览器验收。
-- 未接入的路由使用 `components/common/UnavailableView.vue` 明示状态。`FrameworkHome.vue` 为旧框架样例，不再是 `/` 的业务入口；`/` 经守卫选择有权限的管理入口或个人字典。
+- 本轮新增P-08/P-09/P-11业务结构，由协调者接入现有路由；缺少后端端点时禁用请求/提交并说明未读取状态。`FrameworkHome.vue` 为旧框架样例，不再是 `/` 的业务入口；`/` 经守卫选择有权限的管理入口或个人字典。
 
 ## 18组范围矩阵
 
@@ -22,10 +22,10 @@
 | P-05 部门：`/admin/departments` | `admin/org/DepartmentsView.vue`、`orgPortalApi.ts`；`DepartmentAdminController`的CRUD | 已有部门树、创建/编辑/删除、If-Match、名称30字符限制、父节点排除后代，以及移动前旧新路径/子树数量确认。服务端DTO为parentId/name/enabled/ancestors/version，未覆盖规格中的orderNum、childrenCount等；有效委派范围尚未落地。名称边界、移动影响与版本冲突仍需浏览器证据。 |
 | P-06 用户：`/admin/users`、`/:id` | `admin/org/UsersView.vue`；`UserAdminController`的列表/创建/读取/更新及status/roles/department | 已有组织档案管理、逐动作权限与部门/角色/状态专用端点接线，角色加载失败时禁止覆盖。后端UserWrite没有initialPassword、email、phoneNumber、remark，也没有用户DELETE或重置密码端点；“创建档案”不等于可登录账号开通。版本冲突、自增权拒绝及独立动作能力仍需真实证据。 |
 | P-07 角色：`/admin/roles`、`/:id` | `admin/org/RolesView.vue`；`RoleAdminController`的CRUD | 已有key/name/enabled/permissionCodes表单及版本化更新/删除；功能码按当前会话权限子集多选，原有超出子集的码只读保留，独立可委派码目录仍缺。DTO不含memberCount/managedDepartmentIds；跨范围共享角色只读、委派到期等仍依赖未实现的范围能力，不能将会话权限等同完整委派契约。 |
-| P-08 委派：`/admin/delegations` | 路由已定义，当前为UnavailableView | 未发现对应管理Controller；需实现部门子树∩资源∩动作∩有效期契约后再联调，不能把管理范围空态或占位页记作委派完成。 |
-| P-09 平台/客户端：`/admin/platforms`、`/:id` | 路由已定义，当前为UnavailableView；底层平台注册与OAuth客户端代码存在 | 控制台平台CRUD、Scope与客户端管理端点尚未接入。OAuth注册/平台证明能力不等于这些管理页面已实现；一次性secret、Scope差异、信任降级、精确回调等均待管理契约和UI验收。 |
+| P-08 委派：`/admin/delegations` | `admin/integrations/DelegationsView.vue`、`adminSurface.ts`；后端未发现委派Controller，`ManagementScope`仍仅支持平台管理员 | 已有筛选、委派字段表单、动作/有效期本地校验、部门子树∩资源∩动作∩有效期说明和空表列；提交保持禁用，不调用缺失端点。待真实管理范围选择器、列表/撤销端点与越级/自委派网络证据。 |
+| P-09 平台/客户端：`/admin/platforms`、`/:id` | `admin/integrations/PlatformsView.vue`、`PlatformDetailView.vue`及同域表单/Scope组件、`adminSurface.ts`；底层平台注册与OAuth客户端服务端代码存在，但控制台管理Controller未接入 | 已有平台筛选/列结构、基础信息/Scope/客户端三页签、Tier/proof/Scope白名单/精确回调 URI本地校验；新建/编辑表单可预览，保存按钮保持禁用，不调用缺失端点、不展示secret。资源目录缺少可信generation时不可选。待平台CRUD、Scope差异、客户端CRUD/一次性secret、信任降级及真实回调兼容验收。 |
 | P-10 ACL：`/admin/permissions`、`/admin/permissions/preview` | `admin/access/PermissionsView.vue`已接入`useAccessWorkspace.ts`，两条路由复用工作区；`services/access.ts`调用`AclGrantAdminController`的grants CRUD及preview | 已有受控主体选项、资源树、单条规则写入与预览接线；需验证generation、META/READ与DENY、冲突及切换清理。命名空间缺少实时generation读取接口，当前禁用新增/编辑，允许预览；PG catalog仅分组。GET effective尚未实现，现有preview不包含规格全部reasonCodes/versions字段，不能宣称完整有效权限解释。 |
-| P-11 全局审计：`/admin/audit`、`/:requestId` | 路由已定义，当前为UnavailableView；个人history端点独立存在 | 未发现全局审计列表/详情/decrypt管理Controller；个人历史不能代替全局受控审计范围。理由校验、解密到期清除、独立decrypt权限等须在真实端点存在后验收。 |
+| P-11 全局审计：`/admin/audit`、`/:requestId` | `admin/audit/AuditView.vue`、`AuditDetailView.vue`；后端未发现全局审计列表/详情/decrypt管理Controller，个人history端点独立存在 | 已有31天日期边界、审计筛选、调用记录列结构、详情脱敏边界和UNKNOWN说明；查询按钮保持禁用，不调用缺失端点，不提供原SQL输入或解密按钮。待全局审计列表/详情/decrypt端点、范围筛选、理由10～500字符、明文到期清除及网络证据。 |
 | P-12 个人字典：`/me/dictionary`、`/:objectId` | `me/DictionaryView.vue`、`DictionaryDetailView.vue`、`mePortalApi.ts`；`MeController`的access-context/dictionary | 已逐级读取个人上下文与目录、提供各层游标加载更多、按READ打开详情，并处理过时请求与ID变化。需上下文分页、切换/失效清理、并发筛选、DISCOVER/HIDE与META DENY、无READ不返结构、外键隐藏及他人对象ID的真实验证。 |
 | P-13 接入配置：`/me/integrations` | `me/IntegrationsView.vue`；`MeController`的mcp-config及access-context | 已有平台/客户端选择、通用模板、主动复制和compatibilityStatus展示。模板存在不表示客户端已连接；四客户端版本、OAuth/PAT、刷新与撤销必须另有实际联调证据，example.test地址只能用于合成夹具。 |
 | P-14 PAT：`/me/tokens` | `me/TokensView.vue`；`MeController`的tokens列表/创建/撤销 | 已有Tier3平台、Scope、期限、一次性明文弹窗与主动复制，并处理pending及离页后的迟到响应。需90天上限、响应丢失不重建、撤销/过期、弹窗/离页/会话失效清除及浏览器存储/日志不泄漏的证据。当前端点的实际幂等语义须与目标契约分别记录。 |
