@@ -168,6 +168,26 @@ public final class SqlFieldCipher {
         return aad.array();
     }
 
+    /**
+     * Decrypts one audit field for the admin API decrypt path using API field names
+     * ("sqlRaw"/"sqlFinal") instead of the internal column names.
+     */
+    public static byte[] decryptForAudit(
+            SqlFieldCipherPolicy policy,
+            WalKey key,
+            UUID requestId,
+            String apiFieldName,
+            byte[] envelope) {
+        String field =
+                "sqlRaw".equals(apiFieldName)
+                        ? FIELD_SQL_RAW
+                        : "sqlFinal".equals(apiFieldName) ? FIELD_SQL_FINAL : null;
+        if (field == null) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
+        return decrypt(policy, key, requestId, field, envelope);
+    }
+
     private static void validateField(String field) {
         if (field == null || !(FIELD_SQL_RAW.equals(field) || FIELD_SQL_FINAL.equals(field))) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);

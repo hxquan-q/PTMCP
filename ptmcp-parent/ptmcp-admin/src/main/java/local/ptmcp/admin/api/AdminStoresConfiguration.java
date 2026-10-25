@@ -15,6 +15,8 @@ import local.ptmcp.admin.me.PersonalTokenService;
 import local.ptmcp.admin.metadata.MetadataCatalogService;
 import local.ptmcp.admin.session.AdminSessionService;
 import local.ptmcp.admin.session.SessionAuthFilter;
+import local.ptmcp.persistence.audit.AuditAdminStore;
+import local.ptmcp.persistence.audit.wal.WalKey;
 import local.ptmcp.persistence.org.AclDirectory;
 import local.ptmcp.persistence.org.AclGrantStore;
 import local.ptmcp.persistence.org.DelegationStore;
@@ -64,6 +66,17 @@ public class AdminStoresConfiguration {
     @Bean
     public DelegationStore delegationStore(DataSource dataSource) {
         return new DelegationStore(dataSource);
+    }
+
+    @Bean
+    public AuditAdminStore auditAdminStore(DataSource dataSource) {
+        return new AuditAdminStore(dataSource);
+    }
+
+    /** Production key resolution binds to KMS; this slice injects a configuration-backed stub. */
+    @Bean
+    public java.util.function.LongFunction<WalKey> auditKeyResolver() {
+        return keyId -> new WalKey("test-key-1", new byte[32]);
     }
 
     @Bean
