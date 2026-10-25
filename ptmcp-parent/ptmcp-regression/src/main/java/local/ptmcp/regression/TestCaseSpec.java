@@ -15,6 +15,10 @@ public record TestCaseSpec(
         return new TestCaseSpec(caseId, category, sql, Outcome.ALLOW, null);
     }
 
+    public static TestCaseSpec reject(String caseId, String category, String sql) {
+        return new TestCaseSpec(caseId, category, sql, Outcome.REJECT, null);
+    }
+
     public static TestCaseSpec reject(String caseId, String category, String sql, ErrorCode code) {
         return new TestCaseSpec(caseId, category, sql, Outcome.REJECT, code);
     }
