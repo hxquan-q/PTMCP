@@ -11,10 +11,26 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    ElButton: typeof import('element-plus/es')['ElButton']
     ElConfigProvider: typeof import('element-plus/es')['ElConfigProvider']
+    ElDropdown: typeof import('element-plus/es')['ElDropdown']
+    ElDropdownItem: typeof import('element-plus/es')['ElDropdownItem']
+    ElDropdownMenu: typeof import('element-plus/es')['ElDropdownMenu']
     ElTag: typeof import('element-plus/es')['ElTag']
+    IconEpArrowRight: typeof import('~icons/ep/arrow-right')['default']
+    IconEpCircleCheck: typeof import('~icons/ep/circle-check')['default']
+    IconEpDocumentDelete: typeof import('~icons/ep/document-delete')['default']
+    IconEpExpand: typeof import('~icons/ep/expand')['default']
+    IconEpLock: typeof import('~icons/ep/lock')['default']
     IconEpMonitor: typeof import('~icons/ep/monitor')['default']
+    IconEpMoreFilled: typeof import('~icons/ep/more-filled')['default']
+    IconEpSwitch: typeof import('~icons/ep/switch')['default']
+    IconEpWarning: typeof import('~icons/ep/warning')['default']
+    PageHeader: typeof import('./components/common/PageHeader.vue')['default']
+    PageState: typeof import('./components/common/PageState.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    UnavailableView: typeof import('./components/common/UnavailableView.vue')['default']
+    WorkspaceLayout: typeof import('./components/common/WorkspaceLayout.vue')['default']
   }
 }
