@@ -61,3 +61,28 @@ test('401 notifies all session consumers and never replays the request', async (
     globalThis.fetch = originalFetch;
   }
 });
+
+test('CSRF_INVALID clears stale token without replay; next explicit submit refreshes it', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: { path: string; token: string | null }[] = [];
+  setCsrfToken('stale-csrf');
+  globalThis.fetch = async (input, init) => {
+    const path = String(input);
+    calls.push({ path, token: new Headers(init?.headers).get('X-CSRF-Token') });
+    if (path.endsWith('/session/csrf')) return new Response(JSON.stringify({ csrfToken: 'fresh-csrf' }), { status: 200 });
+    if (calls.length === 1) return new Response(JSON.stringify({ code: 'CSRF_INVALID' }), { status: 403 });
+    return new Response(JSON.stringify({ saved: true }), { status: 200 });
+  };
+  try {
+    await assert.rejects(() => request('/api/v1/admin/test', { method: 'POST', body: { value: 'x' } }), (error: unknown) => error instanceof ApiError && error.code === 'CSRF_INVALID');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]?.token, 'stale-csrf');
+    // A new user-initiated call is a separate intent; transport never replays the first call.
+    await request('/api/v1/admin/test', { method: 'POST', body: { value: 'x' } });
+    assert.deepEqual(calls.map((call) => call.path), ['/backend/admin/api/v1/admin/test', '/backend/admin/api/v1/session/csrf', '/backend/admin/api/v1/admin/test']);
+    assert.equal(calls[2]?.token, 'fresh-csrf');
+  } finally {
+    setCsrfToken(null);
+    globalThis.fetch = originalFetch;
+  }
+});

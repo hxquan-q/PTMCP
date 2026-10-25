@@ -11,6 +11,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    ElAlert: typeof import('element-plus/es')['ElAlert']
     ElButton: typeof import('element-plus/es')['ElButton']
     ElConfigProvider: typeof import('element-plus/es')['ElConfigProvider']
     ElDropdown: typeof import('element-plus/es')['ElDropdown']
@@ -19,12 +20,13 @@ declare module 'vue' {
     ElTag: typeof import('element-plus/es')['ElTag']
     IconEpArrowRight: typeof import('~icons/ep/arrow-right')['default']
     IconEpCircleCheck: typeof import('~icons/ep/circle-check')['default']
+    IconEpClose: typeof import('~icons/ep/close')['default']
     IconEpDocumentDelete: typeof import('~icons/ep/document-delete')['default']
     IconEpExpand: typeof import('~icons/ep/expand')['default']
+    IconEpGrid: typeof import('~icons/ep/grid')['default']
     IconEpLock: typeof import('~icons/ep/lock')['default']
     IconEpMonitor: typeof import('~icons/ep/monitor')['default']
     IconEpMoreFilled: typeof import('~icons/ep/more-filled')['default']
-    IconEpSwitch: typeof import('~icons/ep/switch')['default']
     IconEpWarning: typeof import('~icons/ep/warning')['default']
     PageHeader: typeof import('./components/common/PageHeader.vue')['default']
     PageState: typeof import('./components/common/PageState.vue')['default']

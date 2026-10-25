@@ -156,6 +156,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   const wrapped = typeof root?.code === 'number' && 'data' in (root ?? {});
   if (!response.ok || (wrapped && root?.code !== 200)) {
     const code = typeof root?.code === 'string' ? root.code : typeof nested?.errorCode === 'string' ? nested.errorCode : 'REQUEST_FAILED';
+    if (code === 'CSRF_INVALID') csrfToken = null;
     if (response.status === 401) {
       csrfToken = null;
       sessionEvents.dispatchEvent(new Event('expired'));
