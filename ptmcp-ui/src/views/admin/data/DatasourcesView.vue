@@ -21,6 +21,7 @@ const form = reactive<DatasourceWrite>(emptyForm());
 const createKey = ref(crypto.randomUUID());
 let listController: AbortController | null = null;
 let generation = 0;
+let createGeneration = 0;
 let active = true;
 
 const rules: FormRules<DatasourceWrite> = {
@@ -78,7 +79,7 @@ function statusType(status: string): 'success' | 'warning' | 'info' | 'danger' {
 function requestErrorMessage(value: unknown): string {
   if (value instanceof DataRequestError) {
     requestId.value = value.requestId;
-    return value.message;
+    return `${value.message}${value.code ? `（${value.code}）` : ''}`;
   }
   return value instanceof Error ? value.message : '请求失败，请稍后重试';
 }
@@ -104,7 +105,15 @@ async function load(cursor: string | null = null): Promise<void> {
   } catch (cause) {
     if (!active || requestGeneration !== generation || aborted(cause)) return;
     error.value = requestErrorMessage(cause);
-    if (cause instanceof DataRequestError && [401, 403, 404].includes(cause.status)) rows.value = [];
+    if (cause instanceof DataRequestError && cause.code === 'CURSOR_STALE' && cursor) {
+      nextCursor.value = null;
+      await load();
+      return;
+    }
+    if (cause instanceof DataRequestError && [401, 403, 404].includes(cause.status)) {
+      rows.value = [];
+      nextCursor.value = null;
+    }
   } finally {
     if (active && requestGeneration === generation) loading.value = false;
   }
@@ -120,46 +129,54 @@ function clearCredential(): void {
   form.credential = '';
 }
 function clearSensitive(): void {
-  clearCredential();
+  Object.assign(form, emptyForm());
   dialogVisible.value = false;
   rows.value = [];
   listController?.abort();
   generation += 1;
+  createGeneration += 1;
+  nextCursor.value = null;
+  loading.value = false;
+  submitting.value = false;
 }
 function resetForm(): void {
+  createGeneration += 1;
   Object.assign(form, emptyForm());
   createKey.value = crypto.randomUUID();
   createError.value = '';
 }
 function openCreate(): void {
-  if (!session.can('ptmcp:datasource:create')) return;
+  if (submitting.value || !session.can('ptmcp:datasource:create')) return;
   resetForm();
   dialogVisible.value = true;
 }
 async function submitCreate(): Promise<void> {
-  if (submitting.value || !session.can('ptmcp:datasource:create')) return;
-  const valid = formRef.value
-    ? await formRef.value
-        .validate()
-        .then(() => true)
-        .catch(() => false)
-    : false;
-  if (!valid) return;
-  const current = generation;
+  if (submitting.value || !dialogVisible.value || !session.can('ptmcp:datasource:create')) return;
+  const current = createGeneration;
   submitting.value = true;
   createError.value = '';
   try {
+    const valid = formRef.value
+      ? await formRef.value
+          .validate()
+          .then(() => true)
+          .catch(() => false)
+      : false;
+    if (!valid || !active || current !== createGeneration || !dialogVisible.value || !session.can('ptmcp:datasource:create')) return;
     const result = await createDatasource({ ...form }, createKey.value);
+    if (!active || current !== createGeneration || !dialogVisible.value) return;
     clearCredential();
     dialogVisible.value = false;
-    if (!active || current !== generation) return;
     ElMessage.success('数据源已创建');
     await load();
-    if (result.data?.id && session.can('ptmcp:datasource:read')) await router.push(`/admin/datasources/${result.data.id}`);
+    if (active && current === createGeneration && result.data?.id && session.can('ptmcp:datasource:read'))
+      await router.push(`/admin/datasources/${result.data.id}`);
   } catch (cause) {
-    if (active && current === generation) createError.value = requestErrorMessage(cause);
+    if (!active || current !== createGeneration) return;
+    if (cause instanceof DataRequestError && (cause.status === 401 || (cause.status === 403 && cause.code !== 'CSRF_INVALID'))) clearSensitive();
+    createError.value = requestErrorMessage(cause);
   } finally {
-    submitting.value = false;
+    if (active && current === createGeneration) submitting.value = false;
   }
 }
 watch(dialogVisible, (visible) => {
@@ -260,6 +277,10 @@ onBeforeUnmount(() => {
         <ElTableColumn label="最近同步" min-width="170">
           <template #default="scope">{{ formatDate(scope.row.lastSyncAt) }}</template>
         </ElTableColumn>
+        <ElTableColumn prop="poolMax" label="连接池上限" width="110" />
+        <ElTableColumn label="活动快照" min-width="130"
+          ><template #default="scope">{{ scope.row.activeSnapshotId || '待同步' }}</template></ElTableColumn
+        >
         <ElTableColumn label="操作" width="110" fixed="right">
           <template #default="scope">
             <ElButton v-if="session.can('ptmcp:datasource:read')" link type="primary" @click="router.push(`/admin/datasources/${scope.row.id}`)"
@@ -285,6 +306,7 @@ onBeforeUnmount(() => {
       width="min(620px, calc(100vw - 24px))"
       destroy-on-close
       :close-on-click-modal="!submitting"
+      :close-on-press-escape="!submitting"
       :show-close="!submitting"
     >
       <ElAlert v-if="createError" type="error" :closable="false" show-icon class="state-alert">{{ createError }}</ElAlert>
@@ -313,7 +335,7 @@ onBeforeUnmount(() => {
         <ElAlert type="info" :closable="false">连接凭据只在提交时发送，之后仅显示“已配置”。TLS 固定为 VERIFY_FULL。</ElAlert>
       </ElForm>
       <template #footer
-        ><ElButton @click="dialogVisible = false">取消</ElButton
+        ><ElButton :disabled="submitting" @click="dialogVisible = false">取消</ElButton
         ><ElButton type="primary" :loading="submitting" @click="submitCreate">创建</ElButton></template
       >
     </ElDialog>

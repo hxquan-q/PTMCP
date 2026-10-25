@@ -12,6 +12,8 @@ const rows = ref<MetadataItem[]>([]);
 const nextCursor = ref<string | null>(null);
 const loading = ref(false);
 const sourceLoading = ref(false);
+const sourceNextCursor = ref<string | null>(null);
+const awaitingSnapshot = ref(false);
 const error = ref('');
 const requestId = ref<string>();
 const sourceError = ref('');
@@ -19,11 +21,12 @@ const filters = reactive({ namespaceId: '', keyword: '', kind: '' });
 let sourceController: AbortController | null = null;
 let listController: AbortController | null = null;
 let generation = 0;
+let sourceGeneration = 0;
 let active = true;
 function errorMessage(value: unknown): string {
   if (value instanceof DataRequestError) {
     requestId.value = value.requestId;
-    return value.message;
+    return `${value.message}${value.code ? `（${value.code}）` : ''}`;
   }
   return value instanceof Error ? value.message : '请求失败，请稍后重试';
 }
@@ -39,37 +42,60 @@ function kindType(kind: string): 'success' | 'info' {
 function aborted(value: unknown): boolean {
   return value instanceof DOMException && value.name === 'AbortError';
 }
-async function loadSources(): Promise<void> {
+async function loadSources(cursor: string | null = null): Promise<void> {
+  sourceController?.abort();
+  const current = ++sourceGeneration;
   if (!session.can('ptmcp:datasource:list')) {
+    datasources.value = [];
+    sourceNextCursor.value = null;
+    sourceLoading.value = false;
     sourceError.value = '你没有数据源列表权限。请通过可访问对象入口进入元数据。';
     return;
   }
-  sourceController?.abort();
   sourceController = new AbortController();
   sourceLoading.value = true;
   sourceError.value = '';
   try {
-    const result = await listDatasources({ pageSize: 100, signal: sourceController.signal });
-    if (!active) return;
-    datasources.value = result.data.items ?? [];
+    const result = await listDatasources({ cursor, pageSize: 100, signal: sourceController.signal });
+    if (!active || current !== sourceGeneration) return;
+    const prior = cursor ? datasources.value : [];
+    const knownIds = new Set(prior.map((source) => source.id));
+    datasources.value = [...prior, ...result.data.items.filter((source) => !knownIds.has(source.id))];
+    sourceNextCursor.value = result.data.nextCursor;
     if (!datasourceId.value && datasources.value.length) datasourceId.value = datasources.value[0].id;
   } catch (cause) {
-    if (active && !aborted(cause)) sourceError.value = errorMessage(cause);
+    if (!active || current !== sourceGeneration || aborted(cause)) return;
+    if (cause instanceof DataRequestError && cause.code === 'CURSOR_STALE' && cursor) {
+      sourceNextCursor.value = null;
+      await loadSources();
+      return;
+    }
+    sourceError.value = errorMessage(cause);
+    if (cause instanceof DataRequestError && [401, 403, 404].includes(cause.status)) {
+      datasources.value = [];
+      sourceNextCursor.value = null;
+    }
   } finally {
-    if (active) sourceLoading.value = false;
+    if (active && current === sourceGeneration) sourceLoading.value = false;
   }
+}
+function moreSources(): void {
+  if (sourceNextCursor.value && !sourceLoading.value) void loadSources(sourceNextCursor.value);
 }
 async function load(cursor: string | null = null): Promise<void> {
   listController?.abort();
   const current = ++generation;
   listController = new AbortController();
+  awaitingSnapshot.value = false;
+  error.value = '';
+  requestId.value = undefined;
   if (!datasourceId.value || !session.can('ptmcp:metadata:list')) {
     rows.value = [];
     nextCursor.value = null;
+    loading.value = false;
     return;
   }
   loading.value = true;
-  error.value = '';
   try {
     const result = await listMetadata({
       datasourceId: datasourceId.value,
@@ -85,8 +111,23 @@ async function load(cursor: string | null = null): Promise<void> {
     nextCursor.value = result.data.nextCursor ?? null;
   } catch (cause) {
     if (!active || current !== generation || aborted(cause)) return;
+    if (cause instanceof DataRequestError && cause.code === 'CURSOR_STALE' && cursor) {
+      nextCursor.value = null;
+      await load();
+      return;
+    }
+    if (cause instanceof DataRequestError && cause.code === 'SCHEMA_STALE') {
+      rows.value = [];
+      nextCursor.value = null;
+      awaitingSnapshot.value = true;
+      requestId.value = cause.requestId;
+      return;
+    }
     error.value = errorMessage(cause);
-    if (cause instanceof DataRequestError && [401, 403, 404, 503].includes(cause.status)) rows.value = [];
+    if (cause instanceof DataRequestError && [401, 403, 404, 503].includes(cause.status)) {
+      rows.value = [];
+      nextCursor.value = null;
+    }
   } finally {
     if (active && current === generation) loading.value = false;
   }
@@ -112,8 +153,14 @@ function clearSensitive(): void {
   sourceController?.abort();
   listController?.abort();
   generation += 1;
+  sourceGeneration += 1;
   rows.value = [];
   datasources.value = [];
+  nextCursor.value = null;
+  sourceNextCursor.value = null;
+  loading.value = false;
+  sourceLoading.value = false;
+  awaitingSnapshot.value = false;
 }
 watch(
   () => route.query.datasourceId,
@@ -123,14 +170,16 @@ watch(
       datasourceId.value = selected;
       filters.namespaceId = '';
       nextCursor.value = null;
+      rows.value = [];
       void load();
     }
   }
 );
 onMounted(async () => {
   window.addEventListener('ptmcp:sensitive-clear', clearSensitive);
+  const current = sourceGeneration + 1;
   await loadSources();
-  if (active) await load();
+  if (active && current === sourceGeneration) await load();
 });
 onBeforeUnmount(() => {
   active = false;
@@ -166,6 +215,17 @@ onBeforeUnmount(() => {
         <ElButton type="primary" :disabled="!datasourceId" @click="applyFilters">查询</ElButton>
       </ElForm>
     </ElCard>
+    <div v-if="sourceNextCursor" class="source-pages">
+      <span>已加载 {{ datasources.length }} 个数据源</span><ElButton :loading="sourceLoading" @click="moreSources">加载更多数据源</ElButton>
+    </div>
+    <ElAlert v-if="awaitingSnapshot" type="warning" :closable="false" show-icon class="state-alert">
+      当前数据源暂无可用的元数据快照，处于待同步状态。请同步后重新读取。
+      <span v-if="requestId">（请求 ID：{{ requestId }}）</span>
+      <ElButton v-if="session.can('ptmcp:datasource:read')" link type="primary" @click="router.push(`/admin/datasources/${datasourceId}`)"
+        >前往数据源同步</ElButton
+      >
+      <ElButton link type="primary" @click="applyFilters">重新读取</ElButton>
+    </ElAlert>
     <ElAlert v-if="error" type="error" :closable="false" show-icon class="state-alert"
       ><span
         >{{ error }}<span v-if="requestId">（请求 ID：{{ requestId }}）</span></span
@@ -177,7 +237,7 @@ onBeforeUnmount(() => {
           ><template #default="scope"
             ><button class="link-button" type="button" :disabled="!session.can('ptmcp:metadata:read')" @click="openDetail(scope.row as MetadataItem)">
               <strong>{{ formatObject(scope.row as MetadataItem) }}</strong
-              ><small>{{ scope.row.databaseName }} · ID {{ scope.row.id }}</small>
+              ><small>{{ scope.row.databaseName }} · ID {{ scope.row.id }} · 命名空间 {{ scope.row.namespaceId }}</small>
             </button></template
           ></ElTableColumn
         >
@@ -198,7 +258,18 @@ onBeforeUnmount(() => {
           ></ElTableColumn
         >
         <template #empty
-          ><ElEmpty :description="!datasourceId ? '选择数据源后查看元数据' : loading ? '正在加载…' : '当前快照中没有匹配对象'"
+          ><ElEmpty
+            :description="
+              !datasourceId
+                ? '选择数据源后查看元数据'
+                : loading
+                  ? '正在加载…'
+                  : awaitingSnapshot
+                    ? '元数据待同步'
+                    : error
+                      ? '元数据读取失败，请重试'
+                      : '当前快照中没有匹配对象'
+            "
         /></template>
       </ElTable>
       <div class="table-footer">
@@ -243,6 +314,16 @@ h1 {
 }
 .filter-card :deep(.el-form-item) {
   margin-bottom: 0;
+}
+.source-pages {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin: 0 0 16px;
+  color: #6b7785;
+  font-size: 13px;
 }
 .table-card {
   border-color: #dce5e9;

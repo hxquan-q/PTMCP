@@ -18,7 +18,7 @@ let generation = 0;
 function errorMessage(value: unknown): string {
   if (value instanceof DataRequestError) {
     requestId.value = value.requestId;
-    return value.message;
+    return `${value.message}${value.code ? `（${value.code}）` : ''}`;
   }
   return value instanceof Error ? value.message : '任务状态读取失败';
 }
@@ -76,6 +76,7 @@ function clearSensitive(): void {
 }
 function openDatasource(): void {
   if (job.value?.datasourceId && session.can('ptmcp:datasource:read')) void router.push(`/admin/datasources/${job.value.datasourceId}`);
+  else if (session.can('ptmcp:datasource:list')) void router.push('/admin/datasources');
 }
 function openMetadata(): void {
   if (job.value?.datasourceId && session.can('ptmcp:metadata:list'))
@@ -102,9 +103,11 @@ onBeforeUnmount(() => {
   <section class="page-shell" aria-labelledby="job-title">
     <div class="page-heading">
       <div>
-        <ElButton link class="back-link" @click="router.push(`/admin/datasources/${job?.datasourceId || ''}`)">← 返回数据源</ElButton>
+        <ElButton v-if="session.can('ptmcp:datasource:read') || session.can('ptmcp:datasource:list')" link class="back-link" @click="openDatasource"
+          >← 返回数据源</ElButton
+        >
         <p class="eyebrow">异步任务 / 状态</p>
-        <h1 id="job-title">{{ job?.type === 'SYNC' ? '元数据同步' : '连接测试' }}</h1>
+        <h1 id="job-title">{{ job?.type === 'SYNC' ? '元数据同步' : job?.type === 'TEST' ? '连接测试' : '任务详情' }}</h1>
         <p class="subtitle">任务 ID {{ id }}</p>
       </div>
       <ElTag v-if="job" :type="stateType(job.state)" size="large" effect="light">{{ stateLabel(job.state) }}</ElTag>
@@ -114,6 +117,7 @@ onBeforeUnmount(() => {
         >{{ error }}<span v-if="requestId">（请求 ID：{{ requestId }}）</span></span
       ></ElAlert
     >
+    <ElButton v-if="error && !loading" class="retry-button" @click="load(true)">重新读取任务状态</ElButton>
     <ElSkeleton v-if="loading" :rows="7" animated />
     <template v-else-if="job">
       <ElCard shadow="never" class="progress-card">
@@ -131,8 +135,11 @@ onBeforeUnmount(() => {
           :percentage="Math.min(100, Math.round((job.progress.processed / Math.max(1, job.progress.total)) * 100))"
           :status="job.state === 'FAILED' ? 'exception' : job.state === 'SUCCEEDED' ? 'success' : undefined"
         />
-        <div v-else class="indeterminate" :class="{ terminal: isTerminal(job.state) }"><span></span></div>
-        <p v-if="job.state === 'FAILED'" class="failure">任务失败：{{ job.errorCode || 'UNKNOWN_ERROR' }}。未发布新的元数据快照。</p>
+        <div v-else-if="!isTerminal(job.state)" class="indeterminate"><span></span></div>
+        <p v-else class="muted">服务端未提供处理总量，以任务状态为准。</p>
+        <p v-if="job.state === 'FAILED'" class="failure">
+          任务失败：{{ job.errorCode || 'UNKNOWN_ERROR' }}。{{ job.type === 'SYNC' ? '未发布新的元数据快照。' : '请检查连接配置后手动重新测试。' }}
+        </p>
         <p v-else-if="job.state === 'SUCCEEDED' && job.snapshotId && session.can('ptmcp:metadata:list')" class="success">
           快照 {{ job.snapshotId }} 已发布，可查看元数据。
         </p>
@@ -171,14 +178,14 @@ onBeforeUnmount(() => {
         </dl>
       </ElCard>
       <div class="bottom-actions">
-        <ElButton @click="openDatasource">返回数据源</ElButton
+        <ElButton v-if="session.can('ptmcp:datasource:read') || session.can('ptmcp:datasource:list')" @click="openDatasource">返回数据源</ElButton
         ><ElButton v-if="job.state === 'SUCCEEDED' && job.snapshotId && session.can('ptmcp:metadata:list')" type="primary" @click="openMetadata"
           >查看元数据</ElButton
         >
       </div>
     </template>
-    <ElEmpty v-else description="任务不存在或你已失去访问权限"
-      ><ElButton type="primary" @click="router.push('/admin/datasources')">返回数据源</ElButton></ElEmpty
+    <ElEmpty v-else :description="error ? '暂时无法读取任务状态，请按错误原因重试' : '任务不存在或你已失去访问权限'"
+      ><ElButton v-if="session.can('ptmcp:datasource:list')" type="primary" @click="openDatasource">返回数据源</ElButton></ElEmpty
     >
   </section>
 </template>
@@ -257,10 +264,8 @@ h1 {
   border-radius: 4px;
   background: #e6eeef;
 }
-.indeterminate.terminal span {
-  animation: none;
-  transform: none;
-  width: 100%;
+.retry-button {
+  margin-bottom: 16px;
 }
 .indeterminate span {
   display: block;
