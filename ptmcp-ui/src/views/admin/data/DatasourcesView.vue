@@ -1,23 +1,56 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
 import { createDatasource, DataRequestError, listDatasources, type DatasourceRead, type DatasourceWrite } from '../../../services/data';
+import { useSessionStore } from '../../../stores/session';
 
 const router = useRouter();
+const session = useSessionStore();
 const loading = ref(false);
 const submitting = ref(false);
 const error = ref('');
+const createError = ref('');
 const requestId = ref<string | undefined>();
 const rows = ref<DatasourceRead[]>([]);
 const nextCursor = ref<string | null>(null);
-const cursorHistory = ref<string[]>([]);
 const dialogVisible = ref(false);
-const formRef = ref();
-
+const formRef = ref<FormInstance>();
 const filters = reactive({ keyword: '', engine: '', status: '' });
 const form = reactive<DatasourceWrite>(emptyForm());
+const createKey = ref(crypto.randomUUID());
+let listController: AbortController | null = null;
+let generation = 0;
+let active = true;
 
+const rules: FormRules<DatasourceWrite> = {
+  code: [
+    { required: true, message: '请输入编码', trigger: 'blur' },
+    { max: 64, message: '编码最多64字符', trigger: 'blur' }
+  ],
+  name: [
+    { required: true, message: '请输入名称', trigger: 'blur' },
+    { max: 128, message: '名称最多128字符', trigger: 'blur' }
+  ],
+  host: [
+    { required: true, message: '请输入主机', trigger: 'blur' },
+    { max: 253, message: '主机最多253字符', trigger: 'blur' }
+  ],
+  databaseName: [
+    { required: true, message: '请输入数据库名', trigger: 'blur' },
+    { max: 128, message: '数据库名最多128字符', trigger: 'blur' }
+  ],
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { max: 128, message: '用户名最多128字符', trigger: 'blur' }
+  ],
+  credential: [
+    { required: true, message: '请输入连接凭据', trigger: 'blur' },
+    { max: 1024, message: '连接凭据最多1024字符', trigger: 'blur' }
+  ],
+  port: [{ required: true, type: 'number', min: 1, max: 65535, message: '端口必须为1～65535', trigger: 'change' }],
+  poolMax: [{ required: true, type: 'number', min: 1, max: 8, message: '连接池上限必须为1～8', trigger: 'change' }]
+};
 function emptyForm(): DatasourceWrite {
   return {
     code: '',
@@ -33,20 +66,15 @@ function emptyForm(): DatasourceWrite {
     status: 'DRAFT'
   };
 }
-
 function formatDate(value: string | null | undefined): string {
-  if (!value) return '—';
-  return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+  return value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
 }
-
 function statusLabel(status: string): string {
   return { ACTIVE: '运行中', DRAFT: '草稿', DISABLED: '已停用' }[status] ?? status;
 }
-
 function statusType(status: string): 'success' | 'warning' | 'info' | 'danger' {
   return status === 'ACTIVE' ? 'success' : status === 'DISABLED' ? 'info' : 'warning';
 }
-
 function requestErrorMessage(value: unknown): string {
   if (value instanceof DataRequestError) {
     requestId.value = value.requestId;
@@ -54,66 +82,108 @@ function requestErrorMessage(value: unknown): string {
   }
   return value instanceof Error ? value.message : '请求失败，请稍后重试';
 }
-
+function aborted(value: unknown): boolean {
+  return value instanceof DOMException && value.name === 'AbortError';
+}
 async function load(cursor: string | null = null): Promise<void> {
+  if (!session.can('ptmcp:datasource:list')) {
+    rows.value = [];
+    return;
+  }
+  listController?.abort();
+  const requestGeneration = ++generation;
+  listController = new AbortController();
   loading.value = true;
   error.value = '';
+  requestId.value = undefined;
   try {
-    const result = await listDatasources({ ...filters, cursor, pageSize: 20 });
+    const result = await listDatasources({ ...filters, cursor, pageSize: 20, signal: listController.signal });
+    if (!active || requestGeneration !== generation) return;
     rows.value = result.data.items ?? [];
     nextCursor.value = result.data.nextCursor ?? null;
-    if (!cursor) cursorHistory.value = [];
   } catch (cause) {
+    if (!active || requestGeneration !== generation || aborted(cause)) return;
     error.value = requestErrorMessage(cause);
+    if (cause instanceof DataRequestError && [401, 403, 404].includes(cause.status)) rows.value = [];
   } finally {
-    loading.value = false;
+    if (active && requestGeneration === generation) loading.value = false;
   }
 }
-
 function applyFilters(): void {
-  cursorHistory.value = [];
+  nextCursor.value = null;
   void load();
 }
-
 function nextPage(): void {
-  if (!nextCursor.value) return;
-  cursorHistory.value.push(nextCursor.value);
-  void load(nextCursor.value);
+  if (nextCursor.value && !loading.value) void load(nextCursor.value);
 }
-
+function clearCredential(): void {
+  form.credential = '';
+}
+function clearSensitive(): void {
+  clearCredential();
+  dialogVisible.value = false;
+  rows.value = [];
+  listController?.abort();
+  generation += 1;
+}
 function resetForm(): void {
   Object.assign(form, emptyForm());
+  createKey.value = crypto.randomUUID();
+  createError.value = '';
 }
-
 function openCreate(): void {
+  if (!session.can('ptmcp:datasource:create')) return;
   resetForm();
   dialogVisible.value = true;
 }
-
 async function submitCreate(): Promise<void> {
-  if (submitting.value) return;
+  if (submitting.value || !session.can('ptmcp:datasource:create')) return;
   const valid = formRef.value
     ? await formRef.value
         .validate()
         .then(() => true)
         .catch(() => false)
-    : true;
+    : false;
   if (!valid) return;
+  const current = generation;
   submitting.value = true;
+  createError.value = '';
   try {
-    const result = await createDatasource({ ...form });
+    const result = await createDatasource({ ...form }, createKey.value);
+    clearCredential();
     dialogVisible.value = false;
+    if (!active || current !== generation) return;
     ElMessage.success('数据源已创建');
     await load();
-    if (result.data?.id) await router.push(`/admin/datasources/${result.data.id}`);
+    if (result.data?.id && session.can('ptmcp:datasource:read')) await router.push(`/admin/datasources/${result.data.id}`);
   } catch (cause) {
-    ElMessage.error(requestErrorMessage(cause));
+    if (active && current === generation) createError.value = requestErrorMessage(cause);
   } finally {
     submitting.value = false;
   }
 }
-
-onMounted(() => void load());
+watch(dialogVisible, (visible) => {
+  if (!visible) {
+    clearCredential();
+    createError.value = '';
+  }
+});
+watch(
+  form,
+  () => {
+    if (!submitting.value) createKey.value = crypto.randomUUID();
+  },
+  { deep: true }
+);
+onMounted(() => {
+  window.addEventListener('ptmcp:sensitive-clear', clearSensitive);
+  void load();
+});
+onBeforeUnmount(() => {
+  active = false;
+  clearSensitive();
+  window.removeEventListener('ptmcp:sensitive-clear', clearSensitive);
+});
 </script>
 
 <template>
@@ -124,7 +194,9 @@ onMounted(() => void load());
         <h1 id="datasource-title">数据源</h1>
         <p class="subtitle">管理受控数据连接、健康状态和元数据同步。</p>
       </div>
-      <ElButton type="primary" @click="openCreate"> <IconEpPlus class="button-icon" aria-hidden="true" /> 新建数据源 </ElButton>
+      <ElButton v-if="session.can('ptmcp:datasource:create')" type="primary" @click="openCreate">
+        <IconEpPlus class="button-icon" aria-hidden="true" /> 新建数据源
+      </ElButton>
     </div>
 
     <ElAlert v-if="error" type="error" :closable="false" show-icon class="state-alert">
@@ -159,7 +231,12 @@ onMounted(() => void load());
       <ElTable v-loading="loading" :data="rows" row-key="id" table-layout="auto" empty-text="">
         <ElTableColumn prop="name" label="数据源" min-width="210">
           <template #default="scope">
-            <button class="link-button" type="button" @click="router.push(`/admin/datasources/${scope.row.id}`)">
+            <button
+              class="link-button"
+              type="button"
+              :disabled="!session.can('ptmcp:datasource:read')"
+              @click="router.push(`/admin/datasources/${scope.row.id}`)"
+            >
               <strong>{{ scope.row.name }}</strong>
               <small>{{ scope.row.code }} · ID {{ scope.row.id }}</small>
             </button>
@@ -185,12 +262,14 @@ onMounted(() => void load());
         </ElTableColumn>
         <ElTableColumn label="操作" width="110" fixed="right">
           <template #default="scope">
-            <ElButton link type="primary" @click="router.push(`/admin/datasources/${scope.row.id}`)">查看</ElButton>
+            <ElButton v-if="session.can('ptmcp:datasource:read')" link type="primary" @click="router.push(`/admin/datasources/${scope.row.id}`)"
+              >查看</ElButton
+            >
           </template>
         </ElTableColumn>
         <template #empty>
           <ElEmpty :description="loading ? '正在加载数据源…' : '暂无符合条件的数据源'">
-            <ElButton v-if="!loading" type="primary" @click="openCreate">新建数据源</ElButton>
+            <ElButton v-if="!loading && session.can('ptmcp:datasource:create')" type="primary" @click="openCreate">新建数据源</ElButton>
           </ElEmpty>
         </template>
       </ElTable>
@@ -200,8 +279,16 @@ onMounted(() => void load());
       </div>
     </ElCard>
 
-    <ElDialog v-model="dialogVisible" title="新建数据源" width="620px" destroy-on-close>
-      <ElForm ref="formRef" :model="form" label-position="top" class="datasource-form">
+    <ElDialog
+      v-model="dialogVisible"
+      title="新建数据源"
+      width="min(620px, calc(100vw - 24px))"
+      destroy-on-close
+      :close-on-click-modal="!submitting"
+      :show-close="!submitting"
+    >
+      <ElAlert v-if="createError" type="error" :closable="false" show-icon class="state-alert">{{ createError }}</ElAlert>
+      <ElForm ref="formRef" :model="form" :rules="rules" :disabled="submitting" label-position="top" class="datasource-form">
         <div class="form-grid">
           <ElFormItem label="编码" prop="code" required><ElInput v-model="form.code" maxlength="64" /></ElFormItem>
           <ElFormItem label="名称" prop="name" required><ElInput v-model="form.name" maxlength="128" /></ElFormItem>

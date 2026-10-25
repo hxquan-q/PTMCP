@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus';
 import {
   DataRequestError,
   deleteDatasource,
@@ -12,10 +12,12 @@ import {
   type DatasourceRead,
   type DatasourceWrite
 } from '../../../services/data';
+import { useSessionStore } from '../../../stores/session';
 
 const route = useRoute();
 const router = useRouter();
-const id = String(route.params.id);
+const session = useSessionStore();
+const id = computed(() => String(route.params.id));
 const loading = ref(true);
 const saving = ref(false);
 const actionLoading = ref(false);
@@ -23,8 +25,36 @@ const error = ref('');
 const requestId = ref<string>();
 const etag = ref('');
 const datasource = ref<DatasourceRead | null>(null);
+const formRef = ref<FormInstance>();
 const form = reactive<DatasourceWrite>(emptyForm());
-
+let controller: AbortController | null = null;
+let generation = 0;
+let active = true;
+let saveKey = crypto.randomUUID();
+let testKey = crypto.randomUUID();
+let syncKey = crypto.randomUUID();
+let deleteKey = crypto.randomUUID();
+const rules: FormRules<DatasourceWrite> = {
+  name: [
+    { required: true, message: '请输入名称', trigger: 'blur' },
+    { max: 128, message: '名称最多128字符', trigger: 'blur' }
+  ],
+  host: [
+    { required: true, message: '请输入主机', trigger: 'blur' },
+    { max: 253, message: '主机最多253字符', trigger: 'blur' }
+  ],
+  databaseName: [
+    { required: true, message: '请输入数据库名', trigger: 'blur' },
+    { max: 128, message: '数据库名最多128字符', trigger: 'blur' }
+  ],
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { max: 128, message: '用户名最多128字符', trigger: 'blur' }
+  ],
+  credential: [{ max: 1024, message: '连接凭据最多1024字符', trigger: 'blur' }],
+  port: [{ required: true, type: 'number', min: 1, max: 65535, message: '端口必须为1～65535', trigger: 'change' }],
+  poolMax: [{ required: true, type: 'number', min: 1, max: 8, message: '连接池上限必须为1～8', trigger: 'change' }]
+};
 function emptyForm(): DatasourceWrite {
   return {
     code: '',
@@ -56,6 +86,19 @@ function errorMessage(value: unknown): string {
   }
   return value instanceof Error ? value.message : '请求失败，请稍后重试';
 }
+function resetKeys(): void {
+  saveKey = crypto.randomUUID();
+  testKey = crypto.randomUUID();
+  syncKey = crypto.randomUUID();
+  deleteKey = crypto.randomUUID();
+}
+function clearSensitive(): void {
+  form.credential = '';
+  datasource.value = null;
+  etag.value = '';
+  controller?.abort();
+  generation += 1;
+}
 function copyForm(value: DatasourceRead): void {
   Object.assign(form, {
     code: value.code,
@@ -71,64 +114,100 @@ function copyForm(value: DatasourceRead): void {
     status: value.status
   });
 }
+function aborted(value: unknown): boolean {
+  return value instanceof DOMException && value.name === 'AbortError';
+}
 async function load(): Promise<void> {
+  controller?.abort();
+  const current = ++generation;
+  controller = new AbortController();
+  datasource.value = null;
+  etag.value = '';
+  form.credential = '';
   loading.value = true;
   error.value = '';
+  if (!session.can('ptmcp:datasource:read')) {
+    loading.value = false;
+    return;
+  }
   try {
-    const result = await getDatasource(id);
+    const result = await getDatasource(id.value, controller.signal);
+    if (!active || current !== generation) return;
     datasource.value = result.data;
     etag.value = result.etag ?? `"${result.data.configVersion}"`;
     copyForm(result.data);
+    resetKeys();
   } catch (cause) {
-    error.value = errorMessage(cause);
+    if (active && current === generation && !aborted(cause)) error.value = errorMessage(cause);
   } finally {
-    loading.value = false;
+    if (active && current === generation) loading.value = false;
   }
 }
+async function validate(): Promise<boolean> {
+  return formRef.value
+    ? await formRef.value
+        .validate()
+        .then(() => true)
+        .catch(() => false)
+    : false;
+}
 async function save(): Promise<void> {
-  if (!etag.value || saving.value) return;
+  if (!etag.value || saving.value || !session.can('ptmcp:datasource:update') || !(await validate())) return;
+  const current = generation;
+  const targetId = id.value;
   saving.value = true;
   error.value = '';
   try {
-    const result = await updateDatasource(id, { ...form }, etag.value);
+    const result = await updateDatasource(targetId, { ...form }, etag.value, saveKey);
+    if (!active || current !== generation) return;
     datasource.value = result.data;
     etag.value = result.etag ?? `"${result.data.configVersion}"`;
     copyForm(result.data);
+    saveKey = crypto.randomUUID();
     ElMessage.success('数据源配置已保存');
   } catch (cause) {
-    error.value = errorMessage(cause);
+    if (active && current === generation) error.value = errorMessage(cause);
   } finally {
+    form.credential = '';
     saving.value = false;
   }
 }
 async function testConnection(): Promise<void> {
-  if (actionLoading.value || !datasource.value) return;
+  if (actionLoading.value || !datasource.value || !session.can('ptmcp:datasource:test') || !(await validate())) return;
+  const current = generation;
   actionLoading.value = true;
   try {
-    const result = await testDatasource(id, { ...form });
+    const result = await testDatasource(id.value, { ...form }, testKey);
+    if (!active || current !== generation) return;
+    form.credential = '';
+    testKey = crypto.randomUUID();
     ElMessage.success('连接测试已提交');
-    await router.push(`/admin/jobs/${result.data.id}`);
+    if (session.can('ptmcp:job:read')) await router.push(`/admin/jobs/${result.data.id}`);
   } catch (cause) {
-    error.value = errorMessage(cause);
+    if (active && current === generation) error.value = errorMessage(cause);
   } finally {
+    form.credential = '';
     actionLoading.value = false;
   }
 }
 async function syncMetadata(): Promise<void> {
-  if (actionLoading.value || !datasource.value) return;
+  if (actionLoading.value || !datasource.value || !session.can('ptmcp:datasource:sync')) return;
+  const current = generation;
   actionLoading.value = true;
   try {
-    const result = await syncDatasource(id);
+    const result = await syncDatasource(id.value, syncKey);
+    if (!active || current !== generation) return;
+    syncKey = crypto.randomUUID();
     ElMessage.success('元数据同步已提交');
-    await router.push(`/admin/jobs/${result.data.id}`);
+    if (session.can('ptmcp:job:read')) await router.push(`/admin/jobs/${result.data.id}`);
   } catch (cause) {
-    error.value = errorMessage(cause);
+    if (active && current === generation) error.value = errorMessage(cause);
   } finally {
     actionLoading.value = false;
   }
 }
 async function removeDatasource(): Promise<void> {
-  if (!etag.value || actionLoading.value) return;
+  if (!etag.value || actionLoading.value || !session.can('ptmcp:datasource:delete')) return;
   try {
     await ElMessageBox.confirm('删除后将无法继续使用此数据源。若仍有活动授权，服务端会拒绝删除。', '确认删除数据源', {
       type: 'warning',
@@ -138,23 +217,45 @@ async function removeDatasource(): Promise<void> {
   } catch {
     return;
   }
+  const current = generation;
   actionLoading.value = true;
   try {
-    await deleteDatasource(id, etag.value);
+    await deleteDatasource(id.value, etag.value, deleteKey);
+    if (!active || current !== generation) return;
     ElMessage.success('数据源已删除');
     await router.replace('/admin/datasources');
   } catch (cause) {
-    error.value = errorMessage(cause);
+    if (active && current === generation) error.value = errorMessage(cause);
   } finally {
     actionLoading.value = false;
   }
 }
 function openMetadata(): void {
-  if (datasource.value?.activeSnapshotId) void router.push({ path: '/admin/metadata', query: { datasourceId: id } });
+  if (datasource.value?.activeSnapshotId && session.can('ptmcp:metadata:list'))
+    void router.push({ path: '/admin/metadata', query: { datasourceId: id.value } });
 }
-onMounted(() => void load());
+watch(
+  form,
+  () => {
+    if (!saving.value && !actionLoading.value) {
+      saveKey = crypto.randomUUID();
+      testKey = crypto.randomUUID();
+    }
+  },
+  { deep: true }
+);
+watch(id, () => {
+  clearSensitive();
+  void load();
+});
+onMounted(() => {
+  window.addEventListener('ptmcp:sensitive-clear', clearSensitive);
+  void load();
+});
 onBeforeUnmount(() => {
-  error.value = '';
+  active = false;
+  clearSensitive();
+  window.removeEventListener('ptmcp:sensitive-clear', clearSensitive);
 });
 </script>
 
@@ -168,8 +269,15 @@ onBeforeUnmount(() => {
         <p class="subtitle">{{ datasource?.code || '加载中…' }}</p>
       </div>
       <div v-if="datasource" class="heading-actions">
-        <ElButton :loading="actionLoading" @click="testConnection">测试连接</ElButton>
-        <ElButton type="primary" :loading="actionLoading" :disabled="datasource.status !== 'ACTIVE'" @click="syncMetadata">同步元数据</ElButton>
+        <ElButton v-if="session.can('ptmcp:datasource:test')" :loading="actionLoading" @click="testConnection">测试连接</ElButton>
+        <ElButton
+          v-if="session.can('ptmcp:datasource:sync')"
+          type="primary"
+          :loading="actionLoading"
+          :disabled="datasource.status !== 'ACTIVE'"
+          @click="syncMetadata"
+          >同步元数据</ElButton
+        >
       </div>
     </div>
 
@@ -184,7 +292,9 @@ onBeforeUnmount(() => {
         <span class="status-label">当前状态</span><ElTag :type="statusType(datasource.status)">{{ statusLabel(datasource.status) }}</ElTag>
         <span>健康：{{ datasource.health || 'UNKNOWN' }}</span
         ><span>凭据：{{ datasource.credentialConfigured ? '已配置' : '未配置' }}</span>
-        <ElButton v-if="datasource.activeSnapshotId" link type="primary" @click="openMetadata">查看元数据</ElButton>
+        <ElButton v-if="datasource.activeSnapshotId && session.can('ptmcp:metadata:list')" link type="primary" @click="openMetadata"
+          >查看元数据</ElButton
+        >
       </div>
       <ElCard shadow="never" class="detail-card">
         <template #header
@@ -192,10 +302,17 @@ onBeforeUnmount(() => {
             <span>连接配置</span><span class="version">版本 {{ datasource.configVersion }}</span>
           </div></template
         >
-        <ElForm :model="form" label-position="top" class="datasource-form">
+        <ElForm
+          ref="formRef"
+          :model="form"
+          :rules="rules"
+          :disabled="!session.can('ptmcp:datasource:update')"
+          label-position="top"
+          class="datasource-form"
+        >
           <div class="form-grid">
             <ElFormItem label="编码"><ElInput v-model="form.code" disabled /></ElFormItem>
-            <ElFormItem label="名称"><ElInput v-model="form.name" maxlength="128" /></ElFormItem>
+            <ElFormItem label="名称" prop="name"><ElInput v-model="form.name" maxlength="128" /></ElFormItem>
             <ElFormItem label="引擎"
               ><ElSelect v-model="form.engine" disabled
                 ><ElOption label="MySQL" value="MYSQL" /><ElOption label="PostgreSQL" value="POSTGRESQL" /></ElSelect
@@ -206,19 +323,21 @@ onBeforeUnmount(() => {
                   label="已停用"
                   value="DISABLED" /></ElSelect
             ></ElFormItem>
-            <ElFormItem label="主机"><ElInput v-model="form.host" /></ElFormItem>
-            <ElFormItem label="端口"><ElInputNumber v-model="form.port" :min="1" :max="65535" class="full-width" /></ElFormItem>
-            <ElFormItem label="数据库名"><ElInput v-model="form.databaseName" /></ElFormItem>
-            <ElFormItem label="用户名"><ElInput v-model="form.username" /></ElFormItem>
+            <ElFormItem label="主机" prop="host"><ElInput v-model="form.host" /></ElFormItem>
+            <ElFormItem label="端口" prop="port"><ElInputNumber v-model="form.port" :min="1" :max="65535" class="full-width" /></ElFormItem>
+            <ElFormItem label="数据库名" prop="databaseName"><ElInput v-model="form.databaseName" /></ElFormItem>
+            <ElFormItem label="用户名" prop="username"><ElInput v-model="form.username" /></ElFormItem>
             <ElFormItem label="替换凭据"
               ><ElInput v-model="form.credential" type="password" show-password autocomplete="new-password" placeholder="留空保持已配置凭据"
             /></ElFormItem>
-            <ElFormItem label="连接池上限"><ElInputNumber v-model="form.poolMax" :min="1" :max="8" class="full-width" /></ElFormItem>
+            <ElFormItem label="连接池上限" prop="poolMax"><ElInputNumber v-model="form.poolMax" :min="1" :max="8" class="full-width" /></ElFormItem>
           </div>
           <ElAlert type="info" :closable="false">TLS 固定为 VERIFY_FULL。凭据不回显，留空表示保持现有值。</ElAlert>
           <div class="form-actions">
-            <ElButton type="primary" :loading="saving" @click="save">保存更改</ElButton
-            ><ElButton type="danger" plain :loading="actionLoading" @click="removeDatasource">删除数据源</ElButton>
+            <ElButton v-if="session.can('ptmcp:datasource:update')" type="primary" :loading="saving" @click="save">保存更改</ElButton
+            ><ElButton v-if="session.can('ptmcp:datasource:delete')" type="danger" plain :loading="actionLoading" @click="removeDatasource"
+              >删除数据源</ElButton
+            >
           </div>
         </ElForm>
       </ElCard>

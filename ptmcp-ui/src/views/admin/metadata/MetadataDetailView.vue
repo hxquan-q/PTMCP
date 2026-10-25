@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
 import {
   DataRequestError,
   getMetadata,
@@ -10,10 +10,11 @@ import {
   type MetadataColumn,
   type MetadataDetail
 } from '../../../services/data';
-
+import { useSessionStore } from '../../../stores/session';
 const route = useRoute();
 const router = useRouter();
-const id = String(route.params.objectId);
+const session = useSessionStore();
+const id = computed(() => String(route.params.objectId));
 const detail = ref<MetadataDetail | null>(null);
 const loading = ref(true);
 const saving = ref(false);
@@ -21,8 +22,32 @@ const error = ref('');
 const requestId = ref<string>();
 const etag = ref('');
 const columns = ref<MetadataColumn[]>([]);
+const formRef = ref<FormInstance>();
 const form = reactive<DictionaryWrite>({ title: '', description: '', ownerUserId: null, columns: [] });
-
+let controller: AbortController | null = null;
+let generation = 0;
+let active = true;
+let saveKey = crypto.randomUUID();
+const rules: FormRules<DictionaryWrite> = {
+  title: [
+    { required: true, message: '请输入业务标题', trigger: 'blur' },
+    { max: 128, message: '业务标题最多128字符', trigger: 'blur' },
+    { pattern: /^[^<>]*$/, message: '业务标题仅支持纯文本', trigger: 'blur' }
+  ],
+  description: [
+    { max: 8000, message: '业务说明最多8000字符', trigger: 'blur' },
+    { pattern: /^[^<>]*$/, message: '业务说明仅支持纯文本', trigger: 'blur' }
+  ],
+  ownerUserId: [
+    {
+      validator: (_rule, value, callback) => {
+        if (value && !/^[1-9]\d*$/.test(String(value))) callback(new Error('负责人 ID 必须为正整数字符串'));
+        else callback();
+      },
+      trigger: 'blur'
+    }
+  ]
+};
 function errorMessage(value: unknown): string {
   if (value instanceof DataRequestError) {
     requestId.value = value.requestId;
@@ -42,50 +67,107 @@ function copyDictionary(value: MetadataDetail): void {
       description: column.description ?? ''
     }))
   });
-  for (const column of columns.value) {
+  for (const column of columns.value)
     if (!form.columns.some((item) => item.columnName.toLowerCase() === column.name.toLowerCase()))
       form.columns.push({ columnName: column.name, title: '', description: '' });
-  }
+}
+function clearSensitive(): void {
+  controller?.abort();
+  generation += 1;
+  detail.value = null;
+  columns.value = [];
+  form.title = '';
+  form.description = '';
+  form.ownerUserId = null;
+  form.columns = [];
+  etag.value = '';
 }
 async function load(): Promise<void> {
+  controller?.abort();
+  const current = ++generation;
+  controller = new AbortController();
+  detail.value = null;
+  columns.value = [];
   loading.value = true;
   error.value = '';
+  if (!session.can('ptmcp:metadata:read')) {
+    loading.value = false;
+    return;
+  }
   try {
-    const result = await getMetadata(id);
+    const result = await getMetadata(id.value, controller.signal);
+    if (!active || current !== generation) return;
     detail.value = result.data;
     etag.value = result.etag ?? `"${result.data.dictionary.version}"`;
     copyDictionary(result.data);
+    saveKey = crypto.randomUUID();
   } catch (cause) {
-    error.value = errorMessage(cause);
+    if (active && current === generation && !(cause instanceof DOMException && cause.name === 'AbortError')) error.value = errorMessage(cause);
   } finally {
-    loading.value = false;
+    if (active && current === generation) loading.value = false;
   }
 }
 async function save(): Promise<void> {
-  if (!detail.value || saving.value || !etag.value) return;
+  if (!detail.value || saving.value || !etag.value || !session.can('ptmcp:metadata:dictionary')) return;
+  const valid = formRef.value
+    ? await formRef.value
+        .validate()
+        .then(() => true)
+        .catch(() => false)
+    : false;
+  if (!valid) return;
+  const changedColumns = form.columns.filter((item) => item.title.trim() || item.description.trim());
+  if (changedColumns.length > 500 || changedColumns.some((item) => !item.title.trim() || /[<>]/.test(item.title + item.description))) {
+    error.value = '每个提交列都需要纯文本业务标题，且最多提交500列。';
+    return;
+  }
+  const current = generation;
+  const targetId = id.value;
   saving.value = true;
   error.value = '';
   try {
-    const result = await updateDictionary(id, { ...form, columns: form.columns.map((item) => ({ ...item })) }, etag.value);
+    const result = await updateDictionary(
+      targetId,
+      { ...form, ownerUserId: form.ownerUserId || null, columns: changedColumns.map((item) => ({ ...item })) },
+      etag.value,
+      saveKey
+    );
+    if (!active || current !== generation) return;
     detail.value = result.data;
     etag.value = result.etag ?? `"${result.data.dictionary.version}"`;
     copyDictionary(result.data);
+    saveKey = crypto.randomUUID();
     ElMessage.success('业务字典已保存');
   } catch (cause) {
-    error.value = errorMessage(cause);
+    if (active && current === generation) error.value = errorMessage(cause);
   } finally {
     saving.value = false;
   }
 }
 function dictionaryForColumn(name: string): { title: string; description: string } {
-  let item = form.columns.find((value) => value.columnName.toLowerCase() === name.toLowerCase());
-  if (!item) {
-    item = { columnName: name, title: '', description: '' };
-    form.columns.push(item);
-  }
-  return item;
+  const item = form.columns.find((value) => value.columnName.toLowerCase() === name.toLowerCase());
+  return item ?? { title: '', description: '' };
 }
-onMounted(() => void load());
+watch(
+  form,
+  () => {
+    if (!saving.value) saveKey = crypto.randomUUID();
+  },
+  { deep: true }
+);
+watch(id, () => {
+  clearSensitive();
+  void load();
+});
+onMounted(() => {
+  window.addEventListener('ptmcp:sensitive-clear', clearSensitive);
+  void load();
+});
+onBeforeUnmount(() => {
+  active = false;
+  clearSensitive();
+  window.removeEventListener('ptmcp:sensitive-clear', clearSensitive);
+});
 </script>
 
 <template>
@@ -151,10 +233,13 @@ onMounted(() => void load());
           ><div class="card-title">
             <strong>业务字典</strong><span>版本 {{ detail.dictionary.version }} · 纯文本</span>
           </div></template
-        ><ElForm :model="form" label-position="top"
-          ><ElFormItem label="业务标题" required><ElInput v-model="form.title" maxlength="128" show-word-limit /></ElFormItem
-          ><ElFormItem label="业务说明"><ElInput v-model="form.description" type="textarea" :rows="4" maxlength="8000" show-word-limit /></ElFormItem
-          ><ElFormItem label="负责人 ID"><ElInput v-model="form.ownerUserId" inputmode="numeric" placeholder="可留空" /></ElFormItem>
+        ><ElForm ref="formRef" :model="form" :rules="rules" :disabled="!session.can('ptmcp:metadata:dictionary') || saving" label-position="top"
+          ><ElFormItem label="业务标题" prop="title" required><ElInput v-model="form.title" maxlength="128" show-word-limit /></ElFormItem
+          ><ElFormItem label="业务说明" prop="description"
+            ><ElInput v-model="form.description" type="textarea" :rows="4" maxlength="8000" show-word-limit /></ElFormItem
+          ><ElFormItem label="负责人 ID" prop="ownerUserId"
+            ><ElInput v-model="form.ownerUserId" inputmode="numeric" placeholder="可留空"
+          /></ElFormItem>
           <div class="column-heading"><span>列级说明</span><small>列名来自当前快照，不能新增或执行 DDL。</small></div>
           <div class="column-dictionary">
             <div v-for="column in columns" :key="column.name" class="column-row">
@@ -168,7 +253,7 @@ onMounted(() => void load());
           </div>
           <div class="form-actions">
             <span class="version-note">保存将生成新字典版本并使用 If-Match 防止覆盖他人修改。</span
-            ><ElButton type="primary" :loading="saving" @click="save">保存业务字典</ElButton>
+            ><ElButton v-if="session.can('ptmcp:metadata:dictionary')" type="primary" :loading="saving" @click="save">保存业务字典</ElButton>
           </div></ElForm
         ></ElCard
       >

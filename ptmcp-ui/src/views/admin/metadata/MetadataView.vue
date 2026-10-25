@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue';
+import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { DataRequestError, listDatasources, listMetadata, type DatasourceRead, type MetadataItem } from '../../../services/data';
-
+import { useSessionStore } from '../../../stores/session';
 const route = useRoute();
 const router = useRouter();
+const session = useSessionStore();
 const datasources = ref<DatasourceRead[]>([]);
 const datasourceId = ref(String(route.query.datasourceId ?? ''));
 const rows = ref<MetadataItem[]>([]);
@@ -15,7 +16,10 @@ const error = ref('');
 const requestId = ref<string>();
 const sourceError = ref('');
 const filters = reactive({ namespaceId: '', keyword: '', kind: '' });
-
+let sourceController: AbortController | null = null;
+let listController: AbortController | null = null;
+let generation = 0;
+let active = true;
 function errorMessage(value: unknown): string {
   if (value instanceof DataRequestError) {
     requestId.value = value.requestId;
@@ -32,21 +36,34 @@ function formatObject(item: MetadataItem): string {
 function kindType(kind: string): 'success' | 'info' {
   return kind === 'TABLE' ? 'success' : 'info';
 }
+function aborted(value: unknown): boolean {
+  return value instanceof DOMException && value.name === 'AbortError';
+}
 async function loadSources(): Promise<void> {
+  if (!session.can('ptmcp:datasource:list')) {
+    sourceError.value = '你没有数据源列表权限。请通过可访问对象入口进入元数据。';
+    return;
+  }
+  sourceController?.abort();
+  sourceController = new AbortController();
   sourceLoading.value = true;
   sourceError.value = '';
   try {
-    const result = await listDatasources({ pageSize: 100 });
+    const result = await listDatasources({ pageSize: 100, signal: sourceController.signal });
+    if (!active) return;
     datasources.value = result.data.items ?? [];
     if (!datasourceId.value && datasources.value.length) datasourceId.value = datasources.value[0].id;
   } catch (cause) {
-    sourceError.value = errorMessage(cause);
+    if (active && !aborted(cause)) sourceError.value = errorMessage(cause);
   } finally {
-    sourceLoading.value = false;
+    if (active) sourceLoading.value = false;
   }
 }
-async function load(): Promise<void> {
-  if (!datasourceId.value) {
+async function load(cursor: string | null = null): Promise<void> {
+  listController?.abort();
+  const current = ++generation;
+  listController = new AbortController();
+  if (!datasourceId.value || !session.can('ptmcp:metadata:list')) {
     rows.value = [];
     nextCursor.value = null;
     return;
@@ -59,60 +76,66 @@ async function load(): Promise<void> {
       namespaceId: filters.namespaceId || undefined,
       keyword: filters.keyword || undefined,
       kind: filters.kind || undefined,
-      pageSize: 20
+      cursor,
+      pageSize: 20,
+      signal: listController.signal
     });
+    if (!active || current !== generation) return;
     rows.value = result.data.items ?? [];
     nextCursor.value = result.data.nextCursor ?? null;
   } catch (cause) {
+    if (!active || current !== generation || aborted(cause)) return;
     error.value = errorMessage(cause);
+    if (cause instanceof DataRequestError && [401, 403, 404, 503].includes(cause.status)) rows.value = [];
   } finally {
-    loading.value = false;
+    if (active && current === generation) loading.value = false;
   }
 }
 function selectSource(): void {
+  filters.namespaceId = '';
+  nextCursor.value = null;
+  rows.value = [];
   void router.replace({ query: { ...route.query, datasourceId: datasourceId.value || undefined } });
   void load();
 }
 function applyFilters(): void {
+  nextCursor.value = null;
   void load();
 }
 function nextPage(): void {
-  if (!nextCursor.value || !datasourceId.value) return;
-  loading.value = true;
-  void listMetadata({
-    datasourceId: datasourceId.value,
-    namespaceId: filters.namespaceId || undefined,
-    keyword: filters.keyword || undefined,
-    kind: filters.kind || undefined,
-    cursor: nextCursor.value,
-    pageSize: 20
-  })
-    .then((result) => {
-      rows.value = result.data.items ?? [];
-      nextCursor.value = result.data.nextCursor ?? null;
-    })
-    .catch((cause) => {
-      error.value = errorMessage(cause);
-    })
-    .finally(() => {
-      loading.value = false;
-    });
+  if (nextCursor.value && !loading.value) void load(nextCursor.value);
 }
 function openDetail(row: MetadataItem): void {
-  void router.push(`/admin/metadata/${row.id}`);
+  if (session.can('ptmcp:metadata:read')) void router.push(`/admin/metadata/${row.id}`);
+}
+function clearSensitive(): void {
+  sourceController?.abort();
+  listController?.abort();
+  generation += 1;
+  rows.value = [];
+  datasources.value = [];
 }
 watch(
   () => route.query.datasourceId,
   (value) => {
-    if (typeof value === 'string' && value !== datasourceId.value) {
-      datasourceId.value = value;
+    const selected = typeof value === 'string' ? value : '';
+    if (selected !== datasourceId.value) {
+      datasourceId.value = selected;
+      filters.namespaceId = '';
+      nextCursor.value = null;
       void load();
     }
   }
 );
 onMounted(async () => {
+  window.addEventListener('ptmcp:sensitive-clear', clearSensitive);
   await loadSources();
-  await load();
+  if (active) await load();
+});
+onBeforeUnmount(() => {
+  active = false;
+  clearSensitive();
+  window.removeEventListener('ptmcp:sensitive-clear', clearSensitive);
 });
 </script>
 
@@ -152,8 +175,8 @@ onMounted(async () => {
       <ElTable v-loading="loading" :data="rows" row-key="id" empty-text="">
         <ElTableColumn label="对象" min-width="270"
           ><template #default="scope"
-            ><button class="link-button" type="button" @click="openDetail(scope.row)">
-              <strong>{{ formatObject(scope.row) }}</strong
+            ><button class="link-button" type="button" :disabled="!session.can('ptmcp:metadata:read')" @click="openDetail(scope.row as MetadataItem)">
+              <strong>{{ formatObject(scope.row as MetadataItem) }}</strong
               ><small>{{ scope.row.databaseName }} · ID {{ scope.row.id }}</small>
             </button></template
           ></ElTableColumn
@@ -168,7 +191,11 @@ onMounted(async () => {
           ><template #default="scope">{{ scope.row.snapshotVersion }} / {{ scope.row.generation }}</template></ElTableColumn
         >
         <ElTableColumn label="操作" width="100" fixed="right"
-          ><template #default="scope"><ElButton link type="primary" @click="openDetail(scope.row)">查看</ElButton></template></ElTableColumn
+          ><template #default="scope"
+            ><ElButton v-if="session.can('ptmcp:metadata:read')" link type="primary" @click="openDetail(scope.row as MetadataItem)"
+              >查看</ElButton
+            ></template
+          ></ElTableColumn
         >
         <template #empty
           ><ElEmpty :description="!datasourceId ? '选择数据源后查看元数据' : loading ? '正在加载…' : '当前快照中没有匹配对象'"

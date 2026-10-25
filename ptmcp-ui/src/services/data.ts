@@ -32,11 +32,6 @@ export interface ApiResult<T> {
   etag: string | null;
 }
 
-export function setDataCsrfToken(token: string | null): void {
-  void token;
-  // CSRF is injected by the shared HTTP transport. Kept as a no-op for compatibility with callers.
-}
-
 function idempotencyKey(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -210,27 +205,32 @@ export function getDatasource(id: string, signal?: AbortSignal): Promise<ApiResu
   return dataRequest<DatasourceRead>(`/api/v1/admin/datasources/${encodeURIComponent(id)}`, { signal });
 }
 
-export function createDatasource(body: DatasourceWrite): Promise<ApiResult<DatasourceRead>> {
-  return dataRequest<DatasourceRead>('/api/v1/admin/datasources', { method: 'POST', body });
+export function createDatasource(body: DatasourceWrite, idempotencyKey?: string): Promise<ApiResult<DatasourceRead>> {
+  return dataRequest<DatasourceRead>('/api/v1/admin/datasources', { method: 'POST', body, idempotencyKey });
 }
 
-export function updateDatasource(id: string, body: DatasourceWrite, etag: string): Promise<ApiResult<DatasourceRead>> {
-  return dataRequest<DatasourceRead>(`/api/v1/admin/datasources/${encodeURIComponent(id)}`, { method: 'PUT', body, etag });
+export function updateDatasource(id: string, body: DatasourceWrite, etag: string, idempotencyKey?: string): Promise<ApiResult<DatasourceRead>> {
+  return dataRequest<DatasourceRead>(`/api/v1/admin/datasources/${encodeURIComponent(id)}`, { method: 'PUT', body, etag, idempotencyKey });
 }
 
-export function deleteDatasource(id: string, etag: string): Promise<ApiResult<{ deleted: boolean; id: string; version: string }>> {
-  return dataRequest(`/api/v1/admin/datasources/${encodeURIComponent(id)}`, { method: 'DELETE', etag });
+export function deleteDatasource(
+  id: string,
+  etag: string,
+  idempotencyKey?: string
+): Promise<ApiResult<{ deleted: boolean; id: string; version: string }>> {
+  return dataRequest(`/api/v1/admin/datasources/${encodeURIComponent(id)}`, { method: 'DELETE', etag, idempotencyKey });
 }
 
-export function testDatasource(id: string, draft?: DatasourceWrite): Promise<ApiResult<JobView>> {
+export function testDatasource(id: string, draft?: DatasourceWrite, idempotencyKey?: string): Promise<ApiResult<JobView>> {
   return dataRequest<JobView>(`/api/v1/admin/datasources/${encodeURIComponent(id)}/test`, {
     method: 'POST',
-    body: draft ? { draft } : undefined
+    body: draft ? { draft } : undefined,
+    idempotencyKey
   });
 }
 
-export function syncDatasource(id: string): Promise<ApiResult<JobView>> {
-  return dataRequest<JobView>(`/api/v1/admin/datasources/${encodeURIComponent(id)}/sync`, { method: 'POST', body: { mode: 'FULL' } });
+export function syncDatasource(id: string, idempotencyKey?: string): Promise<ApiResult<JobView>> {
+  return dataRequest<JobView>(`/api/v1/admin/datasources/${encodeURIComponent(id)}/sync`, { method: 'POST', body: { mode: 'FULL' }, idempotencyKey });
 }
 
 export function getJob(id: string, signal?: AbortSignal): Promise<ApiResult<JobView>> {
@@ -258,10 +258,11 @@ export function getMetadata(id: string, signal?: AbortSignal): Promise<ApiResult
   return dataRequest<MetadataDetail>(`/api/v1/admin/metadata/objects/${encodeURIComponent(id)}`, { signal });
 }
 
-export function updateDictionary(id: string, body: DictionaryWrite, etag: string): Promise<ApiResult<MetadataDetail>> {
+export function updateDictionary(id: string, body: DictionaryWrite, etag: string, idempotencyKey?: string): Promise<ApiResult<MetadataDetail>> {
   return dataRequest<MetadataDetail>(`/api/v1/admin/metadata/objects/${encodeURIComponent(id)}/dictionary`, {
     method: 'PUT',
     body,
-    etag
+    etag,
+    idempotencyKey
   });
 }

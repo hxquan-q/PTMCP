@@ -1,18 +1,20 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { DataRequestError, getJob, type JobView } from '../../../services/data';
-
+import { useSessionStore } from '../../../stores/session';
 const route = useRoute();
 const router = useRouter();
-const id = String(route.params.id);
+const session = useSessionStore();
+const id = computed(() => String(route.params.id));
 const job = ref<JobView | null>(null);
 const loading = ref(true);
 const error = ref('');
 const requestId = ref<string>();
 let timer: number | undefined;
 let active = true;
-
+let controller: AbortController | null = null;
+let generation = 0;
 function errorMessage(value: unknown): string {
   if (value instanceof DataRequestError) {
     requestId.value = value.requestId;
@@ -32,36 +34,64 @@ function date(value: string | null): string {
 function isTerminal(value: string): boolean {
   return ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(value);
 }
+function stop(): void {
+  if (timer) window.clearTimeout(timer);
+  timer = undefined;
+  controller?.abort();
+}
 function schedule(): void {
-  if (!active || !job.value || isTerminal(job.value.state)) return;
-  timer = window.setTimeout(() => void load(false), 2000);
+  if (active && !document.hidden && job.value && !isTerminal(job.value.state)) timer = window.setTimeout(() => void load(false), 2000);
 }
 async function load(initial = true): Promise<void> {
-  if (!active) return;
+  if (!active || document.hidden || !session.can('ptmcp:job:read')) return;
+  stop();
+  controller = new AbortController();
+  const current = ++generation;
   if (initial) loading.value = true;
   error.value = '';
   try {
-    const result = await getJob(id);
-    if (!active) return;
+    const result = await getJob(id.value, controller.signal);
+    if (!active || current !== generation) return;
     job.value = result.data;
     schedule();
   } catch (cause) {
-    if (!active) return;
+    if (!active || current !== generation || (cause instanceof DOMException && cause.name === 'AbortError')) return;
     error.value = errorMessage(cause);
+    if (cause instanceof DataRequestError && [401, 403, 404].includes(cause.status)) job.value = null;
   } finally {
-    if (initial) loading.value = false;
+    if (initial && current === generation) loading.value = false;
   }
 }
+function visibilityChanged(): void {
+  stop();
+  if (!document.hidden) void load(false);
+}
+function clearSensitive(): void {
+  stop();
+  generation += 1;
+  job.value = null;
+}
 function openDatasource(): void {
-  if (job.value?.datasourceId) void router.push(`/admin/datasources/${job.value.datasourceId}`);
+  if (job.value?.datasourceId && session.can('ptmcp:datasource:read')) void router.push(`/admin/datasources/${job.value.datasourceId}`);
 }
 function openMetadata(): void {
-  if (job.value?.datasourceId) void router.push({ path: '/admin/metadata', query: { datasourceId: job.value.datasourceId } });
+  if (job.value?.datasourceId && session.can('ptmcp:metadata:list'))
+    void router.push({ path: '/admin/metadata', query: { datasourceId: job.value.datasourceId } });
 }
-onMounted(() => void load());
+watch(id, () => {
+  clearSensitive();
+  void load();
+});
+onMounted(() => {
+  document.addEventListener('visibilitychange', visibilityChanged);
+  window.addEventListener('ptmcp:sensitive-clear', clearSensitive);
+  void load();
+});
 onBeforeUnmount(() => {
   active = false;
-  if (timer) window.clearTimeout(timer);
+  clearSensitive();
+  document.removeEventListener('visibilitychange', visibilityChanged);
+  window.removeEventListener('ptmcp:sensitive-clear', clearSensitive);
 });
 </script>
 
@@ -98,9 +128,11 @@ onBeforeUnmount(() => {
           :percentage="Math.min(100, Math.round((job.progress.processed / Math.max(1, job.progress.total)) * 100))"
           :status="job.state === 'FAILED' ? 'exception' : job.state === 'SUCCEEDED' ? 'success' : undefined"
         />
-        <div v-else class="indeterminate"><span></span></div>
+        <div v-else class="indeterminate" :class="{ terminal: isTerminal(job.state) }"><span></span></div>
         <p v-if="job.state === 'FAILED'" class="failure">任务失败：{{ job.errorCode || 'UNKNOWN_ERROR' }}。未发布新的元数据快照。</p>
-        <p v-else-if="job.state === 'SUCCEEDED' && job.snapshotId" class="success">快照 {{ job.snapshotId }} 已发布，可查看元数据。</p>
+        <p v-else-if="job.state === 'SUCCEEDED' && job.snapshotId && session.can('ptmcp:metadata:list')" class="success">
+          快照 {{ job.snapshotId }} 已发布，可查看元数据。
+        </p>
       </ElCard>
       <ElCard shadow="never" class="detail-card">
         <template #header><strong>任务信息</strong></template>
@@ -112,7 +144,9 @@ onBeforeUnmount(() => {
           <div>
             <dt>数据源</dt>
             <dd>
-              <button class="link-button" type="button" @click="openDatasource">{{ job.datasourceId }}</button>
+              <button class="link-button" type="button" :disabled="!session.can('ptmcp:datasource:read')" @click="openDatasource">
+                {{ job.datasourceId }}
+              </button>
             </dd>
           </div>
           <div>
@@ -135,7 +169,9 @@ onBeforeUnmount(() => {
       </ElCard>
       <div class="bottom-actions">
         <ElButton @click="openDatasource">返回数据源</ElButton
-        ><ElButton v-if="job.state === 'SUCCEEDED' && job.snapshotId" type="primary" @click="openMetadata">查看元数据</ElButton>
+        ><ElButton v-if="job.state === 'SUCCEEDED' && job.snapshotId && session.can('ptmcp:metadata:list')" type="primary" @click="openMetadata"
+          >查看元数据</ElButton
+        >
       </div>
     </template>
     <ElEmpty v-else description="任务不存在或你已失去访问权限"
@@ -217,6 +253,11 @@ h1 {
   overflow: hidden;
   border-radius: 4px;
   background: #e6eeef;
+}
+.indeterminate.terminal span {
+  animation: none;
+  transform: none;
+  width: 100%;
 }
 .indeterminate span {
   display: block;
