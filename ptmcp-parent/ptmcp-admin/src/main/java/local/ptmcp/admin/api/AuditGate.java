@@ -22,13 +22,13 @@ public final class AuditGate {
 
     private AuditGate() {}
 
-    /** Platform admins pass unconditionally for list/read; decrypt always needs delegation. */
+    /** Platform admins pass for all three operations; delegated admins need matching scope. */
     public static boolean isAllowed(
             AdminPrincipal principal,
             DelegationStore delegations,
             String action,
             Long datasourceId) {
-        if (principal.platformAdmin() && !ACTION_DECRYPT.equals(action)) {
+        if (principal.platformAdmin()) {
             return true;
         }
         if (datasourceId == null) {

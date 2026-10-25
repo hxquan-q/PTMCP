@@ -146,7 +146,7 @@ class AuditAdminApiTest {
     void seedAuditRecord() throws Exception {
         datasourceId = 1L;
         targetUserId = 100L;
-        delegateUserId = 200L;
+        delegateUserId = 200L + (System.nanoTime() % 1000);
         requestId = UUID.randomUUID();
         Instant now = Instant.now();
         byte[] rawCipher =
@@ -166,7 +166,7 @@ class AuditAdminApiTest {
                                         + " raw_length, duration_ms, queue_ms, rows_returned,"
                                         + " truncated, create_time)"
                                         + " VALUES (?, ?, 1, ?, 'execute_readonly_sql',"
-                                        + " ?, UTC_TIMESTAMP(6), 'SUCCESS', 'ALLOW', NULL,"
+                                        + " ?, UTC_TIMESTAMP(6), 'SUCCESS', 'ALLOW', NULL, 'SELECT secret_column FROM private_table WHERE id = 42',"
                                         + " NULL, ?, ?, 50,"
                                         + " 100, 5, 42, 0, UTC_TIMESTAMP(6))")) {
             statement.setString(1, requestId.toString());
@@ -174,7 +174,7 @@ class AuditAdminApiTest {
             statement.setLong(3, datasourceId);
             statement.setObject(4, java.sql.Timestamp.from(now.minus(1, ChronoUnit.HOURS)));
             statement.setBytes(5, rawCipher);
-            statement.setInt(7, PLAIN_SQL.length());
+            statement.setString(6, "test-key-1");
             statement.executeUpdate();
         }
     }
