@@ -43,7 +43,10 @@ function schedule(): void {
   if (active && !document.hidden && job.value && !isTerminal(job.value.state)) timer = window.setTimeout(() => void load(false), 2000);
 }
 async function load(initial = true): Promise<void> {
-  if (!active || document.hidden || !session.can('ptmcp:job:read')) return;
+  if (!active || document.hidden || !session.can('ptmcp:job:read')) {
+    if (initial) loading.value = false;
+    return;
+  }
   stop();
   controller = new AbortController();
   const current = ++generation;
@@ -64,7 +67,7 @@ async function load(initial = true): Promise<void> {
 }
 function visibilityChanged(): void {
   stop();
-  if (!document.hidden) void load(false);
+  if (!document.hidden) void load(true);
 }
 function clearSensitive(): void {
   stop();
