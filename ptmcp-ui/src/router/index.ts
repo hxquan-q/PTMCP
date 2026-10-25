@@ -142,7 +142,9 @@ router.beforeEach(async (to) => {
   }
   if (!session.isAuthenticated) return { name: 'login', query: { returnTo: safeReturnTo(to.fullPath) } };
   if (to.name === 'home') {
-    const first = adminRoutes.find((route) => typeof route.meta?.permission === 'string' && session.can(route.meta.permission));
+    const first = adminRoutes.find(
+      (route) => !route.path.includes(':') && typeof route.meta?.permission === 'string' && session.can(route.meta.permission)
+    );
     return first ? `/admin/${first.path}` : '/me/dictionary';
   }
   const permission = to.meta.permission;
