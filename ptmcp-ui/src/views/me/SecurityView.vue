@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { onBeforeUnmount, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { mePortalApi } from '../../services/mePortalApi';
+import { useSessionStore } from '../../stores/session';
 import { errorText } from '../portalUtils';
 
 const router = useRouter();
+const session = useSessionStore();
 const saving = ref(false);
 const form = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' });
 function byteLength(value: string): number {
@@ -26,7 +27,7 @@ async function changePassword(): Promise<void> {
   }
   saving.value = true;
   try {
-    await mePortalApi.changePassword(form.oldPassword, form.newPassword);
+    await session.changePassword(form.oldPassword, form.newPassword);
     ElMessage.success('密码已修改，请重新登录');
     router.replace({ name: 'login', query: { returnTo: '/me/security' } });
   } catch (error) {
@@ -35,6 +36,12 @@ async function changePassword(): Promise<void> {
     saving.value = false;
   }
 }
+
+onBeforeUnmount(() => {
+  form.oldPassword = '';
+  form.newPassword = '';
+  form.confirmPassword = '';
+});
 </script>
 
 <template>

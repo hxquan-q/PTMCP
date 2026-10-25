@@ -68,7 +68,7 @@ onMounted(load);
           ></ElTableColumn
         ><ElTableColumn label="操作" width="100"
           ><template #default="{ row }"
-            ><ElButton v-if="row.status === 'ACTIVE'" link type="danger" @click="revoke(row)">撤销</ElButton></template
+            ><ElButton v-if="row.status === 'ACTIVE'" link type="danger" @click="revoke(row as AuthorizationView)">撤销</ElButton></template
           ></ElTableColumn
         ></ElTable
       >

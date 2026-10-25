@@ -66,7 +66,7 @@ onMounted(load);
         ><ElFormItem label="结束时间"><ElDatePicker v-model="filters.to" type="datetime" value-format="YYYY-MM-DDTHH:mm" /></ElFormItem
         ><ElFormItem label="工具"><ElInput v-model="filters.tool" clearable placeholder="可选" /></ElFormItem
         ><ElFormItem label="结果"><ElInput v-model="filters.result" clearable placeholder="可选" /></ElFormItem
-        ><ElButton type="primary" @click="load">查询</ElButton>
+        ><ElButton type="primary" @click="load()">查询</ElButton>
       </div>
       <ElSkeleton v-if="loading" :rows="6" animated /><ElEmpty v-else-if="!items.length" description="当前窗口没有查询记录" /><ElTable
         v-else

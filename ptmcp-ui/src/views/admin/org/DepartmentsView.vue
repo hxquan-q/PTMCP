@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { useSessionStore } from '../../../stores/session';
 import { orgPortalApi, type Department } from '../../../services/orgPortalApi';
 import { errorText, isConflict } from '../../portalUtils';
 
 type DepartmentNode = Department & { children: DepartmentNode[] };
 
 const loading = ref(false);
+const session = useSessionStore();
 const saving = ref(false);
 const loadError = ref('');
 const departments = ref<Department[]>([]);
@@ -65,6 +67,7 @@ async function load(): Promise<void> {
 }
 
 async function save(): Promise<void> {
+  if (!session.can(editing.value ? 'ptmcp:department:update' : 'ptmcp:department:create')) return;
   if (!form.name.trim()) {
     ElMessage.warning('请输入部门名称');
     return;
@@ -85,6 +88,7 @@ async function save(): Promise<void> {
 }
 
 async function remove(item: Department): Promise<void> {
+  if (!session.can('ptmcp:department:delete')) return;
   try {
     await ElMessageBox.confirm(`确定删除“${item.name}”吗？部门下仍有成员或子部门时服务端会拒绝。`, '删除部门', { type: 'warning' });
     await orgPortalApi.departments.remove(item.id, item.version);
@@ -107,7 +111,7 @@ onMounted(load);
         <h1 id="departments-title">部门</h1>
         <p class="page-description">维护部门树和管理范围。移动部门由服务端重算祖先关系。</p>
       </div>
-      <ElButton type="primary" @click="openCreate">新建部门</ElButton>
+      <ElButton v-if="session.can('ptmcp:department:create')" type="primary" @click="openCreate">新建部门</ElButton>
     </div>
 
     <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError">
@@ -128,8 +132,8 @@ onMounted(load);
             <span class="tree-name">{{ data.name }}</span>
             <ElTag size="small" :type="data.enabled ? 'success' : 'info'">{{ data.enabled ? '启用' : '停用' }}</ElTag>
             <span class="tree-actions">
-              <ElButton link type="primary" @click.stop="openEdit(data)">编辑</ElButton>
-              <ElButton link type="danger" @click.stop="remove(data)">删除</ElButton>
+              <ElButton v-if="session.can('ptmcp:department:update')" link type="primary" @click.stop="openEdit(data)">编辑</ElButton>
+              <ElButton v-if="session.can('ptmcp:department:delete')" link type="danger" @click.stop="remove(data)">删除</ElButton>
             </span>
           </div>
         </template>

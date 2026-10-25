@@ -1,4 +1,6 @@
-export type ApiError = Error & { status?: number; code?: string; requestId?: string };
+import { ApiError, request as transportRequest, setCsrfToken } from './http';
+
+export { ApiError };
 
 export interface Department {
   id: string;
@@ -45,53 +47,28 @@ export interface Grant {
   version: number;
 }
 
-let csrfToken: string | null = null;
-
-/** CSRF lives only in this module's memory; the session cookie remains HttpOnly. */
 export function setPortalCsrfToken(value: string | null): void {
-  csrfToken = value;
-}
-
-function apiError(response: Response, body: unknown): ApiError {
-  const payload = isRecord(body) ? body : {};
-  const error = new Error(typeof payload.code === 'string' ? payload.code : `请求失败（${response.status}）`) as ApiError;
-  error.status = response.status;
-  error.code = typeof payload.code === 'string' ? payload.code : undefined;
-  const data = isRecord(payload.data) ? payload.data : undefined;
-  error.requestId = (data && typeof data.requestId === 'string' ? data.requestId : undefined) ?? response.headers.get('X-Request-Id') ?? undefined;
-  return error;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  setCsrfToken(value);
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  headers.set('Accept', 'application/json');
-  if (init.body !== undefined && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json');
-  }
-  if (init.method && !['GET', 'HEAD', 'OPTIONS'].includes(init.method.toUpperCase())) {
-    if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
-  }
-  const response = await fetch(`/backend/admin${path}`, {
-    ...init,
-    headers,
-    credentials: 'same-origin',
-    cache: 'no-store'
-  });
-  const text = await response.text();
   let body: unknown = null;
-  if (text) {
+  if (typeof init.body === 'string') {
     try {
-      body = JSON.parse(text) as unknown;
+      body = JSON.parse(init.body) as unknown;
     } catch {
-      body = text;
+      body = init.body;
     }
+  } else {
+    body = init.body;
   }
-  if (!response.ok) throw apiError(response, body);
-  return body as T;
+  const result = await transportRequest<T>(path, {
+    method: init.method,
+    body,
+    headers: init.headers,
+    signal: init.signal ?? undefined
+  });
+  return result.data;
 }
 
 function etag(version: number): string {

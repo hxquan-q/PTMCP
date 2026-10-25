@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { useSessionStore } from '../../../stores/session';
 import { orgPortalApi, type Role } from '../../../services/orgPortalApi';
 import { errorText, isConflict } from '../../portalUtils';
 
 const roles = ref<Role[]>([]);
+const session = useSessionStore();
+const route = useRoute();
 const loading = ref(false);
 const loadError = ref('');
 const dialogVisible = ref(false);
@@ -54,6 +58,7 @@ async function load(): Promise<void> {
   }
 }
 async function save(): Promise<void> {
+  if (!session.can(editing.value ? 'ptmcp:role:update' : 'ptmcp:role:create')) return;
   if (!form.name.trim() || (!editing.value && !form.key.trim())) {
     ElMessage.warning('请填写角色 key 和名称');
     return;
@@ -77,6 +82,7 @@ async function save(): Promise<void> {
   }
 }
 async function remove(role: Role): Promise<void> {
+  if (!session.can('ptmcp:role:delete')) return;
   try {
     await ElMessageBox.confirm(`确定删除“${role.name}”吗？仍被用户或 ACL 使用的角色会被服务端拒绝。`, '删除角色', { type: 'warning' });
     await orgPortalApi.roles.remove(role.id, role.version);
@@ -87,7 +93,17 @@ async function remove(role: Role): Promise<void> {
     ElMessage.error(isConflict(error) ? '角色版本已变化，请刷新后重试' : errorText(error));
   }
 }
-onMounted(load);
+onMounted(async () => {
+  await load();
+  const id = typeof route.params.id === 'string' ? route.params.id : null;
+  if (id) {
+    try {
+      openEdit(await orgPortalApi.roles.get(id));
+    } catch (error) {
+      ElMessage.error(errorText(error));
+    }
+  }
+});
 </script>
 
 <template>
@@ -98,7 +114,7 @@ onMounted(load);
         <h1 id="roles-title">角色</h1>
         <p class="page-description">角色只管理功能码；数据权限在授权矩阵中单独维护。</p>
       </div>
-      <ElButton type="primary" @click="openCreate">新建角色</ElButton>
+      <ElButton v-if="session.can('ptmcp:role:create')" type="primary" @click="openCreate">新建角色</ElButton>
     </div>
     <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError"
       ><template #default><ElButton link type="danger" @click="load">重新加载</ElButton></template></ElAlert
@@ -122,8 +138,8 @@ onMounted(load);
           ></ElTableColumn
         ><ElTableColumn label="操作" fixed="right" width="130"
           ><template #default="{ row }"
-            ><ElButton link type="primary" @click="openEdit(row)">编辑</ElButton
-            ><ElButton link type="danger" @click="remove(row)">删除</ElButton></template
+            ><ElButton v-if="session.can('ptmcp:role:update')" link type="primary" @click="openEdit(row as Role)">编辑</ElButton
+            ><ElButton v-if="session.can('ptmcp:role:delete')" link type="danger" @click="remove(row as Role)">删除</ElButton></template
           ></ElTableColumn
         >
       </ElTable>

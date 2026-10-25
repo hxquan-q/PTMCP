@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { mePortalApi, type PlatformItem, type TokenView } from '../../services/mePortalApi';
 import { errorText } from '../portalUtils';
@@ -37,6 +37,12 @@ function closeSecret(): void {
   secretVisible.value = false;
   tokenPlaintext.value = '';
 }
+
+onBeforeUnmount(() => {
+  closeSecret();
+  form.name = '';
+  window.removeEventListener('ptmcp:sensitive-clear', closeSecret);
+});
 
 async function loadPlatforms(): Promise<void> {
   try {
@@ -106,6 +112,7 @@ function platformName(id: string | null): string {
   return id ? (platforms.value.find((item) => item.id === id)?.name ?? id) : '—';
 }
 onMounted(async () => {
+  window.addEventListener('ptmcp:sensitive-clear', closeSecret);
   await loadPlatforms();
   await load();
 });
@@ -147,7 +154,7 @@ onMounted(async () => {
           ></ElTableColumn
         ><ElTableColumn label="操作" width="100"
           ><template #default="{ row }"
-            ><ElButton v-if="row.status === 'ACTIVE'" link type="danger" @click="revoke(row)">撤销</ElButton></template
+            ><ElButton v-if="row.status === 'ACTIVE'" link type="danger" @click="revoke(row as TokenView)">撤销</ElButton></template
           ></ElTableColumn
         ></ElTable
       >

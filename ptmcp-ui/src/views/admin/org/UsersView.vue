@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { useSessionStore } from '../../../stores/session';
 import { orgPortalApi, type Department, type Role, type User } from '../../../services/orgPortalApi';
 import { errorText, isConflict } from '../../portalUtils';
 
 const loading = ref(false);
+const session = useSessionStore();
+const route = useRoute();
 const saving = ref(false);
 const loadError = ref('');
 const users = ref<User[]>([]);
@@ -64,6 +68,7 @@ async function load(): Promise<void> {
 }
 
 async function save(): Promise<void> {
+  if (!session.can(editing.value ? 'ptmcp:user:update' : 'ptmcp:user:create')) return;
   if (!form.username.trim() || !form.displayName.trim() || !form.deptId) {
     ElMessage.warning('请填写用户名、显示名称和部门');
     return;
@@ -94,6 +99,7 @@ async function save(): Promise<void> {
 }
 
 async function toggleStatus(user: User): Promise<void> {
+  if (!session.can('ptmcp:user:status')) return;
   const next = user.enabled ? 'DISABLED' : 'ACTIVE';
   try {
     await ElMessageBox.confirm(`确定${user.enabled ? '停用' : '启用'}“${user.displayName}”吗？`, '更新用户状态', {
@@ -116,7 +122,17 @@ function departmentName(id: string): string {
   return departments.value.find((department) => department.id === id)?.name ?? `部门 ${id}`;
 }
 
-onMounted(load);
+onMounted(async () => {
+  await load();
+  const id = typeof route.params.id === 'string' ? route.params.id : null;
+  if (id) {
+    try {
+      openEdit(await orgPortalApi.users.get(id));
+    } catch (error) {
+      ElMessage.error(errorText(error));
+    }
+  }
+});
 </script>
 
 <template>
@@ -127,7 +143,7 @@ onMounted(load);
         <h1 id="users-title">用户</h1>
         <p class="page-description">管理用户状态、部门归属和角色。每项变更都携带资源版本。</p>
       </div>
-      <ElButton type="primary" @click="openCreate">新建用户</ElButton>
+      <ElButton v-if="session.can('ptmcp:user:create')" type="primary" @click="openCreate">新建用户</ElButton>
     </div>
     <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError"
       ><template #default><ElButton link type="danger" @click="load">重新加载</ElButton></template></ElAlert
@@ -160,8 +176,8 @@ onMounted(load);
         >
         <ElTableColumn label="操作" fixed="right" width="180"
           ><template #default="{ row }"
-            ><ElButton link type="primary" @click="openEdit(row)">编辑</ElButton
-            ><ElButton link :type="row.enabled ? 'danger' : 'success'" @click="toggleStatus(row)">{{
+            ><ElButton v-if="session.can('ptmcp:user:update')" link type="primary" @click="openEdit(row as User)">编辑</ElButton
+            ><ElButton v-if="session.can('ptmcp:user:status')" link :type="row.enabled ? 'danger' : 'success'" @click="toggleStatus(row as User)">{{
               row.enabled ? '停用' : '启用'
             }}</ElButton></template
           ></ElTableColumn
