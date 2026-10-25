@@ -1,4 +1,5 @@
 import { request, ApiError } from './http';
+import { adaptDatasource, adaptDatasourceDelete, adaptDatasourcePage, adaptJob, adaptMetadataDetail, adaptMetadataPage } from '../adapters/data-dto';
 
 export type DataRequestOptions = {
   method?: string;
@@ -59,6 +60,11 @@ export async function dataRequest<T>(path: string, options: DataRequestOptions =
   }
 }
 
+async function adaptedRequest<Wire, Model>(path: string, options: DataRequestOptions, adapt: (dto: Wire) => Model): Promise<ApiResult<Model>> {
+  const result = await dataRequest<Wire>(path, options);
+  return { ...result, data: adapt(result.data) };
+}
+
 export interface DatasourceRead {
   id: string;
   version?: string;
@@ -99,6 +105,12 @@ export interface DatasourceWrite {
 export interface DatasourcePage {
   items: DatasourceRead[];
   nextCursor: string | null;
+}
+
+export interface DatasourceDelete {
+  deleted: boolean;
+  id: string;
+  version: string;
 }
 
 export interface JobView {
@@ -198,43 +210,43 @@ export async function listDatasources(
   if (params.status) query.set('status', params.status);
   if (params.cursor) query.set('cursor', params.cursor);
   query.set('pageSize', String(params.pageSize ?? 20));
-  return dataRequest<DatasourcePage>(`/api/v1/admin/datasources?${query}`, { signal: params.signal });
+  return adaptedRequest(`/api/v1/admin/datasources?${query}`, { signal: params.signal }, adaptDatasourcePage);
 }
 
 export function getDatasource(id: string, signal?: AbortSignal): Promise<ApiResult<DatasourceRead>> {
-  return dataRequest<DatasourceRead>(`/api/v1/admin/datasources/${encodeURIComponent(id)}`, { signal });
+  return adaptedRequest(`/api/v1/admin/datasources/${encodeURIComponent(id)}`, { signal }, adaptDatasource);
 }
 
 export function createDatasource(body: DatasourceWrite, idempotencyKey?: string): Promise<ApiResult<DatasourceRead>> {
-  return dataRequest<DatasourceRead>('/api/v1/admin/datasources', { method: 'POST', body, idempotencyKey });
+  return adaptedRequest('/api/v1/admin/datasources', { method: 'POST', body, idempotencyKey }, adaptDatasource);
 }
 
 export function updateDatasource(id: string, body: DatasourceWrite, etag: string, idempotencyKey?: string): Promise<ApiResult<DatasourceRead>> {
-  return dataRequest<DatasourceRead>(`/api/v1/admin/datasources/${encodeURIComponent(id)}`, { method: 'PUT', body, etag, idempotencyKey });
+  return adaptedRequest(`/api/v1/admin/datasources/${encodeURIComponent(id)}`, { method: 'PUT', body, etag, idempotencyKey }, adaptDatasource);
 }
 
-export function deleteDatasource(
-  id: string,
-  etag: string,
-  idempotencyKey?: string
-): Promise<ApiResult<{ deleted: boolean; id: string; version: string }>> {
-  return dataRequest(`/api/v1/admin/datasources/${encodeURIComponent(id)}`, { method: 'DELETE', etag, idempotencyKey });
+export function deleteDatasource(id: string, etag: string, idempotencyKey?: string): Promise<ApiResult<DatasourceDelete>> {
+  return adaptedRequest(`/api/v1/admin/datasources/${encodeURIComponent(id)}`, { method: 'DELETE', etag, idempotencyKey }, adaptDatasourceDelete);
 }
 
 export function testDatasource(id: string, draft?: DatasourceWrite, idempotencyKey?: string): Promise<ApiResult<JobView>> {
-  return dataRequest<JobView>(`/api/v1/admin/datasources/${encodeURIComponent(id)}/test`, {
-    method: 'POST',
-    body: draft ? { draft } : undefined,
-    idempotencyKey
-  });
+  return adaptedRequest(
+    `/api/v1/admin/datasources/${encodeURIComponent(id)}/test`,
+    { method: 'POST', body: draft ? { draft } : undefined, idempotencyKey },
+    adaptJob
+  );
 }
 
 export function syncDatasource(id: string, idempotencyKey?: string): Promise<ApiResult<JobView>> {
-  return dataRequest<JobView>(`/api/v1/admin/datasources/${encodeURIComponent(id)}/sync`, { method: 'POST', body: { mode: 'FULL' }, idempotencyKey });
+  return adaptedRequest(
+    `/api/v1/admin/datasources/${encodeURIComponent(id)}/sync`,
+    { method: 'POST', body: { mode: 'FULL' }, idempotencyKey },
+    adaptJob
+  );
 }
 
 export function getJob(id: string, signal?: AbortSignal): Promise<ApiResult<JobView>> {
-  return dataRequest<JobView>(`/api/v1/admin/jobs/${encodeURIComponent(id)}`, { signal });
+  return adaptedRequest(`/api/v1/admin/jobs/${encodeURIComponent(id)}`, { signal }, adaptJob);
 }
 
 export async function listMetadata(params: {
@@ -251,18 +263,17 @@ export async function listMetadata(params: {
   if (params.keyword) query.set('keyword', params.keyword);
   if (params.kind) query.set('kind', params.kind);
   if (params.cursor) query.set('cursor', params.cursor);
-  return dataRequest<MetadataPage>(`/api/v1/admin/metadata/objects?${query}`, { signal: params.signal });
+  return adaptedRequest(`/api/v1/admin/metadata/objects?${query}`, { signal: params.signal }, adaptMetadataPage);
 }
 
 export function getMetadata(id: string, signal?: AbortSignal): Promise<ApiResult<MetadataDetail>> {
-  return dataRequest<MetadataDetail>(`/api/v1/admin/metadata/objects/${encodeURIComponent(id)}`, { signal });
+  return adaptedRequest(`/api/v1/admin/metadata/objects/${encodeURIComponent(id)}`, { signal }, adaptMetadataDetail);
 }
 
 export function updateDictionary(id: string, body: DictionaryWrite, etag: string, idempotencyKey?: string): Promise<ApiResult<MetadataDetail>> {
-  return dataRequest<MetadataDetail>(`/api/v1/admin/metadata/objects/${encodeURIComponent(id)}/dictionary`, {
-    method: 'PUT',
-    body,
-    etag,
-    idempotencyKey
-  });
+  return adaptedRequest(
+    `/api/v1/admin/metadata/objects/${encodeURIComponent(id)}/dictionary`,
+    { method: 'PUT', body, etag, idempotencyKey },
+    adaptMetadataDetail
+  );
 }
