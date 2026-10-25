@@ -264,6 +264,9 @@ body {
   margin: 0 auto;
   padding: 32px 34px 56px;
 }
+.workspace-content > .page-shell {
+  padding: 0;
+}
 .workspace-scrim {
   display: none;
 }
