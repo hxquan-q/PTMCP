@@ -143,7 +143,13 @@ async function loadTrail(): Promise<void> {
       </ElCard>
     </template>
     <ElEmpty v-else-if="!error" description="审计详情尚未读取，路由 ID 不代表记录已存在。" />
-    <AuditDecryptDialog v-if="session.can('ptmcp:audit:decrypt') && item" :key="requestId" v-model="decrypt" :request-id="requestId" />
+    <AuditDecryptDialog
+      v-if="session.can('ptmcp:audit:decrypt') && item"
+      :key="requestId"
+      v-model="decrypt"
+      :request-id="requestId"
+      @revealed="loadTrail"
+    />
   </div>
 </template>
 <style scoped>

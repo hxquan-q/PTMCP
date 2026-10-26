@@ -3,7 +3,7 @@ import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { controlPlane, type DecryptedAudit } from '../../../services/controlPlane';
 import { errorText } from '../../portalUtils';
 const props = defineProps<{ modelValue: boolean; requestId: string }>();
-const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>();
+const emit = defineEmits<{ 'update:modelValue': [value: boolean]; revealed: [] }>();
 const open = computed({
   get: () => props.modelValue,
   set: (value) => {
@@ -44,6 +44,7 @@ async function reveal(): Promise<void> {
   try {
     const result = await controlPlane.audit.decrypt(props.requestId, reason.value.trim(), [...fields.value], controller.signal);
     if (own !== sequence || !open.value) return;
+    emit('revealed');
     const expiry = new Date(result.expiresAt).getTime();
     if (!Number.isFinite(expiry) || expiry <= Date.now()) {
       error.value = '明文已过期，请重新申请。';
