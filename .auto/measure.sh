@@ -16,7 +16,7 @@ echo "FE_TESTS fe_pass=$FE_PASS fe_fail=$FE_FAIL"
 # --- 后端测试（Testcontainers，需 Docker） ---
 export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 be_log=.auto/last-be.log
-(cd ptmcp-parent && mvn -B -ntp '-Dptmcp.test.mysqlImage=mysql:8.0' '-Dptmcp.test.mysqlSeries=8.0.' '-Dptmcp.test.pgImage=postgres:15' -pl ptmcp-admin,ptmcp-gateway -am test) > "$be_log" 2>&1
+(cd ptmcp-parent && mvn -B -ntp '-Dptmcp.test.pgImage=postgres:15' -pl ptmcp-admin,ptmcp-gateway -am test) > "$be_log" 2>&1
 BE_EXIT=$?
 tail -40 "$be_log" | sed 's/^/BE | /'
 
