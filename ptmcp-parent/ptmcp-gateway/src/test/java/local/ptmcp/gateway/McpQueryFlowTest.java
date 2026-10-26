@@ -2,6 +2,7 @@ package local.ptmcp.gateway;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.nimbusds.jose.JWSAlgorithm;
@@ -65,6 +66,9 @@ import java.util.UUID;
 class McpQueryFlowTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final String KEY = Base64.getEncoder().encodeToString(new byte[32]);
+    // Distinct from the credential key on purpose: a green run proves the terminal sealed with
+    // the audit key, not with whichever key happened to be lying around in the context.
+    private static final String AUDIT_KEY = base64Key();
     private static final String PAT = "ptmcp_pat_" + TlsMysqlFixture.secret();
     private static final String PAT_REVOKED = "ptmcp_pat_" + TlsMysqlFixture.secret();
     private static final String PAT_EXPIRED = "ptmcp_pat_" + TlsMysqlFixture.secret();
@@ -128,6 +132,7 @@ class McpQueryFlowTest {
         properties.add("ptmcp.gateway.truststore-password", () -> BUSINESS.password);
         properties.add("ptmcp.gateway.wal-directory", WAL::toString);
         properties.add("ptmcp.gateway.wal-key", () -> KEY);
+        properties.add("ptmcp.gateway.audit-key", () -> AUDIT_KEY);
         properties.add("ptmcp.gateway.issuer", () -> ISSUER);
         properties.add("ptmcp.gateway.resource", () -> RESOURCE);
         properties.add("ptmcp.gateway.jwks-uri", () -> ISSUER + "jwks");
@@ -329,6 +334,60 @@ class McpQueryFlowTest {
                 JSON.readTree(result.path("content").get(0).path("text").asText()));
         String requestId = result.path("structuredContent").path("requestId").asText();
         assertTerminal(requestId, "SUCCESS", "ALLOW");
+    }
+
+    /**
+     * End-to-end proof of the audit-sealing slice: the success terminal stores the raw SQL as an
+     * AES-GCM ciphertext sealed with the configured audit key (not the credential key), and the
+     * same wire format the admin console's reader uses decrypts it back to the exact query text.
+     */
+    @Test
+    void successfulQuerySealsRawSqlWithTheAuditKeyForConsoleReveal() throws Exception {
+        String sql = "SELECT id FROM orders WHERE id = 1";
+        HttpResponse<String> response = call(sql, PAT);
+        assertEquals(200, response.statusCode(), response.body());
+        String requestId =
+                JSON.readTree(response.body())
+                        .path("result")
+                        .path("structuredContent")
+                        .path("requestId")
+                        .asText();
+
+        byte[] rawKey = Base64.getDecoder().decode(AUDIT_KEY);
+        byte[] sealed;
+        String keyId;
+        try (Connection meta = PRIMARY.getConnection();
+                PreparedStatement sqlStatement =
+                        meta.prepareStatement(
+                                "SELECT sql_raw_cipher, key_id FROM audit_log WHERE request_id = ?")) {
+            sqlStatement.setString(1, requestId);
+            try (ResultSet row = sqlStatement.executeQuery()) {
+                assertTrue(row.next(), "missing audit row for " + requestId);
+                sealed = row.getBytes(1);
+                keyId = row.getString(2);
+            }
+        }
+        assertNotNull(sealed, "success terminal must carry the sealed raw SQL");
+        assertTrue(sealed.length > 12 + 16, "ciphertext shorter than iv + tag");
+        String expectedKeyId =
+                "local:"
+                        + java.util.HexFormat.of()
+                                .formatHex(MessageDigest.getInstance("SHA-256").digest(rawKey))
+                                .substring(0, 16);
+        assertEquals(expectedKeyId, keyId, "terminal key id must derive from the audit key");
+
+        javax.crypto.spec.SecretKeySpec auditKey =
+                new javax.crypto.spec.SecretKeySpec(rawKey, "AES");
+        javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(
+                javax.crypto.Cipher.DECRYPT_MODE,
+                auditKey,
+                new javax.crypto.spec.GCMParameterSpec(128, sealed, 0, 12));
+        String revealed =
+                new String(
+                        cipher.doFinal(sealed, 12, sealed.length - 12),
+                        java.nio.charset.StandardCharsets.UTF_8);
+        assertEquals(sql, revealed, "decrypted plaintext must match the executed query");
     }
 
     @Test
