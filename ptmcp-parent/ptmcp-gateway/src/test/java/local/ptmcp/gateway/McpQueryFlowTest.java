@@ -356,17 +356,24 @@ class McpQueryFlowTest {
         byte[] rawKey = Base64.getDecoder().decode(AUDIT_KEY);
         byte[] sealed;
         String keyId;
+        String masked;
         try (Connection meta = PRIMARY.getConnection();
                 PreparedStatement sqlStatement =
                         meta.prepareStatement(
-                                "SELECT sql_raw_cipher, key_id FROM audit_log WHERE request_id = ?")) {
+                                "SELECT sql_raw_cipher, key_id, sql_masked FROM audit_log"
+                                        + " WHERE request_id = ?")) {
             sqlStatement.setString(1, requestId);
             try (ResultSet row = sqlStatement.executeQuery()) {
                 assertTrue(row.next(), "missing audit row for " + requestId);
                 sealed = row.getBytes(1);
                 keyId = row.getString(2);
+                masked = row.getString(3);
             }
         }
+        // The masked form is plaintext-safe: literals gone, structure readable.
+        assertNotNull(masked, "masked sql should accompany the sealed raw sql");
+        assertFalse(masked.contains("1"), "numeric literal survived masking: " + masked);
+        assertTrue(masked.contains("SELECT id FROM orders WHERE id = ?"), masked);
         assertNotNull(sealed, "success terminal must carry the sealed raw SQL");
         assertTrue(sealed.length > 12 + 16, "ciphertext shorter than iv + tag");
         String expectedKeyId =
@@ -423,18 +430,22 @@ class McpQueryFlowTest {
         String attempted = "SELECT id FROM secret";
         byte[] sealed;
         String keyId;
+        String deniedMasked;
         try (Connection meta = PRIMARY.getConnection();
                 PreparedStatement sqlStatement =
                         meta.prepareStatement(
-                                "SELECT sql_raw_cipher, key_id FROM audit_log"
+                                "SELECT sql_raw_cipher, key_id, sql_masked FROM audit_log"
                                         + " WHERE request_id = ?")) {
             sqlStatement.setString(1, deniedRequestId);
             try (ResultSet row = sqlStatement.executeQuery()) {
                 assertTrue(row.next(), "missing audit row for " + deniedRequestId);
                 sealed = row.getBytes(1);
                 keyId = row.getString(2);
+                deniedMasked = row.getString(3);
             }
         }
+        assertNotNull(deniedMasked, "denied terminal should carry the masked attempt");
+        assertEquals("SELECT id FROM secret", deniedMasked);
         assertNotNull(sealed, "denied terminal must carry the sealed attempted SQL");
         byte[] rawKey = Base64.getDecoder().decode(AUDIT_KEY);
         String expectedKeyId =
