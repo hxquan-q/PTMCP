@@ -46,7 +46,7 @@ const guidance = computed(() =>
       ? '权限拒绝不代表系统故障。核对平台 Scope、用户授权和 DENY 规则。'
       : item.value?.truncated
         ? '结果被截断，请收窄条件或使用聚合。'
-        : '使用 requestId 关联排查，时间均按 Asia/Taipei 展示。'
+        : '使用 requestId 关联排查，时间均按 Asia/Taipei 展示。',
 );
 watch(requestId, () => void load(), { immediate: true, flush: 'sync' });
 </script>

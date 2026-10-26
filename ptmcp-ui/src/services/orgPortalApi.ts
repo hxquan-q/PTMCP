@@ -73,7 +73,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     method: init.method,
     body,
     headers: init.headers,
-    signal: init.signal ?? undefined
+    signal: init.signal ?? undefined,
   });
   return normalizeOrgResponse(path, result.data) as T;
 }
@@ -92,13 +92,13 @@ export const orgPortalApi = {
       request<Department>(`/api/v1/admin/departments/${encodeURIComponent(id)}`, {
         method: 'PUT',
         headers: { 'If-Match': etag(version) },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
       }),
     remove: (id: string, version: number) =>
       request<void>(`/api/v1/admin/departments/${encodeURIComponent(id)}`, {
         method: 'DELETE',
-        headers: { 'If-Match': etag(version) }
-      })
+        headers: { 'If-Match': etag(version) },
+      }),
   },
   users: {
     list: (params: { departmentId?: string; keyword?: string } = {}, signal?: AbortSignal) => {
@@ -114,26 +114,26 @@ export const orgPortalApi = {
       request<User>(`/api/v1/admin/users/${encodeURIComponent(id)}`, {
         method: 'PUT',
         headers: { 'If-Match': etag(version) },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
       }),
     setStatus: (id: string, status: 'ACTIVE' | 'DISABLED', version: number) =>
       request<User>(`/api/v1/admin/users/${encodeURIComponent(id)}/status`, {
         method: 'PUT',
         headers: { 'If-Match': etag(version) },
-        body: JSON.stringify({ status })
+        body: JSON.stringify({ status }),
       }),
     setRoles: (id: string, roleIds: string[], version: number) =>
       request<User>(`/api/v1/admin/users/${encodeURIComponent(id)}/roles`, {
         method: 'PUT',
         headers: { 'If-Match': etag(version) },
-        body: JSON.stringify({ roleIds })
+        body: JSON.stringify({ roleIds }),
       }),
     setDepartment: (id: string, departmentId: string, version: number) =>
       request<User>(`/api/v1/admin/users/${encodeURIComponent(id)}/department`, {
         method: 'PUT',
         headers: { 'If-Match': etag(version) },
-        body: JSON.stringify({ departmentId })
-      })
+        body: JSON.stringify({ departmentId }),
+      }),
   },
   roles: {
     list: (signal?: AbortSignal) => request<Role[]>('/api/v1/admin/roles', { signal }),
@@ -144,13 +144,13 @@ export const orgPortalApi = {
       request<Role>(`/api/v1/admin/roles/${encodeURIComponent(id)}`, {
         method: 'PUT',
         headers: { 'If-Match': etag(version) },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
       }),
     remove: (id: string, version: number) =>
       request<void>(`/api/v1/admin/roles/${encodeURIComponent(id)}`, {
         method: 'DELETE',
-        headers: { 'If-Match': etag(version) }
-      })
+        headers: { 'If-Match': etag(version) },
+      }),
   },
   grants: {
     list: (params: { subjectType?: string; subjectId?: string } = {}) => {
@@ -162,13 +162,13 @@ export const orgPortalApi = {
     revoke: (id: string, version: number) =>
       request<Grant>(`/api/v1/admin/acl/grants/${encodeURIComponent(id)}`, {
         method: 'DELETE',
-        headers: { 'If-Match': etag(version) }
+        headers: { 'If-Match': etag(version) },
       }),
     preview: (body: { subjectUserId: string; platformId: string; resourceIds: string[]; at?: string }) =>
       request<{
         decisions: Array<{ resourceId: string; meta: boolean; read: boolean; sourceGrantIds: string[] }>;
         evaluatedAt: string;
         nextBoundaryAt: string | null;
-      }>('/api/v1/admin/acl/preview', { method: 'POST', body: JSON.stringify(body) })
-  }
+      }>('/api/v1/admin/acl/preview', { method: 'POST', body: JSON.stringify(body) }),
+  },
 };

@@ -104,7 +104,7 @@ async function load(cursor: string | null = null): Promise<void> {
       kind: filters.kind || undefined,
       cursor,
       pageSize: 20,
-      signal: listController.signal
+      signal: listController.signal,
     });
     if (!active || current !== generation) return;
     rows.value = result.data.items ?? [];
@@ -173,7 +173,7 @@ watch(
       rows.value = [];
       void load();
     }
-  }
+  },
 );
 onMounted(async () => {
   window.addEventListener('ptmcp:sensitive-clear', clearSensitive);

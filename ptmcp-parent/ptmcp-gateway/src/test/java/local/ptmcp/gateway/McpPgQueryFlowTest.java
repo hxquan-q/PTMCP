@@ -117,7 +117,7 @@ class McpPgQueryFlowTest {
         properties.add("ptmcp.gateway.credential-key", () -> KEY);
         properties.add("ptmcp.gateway.allowed-cidrs", () -> "127.0.0.0/8,172.16.0.0/12");
         properties.add("ptmcp.gateway.truststore-path", () -> "target/test-only-trust.p12");
-        properties.add("ptmcp.gateway.truststore-password", () -> "test-only");
+        properties.add("ptmcp.gateway.truststore-password", TlsMysqlFixture::secret);
         properties.add("ptmcp.gateway.wal-directory", WAL::toString);
         properties.add("ptmcp.gateway.wal-key", () -> KEY);
         properties.add("ptmcp.gateway.issuer", () -> "https://as.test.invalid");

@@ -50,6 +50,7 @@ aliyun devops flow-update-pipeline \
 | 语言 | Java、TypeScript |
 | 触发 | `dev` 分支的提交（commit）和合并请求（merge_request） |
 | 质量门禁 | blocker `<= 0`；critical/major 当前不设上限 |
+| 文件过滤 | 已排除生成文件 `ptmcp-ui/src/components.d.ts`（unplugin-vue-components 产物） |
 
 规则包：
 

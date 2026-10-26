@@ -29,8 +29,9 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /** Real MySQL boundary for the V3 OAuth/audit/idempotency/lease migration. */
@@ -1286,7 +1287,9 @@ class OAuthAuditSchemaMigrationTest {
         byte[] firstRequest = hash((byte) 31);
         byte[] secondRequest = hash((byte) 32);
         CyclicBarrier barrier = new CyclicBarrier(2);
-        ExecutorService pool = Executors.newFixedThreadPool(2);
+        ExecutorService pool =
+                new ThreadPoolExecutor(
+                        2, 2, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
         Callable<Integer> first =
                 () -> claim(barrier, 9, keyHash, firstRequest, NOW, NOW.plusHours(24));
         Callable<Integer> second =

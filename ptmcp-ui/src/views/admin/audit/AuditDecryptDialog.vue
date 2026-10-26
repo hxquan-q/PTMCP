@@ -9,7 +9,7 @@ const open = computed({
   set: (value) => {
     if (!value) clear();
     emit('update:modelValue', value);
-  }
+  },
 });
 const reason = ref('');
 const fields = ref(['sqlRaw']);

@@ -16,7 +16,7 @@ const form = reactive({
   redirectUris: '',
   allowedScopes: ['mcp:catalog'] as string[],
   jwksUri: '',
-  status: 'DISABLED'
+  status: 'DISABLED',
 });
 const errors = ref<Record<string, string>>({});
 const message = ref('');
@@ -26,14 +26,14 @@ watch(
     form.authMethods = type === 'PUBLIC' ? ['none'] : ['private_key_jwt'];
     form.jwksUri = '';
   },
-  { flush: 'sync' }
+  { flush: 'sync' },
 );
 if (props.initial)
   Object.assign(form, {
     ...props.initial,
     authMethods: [...props.initial.authMethods],
     allowedScopes: [...props.initial.allowedScopes],
-    redirectUris: props.initial.redirectUris.join('\n')
+    redirectUris: props.initial.redirectUris.join('\n'),
   });
 watch(form, () => {
   errors.value = {};
@@ -70,7 +70,7 @@ async function save(): Promise<void> {
       allowedScopes: [...form.allowedScopes],
       status: form.status,
       redirectUris: splitLines(form.redirectUris),
-      jwksUri: form.authMethods.includes('private_key_jwt') ? form.jwksUri : ''
+      jwksUri: form.authMethods.includes('private_key_jwt') ? form.jwksUri : '',
     });
   } catch (reason) {
     message.value = errorText(reason);

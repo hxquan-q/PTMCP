@@ -36,7 +36,7 @@ export function formatDate(value: string | null | undefined): string {
   return new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'Asia/Taipei',
     dateStyle: 'medium',
-    timeStyle: 'short'
+    timeStyle: 'short',
   }).format(date);
 }
 

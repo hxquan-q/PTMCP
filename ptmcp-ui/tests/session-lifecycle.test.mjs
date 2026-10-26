@@ -8,7 +8,7 @@ const sourceImports = registerHooks({
   resolve(specifier, context, nextResolve) {
     const extensionless = context.parentURL?.includes('/src/') && specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier);
     return nextResolve(extensionless ? `${specifier}.ts` : specifier, context);
-  }
+  },
 });
 const { useSessionStore } = await import('../src/stores/session.ts');
 const { request, refreshCsrf } = await import('../src/services/http.ts');
@@ -22,7 +22,7 @@ const user = (id) => ({
   roles: [],
   permissions: ['ptmcp:datasource:list'],
   managedScopes: [],
-  expiresAt: '2099-01-01T00:00:00Z'
+  expiresAt: '2099-01-01T00:00:00Z',
 });
 const response = (body, status = 200) => new Response(JSON.stringify(body), { status });
 async function fixture(run) {
@@ -43,7 +43,7 @@ async function fixture(run) {
 const settle = (promise) =>
   promise.then(
     () => undefined,
-    () => undefined
+    () => undefined,
   );
 
 test('a late session read cannot restore identity or permissions after clear', () =>
@@ -90,7 +90,7 @@ test('invalidating a pending login stops its remaining session bootstrap', () =>
     assert.equal(session.user, null);
     assert.equal(
       calls.some((path) => path.endsWith('/me')),
-      false
+      false,
     );
   }));
 

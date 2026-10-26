@@ -41,7 +41,7 @@ const firstAdminRoute = computed(() => {
     '/admin/permissions',
     '/admin/delegations',
     '/admin/platforms',
-    '/admin/audit'
+    '/admin/audit',
   ];
   return candidates.find((path) => {
     const record = router.getRoutes().find((candidate) => candidate.path === path);
@@ -56,7 +56,7 @@ let previousOverflow = '';
 function closeMenu(restoreFocus = true): void {
   if (!menuOpen.value) return;
   menuOpen.value = false;
-  if (restoreFocus) void nextTick(() => menuButton.value?.focus());
+  if (restoreFocus) nextTick(() => menuButton.value?.focus()).catch(() => undefined);
 }
 async function closeForNavigation(): Promise<void> {
   if (!overlayNavigation.value) return;
@@ -77,7 +77,7 @@ function handleNavigationKey(event: KeyboardEvent): void {
   }
   if (event.key !== 'Tab') return;
   const controls = Array.from(sidebar.value?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), [tabindex="0"]') ?? []).filter(
-    (element) => element.getClientRects().length
+    (element) => element.getClientRects().length,
   );
   const first = controls[0];
   const last = controls.at(-1);
@@ -105,7 +105,7 @@ watch(
     closeMenu(false);
     await nextTick();
     content.value?.focus();
-  }
+  },
 );
 onMounted(() => {
   media = window.matchMedia('(max-width: 900px)');

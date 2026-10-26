@@ -12,7 +12,7 @@ const items: NavigationItem[] = [
   { label: '个人令牌', to: '/me/tokens', icon: KeyIcon },
   { label: '授权管理', to: '/me/authorizations', icon: LockIcon },
   { label: '查询历史', to: '/me/history', icon: TicketsIcon },
-  { label: '账号安全', to: '/me/security', icon: SettingIcon }
+  { label: '账号安全', to: '/me/security', icon: SettingIcon },
 ];
 </script>
 <template><WorkspaceLayout mode="personal" title="数据门户" subtitle="查看已授权的数据资产" :items="items" /></template>

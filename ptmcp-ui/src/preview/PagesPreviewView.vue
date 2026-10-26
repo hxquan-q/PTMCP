@@ -7,8 +7,8 @@ const groups = [
       ['数据源详情', '/admin/datasources/1'],
       ['同步任务', '/admin/jobs/1'],
       ['元数据目录', '/admin/metadata'],
-      ['业务字典编辑', '/admin/metadata/1?datasourceId=1']
-    ]
+      ['业务字典编辑', '/admin/metadata/1?datasourceId=1'],
+    ],
   },
   {
     title: '组织与权限',
@@ -20,8 +20,8 @@ const groups = [
       ['角色详情', '/admin/roles/2'],
       ['委派', '/admin/delegations'],
       ['授权矩阵', '/admin/permissions'],
-      ['权限预览', '/admin/permissions/preview']
-    ]
+      ['权限预览', '/admin/permissions/preview'],
+    ],
   },
   {
     title: '平台与审计',
@@ -29,8 +29,8 @@ const groups = [
       ['平台列表', '/admin/platforms'],
       ['平台 / Scope / 客户端', '/admin/platforms/1'],
       ['全局审计', '/admin/audit'],
-      ['审计详情 / 限时解密', '/admin/audit/preview-request-1']
-    ]
+      ['审计详情 / 限时解密', '/admin/audit/preview-request-1'],
+    ],
   },
   {
     title: '个人门户',
@@ -42,8 +42,8 @@ const groups = [
       ['我的授权', '/me/authorizations'],
       ['查询历史', '/me/history'],
       ['历史详情', '/me/history/preview-request-1'],
-      ['账号安全', '/me/security']
-    ]
+      ['账号安全', '/me/security'],
+    ],
   },
   {
     title: '认证与系统状态',
@@ -51,9 +51,9 @@ const groups = [
       ['控制台登录', '/__preview/login'],
       ['AS 登录 / 授权同意', '/__preview/authorization'],
       ['无权限', '/403'],
-      ['页面不存在', '/404']
-    ]
-  }
+      ['页面不存在', '/404'],
+    ],
+  },
 ];
 </script>
 <template>

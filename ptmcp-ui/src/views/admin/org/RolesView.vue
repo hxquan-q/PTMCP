@@ -84,7 +84,7 @@ async function save(): Promise<void> {
       await orgPortalApi.roles.update(
         editing.value.id,
         { name: form.name.trim(), enabled: form.enabled, permissionCodes: permissionCodes() },
-        editing.value.version
+        editing.value.version,
       );
     else await orgPortalApi.roles.create({ key: form.key.trim(), name: form.name.trim(), enabled: form.enabled, permissionCodes: permissionCodes() });
     dialogVisible.value = false;
@@ -150,7 +150,7 @@ watch(
   () => route.params.id,
   () => {
     void loadRouteDetail();
-  }
+  },
 );
 watch(
   () => session.can('ptmcp:role:list'),
@@ -159,7 +159,7 @@ watch(
       rolesTask.cancel();
       roles.value = [];
     }
-  }
+  },
 );
 onMounted(async () => {
   await load();

@@ -31,8 +31,9 @@ import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -247,7 +248,9 @@ class MysqlReadOnlyExecutorTest {
         long connectionId = connectionIdViaExecutor();
         TRACES.clear();
         ReadOnlyCancellation cancellation = new ReadOnlyCancellation();
-        ExecutorService pool = Executors.newSingleThreadExecutor();
+        ExecutorService pool =
+                new ThreadPoolExecutor(
+                        1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
         try {
             Future<DomainException> future =
                     pool.submit(

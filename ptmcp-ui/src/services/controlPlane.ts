@@ -102,7 +102,7 @@ export const controlPlane = {
       row
         ? controlRequest<Platform>(`/platforms/${encodeURIComponent(row.id)}`, { method: 'PUT', body, headers: versioned(row.version) })
         : controlRequest<Platform>('/platforms', create(body)),
-    remove: (row: Platform) => controlRequest(`/platforms/${encodeURIComponent(row.id)}`, { method: 'DELETE', headers: versioned(row.version) })
+    remove: (row: Platform) => controlRequest(`/platforms/${encodeURIComponent(row.id)}`, { method: 'DELETE', headers: versioned(row.version) }),
   },
   clients: {
     list: (platformId: string, filters: Record<string, string | undefined>, signal?: AbortSignal) =>
@@ -110,27 +110,27 @@ export const controlPlane = {
     save: (platformId: string, body: ClientWrite, row?: Client) =>
       row
         ? controlRequest<Client>(`/clients/${encodeURIComponent(row.id)}`, { method: 'PUT', body, headers: versioned(row.version) }).then(
-            (client) => ({ client })
+            (client) => ({ client }),
           )
         : controlRequest<{ client: Client; clientSecret?: string }>(`/platforms/${encodeURIComponent(platformId)}/clients`, create(body)),
-    remove: (row: Client) => controlRequest(`/clients/${encodeURIComponent(row.id)}`, { method: 'DELETE', headers: versioned(row.version) })
+    remove: (row: Client) => controlRequest(`/clients/${encodeURIComponent(row.id)}`, { method: 'DELETE', headers: versioned(row.version) }),
   },
   scopes: {
     get: (id: string, signal?: AbortSignal) => controlRequest<ScopeRead>(`/platforms/${encodeURIComponent(id)}/scopes`, { signal }),
     save: (id: string, items: ScopeRule[], version: string) =>
-      controlRequest<ScopeRead>(`/platforms/${encodeURIComponent(id)}/scopes`, { method: 'PUT', body: { items }, headers: versioned(version) })
+      controlRequest<ScopeRead>(`/platforms/${encodeURIComponent(id)}/scopes`, { method: 'PUT', body: { items }, headers: versioned(version) }),
   },
   delegations: {
     list: (filters: Record<string, string | undefined>, signal?: AbortSignal) =>
       controlRequest<Page<Delegation>>(`/delegations${queryString(filters)}`, { signal }),
     create: (body: DelegationWrite) => controlRequest<Delegation>('/delegations', create(body)),
-    revoke: (row: Delegation) => controlRequest(`/delegations/${encodeURIComponent(row.id)}`, { method: 'DELETE', headers: versioned(row.version) })
+    revoke: (row: Delegation) => controlRequest(`/delegations/${encodeURIComponent(row.id)}`, { method: 'DELETE', headers: versioned(row.version) }),
   },
   audit: {
     list: (filters: Record<string, string | undefined>, signal?: AbortSignal) =>
       controlRequest<Page<AdminAuditSummary>>(`/audit${queryString(filters)}`, { signal }),
     get: (id: string, signal?: AbortSignal) => controlRequest<AdminAuditDetail>(`/audit/${encodeURIComponent(id)}`, { signal }),
     decrypt: (id: string, reason: string, fields: string[], signal?: AbortSignal) =>
-      controlRequest<DecryptedAudit>(`/audit/${encodeURIComponent(id)}/decrypt`, { ...create({ reason, fields }), signal })
-  }
+      controlRequest<DecryptedAudit>(`/audit/${encodeURIComponent(id)}/decrypt`, { ...create({ reason, fields }), signal }),
+  },
 };

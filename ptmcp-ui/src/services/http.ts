@@ -25,7 +25,7 @@ export class ApiError extends Error {
     message: string,
     requestId: string | null = null,
     retryable = false,
-    details: Record<string, unknown> = {}
+    details: Record<string, unknown> = {},
   ) {
     super(message);
     this.name = 'ApiError';
@@ -155,7 +155,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
             body: options.body === undefined ? undefined : JSON.stringify(options.body),
             credentials: 'same-origin',
             cache: 'no-store',
-            signal: options.signal
+            signal: options.signal,
           });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
@@ -188,7 +188,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       failureMessage(response.status, code),
       requestId,
       root?.retryable === true || nested?.retryable === true,
-      object(nested?.details) ?? {}
+      object(nested?.details) ?? {},
     );
   }
   return { data: (wrapped ? root?.data : body) as T, etag: response.headers.get('ETag'), requestId };

@@ -52,9 +52,9 @@ const {
   loaded: clientsLoaded,
   reset: resetClients,
   load: loadClients,
-  retry: retryClients
+  retry: retryClients,
 } = useCursorPage((cursor, signal) =>
-  controlPlane.clients.list(activeId.value, { cursor, type: clientType.value, status: clientStatus.value }, signal)
+  controlPlane.clients.list(activeId.value, { cursor, type: clientType.value, status: clientStatus.value }, signal),
 );
 async function load(): Promise<void> {
   if (!controlPlaneAvailable) return;
@@ -80,7 +80,7 @@ async function savePlatform(body: PlatformWrite): Promise<void> {
       await ElMessageBox.confirm(
         `信任配置由 Tier ${item.value.tier} / ${item.value.proofMode} 变为 Tier ${body.tier} / ${body.proofMode}。确认已重新批准；现有客户端可能需重新授权。`,
         '确认信任变更',
-        { type: 'warning' }
+        { type: 'warning' },
       );
     } catch {
       return;

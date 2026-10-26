@@ -26,20 +26,20 @@ export function createPreviewServer() {
     client: 'list read create update delete',
     delegation: 'list create delete',
     acl: 'list read create update delete preview effective',
-    audit: 'list read decrypt'
+    audit: 'list read decrypt',
   }).flatMap(([resource, actions]) => actions.split(' ').map((action) => `ptmcp:${resource}:${action}`));
   const tables: Record<string, Row[]> = {
     departments: [
       { id: '1', name: '演示总部', parentId: null, enabled: true, ancestors: '0', version: 1 },
-      { id: '2', name: '数据团队', parentId: '1', enabled: true, ancestors: '0,1', version: 1 }
+      { id: '2', name: '数据团队', parentId: '1', enabled: true, ancestors: '0,1', version: 1 },
     ],
     users: [
       { id: '1', username: 'preview-admin', displayName: '前端演示管理员', deptId: '1', enabled: true, roleIds: ['1'], version: 1 },
-      { id: '2', username: 'preview-analyst', displayName: '合成分析员', deptId: '2', enabled: true, roleIds: ['2'], version: 1 }
+      { id: '2', username: 'preview-analyst', displayName: '合成分析员', deptId: '2', enabled: true, roleIds: ['2'], version: 1 },
     ],
     roles: [
       { id: '1', key: 'PREVIEW_ADMIN', name: '演示管理员', enabled: true, permissionCodes: permissions, version: 1 },
-      { id: '2', key: 'PREVIEW_READER', name: '演示分析员', enabled: true, permissionCodes: [], version: 1 }
+      { id: '2', key: 'PREVIEW_READER', name: '演示分析员', enabled: true, permissionCodes: [], version: 1 },
     ],
     platforms: [
       {
@@ -53,7 +53,7 @@ export function createPreviewServer() {
         status: 'ACTIVE',
         version: '1',
         scopeVersion: '1',
-        securityVersion: '1'
+        securityVersion: '1',
       },
       {
         id: '2',
@@ -66,8 +66,8 @@ export function createPreviewServer() {
         status: 'DISABLED',
         version: '1',
         scopeVersion: '1',
-        securityVersion: '1'
-      }
+        securityVersion: '1',
+      },
     ],
     clients: [
       {
@@ -82,8 +82,8 @@ export function createPreviewServer() {
         jwksUri: '',
         status: 'ACTIVE',
         version: '1',
-        secretConfigured: false
-      }
+        secretConfigured: false,
+      },
     ],
     delegations: [
       {
@@ -96,8 +96,8 @@ export function createPreviewServer() {
         validFrom: now,
         validTo: new Date(Date.now() + 7 * 86400000).toISOString(),
         status: 'ACTIVE',
-        version: '1'
-      }
+        version: '1',
+      },
     ],
     datasources: [
       {
@@ -118,7 +118,7 @@ export function createPreviewServer() {
         activeSnapshotId: '1',
         lastSyncAt: now,
         credentialConfigured: true,
-        health: 'HEALTHY'
+        health: 'HEALTHY',
       },
       {
         id: '2',
@@ -138,8 +138,8 @@ export function createPreviewServer() {
         activeSnapshotId: null,
         lastSyncAt: null,
         credentialConfigured: false,
-        health: 'UNKNOWN'
-      }
+        health: 'UNKNOWN',
+      },
     ],
     objects: [
       {
@@ -170,7 +170,7 @@ export function createPreviewServer() {
             maxLength: null,
             comment: '合成编号',
             primaryKey: true,
-            foreignKey: null
+            foreignKey: null,
           },
           {
             ordinal: 2,
@@ -183,13 +183,13 @@ export function createPreviewServer() {
             maxLength: null,
             comment: '合成金额',
             primaryKey: false,
-            foreignKey: null
-          }
+            foreignKey: null,
+          },
         ],
         dictionary: { title: '合成订单', description: '仅用于前端预览，不对应真实业务表。', ownerUserId: null, version: '1', columns: [] },
         foreignKeys: [],
-        foreignKeysRestricted: true
-      }
+        foreignKeysRestricted: true,
+      },
     ],
     grants: [
       {
@@ -206,8 +206,8 @@ export function createPreviewServer() {
         validTo: null,
         reason: '前端合成授权',
         status: 'ACTIVE',
-        version: '1'
-      }
+        version: '1',
+      },
     ],
     tokens: [
       {
@@ -219,8 +219,8 @@ export function createPreviewServer() {
         expiresAt: '2099-01-01T00:00:00Z',
         lastUsedAt: null,
         createdAt: now,
-        status: 'ACTIVE'
-      }
+        status: 'ACTIVE',
+      },
     ],
     authorizations: [
       {
@@ -230,8 +230,8 @@ export function createPreviewServer() {
         issuedAt: now,
         lastUsedAt: now,
         status: 'ACTIVE',
-        absoluteExpiresAt: '2099-01-01T00:00:00Z'
-      }
+        absoluteExpiresAt: '2099-01-01T00:00:00Z',
+      },
     ],
     audit: ['SUCCESS', 'UNKNOWN', 'ERROR'].map((result, index) => ({
       requestId: `preview-request-${index + 1}`,
@@ -253,7 +253,7 @@ export function createPreviewServer() {
       queueMs: 2,
       dbMs: 15,
       responseBytes: 160,
-      fingerprint: 'synthetic-fingerprint'
+      fingerprint: 'synthetic-fingerprint',
     })),
     jobs: [
       {
@@ -265,16 +265,16 @@ export function createPreviewServer() {
         startedAt: now,
         finishedAt: now,
         snapshotId: '1',
-        errorCode: null
-      }
-    ]
+        errorCode: null,
+      },
+    ],
   };
   const scope: Record<string, Row> = {
     '1': {
       items: [{ resourceType: 'OBJECT', resourceId: '1', resourceGeneration: '1', action: 'READ', includeDescendants: false }],
       scopeVersion: '1',
-      version: '1'
-    }
+      version: '1',
+    },
   };
   let serial = 100;
   let signedIn = true;
@@ -285,8 +285,8 @@ export function createPreviewServer() {
         'Content-Type': 'application/json',
         'Cache-Control': 'no-store',
         'X-PTMCP-Preview': 'synthetic',
-        ETag: `"${String((data as Row | null)?.version ?? ((data as Row | null)?.dictionary as Row | undefined)?.version ?? '1')}"`
-      }
+        ETag: `"${String((data as Row | null)?.version ?? ((data as Row | null)?.dictionary as Row | undefined)?.version ?? '1')}"`,
+      },
     });
   const fail = (status: number, code: string) => response({ code, retryable: false }, status);
   function page(rows: Row[], query: URLSearchParams) {
@@ -304,8 +304,8 @@ export function createPreviewServer() {
         'tool',
         'errorCode',
         'platformId',
-        'datasourceId'
-      ].every((key) => !query.get(key) || String(row[key]) === query.get(key))
+        'datasourceId',
+      ].every((key) => !query.get(key) || String(row[key]) === query.get(key)),
     );
     const keyword = (query.get('keyword') ?? '').toLowerCase();
     if (keyword)
@@ -313,8 +313,8 @@ export function createPreviewServer() {
         ['name', 'code', 'username', 'displayName', 'tableName', 'objectName'].some((key) =>
           String(row[key] ?? '')
             .toLowerCase()
-            .includes(keyword)
-        )
+            .includes(keyword),
+        ),
       );
     if (query.get('departmentId')) values = values.filter((row) => row.deptId === query.get('departmentId'));
     if (query.get('from')) values = values.filter((row) => String(row.startedAt) >= query.get('from')!);
@@ -355,7 +355,7 @@ export function createPreviewServer() {
         return response(
           ['departments', 'users', 'roles'].includes(resource) || (resource === 'acl' && id === 'grants')
             ? []
-            : { items: [], nextCursor: null, evaluatedAt: now, versions: {} }
+            : { items: [], nextCursor: null, evaluatedAt: now, versions: {} },
         );
       }
     }
@@ -378,7 +378,7 @@ export function createPreviewServer() {
         roles: [{ id: '1', name: '演示管理员' }],
         permissions,
         managedScopes: ['PREVIEW_ONLY'],
-        expiresAt: '2099-01-01T00:00:00Z'
+        expiresAt: '2099-01-01T00:00:00Z',
       });
     }
     if (!signedIn) return fail(401, 'SESSION_EXPIRED');
@@ -399,7 +399,7 @@ export function createPreviewServer() {
         authentication: ['OAuth', 'PAT'],
         configTemplate: '{"mcpServers":{"synthetic":{"url":"https://mcp.example.test/mcp","headers":{"Authorization":"Bearer <YOUR_PAT>"}}}}',
         compatibilityStatus: 'NOT_VALIDATED',
-        validatedVersion: null
+        validatedVersion: null,
       });
     if (resource === 'acl' && id === 'effective')
       return response({
@@ -409,9 +409,9 @@ export function createPreviewServer() {
           meta: true,
           read: true,
           sourceGrantIds: ['1'],
-          reasonCodes: ['SYNTHETIC_PREVIEW']
+          reasonCodes: ['SYNTHETIC_PREVIEW'],
         })),
-        nextCursor: null
+        nextCursor: null,
       });
     if (resource === 'acl' && id === 'preview')
       return response({
@@ -420,11 +420,11 @@ export function createPreviewServer() {
           meta: true,
           read: true,
           sourceGrantIds: ['1'],
-          reasonCodes: ['SYNTHETIC_PREVIEW']
+          reasonCodes: ['SYNTHETIC_PREVIEW'],
         })),
         evaluatedAt: now,
         nextBoundaryAt: null,
-        versions: { securityVersion: '1' }
+        versions: { securityVersion: '1' },
       });
     if (resource === 'platforms' && action === 'scopes') {
       const current = scope[id] ?? { items: [], scopeVersion: '1', version: '1' };
@@ -446,9 +446,9 @@ export function createPreviewServer() {
         return fail(400, 'INVALID_REQUEST');
       return response({
         ...Object.fromEntries(
-          (body.fields as string[]).map((field) => [field, 'SELECT id FROM synthetic_orders WHERE id = 42 /* synthetic preview only */'])
+          (body.fields as string[]).map((field) => [field, 'SELECT id FROM synthetic_orders WHERE id = 42 /* synthetic preview only */']),
         ),
-        expiresAt: new Date(Date.now() + 30000).toISOString()
+        expiresAt: new Date(Date.now() + 30000).toISOString(),
       });
     }
     if (resource === 'datasources' && ['test', 'sync'].includes(action)) {
@@ -495,7 +495,7 @@ export function createPreviewServer() {
       if (rowId) return row ? response(row) : fail(404, 'NOT_FOUND');
       const selected = resource === 'platforms' && action === 'clients' ? rows.filter((item) => item.platformId === id) : rows;
       return response(
-        ['departments', 'users', 'roles', 'grants'].includes(table) ? page(selected, url.searchParams).items : page(selected, url.searchParams)
+        ['departments', 'users', 'roles', 'grants'].includes(table) ? page(selected, url.searchParams).items : page(selected, url.searchParams),
       );
     }
     if (method === 'POST') {
@@ -509,7 +509,7 @@ export function createPreviewServer() {
           resourceVersion: '1',
           activeSnapshotId: null,
           health: 'UNKNOWN',
-          lastSyncAt: null
+          lastSyncAt: null,
         });
       if (table === 'clients')
         Object.assign(created, { platformId: id, clientId: `synthetic-client-${created.id}`, secretConfigured: body.type === 'CONFIDENTIAL' });
@@ -522,9 +522,9 @@ export function createPreviewServer() {
             client: created,
             ...(body.type === 'CONFIDENTIAL' && ((body.authMethods as string[]) ?? []).includes('client_secret_basic')
               ? { clientSecret: 'synthetic-secret-not-a-credential' }
-              : {})
+              : {}),
           },
-          201
+          201,
         );
       if (table === 'tokens') return response({ token: 'synthetic-pat-not-a-credential', metadata: created }, 201);
       return response(created, 201);

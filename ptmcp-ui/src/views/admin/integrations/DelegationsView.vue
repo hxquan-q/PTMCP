@@ -14,7 +14,7 @@ import { validateRequired, validateWindow } from './adminSurface';
 const session = useSessionStore();
 const filter = reactive({ userId: '', status: '', resourceType: '' });
 const { rows, cursor, loading, error, loaded, reset, load, retry } = useCursorPage((cursor, signal) =>
-  controlPlane.delegations.list({ ...filter, cursor }, signal)
+  controlPlane.delegations.list({ ...filter, cursor }, signal),
 );
 const dialogVisible = ref(false);
 const users = ref<User[]>([]);
@@ -31,7 +31,7 @@ const draft = reactive({
   resourceId: '',
   allowedActions: [] as string[],
   validFrom: '',
-  validTo: ''
+  validTo: '',
 });
 let alive = true;
 let editorVersion = 0;
@@ -46,7 +46,7 @@ function clear(): void {
     resourceId: '',
     allowedActions: [],
     validFrom: '',
-    validTo: ''
+    validTo: '',
   });
   validation.value = '';
   errors.value = {};
@@ -66,7 +66,7 @@ async function loadDirectories(): Promise<void> {
       const [people, depts, sources] = await Promise.all([
         orgPortalApi.users.list({}, signal),
         orgPortalApi.departments.list(signal),
-        listDatasources({ signal, pageSize: 100 })
+        listDatasources({ signal, pageSize: 100 }),
       ]);
       const objects = await Promise.all(sources.data.items.map((source) => listMetadata({ datasourceId: source.id, signal, pageSize: 100 })));
       return { people, depts, sources: sources.data.items, objects };
@@ -76,7 +76,7 @@ async function loadDirectories(): Promise<void> {
     departments.value = result.depts;
     resources.value = [
       ...result.sources.map((row) => ({ id: row.id, label: row.name, type: 'DATASOURCE' })),
-      ...result.objects.flatMap((page) => page.data.items.map((row) => ({ id: row.id, label: row.objectName, type: 'OBJECT' })))
+      ...result.objects.flatMap((page) => page.data.items.map((row) => ({ id: row.id, label: row.objectName, type: 'OBJECT' }))),
     ];
   } catch (reason) {
     directoryError.value = errorText(reason);
@@ -93,9 +93,9 @@ function validate(): boolean {
       departmentRootId: draft.departmentRootId,
       resourceId: draft.resourceId,
       validFrom: draft.validFrom,
-      validTo: draft.validTo
+      validTo: draft.validTo,
     },
-    { userId: '管理员', departmentRootId: '部门根', resourceId: '资源', validFrom: '开始时间', validTo: '结束时间' }
+    { userId: '管理员', departmentRootId: '部门根', resourceId: '资源', validFrom: '开始时间', validTo: '结束时间' },
   );
   const windowError = validateWindow(draft.validFrom, draft.validTo);
   if (windowError) errors.value.validTo = windowError;
@@ -116,14 +116,14 @@ async function submit(): Promise<void> {
     await ElMessageBox.confirm(
       `管理员 ${draft.userId}：部门子树 ${draft.departmentRootId} ∩ ${draft.resourceType}:${draft.resourceId} ∩ ${draft.allowedActions.length} 个动作；有效至 ${formatDate(new Date(draft.validTo).toISOString())}（Asia/Taipei）。`,
       '确认委派边界',
-      { type: 'warning' }
+      { type: 'warning' },
     );
     if (own !== editorVersion || !alive) return;
     await controlPlane.delegations.create({
       ...draft,
       allowedActions: [...draft.allowedActions],
       validFrom: new Date(draft.validFrom).toISOString(),
-      validTo: new Date(draft.validTo).toISOString()
+      validTo: new Date(draft.validTo).toISOString(),
     });
     if (own !== editorVersion || !alive) return;
     clear();

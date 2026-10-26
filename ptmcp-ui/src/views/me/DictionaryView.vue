@@ -54,7 +54,7 @@ async function loadPlatforms(append = false): Promise<void> {
   loadingContext.value = true;
   try {
     const page = await platformTask.run((signal) =>
-      mePortalApi.accessContext.platforms(append ? (platformCursor.value ?? undefined) : undefined, signal)
+      mePortalApi.accessContext.platforms(append ? (platformCursor.value ?? undefined) : undefined, signal),
     );
     if (!page) return;
     platforms.value = append ? [...platforms.value, ...page.items] : page.items;
@@ -83,7 +83,7 @@ async function loadDatasources(append = false): Promise<void> {
   if (!platformId.value) return;
   try {
     const page = await datasourceTask.run((signal) =>
-      mePortalApi.accessContext.datasources(platformId.value, append ? (datasourceCursor.value ?? undefined) : undefined, signal)
+      mePortalApi.accessContext.datasources(platformId.value, append ? (datasourceCursor.value ?? undefined) : undefined, signal),
     );
     if (!page) return;
     datasources.value = append ? [...datasources.value, ...page.items] : page.items;
@@ -105,7 +105,7 @@ async function loadNamespaces(append = false): Promise<void> {
   if (!platformId.value || !datasourceId.value) return;
   try {
     const page = await namespaceTask.run((signal) =>
-      mePortalApi.accessContext.namespaces(platformId.value, datasourceId.value, append ? (namespaceCursor.value ?? undefined) : undefined, signal)
+      mePortalApi.accessContext.namespaces(platformId.value, datasourceId.value, append ? (namespaceCursor.value ?? undefined) : undefined, signal),
     );
     if (!page) return;
     namespaces.value = append ? [...namespaces.value, ...page.items] : page.items;
@@ -134,10 +134,10 @@ async function loadObjects(append = false): Promise<void> {
           databaseName: databaseName.value || undefined,
           schemaName: schemaName.value || undefined,
           keyword: keyword.value.trim() || undefined,
-          cursor: append ? (nextCursor.value ?? undefined) : undefined
+          cursor: append ? (nextCursor.value ?? undefined) : undefined,
         },
-        signal
-      )
+        signal,
+      ),
     );
     if (!page) return;
     objects.value = append ? [...objects.value, ...page.items] : page.items;

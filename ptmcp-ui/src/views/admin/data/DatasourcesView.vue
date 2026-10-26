@@ -27,30 +27,30 @@ let active = true;
 const rules: FormRules<DatasourceWrite> = {
   code: [
     { required: true, message: '请输入编码', trigger: 'blur' },
-    { max: 64, message: '编码最多64字符', trigger: 'blur' }
+    { max: 64, message: '编码最多64字符', trigger: 'blur' },
   ],
   name: [
     { required: true, message: '请输入名称', trigger: 'blur' },
-    { max: 128, message: '名称最多128字符', trigger: 'blur' }
+    { max: 128, message: '名称最多128字符', trigger: 'blur' },
   ],
   host: [
     { required: true, message: '请输入主机', trigger: 'blur' },
-    { max: 253, message: '主机最多253字符', trigger: 'blur' }
+    { max: 253, message: '主机最多253字符', trigger: 'blur' },
   ],
   databaseName: [
     { required: true, message: '请输入数据库名', trigger: 'blur' },
-    { max: 128, message: '数据库名最多128字符', trigger: 'blur' }
+    { max: 128, message: '数据库名最多128字符', trigger: 'blur' },
   ],
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
-    { max: 128, message: '用户名最多128字符', trigger: 'blur' }
+    { max: 128, message: '用户名最多128字符', trigger: 'blur' },
   ],
   credential: [
     { required: true, message: '请输入连接凭据', trigger: 'blur' },
-    { max: 1024, message: '连接凭据最多1024字符', trigger: 'blur' }
+    { max: 1024, message: '连接凭据最多1024字符', trigger: 'blur' },
   ],
   port: [{ required: true, type: 'number', min: 1, max: 65535, message: '端口必须为1～65535', trigger: 'change' }],
-  poolMax: [{ required: true, type: 'number', min: 1, max: 8, message: '连接池上限必须为1～8', trigger: 'change' }]
+  poolMax: [{ required: true, type: 'number', min: 1, max: 8, message: '连接池上限必须为1～8', trigger: 'change' }],
 };
 function emptyForm(): DatasourceWrite {
   return {
@@ -64,7 +64,7 @@ function emptyForm(): DatasourceWrite {
     credential: '',
     tlsMode: 'VERIFY_FULL',
     poolMax: 4,
-    status: 'DRAFT'
+    status: 'DRAFT',
   };
 }
 function formatDate(value: string | null | undefined): string {
@@ -190,7 +190,7 @@ watch(
   () => {
     if (!submitting.value) createKey.value = crypto.randomUUID();
   },
-  { deep: true }
+  { deep: true },
 );
 onMounted(() => {
   window.addEventListener('ptmcp:sensitive-clear', clearSensitive);

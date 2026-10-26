@@ -23,13 +23,13 @@ export async function mountAccessWorkspace(api = {}) {
       listMetadata: async () => ({ data: { items: [], nextCursor: null } }),
       getMetadata: async () => ({ data: { generation: '1' } }),
       getDatasource: async () => ({ data: { id: '1' } }),
-      ...api
+      ...api,
     },
     Error: AccessError,
     confirm: async (...args) => {
       calls.push(args);
     },
-    can: () => true
+    can: () => true,
   };
   globalThis[key] = fixture;
   const prefix = `const f=globalThis[${JSON.stringify(key)}];`;
@@ -37,24 +37,24 @@ export async function mountAccessWorkspace(api = {}) {
   const urls = {
     vue: import.meta.resolve('vue'),
     'element-plus': dataUrl(
-      `${prefix} export const ElMessage={success(){},warning(){}}; export const ElMessageBox={confirm:(...args)=>f.confirm(...args)};`
+      `${prefix} export const ElMessage={success(){},warning(){}}; export const ElMessageBox={confirm:(...args)=>f.confirm(...args)};`,
     ),
     '../../../stores/session': dataUrl(`${prefix} export const useSessionStore=()=>({can:(...args)=>f.can(...args)});`),
     '../../../services/http': dataUrl(
-      `${prefix} export const ApiError=f.Error; export const errorMessage=e=>e.message; export const idempotencyKey=()=>crypto.randomUUID();`
+      `${prefix} export const ApiError=f.Error; export const errorMessage=e=>e.message; export const idempotencyKey=()=>crypto.randomUUID();`,
     ),
     '../../../services/access': exportsFor(['getGrant', 'listGrants', 'previewAccess', 'revokeGrantApi', 'saveGrant']),
     '../../../services/data': exportsFor(['getDatasource', 'getMetadata', 'listDatasources', 'listMetadata']),
     '../../../services/orgPortalApi': dataUrl(
-      'export const orgPortalApi={users:{list:async()=>[]},roles:{list:async()=>[]},departments:{list:async()=>[]}};'
+      'export const orgPortalApi={users:{list:async()=>[]},roles:{list:async()=>[]},departments:{list:async()=>[]}};',
     ),
     '../../../services/mePortalApi': dataUrl('export const mePortalApi={accessContext:{platforms:async()=>({items:[],nextCursor:null})}};'),
-    '../../../adapters/access-resource': new URL('../../src/adapters/access-resource.ts', import.meta.url).href
+    '../../../adapters/access-resource': new URL('../../src/adapters/access-resource.ts', import.meta.url).href,
   };
   const file = new URL('../../src/views/admin/access/useAccessWorkspace.ts', import.meta.url);
   const code = stripTypeScriptTypes(await readFile(file, 'utf8'), { mode: 'transform' }).replace(
     /from\s+(['"])([^'"]+)\1/g,
-    (statement, _quote, specifier) => (urls[specifier] ? `from ${JSON.stringify(urls[specifier])}` : statement)
+    (statement, _quote, specifier) => (urls[specifier] ? `from ${JSON.stringify(urls[specifier])}` : statement),
   );
   const { useAccessWorkspace } = await import(dataUrl(code));
   const priorWindow = globalThis.window;
@@ -69,14 +69,14 @@ export async function mountAccessWorkspace(api = {}) {
     createText: () => ({}),
     createComment: () => ({}),
     parentNode: () => null,
-    nextSibling: () => null
+    nextSibling: () => null,
   });
   let state;
   const app = renderer.createApp({
     setup() {
       state = useAccessWorkspace();
       return () => null;
-    }
+    },
   });
   app.mount({});
   await flushAccess();
@@ -89,7 +89,7 @@ export async function mountAccessWorkspace(api = {}) {
       app.unmount();
       globalThis.window = priorWindow;
       delete globalThis[key];
-    }
+    },
   };
 }
 

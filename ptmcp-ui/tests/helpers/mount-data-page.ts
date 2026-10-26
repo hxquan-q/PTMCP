@@ -54,9 +54,9 @@ export async function mountDataPage(path: string, api: Api) {
       replace: async (value: unknown) => {
         navigations.push(value);
       },
-      back: () => {}
+      back: () => {},
     },
-    session: { can: () => true }
+    session: { can: () => true },
   };
   const prefix = `const f=globalThis[${JSON.stringify(key)}];`;
   const serviceNames = [
@@ -70,10 +70,10 @@ export async function mountDataPage(path: string, api: Api) {
     'syncDatasource',
     'testDatasource',
     'updateDatasource',
-    'updateDictionary'
+    'updateDictionary',
   ];
   const services = dataUrl(
-    `${prefix} export const DataRequestError=f.Error; ${serviceNames.map((name) => `export const ${name}=(...args)=>f.api.${name}(...args);`).join('\n')}`
+    `${prefix} export const DataRequestError=f.Error; ${serviceNames.map((name) => `export const ${name}=(...args)=>f.api.${name}(...args);`).join('\n')}`,
   );
   const urls: Record<string, string> = {
     vue: import.meta.resolve('vue'),
@@ -82,13 +82,13 @@ export async function mountDataPage(path: string, api: Api) {
     '../../../services/data': services,
     '../../../stores/session': dataUrl(`${prefix} export const useSessionStore=()=>f.session;`),
     '../../../adapters/edit-conflict': new URL('../../src/adapters/edit-conflict.ts', import.meta.url).href,
-    '../../../components/data/VersionConflictPanel.vue': dataUrl('export default {};')
+    '../../../components/data/VersionConflictPanel.vue': dataUrl('export default {};'),
   };
   const file = new URL(`../../src/views/${path}`, import.meta.url);
   const { descriptor } = parse(await readFile(file, 'utf8'));
   const script = compileScript(descriptor, { id: key });
   const code = script.content.replace(/from\s+(['"])([^'"]+)\1/g, (statement, _quote: string, specifier: string) =>
-    urls[specifier] ? `from ${JSON.stringify(urls[specifier])}` : statement
+    urls[specifier] ? `from ${JSON.stringify(urls[specifier])}` : statement,
   );
   const component = (await import(dataUrl(stripTypeScriptTypes(code, { mode: 'transform' })))).default;
   const priorWindow = globals.window;
@@ -103,7 +103,7 @@ export async function mountDataPage(path: string, api: Api) {
     createText: () => ({}),
     createComment: () => ({}),
     parentNode: () => null,
-    nextSibling: () => null
+    nextSibling: () => null,
   });
   const app = renderer.createApp({ ...component, render: () => null });
   app.mount({});
@@ -117,7 +117,7 @@ export async function mountDataPage(path: string, api: Api) {
       app.unmount();
       globals.window = priorWindow;
       delete globals[key];
-    }
+    },
   };
 }
 

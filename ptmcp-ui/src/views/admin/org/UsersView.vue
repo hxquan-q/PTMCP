@@ -50,7 +50,7 @@ const usersTask = usePortalTask(clearPage);
 const detailTask = usePortalTask(clearPage);
 
 const canEdit = computed(
-  () => !editing.value || ['ptmcp:user:update', 'ptmcp:user:move', 'ptmcp:user:assign-role', 'ptmcp:user:status'].some(session.can)
+  () => !editing.value || ['ptmcp:user:update', 'ptmcp:user:move', 'ptmcp:user:assign-role', 'ptmcp:user:status'].some(session.can),
 );
 const canMove = computed(() => !editing.value || session.can('ptmcp:user:move'));
 const canAssignRoles = computed(() => session.can('ptmcp:user:assign-role') && roleOptionsLoaded.value);
@@ -94,7 +94,7 @@ async function load(): Promise<void> {
       const [departmentResult, roleResult] = await Promise.allSettled([orgPortalApi.departments.list(signal), orgPortalApi.roles.list(signal)]);
       const items = await orgPortalApi.users.list(
         { departmentId: departmentFilter.value || undefined, keyword: keyword.value.trim() || undefined },
-        signal
+        signal,
       );
       return { departmentResult, roleResult, items };
     });
@@ -138,7 +138,7 @@ async function save(): Promise<void> {
       displayName: form.displayName.trim(),
       deptId: form.deptId,
       roleIds: canAssignRoles.value ? [...form.roleIds] : [],
-      enabled: session.can('ptmcp:user:status') ? form.enabled : true
+      enabled: session.can('ptmcp:user:status') ? form.enabled : true,
     };
     if (editing.value) {
       let current = editing.value;
@@ -147,7 +147,7 @@ async function save(): Promise<void> {
         await ElMessageBox.confirm(
           `将“${current.displayName}”从“${departmentName(current.deptId)}”移动到“${departmentName(form.deptId)}”。服务端将重新计算该用户的有效授权。`,
           '确认迁移用户部门',
-          { type: 'warning' }
+          { type: 'warning' },
         );
       }
       if (plan.includes('status') && !form.enabled) {
@@ -160,9 +160,9 @@ async function save(): Promise<void> {
             displayName: form.displayName.trim(),
             deptId: current.deptId,
             enabled: current.enabled,
-            ...(frontendPreview ? { email: profile.email, phoneNumber: profile.phoneNumber, remark: profile.remark } : {})
+            ...(frontendPreview ? { email: profile.email, phoneNumber: profile.phoneNumber, remark: profile.remark } : {}),
           },
-          current.version
+          current.version,
         );
         editing.value = current;
         completed += 1;
@@ -189,9 +189,9 @@ async function save(): Promise<void> {
             displayName: current.displayName,
             deptId: current.deptId,
             enabled: current.enabled,
-            ...{ email: profile.email, phoneNumber: profile.phoneNumber, remark: profile.remark }
+            ...{ email: profile.email, phoneNumber: profile.phoneNumber, remark: profile.remark },
           },
-          current.version
+          current.version,
         );
     } else await orgPortalApi.users.create({ ...body, ...(frontendPreview ? { ...profile } : {}) });
     profile.initialPassword = '';
@@ -253,7 +253,7 @@ async function toggleStatus(user: User): Promise<void> {
   const next = user.enabled ? 'DISABLED' : 'ACTIVE';
   try {
     await ElMessageBox.confirm(`确定${user.enabled ? '停用' : '启用'}“${user.displayName}”吗？`, '更新用户状态', {
-      type: user.enabled ? 'warning' : 'info'
+      type: user.enabled ? 'warning' : 'info',
     });
     await orgPortalApi.users.setStatus(user.id, next, user.version);
     ElMessage.success('状态已更新');
@@ -294,7 +294,7 @@ watch(
   () => route.params.id,
   () => {
     void loadRouteDetail();
-  }
+  },
 );
 watch(
   () => session.can('ptmcp:user:list'),
@@ -303,7 +303,7 @@ watch(
       usersTask.cancel();
       users.value = [];
     }
-  }
+  },
 );
 onMounted(async () => {
   await load();

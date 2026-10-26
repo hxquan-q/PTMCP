@@ -8,7 +8,7 @@ import {
   updateDictionary,
   type DictionaryWrite,
   type MetadataColumn,
-  type MetadataDetail
+  type MetadataDetail,
 } from '../../../services/data';
 import { useSessionStore } from '../../../stores/session';
 import { dictionaryDifferences, dictionaryDraft, isVersionConflict, rebaseDictionaryDraft } from '../../../adapters/edit-conflict';
@@ -39,11 +39,11 @@ const rules: FormRules<DictionaryWrite> = {
   title: [
     { required: true, message: '请输入业务标题', trigger: 'blur' },
     { max: 128, message: '业务标题最多128字符', trigger: 'blur' },
-    { pattern: /^[^<>]*$/, message: '业务标题仅支持纯文本', trigger: 'blur' }
+    { pattern: /^[^<>]*$/, message: '业务标题仅支持纯文本', trigger: 'blur' },
   ],
   description: [
     { max: 8000, message: '业务说明最多8000字符', trigger: 'blur' },
-    { pattern: /^[^<>]*$/, message: '业务说明仅支持纯文本', trigger: 'blur' }
+    { pattern: /^[^<>]*$/, message: '业务说明仅支持纯文本', trigger: 'blur' },
   ],
   ownerUserId: [
     {
@@ -51,9 +51,9 @@ const rules: FormRules<DictionaryWrite> = {
         if (value && !/^[1-9]\d*$/.test(String(value))) callback(new Error('负责人 ID 必须为正整数字符串'));
         else callback();
       },
-      trigger: 'blur'
-    }
-  ]
+      trigger: 'blur',
+    },
+  ],
 };
 function errorMessage(value: unknown): string {
   if (value instanceof DataRequestError) {
@@ -186,7 +186,7 @@ async function save(): Promise<void> {
       targetId,
       { ...form, ownerUserId: form.ownerUserId || null, columns: changedColumns.map((item) => ({ ...item })) },
       etag.value,
-      saveKey
+      saveKey,
     );
     if (!active || current !== generation) return;
     detail.value = result.data;
@@ -215,7 +215,7 @@ watch(
   () => {
     if (!saving.value) saveKey = crypto.randomUUID();
   },
-  { deep: true }
+  { deep: true },
 );
 watch(id, () => {
   clearSensitive();

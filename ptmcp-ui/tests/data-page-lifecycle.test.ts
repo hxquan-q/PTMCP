@@ -19,7 +19,7 @@ const source = {
   activeSnapshotId: null,
   lastSyncAt: null,
   credentialConfigured: true,
-  health: 'UNKNOWN'
+  health: 'UNKNOWN',
 };
 
 test('a pending create validation prevents duplicate submissions', async () => {
@@ -31,7 +31,7 @@ test('a pending create validation prevents duplicate submissions', async () => {
     createDatasource: async () => {
       creates += 1;
       return { data: source, etag: '"1"' };
-    }
+    },
   });
   try {
     page.state.openCreate();
@@ -39,7 +39,7 @@ test('a pending create validation prevents duplicate submissions', async () => {
       validate: () => {
         validations += 1;
         return validation.promise;
-      }
+      },
     };
     const first = page.state.submitCreate();
     const second = page.state.submitCreate();
@@ -57,7 +57,7 @@ test('metadata source responses cannot restore cleared resource state', async ()
   const pendingSources = deferred<unknown>();
   const page = await mountDataPage('admin/metadata/MetadataView.vue', {
     listDatasources: () => pendingSources.promise,
-    listMetadata: async () => ({ data: { items: [], nextCursor: null } })
+    listMetadata: async () => ({ data: { items: [], nextCursor: null } }),
   });
   try {
     page.state.clearSensitive();
@@ -74,7 +74,7 @@ test('missing metadata snapshots are represented as pending sync rather than emp
     listDatasources: async () => ({ data: { items: [source], nextCursor: null } }),
     listMetadata: async () => {
       throw new FixtureDataError(503, 'SCHEMA_STALE');
-    }
+    },
   });
   try {
     assert.equal(page.state.awaitingSnapshot, true);
@@ -92,7 +92,7 @@ test('metadata source selection can append the next cursor page', async () => {
       cursors.push(cursor);
       return { data: { items: [{ ...source, id: cursor ? '13' : '12' }], nextCursor: cursor ? null : 'source-page-2' } };
     },
-    listMetadata: async () => ({ data: { items: [], nextCursor: null } })
+    listMetadata: async () => ({ data: { items: [], nextCursor: null } }),
   });
   try {
     page.state.moreSources();
@@ -100,7 +100,7 @@ test('metadata source selection can append the next cursor page', async () => {
     assert.deepEqual(cursors, [null, 'source-page-2']);
     assert.deepEqual(
       page.state.datasources.map((item) => (item as { id: string }).id),
-      ['12', '13']
+      ['12', '13'],
     );
   } finally {
     page.close();
@@ -116,7 +116,7 @@ test('stale metadata cursors restart at the first page without replaying a write
       cursors.push(cursor);
       if (cursor) throw new FixtureDataError(409, 'CURSOR_STALE');
       return { data: { items: [{ id: 'current-object' }], nextCursor: 'stale-next' } };
-    }
+    },
   });
   try {
     page.state.nextPage();
@@ -139,7 +139,7 @@ test('a datasource conflict preserves the draft, clears its credential and requi
     updateDatasource: async () => {
       writes += 1;
       throw new FixtureDataError(409, 'VERSION_CONFLICT');
-    }
+    },
   });
   try {
     page.state.formRef = { validate: async () => true };
@@ -168,7 +168,7 @@ test('a late save response cannot clear a credential entered on another datasour
   const pendingWrite = deferred<unknown>();
   const page = await mountDataPage('admin/data/DatasourceDetailView.vue', {
     getDatasource: async (id) => ({ data: { ...source, id }, etag: '"1"' }),
-    updateDatasource: () => pendingWrite.promise
+    updateDatasource: () => pendingWrite.promise,
   });
   try {
     page.state.formRef = { validate: async () => true };
@@ -198,7 +198,7 @@ test('a late conflict read cannot replace the state of a new datasource route', 
     },
     updateDatasource: async () => {
       throw new FixtureDataError(409, 'VERSION_CONFLICT');
-    }
+    },
   });
   try {
     page.state.formRef = { validate: async () => true };
@@ -228,7 +228,7 @@ test('dictionary conflict adoption retains removed-column drafts and blocks writ
     maxLength: null,
     comment: null,
     primaryKey: true,
-    foreignKey: null
+    foreignKey: null,
   };
   const original = {
     id: '31',
@@ -248,8 +248,8 @@ test('dictionary conflict adoption retains removed-column drafts and blocks writ
       description: null,
       ownerUserId: null,
       version: '1',
-      columns: [{ columnName: 'old', title: 'Old column', description: null }]
-    }
+      columns: [{ columnName: 'old', title: 'Old column', description: null }],
+    },
   };
   let reads = 0;
   let writes = 0;
@@ -260,13 +260,13 @@ test('dictionary conflict adoption retains removed-column drafts and blocks writ
         ? { data: original, etag: '"1"' }
         : {
             data: { ...original, columns: [{ ...column, name: 'new' }], dictionary: { ...original.dictionary, version: '2', columns: [] } },
-            etag: '"2"'
+            etag: '"2"',
           };
     },
     updateDictionary: async () => {
       writes += 1;
       throw new FixtureDataError(409, 'VERSION_CONFLICT');
-    }
+    },
   });
   try {
     page.state.formRef = { validate: async () => true };

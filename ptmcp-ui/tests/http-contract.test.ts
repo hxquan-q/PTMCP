@@ -18,7 +18,10 @@ test('adds CSRF to writes and does not retry failed writes', async () => {
     return new Response(JSON.stringify({ code: 'TEMPORARY_FAILURE' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
   };
   setCsrfToken('test-csrf');
-  await assert.rejects(() => request('/api/v1/admin/test', { method: 'POST', body: { value: 'x' } }), (error: unknown) => error instanceof ApiError && error.status === 503);
+  await assert.rejects(
+    () => request('/api/v1/admin/test', { method: 'POST', body: { value: 'x' } }),
+    (error: unknown) => error instanceof ApiError && error.status === 503,
+  );
   assert.equal(calls, 1);
   assert.equal(csrf, 'test-csrf');
   globalThis.fetch = originalFetch;
@@ -47,13 +50,18 @@ test('401 notifies all session consumers and never replays the request', async (
   const originalFetch = globalThis.fetch;
   let count = 0;
   let notified = false;
-  const unsubscribe = onSessionExpired(() => { notified = true; });
+  const unsubscribe = onSessionExpired(() => {
+    notified = true;
+  });
   globalThis.fetch = async () => {
     count += 1;
     return new Response(JSON.stringify({ code: 'SESSION_EXPIRED', codeNumber: 401001 }), { status: 401 });
   };
   try {
-    await assert.rejects(() => request('/api/v1/session/me'), (error: unknown) => error instanceof ApiError && error.status === 401 && error.code === 'SESSION_EXPIRED');
+    await assert.rejects(
+      () => request('/api/v1/session/me'),
+      (error: unknown) => error instanceof ApiError && error.status === 401 && error.code === 'SESSION_EXPIRED',
+    );
     assert.equal(notified, true);
     assert.equal(count, 1);
   } finally {
@@ -74,12 +82,18 @@ test('CSRF_INVALID clears stale token without replay; next explicit submit refre
     return new Response(JSON.stringify({ saved: true }), { status: 200 });
   };
   try {
-    await assert.rejects(() => request('/api/v1/admin/test', { method: 'POST', body: { value: 'x' } }), (error: unknown) => error instanceof ApiError && error.code === 'CSRF_INVALID');
+    await assert.rejects(
+      () => request('/api/v1/admin/test', { method: 'POST', body: { value: 'x' } }),
+      (error: unknown) => error instanceof ApiError && error.code === 'CSRF_INVALID',
+    );
     assert.equal(calls.length, 1);
     assert.equal(calls[0]?.token, 'stale-csrf');
     // A new user-initiated call is a separate intent; transport never replays the first call.
     await request('/api/v1/admin/test', { method: 'POST', body: { value: 'x' } });
-    assert.deepEqual(calls.map((call) => call.path), ['/backend/admin/api/v1/admin/test', '/backend/admin/api/v1/session/csrf', '/backend/admin/api/v1/admin/test']);
+    assert.deepEqual(
+      calls.map((call) => call.path),
+      ['/backend/admin/api/v1/admin/test', '/backend/admin/api/v1/session/csrf', '/backend/admin/api/v1/admin/test'],
+    );
     assert.equal(calls[2]?.token, 'fresh-csrf');
   } finally {
     setCsrfToken(null);

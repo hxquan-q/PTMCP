@@ -13,7 +13,7 @@ import {
   ElSelect,
   ElTable,
   ElTableColumn,
-  ElTag
+  ElTag,
 } from 'element-plus';
 import PageHeader from '../../../components/common/PageHeader.vue';
 import PageState from '../../../components/common/PageState.vue';
@@ -39,7 +39,7 @@ const directoryTask = usePortalTask(() => {
   sources.value = [];
 });
 const { rows, cursor, loading, error, loaded, reset, load, retry } = useCursorPage((cursor, signal) =>
-  controlPlane.audit.list({ ...filters, from: from.value?.toISOString(), to: to.value?.toISOString(), cursor }, signal)
+  controlPlane.audit.list({ ...filters, from: from.value?.toISOString(), to: to.value?.toISOString(), cursor }, signal),
 );
 async function query(): Promise<void> {
   validateFilters();
@@ -49,7 +49,7 @@ async function query(): Promise<void> {
 async function loadDirectories(): Promise<void> {
   try {
     const result = await directoryTask.run(async (signal) =>
-      Promise.all([controlPlane.platforms.list({ pageSize: '100' }, signal), listDatasources({ signal, pageSize: 100 })])
+      Promise.all([controlPlane.platforms.list({ pageSize: '100' }, signal), listDatasources({ signal, pageSize: 100 })]),
     );
     if (result) {
       platforms.value = result[0].items;
@@ -66,7 +66,7 @@ watch(
     reset();
     validation.value = '';
   },
-  { flush: 'sync' }
+  { flush: 'sync' },
 );
 onMounted(() => {
   if (controlPlaneAvailable) {
@@ -81,7 +81,7 @@ const dateRange = computed(() => {
   return validateDateRange(from.value?.toISOString() ?? '', to.value?.toISOString() ?? '');
 });
 const filterSummary = computed(() =>
-  Object.values(filters).filter(Boolean).length ? '筛选条件已准备，查询接口接入后才会发送。' : '未设置筛选条件。'
+  Object.values(filters).filter(Boolean).length ? '筛选条件已准备，查询接口接入后才会发送。' : '未设置筛选条件。',
 );
 function validateFilters(): void {
   validation.value =

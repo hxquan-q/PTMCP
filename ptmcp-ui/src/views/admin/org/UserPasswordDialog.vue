@@ -42,7 +42,7 @@ async function save(): Promise<void> {
     await request(`/api/v1/admin/users/${encodeURIComponent(props.userId)}/password`, {
       method: 'PUT',
       headers: { 'If-Match': `"${props.version}"` },
-      body: { newPassword: password.value, reason: reason.value.trim() }
+      body: { newPassword: password.value, reason: reason.value.trim() },
     });
     if (own !== sequence) return;
     clear();

@@ -15,7 +15,7 @@ test('rejects unsafe schemes, embedded credentials, fragments and unapproved cus
     'https://user:password@agent.example/callback',
     'https://agent.example/callback#token',
     'arbitrary://callback',
-    'https://agent.example/callback?next=https://other.example'
+    'https://agent.example/callback?next=https://other.example',
   ])
     assert.notEqual(validateRedirectUris(uri), null, uri);
   assert.equal(validateRedirectUris('http://127.0.0.1:35125/callback'), null);

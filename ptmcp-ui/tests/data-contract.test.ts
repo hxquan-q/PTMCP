@@ -7,7 +7,7 @@ const sourceImports = registerHooks({
   resolve(specifier, context, nextResolve) {
     const extensionlessSource = context.parentURL?.includes('/src/') && specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier);
     return nextResolve(extensionlessSource ? `${specifier}.ts` : specifier, context);
-  }
+  },
 });
 const api = await import('../src/services/data.ts');
 const { setCsrfToken } = await import('../src/services/http.ts');
@@ -31,7 +31,7 @@ const datasource = {
   activeSnapshotId: 15,
   lastSyncAt: null,
   credentialConfigured: true,
-  health: 'UNKNOWN'
+  health: 'UNKNOWN',
 };
 const draft = { ...datasource, credential: '', tlsMode: 'VERIFY_FULL' as const };
 const job = {
@@ -43,7 +43,7 @@ const job = {
   progress: { processed: 2, total: null },
   startedAt: null,
   finishedAt: null,
-  errorCode: null
+  errorCode: null,
 };
 const foreignKey = { id: 99, nested: { generation: 4 }, rawColumn: '123' };
 const metadata = {
@@ -56,7 +56,7 @@ const metadata = {
   tableComment: null,
   generation: 3,
   snapshotId: 15,
-  snapshotVersion: 6
+  snapshotVersion: 6,
 };
 const detail = {
   ...metadata,
@@ -73,10 +73,10 @@ const detail = {
       maxLength: null,
       comment: null,
       primaryKey: true,
-      foreignKey
-    }
+      foreignKey,
+    },
   ],
-  dictionary: { title: 'Table', description: null, ownerUserId: 44, version: 5, columns: [{ columnName: 'id', title: 'ID', description: null }] }
+  dictionary: { title: 'Table', description: null, ownerUserId: 44, version: 5, columns: [{ columnName: 'id', title: 'ID', description: null }] },
 };
 
 async function withResponse<T>(body: unknown, action: () => Promise<T>): Promise<T> {
@@ -124,16 +124,16 @@ test('metadata list, detail and dictionary writes normalize declared identities 
       page.data.items[0]?.namespaceId,
       page.data.items[0]?.generation,
       page.data.items[0]?.snapshotId,
-      page.data.items[0]?.snapshotVersion
+      page.data.items[0]?.snapshotVersion,
     ],
-    ['31', '22', '3', '15', '6']
+    ['31', '22', '3', '15', '6'],
   );
   const dictionary = { title: 'Table', description: '', ownerUserId: '44', columns: [] };
   for (const invoke of [() => api.getMetadata('31'), () => api.updateDictionary('31', dictionary, '"5"')]) {
     const { data } = await withResponse(detail, invoke);
     assert.deepEqual(
       [data.id, data.namespaceId, data.generation, data.snapshotId, data.snapshotVersion, data.dictionary.ownerUserId, data.dictionary.version],
-      ['31', '22', '3', '15', '6', '44', '5']
+      ['31', '22', '3', '15', '6', '44', '5'],
     );
     assert.equal(data.columns[0]?.ordinal, 1);
     assert.deepEqual(data.columns[0]?.foreignKey, foreignKey);
@@ -143,7 +143,7 @@ test('metadata list, detail and dictionary writes normalize declared identities 
 test('string BIGINTs and nullable identifiers survive intact', async () => {
   const { data } = await withResponse(
     { ...detail, id: '9223372036854775807', dictionary: { ...detail.dictionary, ownerUserId: null, version: '9007199254740993' } },
-    () => api.getMetadata('9223372036854775807')
+    () => api.getMetadata('9223372036854775807'),
   );
   assert.equal(data.id, '9223372036854775807');
   assert.equal(data.dictionary.version, '9007199254740993');
@@ -186,7 +186,7 @@ test('a version conflict is returned to the editor without replacing If-Match or
   try {
     await assert.rejects(
       () => api.updateDatasource('12', draft, '"2"'),
-      (error: unknown) => error instanceof api.DataRequestError && error.status === 409 && error.code === 'VERSION_CONFLICT'
+      (error: unknown) => error instanceof api.DataRequestError && error.status === 409 && error.code === 'VERSION_CONFLICT',
     );
     assert.deepEqual(calls, [{ method: 'PUT', version: '"2"' }]);
   } finally {

@@ -40,10 +40,10 @@ export function normalizeOrgResponse(path: string, value: unknown): unknown {
           ? {
               ...item,
               resourceId: String(item.resourceId),
-              sourceGrantIds: Array.isArray(item.sourceGrantIds) ? item.sourceGrantIds.map(String) : []
+              sourceGrantIds: Array.isArray(item.sourceGrantIds) ? item.sourceGrantIds.map(String) : [],
             }
           : decision;
-      })
+      }),
     };
   }
   return normalize(value);

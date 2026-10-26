@@ -38,7 +38,7 @@ const changes = computed(() => {
   return {
     added: draft.value.filter((row) => !before.has(key(row))),
     removed: (current.value?.items ?? []).filter((row) => !after.has(key(row))),
-    modified: draft.value.filter((row) => before.has(key(row)) && before.get(key(row)) !== JSON.stringify(row))
+    modified: draft.value.filter((row) => before.has(key(row)) && before.get(key(row)) !== JSON.stringify(row)),
   };
 });
 const dirty = computed(() => Object.values(changes.value).some((items) => items.length));
@@ -78,13 +78,13 @@ async function loadObjects(more = false): Promise<void> {
   try {
     const selected = sourceId.value;
     const result = await directoryTask.run((signal) =>
-      listMetadata({ datasourceId: selected, signal, cursor: more ? objectCursor.value : undefined, pageSize: 100 })
+      listMetadata({ datasourceId: selected, signal, cursor: more ? objectCursor.value : undefined, pageSize: 100 }),
     );
     if (!result || sourceId.value !== selected) return;
     const objectOptions = result.data.items.map((row) => ({
       key: `OBJECT:${row.id}`,
       label: [row.databaseName, row.schemaName, row.objectName].filter(Boolean).join(' / '),
-      rule: { resourceType: 'OBJECT', resourceId: row.id, resourceGeneration: row.generation, action: 'META', includeDescendants: false }
+      rule: { resourceType: 'OBJECT', resourceId: row.id, resourceGeneration: row.generation, action: 'META', includeDescendants: false },
     }));
     const source = sources.value.find((row) => row.id === selected);
     options.value = [
@@ -95,11 +95,11 @@ async function loadObjects(more = false): Promise<void> {
               {
                 key: `DATASOURCE:${source.id}`,
                 label: `${source.name}（数据源）`,
-                rule: { resourceType: 'DATASOURCE', resourceId: source.id, resourceGeneration: '1', action: 'META', includeDescendants: false }
-              }
+                rule: { resourceType: 'DATASOURCE', resourceId: source.id, resourceGeneration: '1', action: 'META', includeDescendants: false },
+              },
             ]
           : []),
-      ...objectOptions
+      ...objectOptions,
     ];
     objectCursor.value = result.data.nextCursor;
   } catch (reason) {
@@ -121,7 +121,7 @@ async function save(): Promise<void> {
     await ElMessageBox.confirm(
       `新增 ${changes.value.added.length}、修改 ${changes.value.modified.length}、删除 ${changes.value.removed.length} 条。Scope 为空将无法读库。确认替换整组资源范围？`,
       '确认 Scope 差异',
-      { type: 'warning' }
+      { type: 'warning' },
     );
     const result = await controlPlane.scopes.save(props.platformId, draft.value, current.value.version);
     if (!alive) return;
