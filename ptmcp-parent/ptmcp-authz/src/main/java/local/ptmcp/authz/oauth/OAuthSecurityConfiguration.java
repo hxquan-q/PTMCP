@@ -42,7 +42,6 @@ public class OAuthSecurityConfiguration {
     private static final List<String> CLOSED_ENDPOINTS =
             List.of(
                     "/oauth2/introspect",
-                    "/oauth2/revoke",
                     "/oauth2/par",
                     "/oauth2/device_authorization",
                     "/oauth2/device_verification",
@@ -97,9 +96,19 @@ public class OAuthSecurityConfiguration {
                                                         clientAuthentication
                                                                 .authenticationConverter(
                                                                         new PublicRefreshClientAuthenticationConverter())
+                                                                .authenticationConverter(
+                                                                        new PublicRevocationClientAuthenticationConverter())
                                                                 .authenticationProvider(
                                                                         new PublicRefreshClientAuthenticationProvider(
+                                                                                clients))
+                                                                .authenticationProvider(
+                                                                        new PublicRevocationClientAuthenticationProvider(
                                                                                 clients)))
+                                        .tokenRevocationEndpoint(
+                                                revocation ->
+                                                        revocation.authenticationProvider(
+                                                                new PtmcpTokenRevocationAuthenticationProvider(
+                                                                        authorizations)))
                                         .authorizationServerMetadataEndpoint(
                                                 metadata ->
                                                         metadata
@@ -176,12 +185,10 @@ public class OAuthSecurityConfiguration {
                                     ClientAuthenticationMethod.CLIENT_SECRET_POST.getValue()));
                     methods.add(ClientAuthenticationMethod.NONE.getValue());
                 });
+        metadata.tokenRevocationEndpointAuthenticationMethods(
+                methods -> methods.add(ClientAuthenticationMethod.NONE.getValue()));
         metadata.claims(
                 claims -> {
-                    claims.remove(OAuth2AuthorizationServerMetadataClaimNames.REVOCATION_ENDPOINT);
-                    claims.remove(
-                            OAuth2AuthorizationServerMetadataClaimNames
-                                    .REVOCATION_ENDPOINT_AUTH_METHODS_SUPPORTED);
                     claims.remove(
                             OAuth2AuthorizationServerMetadataClaimNames.INTROSPECTION_ENDPOINT);
                     claims.remove(

@@ -630,6 +630,88 @@ class OAuthAuthorizationCodeFlowTest {
     }
 
     @Test
+    void publicClientRevokesItsRefreshFamilyWithoutLeakingOtherClientTokens() throws Exception {
+        HttpSession session = login();
+        String verifier = verifier();
+        String code =
+                issueCode(
+                        session,
+                        REFRESH_CLIENT_ID,
+                        REFRESH_REDIRECT,
+                        PUBLIC_SCOPES,
+                        state(),
+                        verifier,
+                        true);
+        Response token = exchange(code, verifier, REFRESH_REDIRECT, REFRESH_CLIENT_ID, null);
+        assertEquals(200, token.status(), token.body());
+        JsonNode body = JSON.readTree(token.body());
+        String refresh = body.get("refresh_token").asString();
+        String familyId =
+                SignedJWT.parse(body.get("access_token").asString())
+                        .getJWTClaimsSet()
+                        .getStringClaim("sid");
+
+        Response foreign =
+                new HttpSession()
+                        .postForm(
+                                "/oauth2/revoke",
+                                form(
+                                        Map.of(
+                                                "token", refresh,
+                                                "client_id", PUBLIC_CLIENT_ID)),
+                                Map.of());
+        assertEquals(200, foreign.status(), foreign.body());
+        try (Connection connection = db()) {
+            assertEquals(
+                    1,
+                    scalar(
+                            connection,
+                            "SELECT COUNT(*) FROM oauth_refresh_family "
+                                    + "WHERE id = ? AND status = 'ACTIVE'",
+                            familyId));
+        }
+
+        Response revoked =
+                new HttpSession()
+                        .postForm(
+                                "/oauth2/revoke",
+                                form(
+                                        Map.of(
+                                                "token", refresh,
+                                                "client_id", REFRESH_CLIENT_ID)),
+                                Map.of());
+        assertEquals(200, revoked.status(), revoked.body());
+        try (Connection connection = db()) {
+            assertEquals(
+                    0,
+                    scalar(
+                            connection,
+                            "SELECT COUNT(*) FROM oauth_refresh_family "
+                                    + "WHERE id = ? AND status = 'ACTIVE'",
+                            familyId));
+            assertEquals(
+                    0,
+                    scalar(
+                            connection,
+                            "SELECT COUNT(*) FROM oauth_refresh_token "
+                                    + "WHERE family_id = ? AND status <> 'REVOKED'",
+                            familyId));
+        }
+
+        Response refreshAfterRevoke =
+                new HttpSession()
+                        .postForm(
+                                "/oauth2/token",
+                                form(
+                                        Map.of(
+                                                "grant_type", "refresh_token",
+                                                "refresh_token", refresh,
+                                                "client_id", REFRESH_CLIENT_ID)),
+                                Map.of());
+        assertOAuthError(refreshAfterRevoke, 400, "invalid_grant");
+    }
+
+    @Test
     void discoveryAdvertisesOnlyTheImplementedSurface() throws Exception {
         Response metadata = new HttpSession().get("/.well-known/oauth-authorization-server");
         assertEquals(200, metadata.status());
@@ -648,10 +730,13 @@ class OAuthAuthorizationCodeFlowTest {
         document.get("token_endpoint_auth_methods_supported")
                 .forEach(node -> methods.add(node.asString()));
         assertEquals(Set.of("client_secret_basic", "client_secret_post", "none"), methods);
+        assertEquals(ISSUER + "/oauth2/revoke", document.get("revocation_endpoint").asString());
+        Set<String> revocationMethods = new HashSet<>();
+        document.get("revocation_endpoint_auth_methods_supported")
+                .forEach(node -> revocationMethods.add(node.asString()));
+        assertTrue(revocationMethods.contains("none"));
         for (String claim :
                 List.of(
-                        "revocation_endpoint",
-                        "revocation_endpoint_auth_methods_supported",
                         "introspection_endpoint",
                         "introspection_endpoint_auth_methods_supported",
                         "registration_endpoint",
@@ -677,7 +762,6 @@ class OAuthAuthorizationCodeFlowTest {
         for (String path :
                 List.of(
                         "/oauth2/introspect",
-                        "/oauth2/revoke",
                         "/oauth2/par",
                         "/oauth2/device_authorization",
                         "/oauth2/device_verification",

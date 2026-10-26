@@ -204,6 +204,12 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
         OAuth2Authorization.Token<OidcIdToken> idToken = authorization.getToken(OidcIdToken.class);
         OAuth2Authorization.Token<OAuth2RefreshToken> refreshToken =
                 authorization.getRefreshToken();
+        if (refreshToken != null && refreshToken.isInvalidated()) {
+            if (familyId != null) {
+                revokeFamily(familyId, "CLIENT_REVOKED");
+            }
+            return;
+        }
         FamilyState family = familyId == null ? null : familyState(familyId);
         if (family != null && !"ACTIVE".equals(family.status())) {
             throw invalidGrant();
@@ -435,8 +441,20 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
     @Override
     @Transactional
     public OAuth2Authorization findByToken(String token, OAuth2TokenType tokenType) {
-        if (!StringUtils.hasText(token) || tokenType == null) {
+        if (!StringUtils.hasText(token)) {
             return null;
+        }
+        if (tokenType == null) {
+            OAuth2Authorization refreshed = findByRefreshToken(token);
+            if (refreshed != null) {
+                return refreshed;
+            }
+            List<StoredAuthorization> byCode =
+                    jdbc.query(
+                            SELECT_BY_CODE_HASH,
+                            (rs, index) -> map(rs),
+                            OAuthStoreSupport.sha256(token));
+            return byCode.isEmpty() ? null : reconstruct(byCode.getFirst(), token);
         }
         if (OAuth2ParameterNames.REFRESH_TOKEN.equals(tokenType.getValue())) {
             return findByRefreshToken(token);
