@@ -2472,6 +2472,22 @@ class AdminApiTest {
                             + " updated_by) VALUES ('auth-pwd', 'client-pwd', 'pwd-target',"
                             + " 'authorization_code', 'ACTIVE', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), 1, 1)");
             statement.execute(
+                    "INSERT INTO web_session_index (session_hash, kind, user_id, auth_version,"
+                            + " issued_at, expires_at, version, create_time, update_time)"
+                            + " VALUES (X'11', 'ADMIN', "
+                            + target
+                            + ", 1, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6) + INTERVAL 1 DAY, 1,"
+                            + " UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))");
+            statement.execute(
+                    "INSERT INTO personal_token (user_id, token_prefix, token_hash, name, scopes,"
+                            + " auth_version, expires_at, status, version, create_time, update_time,"
+                            + " created_by, updated_by)"
+                            + " VALUES ("
+                            + target
+                            + ", 'e2e', X'22', 'e2e-token', '[\"mcp:catalog\"]', 1,"
+                            + " UTC_TIMESTAMP(6) + INTERVAL 7 DAY, 'ACTIVE', 1, UTC_TIMESTAMP(6),"
+                            + " UTC_TIMESTAMP(6), 1, 1)");
+            statement.execute(
                     "INSERT INTO oauth_refresh_family (id, authorization_id, user_id,"
                             + " registered_client_id, platform_id, status, auth_version,"
                             + " absolute_expires_at, idle_expires_at, last_rotated_at, version,"
@@ -2580,6 +2596,25 @@ class AdminApiTest {
                 try (ResultSet result = profile.executeQuery()) {
                     assertTrue(result.next());
                     assertEquals(2, result.getLong(1));
+                }
+            }
+            try (PreparedStatement session =
+                    connection.prepareStatement(
+                            "SELECT revoked_at IS NOT NULL FROM web_session_index"
+                                    + " WHERE user_id = ? AND kind = 'ADMIN'")) {
+                session.setLong(1, target);
+                try (ResultSet result = session.executeQuery()) {
+                    assertTrue(result.next());
+                    assertTrue(result.getBoolean(1), "admin session not revoked");
+                }
+            }
+            try (PreparedStatement token =
+                    connection.prepareStatement(
+                            "SELECT status FROM personal_token WHERE user_id = ?")) {
+                token.setLong(1, target);
+                try (ResultSet result = token.executeQuery()) {
+                    assertTrue(result.next());
+                    assertEquals("REVOKED", result.getString(1));
                 }
             }
             try (PreparedStatement log =

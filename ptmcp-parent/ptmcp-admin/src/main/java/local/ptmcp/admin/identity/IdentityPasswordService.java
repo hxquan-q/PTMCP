@@ -92,6 +92,37 @@ public final class IdentityPasswordService {
                                 statement.setLong(2, userId);
                                 statement.executeUpdate();
                             }
+                            // AC-01: every durable credential of the user dies with the reset —
+                            // admin sessions, personal tokens and OAuth authorizations included.
+                            try (PreparedStatement statement =
+                                    statement(
+                                            connection,
+                                            "UPDATE web_session_index SET revoked_at = UTC_TIMESTAMP(6),"
+                                                    + " version = version + 1, update_time = UTC_TIMESTAMP(6)"
+                                                    + " WHERE user_id = ? AND kind = 'ADMIN'"
+                                                    + " AND revoked_at IS NULL")) {
+                                statement.setLong(1, userId);
+                                statement.executeUpdate();
+                            }
+                            try (PreparedStatement statement =
+                                    statement(
+                                            connection,
+                                            "UPDATE personal_token SET status = 'REVOKED',"
+                                                    + " revoked_at = UTC_TIMESTAMP(6), version = version + 1,"
+                                                    + " update_time = UTC_TIMESTAMP(6)"
+                                                    + " WHERE user_id = ? AND status = 'ACTIVE'")) {
+                                statement.setLong(1, userId);
+                                statement.executeUpdate();
+                            }
+                            try (PreparedStatement statement =
+                                    statement(
+                                            connection,
+                                            "UPDATE oauth2_authorization SET status = 'REVOKED',"
+                                                    + " version = version + 1, update_time = UTC_TIMESTAMP(6)"
+                                                    + " WHERE user_id = ? AND status = 'ACTIVE'")) {
+                                statement.setLong(1, userId);
+                                statement.executeUpdate();
+                            }
                             try (PreparedStatement statement =
                                     statement(
                                             connection,
