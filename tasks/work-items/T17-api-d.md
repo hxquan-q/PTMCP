@@ -78,6 +78,11 @@ S6 已完成：审计解密（POST /audit/{id}/decrypt，reason 10-500 必填、
 恒空——密文写入是 gateway 侧切片（已记 .auto/ideas.md），解密通路已就绪并测试覆盖。
 
 S1–S6 全部完成，controlPlane 六域（delegations/effective/platforms/scopes/clients/audit）
-真实模式全部解禁，前端预览模式（5174）合成数据交互保留。待办移交 .auto/ideas.md：gateway
+真实模式全部解禁，前端预览模式（5174）合成数据交互保留。
+
+UI 打磨批次一（b3a781f）：委派状态彩色标签（生效中/已到期/已撤销，对齐数据源页视觉）、
+Scope 差异确认框分条 diff（新增/修改/删除逐条列出）、审计解密倒计时 aria-live、
+EffectiveAccessPane 空态解释+原因码图例、平台 proof 留空占位统一。U2 客户端 secret 一次性
+弹窗已有 OnceSecretDialog 实现无需改动。视觉走查（窄屏/键盘）待浏览器批次统一记录。待办移交 .auto/ideas.md：gateway
 密文写入、委派作用域执行（T16）、org POST 幂等接线、MySQL 8.4 复验、浏览器端到端走查、
 UI 打磨切片池。
