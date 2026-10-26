@@ -64,7 +64,13 @@ S4 已完成：平台 Scope（GET/PUT /platforms/{id}/scopes 整组替换、scop
 前端 ScopeConfigurationPane 解禁，提交 1831220。注意：MySQL JSON 列读回带空格规范化；
 jsonPathCursor 只适用 nextCursor（误用曾致 If-Match 怪值）。
 
-下一步：S5 客户端（POST /platforms/{id}/clients、PUT/DELETE /clients/{id}，secret 只存
-client_secret_hash、创建响应明文一次，ClientConfigurationForm 解禁）、S6 审计解密
-（POST /audit/{id}/decrypt，reason 必填 + audit_sensitive_access 落库，密钥与 gateway
-wal-key 同源——先核对 McpGatewayConfiguration 的 WalKeyProvider 与加密格式）。
+S5 已完成：客户端管理（POST /platforms/{id}/clients 一次性 secret；client_secret 列存
+{bcrypt} 与 Spring AS 兼容、client_secret_hash 存 SHA-256；PUT/DELETE /clients/{id} 同事务
+撤销 ACTIVE refresh family；回调规则同 DCR），新迁移 V7 将 admin_operation_log.aggregate_id
+升级 VARCHAR(64)（OAuth client id 为 UUID），前端 PlatformDetailView 客户端域解禁，
+提交 2a541e5。注意：客户端 id 为 VARCHAR，服务层全 String id；独立 /clients/{id} 路由需
+独立 ClientAdminController。
+
+下一步：S6 审计解密（POST /audit/{id}/decrypt，reason 必填 + audit_sensitive_access 落库 +
+有效期；密钥与 gateway wal-key 同源——先核对 McpGatewayConfiguration 的 WalKeyProvider 与
+AuditTerminal.encryptedRaw 的加密格式，admin 侧需新增密钥配置）。之后回到 UI 打磨切片。
