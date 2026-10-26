@@ -98,7 +98,8 @@ frontendPreview`（仅预览模式放行）把真实模式全部禁用。每个�
   前端 orgPortalApi 补 Idempotency-Key。全部 admin 写端点契约门禁齐备。tests 372→471。
 - **T16 委派作用域执行完成并端到端闭环**：T16-1 判定核（9da7437）、T16-2 departments
   （9f7fc28）、T16-3 users（51cbfe3）、T16-4 roles 只读放开（96232ca）、T16-5 ACL 四维门禁
-  （49f72ba）、T16-6 受控管理员浏览器走查四项断言全过零缺陷。tests 372→476。
+  （49f72ba）、T16-6 受控管理员浏览器走查四项断言全过零缺陷、T16-7 AC-02 跨范围共享角色
+  约束（3c9ba5c）。tests 372→726。
   教训：写端点委派化必须换 AdminPrincipal.require；测试 body 数字 id 不能字符串 replace
   用户名；测试窗口禁写死日期；admin 会话验证源=sys_user_profile.password_hash（身份库
   sys_user.password 服务 OAuth）；bash 传 bcrypt 用文件 docker cp（$ 展开截断）。
