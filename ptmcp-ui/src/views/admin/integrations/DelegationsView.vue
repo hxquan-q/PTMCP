@@ -76,7 +76,13 @@ async function loadDirectories(): Promise<void> {
         orgPortalApi.departments.list(signal),
         listDatasources({ signal, pageSize: 100 }),
       ]);
-      const objects = await Promise.all(sources.data.items.map((source) => listMetadata({ datasourceId: source.id, signal, pageSize: 100 })));
+      // Sources without a published snapshot return SCHEMA_STALE; the datasource node itself
+      // stays delegable, so per-source object reads fail soft instead of blocking the directory.
+      const objects = await Promise.all(
+        sources.data.items.map((source) =>
+          listMetadata({ datasourceId: source.id, signal, pageSize: 100 }).catch(() => ({ data: { items: [], nextCursor: null } })),
+        ),
+      );
       return { people, depts, sources: sources.data.items, objects };
     });
     if (!result) return;

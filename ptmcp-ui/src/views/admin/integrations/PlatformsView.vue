@@ -162,7 +162,7 @@ onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearP
         </div>
       </div>
     </ElCard>
-    <ElDialog v-model="dialogVisible" title="新建平台 · 本地预览" width="min(760px, calc(100vw - 28px))" destroy-on-close
+    <ElDialog v-model="dialogVisible" title="新建平台" width="min(760px, calc(100vw - 28px))" destroy-on-close
       ><PlatformBasicsForm v-if="dialogVisible" :submit="save"
     /></ElDialog>
   </div>

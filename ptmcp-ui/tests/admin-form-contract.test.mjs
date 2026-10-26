@@ -15,7 +15,9 @@ async function mount(name, props) {
       'export const ElAlert={},ElButton={},ElForm={},ElFormItem={},ElInput={},ElOption={},ElSelect={},ElCheckbox={},ElCheckboxGroup={};',
     ),
     './adminSurface': new URL('../src/views/admin/integrations/adminSurface.ts', import.meta.url).href,
-    '../../../services/frontendMode': url('export const controlPlaneAvailable=true; export const platformApiReady=true;'),
+    '../../../services/frontendMode': url(
+      'export const controlPlaneAvailable=true; export const platformApiReady=true; export const clientApiReady=true;',
+    ),
     '../../portalUtils': url('export const errorText=e=>e.message;'),
   };
   const script = stripTypeScriptTypes(code, { mode: 'transform' }).replace(/from\s+(['"])([^'"]+)\1/g, (s, q, p) =>

@@ -3,7 +3,7 @@ import { reactive, ref, watch } from 'vue';
 import { ElAlert, ElButton, ElCheckbox, ElCheckboxGroup, ElForm, ElFormItem, ElInput, ElOption, ElSelect } from 'element-plus';
 import { allowedClientScopes, splitLines, validateAllowedScopes, validateRedirectUris, validateRequired } from './adminSurface';
 import type { Client, ClientWrite } from '../../../services/controlPlane';
-import { controlPlaneAvailable } from '../../../services/frontendMode';
+import { clientApiReady } from '../../../services/frontendMode';
 import { errorText } from '../../portalUtils';
 
 const props = defineProps<{ initial?: Client | null; submit?: (body: ClientWrite) => Promise<void> }>();
@@ -60,7 +60,7 @@ function validate(): boolean {
   return !Object.keys(errors.value).length;
 }
 async function save(): Promise<void> {
-  if (saving.value || !controlPlaneAvailable || !props.submit || !validate()) return;
+  if (saving.value || !clientApiReady || !props.submit || !validate()) return;
   saving.value = true;
   try {
     await props.submit({
@@ -82,15 +82,6 @@ async function save(): Promise<void> {
 
 <template>
   <ElForm label-position="top" @submit.prevent="validate">
-    <ElAlert
-      v-if="!controlPlaneAvailable"
-      class="form-notice"
-      type="info"
-      show-icon
-      :closable="false"
-      title="客户端管理服务待接入"
-      description="可检查配置字段。secret 不在当前表单中输入；机密客户端创建后仅由服务端一次性返回。"
-    />
     <div class="two-col">
       <ElFormItem label="客户端名称" required :error="errors.name"><ElInput v-model="form.name" maxlength="128" /></ElFormItem
       ><ElFormItem label="客户端类型"
@@ -136,7 +127,7 @@ async function save(): Promise<void> {
     <p v-if="message" class="form-result" role="status">{{ message }}</p>
     <div class="form-actions">
       <ElButton native-type="submit" :disabled="saving">校验字段</ElButton
-      ><ElButton type="primary" :loading="saving" :disabled="!controlPlaneAvailable || !submit" @click="save">保存客户端</ElButton>
+      ><ElButton type="primary" :loading="saving" :disabled="!clientApiReady || !submit" @click="save">保存客户端</ElButton>
     </div>
   </ElForm>
 </template>
