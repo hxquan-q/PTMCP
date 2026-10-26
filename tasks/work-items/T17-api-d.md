@@ -53,6 +53,13 @@ S2 已完成：`GET /api/v1/admin/acl/effective`（AclGrantAdminController#effec
 稳定分页、datasourceId 子树筛选、reasonCodes 闭合世界解释），前端 EffectiveAccessPane 解禁，
 提交 ab5ec33。测试注意：清库后首个 createUser id=1 撞 shim 主体，需占位用户（两处已踩）。
 
-下一步：S3 平台 CRUD（POST/PUT/DELETE + GET /{id}，proof_config 加密同 CredentialCipher）、
-S4 平台 Scope（GET/PUT，保存 scope_version+1）、S5 客户端一次性 secret、S6 审计解密。
+S3 已完成：平台 CRUD（PlatformAdminService，proof_config 经 CredentialCipher 只写加密、
+security_version 作 If-Match 乐观锁、Tier1 必须逐调用证明、code 不可变、逻辑删 DELETED、
+操作日志三动作），前端 PlatformsView/PlatformDetailView(平台本体)/PlatformBasicsForm 解禁，
+提交 79e6af3。注意：platform_registry 无 version 列；readLong 不解析带引号数字（新
+readQuotedLong）；调试 printStackTrace 用后即删。
+
+下一步：S4 平台 Scope（GET/PUT /platforms/{id}/scopes，保存 scope_version+1，
+ScopeConfigurationPane 解禁）、S5 客户端一次性 secret（POST /platforms/{id}/clients、
+PUT/DELETE /clients/{id}，hash 存储、创建响应明文一次）、S6 审计解密。
 域级就绪标志模式（`*ApiReady`）在后续切片复用。
