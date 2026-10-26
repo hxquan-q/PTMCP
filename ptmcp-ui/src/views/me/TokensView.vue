@@ -214,7 +214,10 @@ onMounted(async () => {
             ><ElOption v-for="item in tier3Platforms" :key="item.id" :label="item.name" :value="item.id" /><template v-if="platformCursor" #footer
               ><ElButton link type="primary" @click="loadPlatforms(true)">加载更多平台</ElButton></template
             ></ElSelect
-          ></ElFormItem
+          >
+          <p v-if="!tier3Platforms.length" class="helper">
+            当前没有对你可见的 Tier3 平台：平台目录可见性由管理员授予（平台 Scope + 你的授权），可见后即可创建 PAT。
+          </p></ElFormItem
         ><ElFormItem label="Scope" required
           ><ElCheckboxGroup v-model="form.scopes"
             ><ElCheckbox v-for="scope in scopes" :key="scope" :label="scope" :value="scope" /></ElCheckboxGroup></ElFormItem
@@ -241,6 +244,12 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.helper {
+  color: var(--ptmcp-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 4px 0 0;
+}
 .page-heading {
   display: flex;
   align-items: center;
