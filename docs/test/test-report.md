@@ -25,12 +25,12 @@
 | --- | --- | --- | --- |
 | common | PASS（候选） | 210 例，0 失败/错误/跳过 | 纯 Java 值对象/错误/权限展开；不代表 HTTP/MCP 集成 |
 | persistence | PASS（候选） | 85 例，覆盖 V1–V6 迁移、安全事务、审计仓储、WAL 回放、组织/元数据仓储 | 真实 MySQL 容器；未做生产规模、跨实例回放与恢复演练 |
-| datasource | PASS（候选） | 31 例，MySQL/PG 只读执行、取消/预算、宽行/类型投影、元数据采集 | PostgreSQL 执行器未接入 gateway；10MiB 单格/内存峰值未证明 |
+| datasource | PASS（候选） | 35 例，MySQL/PG 只读执行、取消/预算、宽行/类型投影、元数据采集、PG approved-plan 适配 | PG 生产 TLS 证书链未做真实容器联调；10MiB 单格/内存峰值未证明 |
 | guard | PASS（候选） | 31 例；含 T07-c 的 guard 全套件记录 | 真实数据库结果等价与完整管线集成仍待 T19 后续片 |
 | admin | PASS（候选） | 45 例（AdminApiTest 8、SessionApiTest 7、DatasourceApiTest 8、Web 边界 20 等），0 失败 | 审计解密、平台 CRUD/Scope/客户端、真实前端网络未覆盖 |
 | authz | PASS（候选，既有记录） | 44 例，含 OAuthAuthorizationCodeFlowTest 11 + 启动 2（T13-a/T14-a） | PUBLIC refresh/revoke、双副本竞争、真实 MCP 客户端未执行 |
-| gateway | PASS（候选） | 22 例（启动 2、边界 1、WAL 组件 3、权限 DENY 1、查询闭环 14、审计韧性 1），2026-10-26 四线整理复跑全绿 | 仅隔离 MySQL；PG、Tier1 proof、并发预算/排队未接线 |
-| MCP 查询闭环 | PASS（候选） | PAT/JWT 允许；ACL DENY/写 SQL/未知对象/多语句拒绝且业务连接零增量；START/terminal/WAL；Unicode 与输出限幅 | 本机 HTTP + Testcontainers；无真实业务库或生产网络 |
+| gateway | PASS（候选） | 26 例（启动 2、边界 1、WAL 组件 3、权限 DENY 1、MySQL 闭环 14、审计韧性 1、PG 闭环 3、结果编码 1），2026-10-26 复跑全绿 | PG 闭环使用测试专用非 TLS 池；Tier1 proof、并发预算/排队未接线 |
+| MCP 查询闭环 | PASS（候选） | MySQL：PAT/JWT、ACL DENY/写 SQL/未知对象/多语句拒绝且零业务连接、START/terminal/WAL、Unicode/限幅；PG：目录/表结构/类型化查询、缺 schema 拒绝 | 本机 HTTP + Testcontainers；PG 生产 TLS 与对象级拒绝矩阵未做 |
 | 前端构建与契约 | PASS（候选） | `pnpm --dir ptmcp-ui check` 通过；`test:contracts` 68/68；30 个预览入口浏览器走查 | 合成数据预览不是后端/安全/E2E 验收；人工视觉接受 pending |
 | 仓库检查 | PASS | `python scripts/check.py` 48 项检查器回归通过 | 文档/流程/配置机械检查，不是业务安全评审 |
 | 私有 29VQ | BLOCKED | 原始夹具/参数/预期/授权位置未提供 | 不能用合成用例替代 |
@@ -45,9 +45,12 @@ mvnw.cmd -B -ntp -pl ptmcp-admin -am verify
 → BUILD SUCCESS；common 210 / persistence 85 / datasource 31 / admin 45，0 failures/errors/skipped。
 
 mvnw.cmd -B -ntp -pl ptmcp-gateway -am verify
-→ BUILD SUCCESS；common 210 / persistence 85 / guard 216 / datasource 31 / gateway 22，
+→ BUILD SUCCESS；common 210 / persistence 85 / guard 216 / datasource 35 / gateway 26，
   0 failures/errors/skipped。
 ```
+
+PG 接线测试使用测试专用非 TLS 连接工厂（真实 PG 容器）验证执行/guard/结果编码；
+生产 `PinnedTlsPgPoolFactory` 的 `verify-full` + PEM根证书路径尚未做真实容器联调，保持缺口。
 
 环境说明：本机 Clash Verge（mihomo TUN）使 WSL localhost 端口转发间歇失效，Testcontainers
 首次报 `Could not find a valid Docker environment`；通过 WSL 虚拟网卡 TCP 转发 +
@@ -95,7 +98,7 @@ Java/Javac21.0.10，JSQLParser5.4 jar SHA-256 为
 | TC-GRD-001～018 守门与改写 | PARTIAL | 单元/AST 覆盖已实现；真实双方言结果等价、完整 fuzz 与独立评审未做 |
 | TC-ACL-001～011 权限/时效 | PARTIAL | ACL 交集/DENY/窗口/安全状态已有测试与 T19-a 闭环；≤5 秒撤权、多副本、丢事件/主库故障未做 |
 | TC-AUT-001～013 认证与令牌 | PARTIAL | 授权码流程 13 例、PAT/JWT 验证；公开 refresh/revoke、双副本竞争、真实客户端未做 |
-| TC-EXE-001～010 安全执行器 | PARTIAL | MySQL 真实执行/取消/限幅；PG 未接入网关，生产规模与内存证据缺 |
+| TC-EXE-001～010 安全执行器 | PARTIAL | MySQL/PG 均已接入真实执行与结果投影；PG 生产 TLS、对象级拒绝、生产规模与内存证据缺 |
 | TC-AUD-001～007 审计 | PARTIAL | START/terminal/WAL/503 已有；磁盘满、180 天保留、SQL 脱敏 AST 与解密审计未完成 |
 | TC-UI-001～006 前端与API | PARTIAL | 构建/契约/预览/隔离浏览器；真实 18 组 E2E、AS 闭环与人工接受未完成 |
 | TC-API-001～008 管理/元数据契约 | PARTIAL | 数据源/组织/会话/审计/平台只读接口有测试；平台 CRUD/Scope/客户端、解密与完整越权专项未做 |
@@ -111,15 +114,15 @@ Java/Javac21.0.10，JSQLParser5.4 jar SHA-256 为
 
 | 阻塞项 | 责任领域 | 解除证据 | 影响 |
 | --- | --- | --- | --- |
-| PG 执行接线、Tier1 proof、并发预算/排队 | 网关/执行器/安全 | 真实 PG/证明/预算与排队测试、独立评审 | M0/M1 不能判定 |
+| PG 生产 TLS/拒绝矩阵、Tier1 proof、并发预算/排队 | 网关/执行器/安全 | PG TLS 容器联调、对象级拒绝、证明/预算与排队测试、独立评审 | M0/M1 不能判定 |
 | 公开客户端 refresh/revoke 与双副本竞争 | 认证 | NONE+S256 真实客户端、轮换/重放/撤销日志 | 自动续期保持关闭 |
 | 独立安全评审与 ASVS 专项 | 安全 | 对实际 diff/证据的独立复核与发现修复 | 候选不能升级为发布 |
 | 29条VQ资产不可复核 | 业务验收/资产 | 有许可的内部 fixture 与数据 seed/预期 | 业务结果验收 BLOCKED |
 | 四客户端版本/域名/部署 | 集成/运维 | 版本化客户端记录、HTTPS 回调、镜像 digest、恢复演练 | M2/M3/M4 不能判定 |
 | 前端真实 18 组 E2E 与人工接受 | 前端/产品 | 隔离后端网络证据、键盘/窄屏、用户接受记录 | T17 与 G-14 保持 PARTIAL |
 
-建议先完成 PG 执行接线和 Tier1 proof，再做并发预算/排队与公开 refresh/revoke；四客户端矩阵
-待用户提供版本。安全关键变更在独立评审前只按候选记录，不把工程绿灯当发布批准。
+建议先完成 Tier1 proof 与 PG 生产 TLS/拒绝矩阵，再做并发预算/排队与公开 refresh/revoke；
+四客户端矩阵待用户提供版本。安全关键变更在独立评审前只按候选记录，不把工程绿灯当发布批准。
 
 ## 7. 正式执行报告必须补齐的字段
 
