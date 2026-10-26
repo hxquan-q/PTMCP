@@ -104,6 +104,13 @@ hash（12～64 字符、UTF-8≤72B 校验；明文只存在于单请求帧、�
 行级撤销未做（epoch 机制已使旧票据失效），PasswordDialog 的「会话」表述由 epoch 兜底。
 
 至此 T17-api 的管理面端点缺口（委派/平台/客户端/Scope/effective/审计解密/密码重置）全部
-补齐，仅剩 ideas 中的 gateway 密文写入与 T16 委派作用域执行。待办移交 .auto/ideas.md：gateway
+补齐，仅剩 ideas 中的 gateway 密文写入与 T16 委派作用域执行。
+
+S7 走查验证批（ab14624）：Dev-Linux.sh 对存量 dev.env 自动补写新增密钥
+（PTMCP_ADMIN_AUDITKEY / PTMCP_ADMIN_IDENTITY_DATASOURCE_*， Secrets 不落仓库）；修复
+UserPasswordDialog 缺失 Idempotency-Key 头（IdempotentWrites 必填校验曾致 400）。浏览器全
+流程验证：警告文案→双密码+理由→确认→「操作已完成」→sys_user bcrypt、profile version 递增、
+USER_PASSWORD_RESET 掩码日志落库。跨库一致性场景确认：元库用户无身份库账号时重置返回 404
+（失败封闭，符合 PRD「创建档案不等于开通可登录账号」）。待办移交 .auto/ideas.md：gateway
 密文写入、委派作用域执行（T16）、org POST 幂等接线、MySQL 8.4 复验、浏览器端到端走查、
 UI 打磨切片池。
