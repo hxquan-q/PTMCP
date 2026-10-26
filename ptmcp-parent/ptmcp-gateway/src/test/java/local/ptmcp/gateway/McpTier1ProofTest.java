@@ -42,7 +42,9 @@ import java.util.Map;
 class McpTier1ProofTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final String MYSQL_IMAGE =
-            "mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69";
+            System.getProperty(
+                    "ptmcp.test.mysqlImage",
+                    "mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69");
     private static final String KEY = Base64.getEncoder().encodeToString(new byte[32]);
     private static final String MTLS_FINGERPRINT = "aa".repeat(32);
     private static final String WRONG_FINGERPRINT = "bb".repeat(32);

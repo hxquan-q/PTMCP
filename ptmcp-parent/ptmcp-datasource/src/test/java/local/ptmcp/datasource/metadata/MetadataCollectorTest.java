@@ -32,7 +32,9 @@ import java.util.stream.Collectors;
 /** Real database boundary for both metadata collectors; identifiers and comments stay data. */
 class MetadataCollectorTest {
     private static final String PG_IMAGE =
-            "postgres@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6";
+            System.getProperty(
+                    "ptmcp.test.pgImage",
+                    "postgres@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6");
 
     private static MySQLContainer mysql;
     private static PostgreSQLContainer postgres;
@@ -63,7 +65,9 @@ class MetadataCollectorTest {
         String password = Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
         mysql =
                 new MySQLContainer(
-                                "mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69")
+                                System.getProperty(
+                                        "ptmcp.test.mysqlImage",
+                                        "mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69"))
                         .withDatabaseName("metadata_test")
                         .withUsername("metadata_test")
                         .withPassword(password)

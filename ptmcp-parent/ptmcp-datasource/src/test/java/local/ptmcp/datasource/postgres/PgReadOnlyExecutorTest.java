@@ -48,7 +48,9 @@ import javax.sql.DataSource;
 /** Owned PostgreSQL 18 container; missing Docker fails instead of skipping. */
 class PgReadOnlyExecutorTest {
     private static final String IMAGE =
-            "postgres@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6";
+            System.getProperty(
+                    "ptmcp.test.pgImage",
+                    "postgres@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6");
     private static final int MAX_CELL_BYTES = 4_096;
     private static final int MAX_BINARY_BYTES = 3_072;
 

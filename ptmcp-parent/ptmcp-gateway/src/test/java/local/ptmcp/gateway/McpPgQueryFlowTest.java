@@ -59,9 +59,13 @@ import java.util.Map;
 class McpPgQueryFlowTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final String MYSQL_IMAGE =
-            "mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69";
+            System.getProperty(
+                    "ptmcp.test.mysqlImage",
+                    "mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69");
     private static final String PG_IMAGE =
-            "postgres@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6";
+            System.getProperty(
+                    "ptmcp.test.pgImage",
+                    "postgres@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6");
     private static final String KEY = Base64.getEncoder().encodeToString(new byte[32]);
     private static final String PAT = "ptmcp_pat_" + secret();
     private static final String RESOURCE = "https://mcp.test.invalid/mcp";

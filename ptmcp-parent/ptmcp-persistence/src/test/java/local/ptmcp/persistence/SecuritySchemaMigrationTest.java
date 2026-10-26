@@ -43,7 +43,9 @@ class SecuritySchemaMigrationTest {
         new SecureRandom().nextBytes(secret);
         mysql =
                 new MySQLContainer(
-                                "mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69")
+                                System.getProperty(
+                                        "ptmcp.test.mysqlImage",
+                                        "mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69"))
                         .withDatabaseName("security_schema_test")
                         .withUsername("schema_test")
                         .withPassword(
@@ -109,7 +111,9 @@ class SecuritySchemaMigrationTest {
                                             + "@@character_set_server, @@collation_server, @@transaction_isolation");
                     ResultSet result = statement.executeQuery()) {
                 assertTrue(result.next());
-                assertTrue(result.getString(1).startsWith("8.4."));
+                assertTrue(
+                        result.getString(1)
+                                .startsWith(System.getProperty("ptmcp.test.mysqlSeries", "8.4.")));
                 assertEquals("+00:00", result.getString(2));
                 assertTrue(result.getString(3).contains("STRICT_TRANS_TABLES"));
                 System.out.println(

@@ -53,7 +53,9 @@ class OrgManagementStoreTest {
         new SecureRandom().nextBytes(secret);
         mysql =
                 new MySQLContainer(
-                                "mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69")
+                                System.getProperty(
+                                        "ptmcp.test.mysqlImage",
+                                        "mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69"))
                         .withDatabaseName("org_store_test")
                         .withUsername("org_test")
                         .withPassword(

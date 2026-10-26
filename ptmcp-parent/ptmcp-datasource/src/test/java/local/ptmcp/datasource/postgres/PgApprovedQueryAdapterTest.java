@@ -32,7 +32,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /** The PG bridge keeps the same hash/window/checkout guarantees as the MySQL adapter. */
 class PgApprovedQueryAdapterTest {
     private static final String IMAGE =
-            "postgres@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6";
+            System.getProperty(
+                    "ptmcp.test.pgImage",
+                    "postgres@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6");
     private static final Instant NOW = Instant.parse("2026-10-26T00:00:00Z");
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
 

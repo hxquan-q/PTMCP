@@ -17,7 +17,9 @@ import java.util.Base64;
  */
 final class TlsMysqlFixture implements AutoCloseable {
     static final String IMAGE =
-            "mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69";
+            System.getProperty(
+                    "ptmcp.test.mysqlImage",
+                    "mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69");
     final Path directory;
     final Path trustStore;
     final String password = secret();
