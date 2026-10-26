@@ -96,9 +96,11 @@ frontendPreview`（仅预览模式放行）把真实模式全部禁用。每个�
   装配；Dev-Linux 自动补写 AUDITKEY/IDENTITY 配置（存量 dev.env 兼容）。
 - **S8 org POST 幂等接线**（1d49dca）：departments/users/roles 创建端点接 IdempotentWrites，
   前端 orgPortalApi 补 Idempotency-Key。全部 admin 写端点契约门禁齐备。tests 372→471。
-- **T16 委派作用域执行推进**：T16-1 判定核（DelegationScopeResolver，9da7437）、T16-2
-  departments 域接入（DepartmentScopeGate+行级过滤，9f7fc28）。剩余：users/roles/ACL 域
-  接入（每域一切片）+受控管理员前端走查。第 4 次踩「清库后 createUser id=1 撞 actor」坑。
+- **T16 委派作用域执行完成四域**：T16-1 判定核（9da7437）、T16-2 departments
+  （DepartmentScopeGate，9f7fc28）、T16-3 users（UserScopeGate+move 双侧校验，51cbfe3）、
+  T16-4 roles 只读放开（96232ca）、T16-5 ACL 四维门禁（AclScopeGate，49f72ba）。tests
+  372→476。剩余：受控管理员前端会话走查。教训：写端点委派化必须换 AdminPrincipal.require；
+  测试 body 数字 id 不能字符串 replace 用户名；测试窗口禁写死日期。
 - **S1–S6 联调真实化全部完成**（提交 cc93bad→5e353c6）：
   S1 委派 CRUD+幂等+操作日志；S2 ACL effective 稳定分页；S3 平台 CRUD（proof_config 只写
   加密、security_version 乐观锁）；S4 平台 Scope 整组替换双版本自增；S5 客户端一次性
