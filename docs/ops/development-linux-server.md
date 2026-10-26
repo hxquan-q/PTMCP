@@ -65,11 +65,31 @@ PTMCP_MYSQL_IMAGE=mysql:8.0 ./scripts/Dev-Linux.sh up
 cat .local/dev/admin-credentials.txt
 ```
 
-Vite 只绑定 `127.0.0.1`。从其他机器访问时使用 SSH 隧道，只需转发 5173；前端代理会在服务器上访问三个后端：
+Vite 默认只绑定 `127.0.0.1`。从其他机器访问时优先使用 SSH 隧道，只需转发 5173；前端代理会在服务器上访问三个后端：
 
 ```bash
 ssh -L 5173:127.0.0.1:5173 <user>@<server>
 ```
+
+## 临时公网访问
+
+需要临时从公网打开开发页面时：
+
+```bash
+# 1. 允许 Vite 绑定所有网卡
+#    在 .local/dev/dev.env 设置 PTMCP_UI_PUBLIC='true'，或启动时传入环境变量
+PTMCP_UI_PUBLIC='true' ./scripts/Dev-Linux.sh start
+
+# 2. 放行主机防火墙
+sudo ufw allow 5173/tcp
+
+# 3. 如云服务器启用了安全组，还需在云控制台放行 5173/tcp
+# 4. 访问 http://<公网IP>:5173
+```
+
+也可以直接手工运行 `cd ptmcp-ui && pnpm dev:public`。
+
+**安全边界**：Vite 是开发服务器，当前链路由 HTTP 承载，管理员密码和会话 Cookie 会明文传输。不要用于生产、真实业务数据或长期暴露；建议在云安全组限制来源 IP，或改用 SSH 隧道。恢复默认时把 `PTMCP_UI_PUBLIC` 设为 `false` 并重启 UI，然后执行 `sudo ufw delete allow 5173/tcp`。
 
 ## 常用命令
 

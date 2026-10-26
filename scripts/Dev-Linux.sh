@@ -181,6 +181,7 @@ ensure_env() {
     cat >"$ENV_FILE" <<EOF
 # Generated local development configuration. Do not commit.
 PTMCP_DEV_HOME='$LOCAL_DIR'
+PTMCP_UI_PUBLIC='false'
 PTMCP_ADMIN_DATASOURCE_URL='jdbc:mysql://127.0.0.1:13306/ptmcp_dev?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8'
 PTMCP_ADMIN_DATASOURCE_USERNAME='ptmcp_dev'
 PTMCP_ADMIN_DATASOURCE_PASSWORD='$mysql_app'
@@ -420,10 +421,14 @@ run_gateway() {
 run_ui() {
     require_cmd node
     require_cmd pnpm
+    load_env
     cd "$ROOT/ptmcp-ui"
     if [ ! -d node_modules ]; then
         info "installing frontend dependencies"
         pnpm install --frozen-lockfile --ignore-scripts
+    fi
+    if [ "${PTMCP_UI_PUBLIC:-false}" = "true" ]; then
+        exec pnpm dev:public
     fi
     exec pnpm dev
 }
@@ -454,9 +459,15 @@ EOF
             cat >"$launcher" <<EOF
 #!/usr/bin/env bash
 set -Eeuo pipefail
+set -a
+. "$ENV_FILE"
+set +a
 cd "$ROOT/ptmcp-ui"
 if [ ! -d node_modules ]; then
     pnpm install --frozen-lockfile --ignore-scripts
+fi
+if [ "\${PTMCP_UI_PUBLIC:-false}" = "true" ]; then
+    exec pnpm dev:public
 fi
 exec pnpm dev
 EOF

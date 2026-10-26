@@ -5,6 +5,7 @@
     "format:check": "prettier --check src tests",
     "format": "prettier --write src tests",
     "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "dev:public": "vite --host 0.0.0.0 --port 5173 --strictPort",
     "dev:preview": "vite --mode frontend-preview --host 127.0.0.1 --port 5174 --strictPort",
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
     "typecheck": "vue-tsc --noEmit",
