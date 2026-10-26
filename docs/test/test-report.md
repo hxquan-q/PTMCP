@@ -50,7 +50,17 @@ mvnw.cmd -B -ntp -pl ptmcp-authz -am verify
 mvnw.cmd -B -ntp -pl ptmcp-gateway -am verify
 → BUILD SUCCESS；common 224 / persistence 85 / guard 216 / datasource 35 / gateway 29，
   0 failures/errors/skipped。
+
+# 在 ptmcp-parent 执行的全仓 Maven 门禁
+mvnw.cmd -B -ntp verify
+→ BUILD SUCCESS（6m12s）；common 224 / persistence 85 / guard 216 / datasource 35 /
+  admin 45 / authz 32 / gateway 29，0 failures/errors/skipped。
 ```
+
+`python scripts/check.py`（轻量检查）48 项通过。`python scripts/check.py --all` 在本机
+Windows 下用 `cmd /d /c mvnw.cmd` 未解析当前目录，未能执行 Maven；上面的全仓 Maven verify
+与 `pnpm --dir ptmcp-ui check` 已分别实际执行并通过。门禁脚本的 Windows wrapper 解析需后续
+修正，不能把“脚本退出0”当作 Maven 已运行。
 
 PG 接线测试使用测试专用非 TLS 连接工厂（真实 PG 容器）验证执行/guard/结果编码；
 生产 `PinnedTlsPgPoolFactory` 的 `verify-full` + PEM根证书路径尚未做真实容器联调，保持缺口。
