@@ -43,7 +43,11 @@ public final class PoolHandle {
         return evictedConnections.get();
     }
 
-    DataSource dataSource() {
+    /**
+     * The generation's pool. Exposed only so the engine-specific approved-plan adapters in the
+     * trusted execution path can bind it; request-facing code must never reach a DataSource.
+     */
+    public DataSource dataSource() {
         return dataSource;
     }
 

@@ -21,6 +21,7 @@ public record GatewayProperties(
         String allowedCidrs,
         String truststorePath,
         String truststorePassword,
+        String pgSslRootCert,
         String walDirectory,
         String walKey,
         String issuer,
@@ -36,6 +37,7 @@ public record GatewayProperties(
         allowedCidrs = orEmpty(allowedCidrs);
         truststorePath = orEmpty(truststorePath);
         truststorePassword = orEmpty(truststorePassword);
+        pgSslRootCert = orEmpty(pgSslRootCert);
         walDirectory = orEmpty(walDirectory);
         walKey = orEmpty(walKey);
         issuer = orEmpty(issuer);

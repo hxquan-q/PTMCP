@@ -10,6 +10,9 @@ import local.ptmcp.datasource.MysqlReadOnlyExecutor;
 import local.ptmcp.datasource.connection.CredentialCipher;
 import local.ptmcp.datasource.connection.DestinationPolicy;
 import local.ptmcp.datasource.connection.PinnedTlsMysqlPoolFactory;
+import local.ptmcp.datasource.connection.PinnedTlsPgPoolFactory;
+import local.ptmcp.datasource.connection.PinnedTlsPoolFactory;
+import local.ptmcp.datasource.postgres.PgApprovedQueryAdapter;
 import local.ptmcp.guard.budget.BoundedParser;
 import local.ptmcp.persistence.audit.AuditRepository;
 import local.ptmcp.persistence.audit.wal.TerminalWal;
@@ -128,15 +131,14 @@ class McpGatewayConfiguration {
     @Bean(destroyMethod = "close")
     DataSourcePoolRegistry businessPoolRegistry(
             DestinationPolicy destinations, GatewayProperties properties) {
-        if (properties.truststorePath().isBlank()) {
-            throw new IllegalStateException("ptmcp.gateway.truststore-path is required");
-        }
         return new DataSourcePoolRegistry(
-                new PinnedTlsMysqlPoolFactory(
-                        destinations,
-                        properties.truststorePath(),
-                        properties.truststorePassword(),
-                        "PKCS12"));
+                new PinnedTlsPoolFactory(
+                        new PinnedTlsMysqlPoolFactory(
+                                destinations,
+                                properties.truststorePath(),
+                                properties.truststorePassword(),
+                                "PKCS12"),
+                        new PinnedTlsPgPoolFactory(destinations, properties.pgSslRootCert())));
     }
 
     @Bean
@@ -147,6 +149,11 @@ class McpGatewayConfiguration {
     @Bean
     ApprovedQueryAdapter approvedQueryAdapter(MysqlReadOnlyExecutor executor) {
         return new ApprovedQueryAdapter(executor);
+    }
+
+    @Bean
+    PgApprovedQueryAdapter pgApprovedQueryAdapter() {
+        return new PgApprovedQueryAdapter();
     }
 
     @Bean(destroyMethod = "close")
@@ -163,6 +170,7 @@ class McpGatewayConfiguration {
             CredentialCipher cipher,
             DataSourcePoolRegistry poolRegistry,
             ApprovedQueryAdapter adapter,
+            PgApprovedQueryAdapter pgAdapter,
             BoundedParser parser,
             McpAuthentication authentication,
             ObjectProvider<TerminalWal> terminalWal) {
@@ -175,6 +183,7 @@ class McpGatewayConfiguration {
                 cipher,
                 poolRegistry,
                 adapter,
+                pgAdapter,
                 parser,
                 authentication);
     }

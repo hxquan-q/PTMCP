@@ -3,6 +3,7 @@ package local.ptmcp.gateway.mcp;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.datasource.ReadOnlyResult;
+import local.ptmcp.datasource.postgres.PgReadOnlyResult;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -26,7 +27,8 @@ final class ToolResultEncoder {
             List<Map<String, Object>> columns,
             List<List<Object>> rows,
             List<Map<String, Object>> cellTruncations,
-            boolean rowLimitReached) {}
+            boolean rowLimitReached,
+            boolean responseLimitReached) {}
 
     static Encoded encode(ReadOnlyResult result, boolean limitReached) {
         List<ColumnSpec> specs = new ArrayList<>(result.columns().size());
@@ -63,7 +65,44 @@ final class ToolResultEncoder {
             }
             rows.add(row);
         }
-        return new Encoded(columns, List.copyOf(rows), List.copyOf(cellTruncations), limitReached);
+        return new Encoded(
+                columns, List.copyOf(rows), List.copyOf(cellTruncations), limitReached, false);
+    }
+
+    /**
+     * PostgreSQL cells are already bounded and typed by the executor; this projection only maps its
+     * column/truncation shapes into the MCP contract. No string re-parsing is done here, so
+     * booleans/numbers keep their JSON types.
+     */
+    static Encoded encode(PgReadOnlyResult result) {
+        List<Map<String, Object>> columns = new ArrayList<>(result.columns().size());
+        for (PgReadOnlyResult.Column column : result.columns()) {
+            Map<String, Object> descriptor = new LinkedHashMap<>();
+            descriptor.put("index", column.index());
+            descriptor.put("name", column.label());
+            descriptor.put("databaseType", column.databaseType());
+            descriptor.put("logicalType", column.logicalType().name());
+            descriptor.put("nullable", column.nullable());
+            descriptor.put("encoding", column.encoding() == null ? null : column.encoding().name());
+            columns.add(descriptor);
+        }
+        List<Map<String, Object>> cellTruncations =
+                new ArrayList<>(result.cellTruncations().size());
+        for (PgReadOnlyResult.CellTruncation truncation : result.cellTruncations()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("rowIndex", truncation.rowIndex());
+            item.put("columnIndex", truncation.columnIndex());
+            item.put("reason", "CELL_LIMIT");
+            item.put("originalBytes", truncation.originalBytes());
+            item.put("returnedBytes", truncation.returnedBytes());
+            cellTruncations.add(item);
+        }
+        return new Encoded(
+                List.copyOf(columns),
+                result.rows(),
+                List.copyOf(cellTruncations),
+                result.rowLimitReached(),
+                result.responseLimitReached());
     }
 
     private record Cell(Object value, boolean truncated, int originalBytes, int returnedBytes) {

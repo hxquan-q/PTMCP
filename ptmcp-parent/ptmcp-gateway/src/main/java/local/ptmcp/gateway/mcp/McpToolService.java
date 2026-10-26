@@ -8,11 +8,14 @@ import local.ptmcp.common.resource.ResourceNamespace;
 import local.ptmcp.common.resource.ResourceRef;
 import local.ptmcp.datasource.ApprovedQueryAdapter;
 import local.ptmcp.datasource.DataSourcePoolRegistry;
+import local.ptmcp.datasource.PoolHandle;
 import local.ptmcp.datasource.PoolKey;
 import local.ptmcp.datasource.PoolLimits;
 import local.ptmcp.datasource.ReadOnlyCancellation;
 import local.ptmcp.datasource.ReadOnlyResult;
 import local.ptmcp.datasource.connection.CredentialCipher;
+import local.ptmcp.datasource.postgres.PgApprovedQueryAdapter;
+import local.ptmcp.datasource.postgres.PgReadOnlyResult;
 import local.ptmcp.guard.approved.ApprovedQuery;
 import local.ptmcp.guard.approved.GuardContext;
 import local.ptmcp.guard.approved.GuardDependencies;
@@ -78,6 +81,7 @@ final class McpToolService {
     private final CredentialCipher cipher;
     private final DataSourcePoolRegistry pools;
     private final ApprovedQueryAdapter adapter;
+    private final PgApprovedQueryAdapter pgAdapter;
     private final BoundedParser parser;
     private final McpAuthentication authentication;
 
@@ -90,6 +94,7 @@ final class McpToolService {
             CredentialCipher cipher,
             DataSourcePoolRegistry pools,
             ApprovedQueryAdapter adapter,
+            PgApprovedQueryAdapter pgAdapter,
             BoundedParser parser,
             McpAuthentication authentication) {
         this.security = Objects.requireNonNull(security, "security");
@@ -100,6 +105,7 @@ final class McpToolService {
         this.cipher = Objects.requireNonNull(cipher, "cipher");
         this.pools = Objects.requireNonNull(pools, "pools");
         this.adapter = Objects.requireNonNull(adapter, "adapter");
+        this.pgAdapter = Objects.requireNonNull(pgAdapter, "pgAdapter");
         this.parser = Objects.requireNonNull(parser, "parser");
         this.authentication = Objects.requireNonNull(authentication, "authentication");
     }
@@ -215,9 +221,12 @@ final class McpToolService {
         try {
             requireScope(identity, "mcp:query");
             PublishedSnapshotReader.Published published = loadUsable(datasourceId);
-            requireMysql(published, schemaName);
+            DatabaseEngine engine = requireDialect(published, schemaName);
             PublishedSnapshotReader.Namespace namespace =
-                    resolveNamespace(published, databaseName, "");
+                    resolveNamespace(
+                            published,
+                            databaseName,
+                            engine == DatabaseEngine.MYSQL ? "" : schemaName);
             SecuritySnapshot snapshot = freshSnapshot(identity);
 
             stage = Stage.GUARD;
@@ -230,8 +239,10 @@ final class McpToolService {
                             identity.platformId(),
                             new ResourceId(datasourceId),
                             published.configVersion(),
-                            namespace.catalogNorm(),
-                            "",
+                            engine == DatabaseEngine.POSTGRESQL
+                                    ? published.databaseName()
+                                    : namespace.catalogNorm(),
+                            namespace.schemaNorm(),
                             new ResourceId(published.snapshotId()),
                             published.resourceVersion(),
                             snapshot.policyEpoch(),
@@ -240,35 +251,52 @@ final class McpToolService {
             GuardDependencies deps =
                     new GuardDependencies(
                             parser,
-                            relationCatalog(published, namespace),
+                            relationCatalog(published, namespace, engine),
                             relationColumns(published),
                             (ctx, resource) -> session.decide(resource.objectId().value()).read(),
                             Clock.systemUTC());
-            approved =
-                    GuardPipeline.guard(
-                            sql, context, GuardPolicy.mysql(false, false, maxRows), deps);
+            GuardPolicy policy =
+                    engine == DatabaseEngine.MYSQL
+                            ? GuardPolicy.mysql(false, false, maxRows)
+                            : GuardPolicy.postgresql(true, maxRows);
+            approved = GuardPipeline.guard(sql, context, policy, deps);
 
             stage = Stage.EXECUTION;
-            activatePool(published);
-            ReadOnlyResult result =
-                    adapter.execute(
-                            approved,
-                            datasource -> {
-                                authentication.revalidate(identity);
-                                audit.confirmStart(requestId);
-                            },
-                            new ReadOnlyCancellation());
+            PoolHandle handle = activatePool(published, engine);
+            ToolResultEncoder.Encoded encoded;
+            if (engine == DatabaseEngine.MYSQL) {
+                ReadOnlyResult result =
+                        adapter.execute(
+                                approved,
+                                datasource -> {
+                                    authentication.revalidate(identity);
+                                    audit.confirmStart(requestId);
+                                },
+                                new ReadOnlyCancellation());
+                encoded = ToolResultEncoder.encode(result, result.limitReached());
+            } else {
+                PgReadOnlyResult result =
+                        pgAdapter.execute(
+                                approved,
+                                handle.dataSource(),
+                                handle.generation(),
+                                datasource -> {
+                                    authentication.revalidate(identity);
+                                    audit.confirmStart(requestId);
+                                },
+                                new ReadOnlyCancellation());
+                encoded = ToolResultEncoder.encode(result);
+            }
 
             stage = Stage.ENCODE;
-            ToolResultEncoder.Encoded encoded =
-                    ToolResultEncoder.encode(result, result.limitReached());
             int durationMs = elapsedMillis(startedNanos);
             Budgeted success =
                     fitRows(
                             id,
                             requestId,
                             Long.toString(datasourceId),
-                            databaseName,
+                            databaseName(published, namespace),
+                            namespace.schemaRaw(),
                             encoded,
                             durationMs);
             terminal(
@@ -335,7 +363,7 @@ final class McpToolService {
         try {
             requireScope(identity, "mcp:catalog");
             PublishedSnapshotReader.Published published = loadUsable(datasourceId);
-            requireMysql(published, schemaName);
+            requireDialect(published, schemaName);
             AuthorizationReader.PlatformInfo platform =
                     authorization.loadPlatform(identity.platformId());
             ToolPermissionService.Session session =
@@ -347,8 +375,12 @@ final class McpToolService {
             long lastObjectId = 0;
             boolean hasMore = false;
             int emitted = 0;
+            boolean postgres = "POSTGRESQL".equals(published.engine());
             for (PublishedSnapshotReader.Namespace namespace : published.namespaces()) {
-                if (databaseName != null && !namespace.catalogNorm().equals(databaseName)) {
+                if (databaseName != null
+                        && !(postgres
+                                ? databaseName.equals(published.databaseName())
+                                : namespace.catalogNorm().equals(databaseName))) {
                     continue;
                 }
                 if (schemaName != null && !namespace.schemaNorm().equals(schemaName)) {
@@ -374,7 +406,12 @@ final class McpToolService {
                         hasMore = true;
                         break;
                     }
-                    items.add(catalogItem(namespace, object, session.decide(object.id()).read()));
+                    items.add(
+                            catalogItem(
+                                    published,
+                                    namespace,
+                                    object,
+                                    session.decide(object.id()).read()));
                     lastNamespaceId = namespace.id();
                     lastObjectId = object.id();
                     emitted++;
@@ -434,13 +471,18 @@ final class McpToolService {
     }
 
     private static Map<String, Object> catalogItem(
+            PublishedSnapshotReader.Published published,
             PublishedSnapshotReader.Namespace namespace,
             PublishedSnapshotReader.TableObject object,
             boolean authorized) {
         Map<String, Object> item = new LinkedHashMap<>();
         item.put("objectId", Long.toString(object.id()));
-        item.put("databaseName", namespace.catalogRaw());
-        item.put("schemaName", null);
+        item.put("databaseName", databaseName(published, namespace));
+        item.put(
+                "schemaName",
+                namespace.schemaRaw() == null || namespace.schemaRaw().isEmpty()
+                        ? null
+                        : namespace.schemaRaw());
         item.put("tableName", object.objectRaw());
         item.put("objectType", object.kind());
         item.put("tableComment", object.tableComment());
@@ -471,9 +513,12 @@ final class McpToolService {
         try {
             requireScope(identity, "mcp:schema");
             PublishedSnapshotReader.Published published = loadUsable(datasourceId);
-            requireMysql(published, schemaName);
+            DatabaseEngine engine = requireDialect(published, schemaName);
             PublishedSnapshotReader.Namespace namespace =
-                    resolveNamespace(published, databaseName, "");
+                    resolveNamespace(
+                            published,
+                            databaseName,
+                            engine == DatabaseEngine.MYSQL ? "" : schemaName);
             ToolPermissionService.Session session =
                     permissions.open(
                             identity.userId(), identity.platformId(), datasourceId, published);
@@ -487,8 +532,12 @@ final class McpToolService {
             }
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("datasourceId", Long.toString(datasourceId));
-            data.put("databaseName", namespace.catalogRaw());
-            data.put("schemaName", null);
+            data.put("databaseName", databaseName(published, namespace));
+            data.put(
+                    "schemaName",
+                    namespace.schemaRaw() == null || namespace.schemaRaw().isEmpty()
+                            ? null
+                            : namespace.schemaRaw());
             data.put("snapshotVersion", Long.toString(published.snapshotId()));
             data.put("tables", tables);
             Map<String, Object> structured = successContent(requestId, data);
@@ -665,25 +714,51 @@ final class McpToolService {
         return snapshot;
     }
 
-    private static void requireMysql(
+    private static DatabaseEngine requireDialect(
             PublishedSnapshotReader.Published published, String schemaName) {
-        if (!"MYSQL".equals(published.engine())) {
-            // PostgreSQL execution wiring is a separate slice; nothing else may execute.
+        DatabaseEngine engine;
+        if ("MYSQL".equals(published.engine())) {
+            engine = DatabaseEngine.MYSQL;
+        } else if ("POSTGRESQL".equals(published.engine())) {
+            engine = DatabaseEngine.POSTGRESQL;
+        } else {
             throw new DomainException(ErrorCode.DIALECT_CONTEXT_INVALID);
         }
-        if (schemaName != null && !schemaName.isEmpty()) {
+        if (engine == DatabaseEngine.MYSQL) {
+            if (schemaName != null && !schemaName.isEmpty()) {
+                throw new DomainException(ErrorCode.DIALECT_CONTEXT_INVALID);
+            }
+        } else if (schemaName == null || schemaName.isBlank()) {
             throw new DomainException(ErrorCode.DIALECT_CONTEXT_INVALID);
         }
+        return engine;
     }
 
     private static PublishedSnapshotReader.Namespace resolveNamespace(
             PublishedSnapshotReader.Published published, String catalog, String schema) {
+        boolean postgres = "POSTGRESQL".equals(published.engine());
+        if (postgres && !published.databaseName().equals(catalog)) {
+            throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
         for (PublishedSnapshotReader.Namespace namespace : published.namespaces()) {
-            if (namespace.catalogNorm().equals(catalog) && namespace.schemaNorm().equals(schema)) {
+            if (postgres) {
+                if (namespace.schemaNorm().equals(schema)) {
+                    return namespace;
+                }
+            } else if (namespace.catalogNorm().equals(catalog)
+                    && namespace.schemaNorm().equals(schema)) {
                 return namespace;
             }
         }
         throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
+    }
+
+    private static String databaseName(
+            PublishedSnapshotReader.Published published,
+            PublishedSnapshotReader.Namespace namespace) {
+        return "POSTGRESQL".equals(published.engine())
+                ? published.databaseName()
+                : namespace.catalogRaw();
     }
 
     private static PublishedSnapshotReader.TableObject findObject(
@@ -698,12 +773,17 @@ final class McpToolService {
 
     private static ScopeTableBinder.RelationCatalog relationCatalog(
             PublishedSnapshotReader.Published published,
-            PublishedSnapshotReader.Namespace namespace) {
+            PublishedSnapshotReader.Namespace namespace,
+            DatabaseEngine engine) {
+        String expectedCatalog =
+                engine == DatabaseEngine.POSTGRESQL
+                        ? published.databaseName()
+                        : namespace.catalogNorm();
         return key -> {
             ResourceNamespace expected = key.namespace();
-            if (expected.engine() != DatabaseEngine.MYSQL
+            if (expected.engine() != engine
                     || expected.datasourceId().value() != published.datasourceId()
-                    || !expected.catalog().equals(namespace.catalogNorm())
+                    || !expected.catalog().equals(expectedCatalog)
                     || !expected.schema().equals(namespace.schemaNorm())) {
                 return Optional.empty();
             }
@@ -743,15 +823,16 @@ final class McpToolService {
         };
     }
 
-    private void activatePool(PublishedSnapshotReader.Published published) {
+    private PoolHandle activatePool(
+            PublishedSnapshotReader.Published published, DatabaseEngine engine) {
         char[] credential =
                 cipher.decrypt(published.credentialCipher(), published.keyId()).toCharArray();
         try {
-            pools.activate(
+            return pools.activate(
                     new PoolKey(
                             published.datasourceId(),
                             published.configVersion(),
-                            DatabaseEngine.MYSQL,
+                            engine,
                             published.host(),
                             published.port(),
                             published.databaseName(),
@@ -825,6 +906,7 @@ final class McpToolService {
             UUID requestId,
             String datasourceId,
             String databaseName,
+            String schemaName,
             ToolResultEncoder.Encoded encoded,
             int durationMs) {
         int rowCount = encoded.rows().size();
@@ -836,8 +918,11 @@ final class McpToolService {
                     cellTruncations.add(truncation);
                 }
             }
-            boolean truncated = encoded.rowLimitReached() || rowCount < encoded.rows().size();
-            List<String> reasons = new ArrayList<>(3);
+            boolean truncated =
+                    encoded.rowLimitReached()
+                            || encoded.responseLimitReached()
+                            || rowCount < encoded.rows().size();
+            List<String> reasons = new ArrayList<>(4);
             if (encoded.rowLimitReached()) {
                 reasons.add("ROW_LIMIT");
             }
@@ -845,13 +930,13 @@ final class McpToolService {
                 truncated = true;
                 reasons.add("CELL_LIMIT");
             }
-            if (rowCount < encoded.rows().size()) {
+            if (encoded.responseLimitReached() || rowCount < encoded.rows().size()) {
                 reasons.add("RESPONSE_LIMIT");
             }
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("datasourceId", datasourceId);
             data.put("databaseName", databaseName);
-            data.put("schemaName", null);
+            data.put("schemaName", schemaName == null || schemaName.isEmpty() ? null : schemaName);
             data.put("columns", encoded.columns());
             data.put("rows", visible);
             data.put("rowsReturned", rowCount);

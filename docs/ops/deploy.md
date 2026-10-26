@@ -103,6 +103,8 @@ Nginx访问日志默认不记录Authorization、Cookie、请求body、query中�
 
 签名私钥、信封加密KEK、平台secret、数据库密码与TLS私钥从组织密钥管理服务或权限收口的secret文件加载。不要为演示写入假“生产密码”。AS私钥不与gateway分享，gateway仅取公共JWKS并验证issuer/audience；admin仅按职责获得解密能力，审计列表角色不自动获得KEK解包权限。
 
+网关业务数据源的TLS信任材料必须由部署显式提供：MySQL使用`ptmcp.gateway.truststore-path`（PKCS12及密码）；PostgreSQL使用`ptmcp.gateway.pg-ssl-root-cert`（PEM根证书）。缺失时对应引擎的首次业务连接失败关闭，不回退到JDK公共信任库。
+
 gateway每个实例使用独占持久WAL卷与稳定instanceId；只读根文件系统不替代可写WAL目录。WAL必须加密、fsync、限额、记录key_id，并有唯一消费归属；同一卷不能被两个活动实例并发恢复。卷重建、节点迁移或实例缩容前必须确认积压已入库或已以受控方式转移，不能直接删除卷。
 
 MySQL数据/binlog、Redis持久数据（如果启用）、WAL、备份和密钥备份位于独立受控存储；容器日志轮换防止挤占WAL。WAL留量按“峰值结局事件字节/秒×允许中断时长×安全系数”计算，不按业务结果集容量估算。磁盘达到阈值时停止新SQL，详见运维手册。
