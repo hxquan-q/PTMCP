@@ -1,6 +1,6 @@
 # Ideas Backlog
 
-- **sqlFinal 密文字段**：S9 已接 sqlRaw 密文（encryptedRaw）；sql_final_cipher 需 AuditTerminal 增加 encryptedFinal 字段+AuditRepository 列映射+terminal 重载扩展，然后 admin decrypt 端点 sqlFinal 维度自然生效。
+- **sqlFinal 密文字段**：S9 已接 sqlRaw 密文（encryptedRaw）；sql_final_cipher 需 AuditTerminal 增加 encryptedFinal 字段+AuditRepository 列映射+terminal 重载扩展+WAL schema 2 演进（WalFormat SCHEMA_VERSION 严格校验，加字段需版本演进与重放兼容）。decrypt 端点 sqlFinal 维度已就绪（null 时返回不含该字段）。决策：增量价值低于 WAL 演进成本，搁置。
 - **委派作用域执行（T16 核心）**：ManagementScope 目前仅平台管理员二值判定。下一步把 admin_delegation 纳入判定（组织授权管理员=功能码∩有效委派∩部门子树），PRD AC-02/AC-07 的越界拒绝用例。涉及所有 admin 控制器的门禁改造，需单独切片+完整测试。
 - **Idempotency-Key 补接线**：DelegationAdminController/PlatformAdminController/clients.create 已接 IdempotentWrites；org 的 POST /users /departments /roles 尚未接（IdempotencyRecorder 协议在 Store 层已验证）。
 - **本机 MySQL 8.4 验证**：测试镜像参数化后本机用 8.0；8.4 digest 拉取卡层（已多次失败勿重试无脑拉）。待网络好转或镜像源可用时重拉，跑一遍全量 mvn test（不带覆盖参数）恢复 8.4 边界验证。
