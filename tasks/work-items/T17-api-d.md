@@ -173,3 +173,8 @@ gateway URL（8082/mcp）+PAT 认证说明——用户侧「创建 PAT→查看 
 PAT 撤销生命周期 E2E（走查记录）：受控管理员 PAT 撤销前查询 SUCCESS→DELETE 撤销→撤销后
 查询 401 TOKEN_REVOKED（gateway 实时强制撤销，无缓存延迟）——T12 撤销传播的真实栈验证
 通过。
+
+管理操作日志读端点（f472edd）：GET /admin/operations（平台管理员、id DESC 游标分页、
+action/aggregateType/actorId 筛选）——S1-S9 七切片写入的 admin_operation_log（委派/平台/
+客户端/密码重置）自此可读，管理操作审计复核闭环。nextCursor 仅溢出页返回。UI 操作日志页
+为下一切片。
