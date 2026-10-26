@@ -1,4 +1,5 @@
 import { request, type RequestOptions } from './http';
+import { newUuid } from './uuid';
 import { controlPlaneAvailable } from './frontendMode';
 import type { AuditDetail, AuditSummary } from './mePortalApi';
 
@@ -87,8 +88,8 @@ async function controlRequest<T>(path: string, options: RequestOptions = {}): Pr
   if (!controlPlaneAvailable) throw new Error('该管理接口尚未接入，请在独立前端预览模式检查交互。');
   return (await request<T>(`/api/v1/admin${path}`, options)).data;
 }
-const versioned = (version: string): HeadersInit => ({ 'If-Match': `"${version}"`, 'Idempotency-Key': crypto.randomUUID() });
-const create = (body: unknown): RequestOptions => ({ method: 'POST', body, headers: { 'Idempotency-Key': crypto.randomUUID() } });
+const versioned = (version: string): HeadersInit => ({ 'If-Match': `"${version}"`, 'Idempotency-Key': newUuid() });
+const create = (body: unknown): RequestOptions => ({ method: 'POST', body, headers: { 'Idempotency-Key': newUuid() } });
 export const controlPlane = {
   effective: (filters: Record<string, string | undefined>, signal?: AbortSignal) =>
     controlRequest<

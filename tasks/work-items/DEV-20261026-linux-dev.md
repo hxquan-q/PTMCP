@@ -53,6 +53,7 @@ Updated: 2026-10-26
 - `stop` → `start`：退出 0；admin/authz/ui 三个健康检查均 UP；迁移跳过已应用版本，管理员密码保持不变。
 - 恢复副本：`.local/backup/dev-linux-20261026.tgz`（因工作区曾清掉新增未跟踪文件，已重新写回并备份）。
 - 公网访问：`PTMCP_UI_PUBLIC='true'`，Vite 监听 `0.0.0.0:5173`，`sudo ufw allow 5173/tcp`；`http://183.36.30.83:5173/` 返回 200；公网 CSRF → 登录 → `/me` 均 200，51 个权限。
+- HTTP Secure Context 修复：新增 `src/services/uuid.ts` 的 `newUuid()`（优先 `crypto.randomUUID`，回退 `crypto.getRandomValues`）和 `src/services/clipboard.ts`（回退 `execCommand`）；`DatasourcesView`、`DatasourceDetailView`、`MetadataDetailView`、`http.ts`、`data.ts`、`controlPlane.ts` 已改用它。契约测试 70/70、`pnpm check` 通过。
 - 合并：`origin/dev` 的 3 个提交已合并为 `eecd75b`，无冲突；后端 `-DskipTests install`、前端 `pnpm check`、契约测试 68/68、仓库检查 48 项通过。
 
 未执行项及原因、剩余风险：MySQL 8.4 固定 digest 多次拉取均卡在某一层并导致 Docker 镜像存储短暂阻塞，已取消；本切片用 8.0 仅验证脚本/迁移/登录，不能写成 8.4 验证通过。gateway 默认 disabled；OAuth 客户端、前端 E2E、独立安全评审未做。公网 5173 是 HTTP 开发服务器，密码和会话 Cookie 会明文传输，只能临时使用；云安全组是否放行 5173 需用户在云控制台确认。工作区曾出现新增未跟踪文件被清掉的异常，已重新写回并建议在 `.local/backup` 保留副本。

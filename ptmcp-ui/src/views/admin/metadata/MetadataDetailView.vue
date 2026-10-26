@@ -10,6 +10,7 @@ import {
   type MetadataColumn,
   type MetadataDetail,
 } from '../../../services/data';
+import { newUuid } from '../../../services/uuid';
 import { useSessionStore } from '../../../stores/session';
 import { dictionaryDifferences, dictionaryDraft, isVersionConflict, rebaseDictionaryDraft } from '../../../adapters/edit-conflict';
 import VersionConflictPanel from '../../../components/data/VersionConflictPanel.vue';
@@ -34,7 +35,7 @@ const conflictRows = computed(() => (conflict.value ? dictionaryDifferences(conf
 let controller: AbortController | null = null;
 let generation = 0;
 let active = true;
-let saveKey = crypto.randomUUID();
+let saveKey = newUuid();
 const rules: FormRules<DictionaryWrite> = {
   title: [
     { required: true, message: '请输入业务标题', trigger: 'blur' },
@@ -123,7 +124,7 @@ function resolveConflict(keepDraft: boolean): void {
   }
   conflictRequired.value = false;
   error.value = '';
-  saveKey = crypto.randomUUID();
+  saveKey = newUuid();
 }
 async function load(): Promise<void> {
   controller?.abort();
@@ -148,7 +149,7 @@ async function load(): Promise<void> {
     detail.value = result.data;
     etag.value = result.etag ?? `"${result.data.dictionary.version}"`;
     copyDictionary(result.data);
-    saveKey = crypto.randomUUID();
+    saveKey = newUuid();
   } catch (cause) {
     if (active && current === generation && !(cause instanceof DOMException && cause.name === 'AbortError')) error.value = errorMessage(cause);
   } finally {
@@ -193,7 +194,7 @@ async function save(): Promise<void> {
     etag.value = result.etag ?? `"${result.data.dictionary.version}"`;
     copyDictionary(result.data);
     conflict.value = null;
-    saveKey = crypto.randomUUID();
+    saveKey = newUuid();
     ElMessage.success('业务字典已保存');
   } catch (cause) {
     if (!active || current !== generation) return;
@@ -213,7 +214,7 @@ function dictionaryForColumn(name: string): { title: string; description: string
 watch(
   form,
   () => {
-    if (!saving.value) saveKey = crypto.randomUUID();
+    if (!saving.value) saveKey = newUuid();
   },
   { deep: true },
 );

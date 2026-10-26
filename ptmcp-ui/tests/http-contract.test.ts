@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
+import { registerHooks } from 'node:module';
 import test from 'node:test';
-import { ApiError, onSessionExpired, parseApiJson, request, setCsrfToken } from '../src/services/http.ts';
+
+const sourceImports = registerHooks({
+  resolve(specifier, context, nextResolve) {
+    const extensionlessSource = context.parentURL?.includes('/src/') && specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier);
+    return nextResolve(extensionlessSource ? `${specifier}.ts` : specifier, context);
+  },
+});
+const { ApiError, onSessionExpired, parseApiJson, request, setCsrfToken } = await import('../src/services/http.ts');
+sourceImports.deregister();
 
 test('preserves unsafe integer identifiers as strings before JSON parsing', () => {
   const value = parseApiJson('{"id":9223372036854775807,"nested":{"version":18446744073709551615}}') as { id: string; nested: { version: string } };

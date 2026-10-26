@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { mePortalApi, type PlatformItem, type TokenView } from '../../services/mePortalApi';
+import { copyText } from '../../services/clipboard';
 import { PortalWriteIntent } from '../../services/portalMutations';
 import { errorText, formatDate, isAccessError, usePortalTask } from '../portalUtils';
 
@@ -144,7 +145,7 @@ async function revoke(token: TokenView): Promise<void> {
 }
 async function copyToken(): Promise<void> {
   try {
-    await navigator.clipboard.writeText(tokenPlaintext.value);
+    await copyText(tokenPlaintext.value);
     ElMessage.success('PAT 已复制，请确认已安全保存');
   } catch {
     ElMessage.warning('浏览器未允许自动复制，请手动选择文本');

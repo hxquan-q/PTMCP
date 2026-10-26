@@ -1,3 +1,5 @@
+import { newUuid } from './uuid';
+
 export interface TransportResult<T> {
   data: T;
   etag: string | null;
@@ -201,7 +203,7 @@ export function errorMessage(error: unknown): string {
 }
 
 export function idempotencyKey(): string {
-  return crypto.randomUUID();
+  return newUuid();
 }
 
 export function queryString(values: Record<string, string | number | boolean | null | undefined>): string {

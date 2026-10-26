@@ -1,4 +1,5 @@
 import { request, ApiError } from './http';
+import { newUuid } from './uuid';
 import { adaptDatasource, adaptDatasourceDelete, adaptDatasourcePage, adaptJob, adaptMetadataDetail, adaptMetadataPage } from '../adapters/data-dto';
 
 export type DataRequestOptions = {
@@ -33,16 +34,11 @@ export interface ApiResult<T> {
   etag: string | null;
 }
 
-function idempotencyKey(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
 export async function dataRequest<T>(path: string, options: DataRequestOptions = {}): Promise<ApiResult<T>> {
   const headers: Record<string, string> = { Accept: 'application/json', ...options.headers };
   if (options.etag) headers['If-Match'] = options.etag;
   const method = (options.method ?? 'GET').toUpperCase();
-  if (method !== 'GET' && method !== 'HEAD') headers['Idempotency-Key'] ??= options.idempotencyKey ?? idempotencyKey();
+  if (method !== 'GET' && method !== 'HEAD') headers['Idempotency-Key'] ??= options.idempotencyKey ?? newUuid();
   try {
     const result = await request<T>(path, { method, body: options.body, headers, signal: options.signal });
     return { data: result.data, etag: result.etag };

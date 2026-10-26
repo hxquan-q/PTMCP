@@ -2,6 +2,7 @@
 import { onMounted, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { mePortalApi, type PlatformItem, type McpConfig } from '../../services/mePortalApi';
+import { copyText } from '../../services/clipboard';
 import { errorText, usePortalTask } from '../portalUtils';
 
 const platforms = ref<PlatformItem[]>([]);
@@ -65,7 +66,7 @@ async function loadConfig(): Promise<void> {
 async function copyConfig(): Promise<void> {
   if (!config.value) return;
   try {
-    await navigator.clipboard.writeText(config.value.configTemplate);
+    await copyText(config.value.configTemplate);
     ElMessage.success('配置模板已复制');
   } catch {
     ElMessage.warning('浏览器未允许自动复制，请手动选择文本');

@@ -80,6 +80,7 @@ export async function mountDataPage(path: string, api: Api) {
     'vue-router': dataUrl(`${prefix} export const useRoute=()=>f.route; export const useRouter=()=>f.router;`),
     'element-plus': dataUrl('export const ElMessage={success(){}}; export const ElMessageBox={confirm:async()=>{}};'),
     '../../../services/data': services,
+    '../../../services/uuid': new URL('../../src/services/uuid.ts', import.meta.url).href,
     '../../../stores/session': dataUrl(`${prefix} export const useSessionStore=()=>f.session;`),
     '../../../adapters/edit-conflict': new URL('../../src/adapters/edit-conflict.ts', import.meta.url).href,
     '../../../components/data/VersionConflictPanel.vue': dataUrl('export default {};'),

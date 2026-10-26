@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onBeforeUnmount } from 'vue';
+import { copyText } from '../../services/clipboard';
 const props = defineProps<{ modelValue: string; title: string }>();
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 const message = ref('');
@@ -11,7 +12,7 @@ const visible = computed({
 });
 async function copy(): Promise<void> {
   try {
-    await navigator.clipboard.writeText(props.modelValue);
+    await copyText(props.modelValue);
     message.value = '已复制，请妥善保存。';
   } catch {
     message.value = '复制失败，请手动选择并复制。';

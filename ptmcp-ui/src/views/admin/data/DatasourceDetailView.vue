@@ -12,6 +12,7 @@ import {
   type DatasourceRead,
   type DatasourceWrite,
 } from '../../../services/data';
+import { newUuid } from '../../../services/uuid';
 import { useSessionStore } from '../../../stores/session';
 import { datasourceDifferences, isVersionConflict } from '../../../adapters/edit-conflict';
 import VersionConflictPanel from '../../../components/data/VersionConflictPanel.vue';
@@ -36,10 +37,10 @@ const form = reactive<DatasourceWrite>(emptyForm());
 let controller: AbortController | null = null;
 let generation = 0;
 let active = true;
-let saveKey = crypto.randomUUID();
-let testKey = crypto.randomUUID();
-let syncKey = crypto.randomUUID();
-let deleteKey = crypto.randomUUID();
+let saveKey = newUuid();
+let testKey = newUuid();
+let syncKey = newUuid();
+let deleteKey = newUuid();
 const rules: FormRules<DatasourceWrite> = {
   name: [
     { required: true, message: '请输入名称', trigger: 'blur' },
@@ -94,10 +95,10 @@ function errorMessage(value: unknown): string {
   return value instanceof Error ? value.message : '请求失败，请稍后重试';
 }
 function resetKeys(): void {
-  saveKey = crypto.randomUUID();
-  testKey = crypto.randomUUID();
-  syncKey = crypto.randomUUID();
-  deleteKey = crypto.randomUUID();
+  saveKey = newUuid();
+  testKey = newUuid();
+  syncKey = newUuid();
+  deleteKey = newUuid();
 }
 function clearSensitive(): void {
   Object.assign(form, emptyForm());
@@ -230,7 +231,7 @@ async function save(): Promise<void> {
     etag.value = result.etag ?? `"${result.data.configVersion}"`;
     copyForm(result.data);
     conflict.value = null;
-    saveKey = crypto.randomUUID();
+    saveKey = newUuid();
     ElMessage.success('数据源配置已保存');
   } catch (cause) {
     if (!active || current !== generation) return;
@@ -256,7 +257,7 @@ async function testConnection(): Promise<void> {
     const result = await testDatasource(id.value, { ...form }, testKey);
     if (!active || current !== generation) return;
     form.credential = '';
-    testKey = crypto.randomUUID();
+    testKey = newUuid();
     ElMessage.success('连接测试已提交');
     if (session.can('ptmcp:job:read')) await router.push(`/admin/jobs/${result.data.id}`);
   } catch (cause) {
@@ -276,7 +277,7 @@ async function syncMetadata(): Promise<void> {
   try {
     const result = await syncDatasource(id.value, syncKey);
     if (!active || current !== generation) return;
-    syncKey = crypto.randomUUID();
+    syncKey = newUuid();
     ElMessage.success('元数据同步已提交');
     if (session.can('ptmcp:job:read')) await router.push(`/admin/jobs/${result.data.id}`);
   } catch (cause) {
@@ -329,8 +330,8 @@ watch(
   form,
   () => {
     if (!saving.value && !actionLoading.value) {
-      saveKey = crypto.randomUUID();
-      testKey = crypto.randomUUID();
+      saveKey = newUuid();
+      testKey = newUuid();
     }
   },
   { deep: true },

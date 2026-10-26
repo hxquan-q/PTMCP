@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
 import { createDatasource, DataRequestError, listDatasources, type DatasourceRead, type DatasourceWrite } from '../../../services/data';
+import { newUuid } from '../../../services/uuid';
 import { useSessionStore } from '../../../stores/session';
 
 const router = useRouter();
@@ -18,7 +19,7 @@ const dialogVisible = ref(false);
 const formRef = ref<FormInstance>();
 const filters = reactive({ keyword: '', engine: '', status: '' });
 const form = reactive<DatasourceWrite>(emptyForm());
-const createKey = ref(crypto.randomUUID());
+const createKey = ref(newUuid());
 let listController: AbortController | null = null;
 let generation = 0;
 let createGeneration = 0;
@@ -142,7 +143,7 @@ function clearSensitive(): void {
 function resetForm(): void {
   createGeneration += 1;
   Object.assign(form, emptyForm());
-  createKey.value = crypto.randomUUID();
+  createKey.value = newUuid();
   createError.value = '';
 }
 function openCreate(): void {
@@ -188,7 +189,7 @@ watch(dialogVisible, (visible) => {
 watch(
   form,
   () => {
-    if (!submitting.value) createKey.value = crypto.randomUUID();
+    if (!submitting.value) createKey.value = newUuid();
   },
   { deep: true },
 );
