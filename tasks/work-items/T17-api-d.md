@@ -119,3 +119,44 @@ USER_PASSWORD_RESET 掩码日志落库。跨库一致性场景确认：元库用
 （失败封闭，符合 PRD「创建档案不等于开通可登录账号」）。待办移交 .auto/ideas.md：gateway
 密文写入、委派作用域执行（T16）、org POST 幂等接线、MySQL 8.4 复验、浏览器端到端走查、
 UI 打磨切片池。
+
+S9 gateway 审计密文写入（210868f）+端到端验证（3084f76）：AuditSealer（AES-GCM iv||ct||tag
+与 admin AuditCipher 同格式同 keyId 派生 local:sha256hex16；部署配对
+ptmcp.gateway.audit-key=ptmcp.admin.audit-key）；成功路径密封原始 SQL；集成用例用独立
+audit-key 证实验钥配对（防误用 credential-key）。
+
+拒绝查询审计盲区补全（961a502）：错误路径（GUARD 拒绝→DENY、执行失败→ERROR）也密封尝试
+的原始 SQL——审计员可经 reason 门禁读出「用户尝试了什么被拒的 SQL」。集成用例：DENY 行
+解密回原文。
+
+sql_masked 网关侧脱敏器（4111d09）：SqlLiteralMasker（jsqlparser 双解析验证+正则字面量脱敏
+→?，失败保守 null；与 sealer 状态解耦）。成功/拒绝两路径填充。个人历史与管理台 SQL 脱敏
+列自此点亮。遗留：MySQL 反斜杠转义保守放弃。
+
+敏感解密频控（ASVS 4.2.1，c91f680）：每操作者滑动 1 分钟窗 10 次上限，计数直接用
+audit_sensitive_access 审计行自身（尝试落库=限流状态）；失败尝试也占预算；超限
+SENSITIVE_REVEAL_LIMIT 140006→429 retryable（新错误码走正规规则治理流程生成）。
+
+审计敏感访问记录（c0c7241）：GET /audit/{id}/sensitive-access + 前端「明文访问记录」卡片
+（操作者/理由/字段/时间，不可删除）+解密成功自动刷新联动。
+
+T16 委派作用域执行六片（判定核 9da7437、departments 9f7fc28、users 51cbfe3、roles 只读放开
+96232ca、ACL 四维门禁 49f72ba、AC-02 跨范围角色约束 3c9ba5c）：DelegationScopeResolver
+（窗口/动作/资源/子树 ancestors 判定）+各域 ScopeGate（平台管理员全权；受控管理员=有效委派
+∩子树∩功能码）+行级过滤+建根平台专属+move 双侧校验+SelfEscalationGuard 保持。受控管理员
+浏览器走查四项断言全过零缺陷。
+
+S7 补全 AC-01（4cc6aa5）：管理员密码重置同事务撤销全部持久凭证（web_session/PAT/OAuth）。
+S8 org POST 幂等（ccfe97f 前后补齐）。教训：多行 patch 必须从 spotless 后文本复制；测试
+body 数字 id 不能字符串 replace 用户名；测试窗口禁写死日期；调试 printStackTrace 用后即删。
+
+MCP 查询流端到端全通（106999b）：MySQL 8.4.13 拉取成功（dev 卷升 8.4，8.0 覆盖移除）；
+业务库 TLS 激活（自建 CA+SAN 127.0.0.1，compose 挂载+ssl flags，Dev-Linux.sh
+ensure_mysql_tls 自动生成，truststore PKCS12 经 env）；凭据密钥部署配对（admin/gateway
+credential-key 同值）；gateway truststore env 冲突清除。真实查询经 PAT→guard→TLS 执行
+返回数据，审计行三层验证。注意：compose 卷路径用 ${PTMCP_DEV_TLS_DIR}（flow 需引号）；
+Dev-Linux stop 不停 gateway——需 pkill。
+
+审计链浏览器解密验证（走查记录）：真实查询行经 admin console 全链 UI 验证——脱敏 SQL→
+reason 门禁解密显示真实业务 SQL+倒计时→敏感访问留痕联动。截图 e2e-decrypt-*.png。
+至此「真实查询→密文→浏览器 reason 门禁解密→复核留痕」在 dev 真实栈全链闭环。
