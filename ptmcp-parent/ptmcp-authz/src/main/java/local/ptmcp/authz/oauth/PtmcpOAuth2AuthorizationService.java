@@ -88,6 +88,8 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
                     + "refresh_token_issued_at = ?, refresh_token_expires_at = ?, update_time = ?, "
                     + "updated_by = ?, version = version + 1 WHERE id = ?";
     private static final String DELETE = "DELETE FROM oauth2_authorization WHERE id = ?";
+    private static final String SELECT_AUTHORIZATION_FAMILY =
+            "SELECT family_id FROM oauth2_authorization WHERE id = ?";
     private static final String SELECT_REFRESH =
             "SELECT t.family_id, t.generation, t.issued_at, t.expires_at, t.consumed_at,"
                     + " t.status AS token_status, f.authorization_id, f.status AS family_status,"
@@ -97,9 +99,9 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
     private static final String SELECT_FAMILY =
             "SELECT status, absolute_expires_at, idle_expires_at FROM oauth_refresh_family"
                     + " WHERE id = ?";
-    private static final String SELECT_ACTIVE_REFRESH =
-            "SELECT token_hash, generation FROM oauth_refresh_token WHERE family_id = ?"
-                    + " AND status = 'ACTIVE' ORDER BY generation DESC LIMIT 1";
+    private static final String SELECT_REFRESH_BY_HASH =
+            "SELECT token_hash, generation FROM oauth_refresh_token WHERE token_hash = ?"
+                    + " AND family_id = ?";
     private static final String INSERT_FAMILY =
             "INSERT INTO oauth_refresh_family (id, authorization_id, user_id,"
                     + " registered_client_id, platform_id, status, auth_version,"
@@ -369,7 +371,9 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
             return;
         }
         byte[] nextHash = OAuthStoreSupport.sha256(refreshToken.getToken().getTokenValue());
-        ActiveRefresh previous = activeRefresh(familyId);
+        byte[] presentedHash = attributeBytes(authorization, OAuthAttributes.REFRESH_TOKEN_HASH);
+        ActiveRefresh previous =
+                presentedHash == null ? null : refreshByHash(familyId, presentedHash);
         long generation = previous == null ? 1 : previous.generation() + 1;
         if (previous != null) {
             int consumed =
@@ -416,15 +420,21 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
         return rows.isEmpty() ? null : rows.getFirst();
     }
 
-    private ActiveRefresh activeRefresh(String familyId) {
+    private ActiveRefresh refreshByHash(String familyId, byte[] tokenHash) {
         List<ActiveRefresh> rows =
                 jdbc.query(
-                        SELECT_ACTIVE_REFRESH,
+                        SELECT_REFRESH_BY_HASH,
                         (rs, index) ->
                                 new ActiveRefresh(
                                         rs.getBytes("token_hash"), rs.getLong("generation")),
+                        tokenHash,
                         familyId);
         return rows.isEmpty() ? null : rows.getFirst();
+    }
+
+    private static byte[] attributeBytes(OAuth2Authorization authorization, String name) {
+        Object value = authorization.getAttribute(name);
+        return value instanceof byte[] bytes ? bytes.clone() : null;
     }
 
     @Override
@@ -548,9 +558,16 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
     @Override
     @Transactional
     public void remove(OAuth2Authorization authorization) {
-        if (authorization != null && StringUtils.hasText(authorization.getId())) {
-            jdbc.update(DELETE, authorization.getId());
+        if (authorization == null || !StringUtils.hasText(authorization.getId())) {
+            return;
         }
+        List<String> families =
+                jdbc.queryForList(SELECT_AUTHORIZATION_FAMILY, String.class, authorization.getId());
+        if (!families.isEmpty() && families.getFirst() != null) {
+            revokeFamily(families.getFirst(), "REMOVED");
+            return;
+        }
+        jdbc.update(DELETE, authorization.getId());
     }
 
     private OAuth2Authorization reconstruct(StoredAuthorization row, String codeValue) {
@@ -640,6 +657,8 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
                             ? refreshExpiresAt.minus(properties.refreshTokenTtl())
                             : refreshIssuedAt;
             builder.token(new OAuth2RefreshToken(refreshValue, issuedAt, refreshExpiresAt));
+            builder.attribute(
+                    OAuthAttributes.REFRESH_TOKEN_HASH, OAuthStoreSupport.sha256(refreshValue));
         }
         return builder.build();
     }
