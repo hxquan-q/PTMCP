@@ -2,6 +2,7 @@ package local.ptmcp.admin.api;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+import local.ptmcp.persistence.org.DelegationScopeResolver;
 import local.ptmcp.persistence.org.IdempotencyRecorder;
 import local.ptmcp.persistence.org.OrgStore;
 
@@ -26,10 +27,15 @@ import java.util.List;
 public class UserAdminController {
     private final OrgStore orgStore;
     private final IdempotencyRecorder idempotency;
+    private final UserScopeGate scopeGate;
 
-    public UserAdminController(OrgStore orgStore, IdempotencyRecorder idempotency) {
+    public UserAdminController(
+            OrgStore orgStore,
+            IdempotencyRecorder idempotency,
+            DelegationScopeResolver scopeResolver) {
         this.orgStore = orgStore;
         this.idempotency = idempotency;
+        this.scopeGate = new UserScopeGate(scopeResolver);
     }
 
     public record UserWrite(
@@ -57,8 +63,7 @@ public class UserAdminController {
             @RequestParam(required = false) Long departmentId,
             @RequestParam(required = false) String keyword,
             HttpServletRequest request) {
-        ManagementScope.requirePlatformAdmin(request);
-        return orgStore.listUsers().stream()
+        return scopeGate.visibleUsers(request, orgStore.listUsers()).stream()
                 .filter(user -> departmentId == null || user.deptId() == departmentId)
                 .filter(
                         user ->
@@ -97,7 +102,7 @@ public class UserAdminController {
 
     @GetMapping("/{id}")
     public UserRead get(@PathVariable long id, HttpServletRequest request) {
-        ManagementScope.requirePlatformAdmin(request);
+        scopeGate.requireUserAccess(request, orgStore.getUser(id).deptId());
         return toRead(orgStore.getUser(id));
     }
 
@@ -105,7 +110,11 @@ public class UserAdminController {
     public ResponseEntity<UserRead> update(
             @PathVariable long id, @RequestBody UserWrite write, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
-        ManagementScope.requirePlatformAdmin(request);
+        scopeGate.requireUserAccess(request, orgStore.getUser(id).deptId());
+        if (write.deptId() != null) {
+            // Moves stay inside the delegated subtree on both sides.
+            scopeGate.requireUserAction(request, write.deptId(), "ptmcp:user:move");
+        }
         if (write.displayName() == null || write.deptId() == null || write.enabled() == null) {
             throw new local.ptmcp.common.error.DomainException(
                     local.ptmcp.common.error.ErrorCode.INVALID_ARGUMENT);
@@ -130,7 +139,7 @@ public class UserAdminController {
     public ResponseEntity<UserRead> setStatus(
             @PathVariable long id, @RequestBody UserStatusWrite write, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
-        ManagementScope.requirePlatformAdmin(request);
+        scopeGate.requireUserAction(request, orgStore.getUser(id).deptId(), "ptmcp:user:status");
         if (!"ACTIVE".equals(write.status()) && !"DISABLED".equals(write.status())) {
             throw new local.ptmcp.common.error.DomainException(
                     local.ptmcp.common.error.ErrorCode.INVALID_ARGUMENT);
@@ -155,7 +164,8 @@ public class UserAdminController {
     public ResponseEntity<UserRead> setRoles(
             @PathVariable long id, @RequestBody UserWrite write, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
-        ManagementScope.requirePlatformAdmin(request);
+        scopeGate.requireUserAction(
+                request, orgStore.getUser(id).deptId(), "ptmcp:user:assign-role");
         if (write.roleIds() == null) {
             throw new local.ptmcp.common.error.DomainException(
                     local.ptmcp.common.error.ErrorCode.INVALID_ARGUMENT);
@@ -183,7 +193,10 @@ public class UserAdminController {
             @RequestBody UserDepartmentWrite write,
             HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
-        ManagementScope.requirePlatformAdmin(request);
+        scopeGate.requireUserAction(request, orgStore.getUser(id).deptId(), "ptmcp:user:move");
+        if (write.departmentId() != null) {
+            scopeGate.requireUserAction(request, write.departmentId(), "ptmcp:user:move");
+        }
         if (write.departmentId() == null) {
             throw new local.ptmcp.common.error.DomainException(
                     local.ptmcp.common.error.ErrorCode.INVALID_ARGUMENT);

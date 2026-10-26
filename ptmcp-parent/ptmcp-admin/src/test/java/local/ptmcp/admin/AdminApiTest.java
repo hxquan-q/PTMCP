@@ -693,6 +693,158 @@ class AdminApiTest {
     }
 
     @Test
+    void delegatedAdminManagesOnlySubtreeUsers() throws Exception {
+        seedAdminDelegationCodes();
+        // Delegable set gains the user codes for this slice.
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            statement.execute(
+                    "INSERT INTO sys_role (role_key, role_name, status, del_flag, create_time,"
+                            + " update_time) VALUES ('user-scope-admin', '用户作用域管理员', '0', '0',"
+                            + " NOW(6), NOW(6))",
+                    Statement.RETURN_GENERATED_KEYS);
+            long roleId;
+            try (var keys = statement.getGeneratedKeys()) {
+                keys.next();
+                roleId = keys.getLong(1);
+            }
+            for (String code :
+                    List.of(
+                            "ptmcp:user:update",
+                            "ptmcp:user:status",
+                            "ptmcp:user:assign-role",
+                            "ptmcp:user:move")) {
+                statement.execute(
+                        "INSERT INTO sys_role_permission (role_id, permission_code, create_time,"
+                                + " update_time) VALUES ("
+                                + roleId
+                                + ", '"
+                                + code
+                                + "', NOW(6), NOW(6))");
+            }
+            statement.execute(
+                    "INSERT INTO sys_user_role (user_id, role_id, create_time, update_time)"
+                            + " VALUES ("
+                            + ADMIN_ID
+                            + ", "
+                            + roleId
+                            + ", NOW(6), NOW(6))");
+        }
+        long datasourceId = insertActiveDatasource();
+
+        long rootId = createDepartment("用户作用域根");
+        long insideId = createDepartment("用户作用域内");
+        long outsideId = createDepartment("用户作用域外");
+        // Re-parent "inside" under root (API has no create-time parent).
+        long insideVersion =
+                readLong(
+                        mockMvc.perform(
+                                        get("/api/v1/admin/departments/" + insideId)
+                                                .header("X-Test-User-Id", ADMIN_ID)
+                                                .header("X-Test-Platform-Admin", "true"))
+                                .andExpect(status().isOk())
+                                .andReturn()
+                                .getResponse()
+                                .getContentAsString(),
+                        "version");
+        mockMvc.perform(
+                        put("/api/v1/admin/departments/" + insideId)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", String.valueOf(insideVersion))
+                                .contentType("application/json")
+                                .content(
+                                        "{\"parentId\":"
+                                                + rootId
+                                                + ",\"name\":\"用户作用域内\",\"enabled\":true}"))
+                .andExpect(status().isOk());
+
+        // Target users: one inside the subtree, one outside.
+        createUser("inside-throwaway", "内部占位", insideId);
+        long insideUser = createUser("inside-user", "内部用户", insideId);
+        long outsideUser = createUser("outside-user", "外部用户", outsideId);
+
+        // Delegate the subtree with user codes to a (distinct) delegated admin.
+        createUser("userscope-throwaway", "占位二", insideId);
+        long delegate = createUser("userscope-admin", "受控用户管理员", insideId);
+        mockMvc.perform(
+                        post("/api/v1/admin/delegations")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", "userscope-delegation-1")
+                                .contentType("application/json")
+                                .content(
+                                        "{\"userId\":"
+                                                + delegate
+                                                + ",\"departmentRootId\":"
+                                                + rootId
+                                                + ",\"resourceType\":\"DATASOURCE\",\"resourceId\":"
+                                                + datasourceId
+                                                + ",\"allowedActions\":[\"ptmcp:user:update\",\"ptmcp:user:status\",\"ptmcp:user:assign-role\",\"ptmcp:user:move\"]"
+                                                + ",\"validFrom\":\"2020-01-01T00:00:00Z\""
+                                                + ",\"validTo\":\"2030-01-01T00:00:00Z\"}"))
+                .andExpect(status().isCreated());
+
+        // List: the delegated admin sees the inside user but not the outside one.
+        MvcResult listed =
+                mockMvc.perform(
+                                get("/api/v1/admin/users")
+                                        .header("X-Test-User-Id", delegate)
+                                        .header("X-Test-Platform-Admin", "false"))
+                        .andExpect(status().isOk())
+                        .andReturn();
+        String listBody = listed.getResponse().getContentAsString();
+        if (!listBody.contains("inside-user")) {
+            throw new AssertionError("inside user missing from subtree view");
+        }
+        if (listBody.contains("outside-user")) {
+            throw new AssertionError("outside user leaked into subtree view");
+        }
+
+        // Status flip inside the subtree succeeds.
+        mockMvc.perform(
+                        put("/api/v1/admin/users/" + insideUser + "/status")
+                                .header("X-Test-User-Id", delegate)
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("If-Match", "1")
+                                .contentType("application/json")
+                                .content("{\"status\":\"DISABLED\"}"))
+                .andExpect(status().isOk());
+
+        // Any write on the outside user is denied.
+        mockMvc.perform(
+                        put("/api/v1/admin/users/" + outsideUser + "/status")
+                                .header("X-Test-User-Id", delegate)
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("If-Match", "1")
+                                .contentType("application/json")
+                                .content("{\"status\":\"DISABLED\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+
+        // Role assignment inside the subtree succeeds (PRD cross-scope role checks are their own
+        // slice; the delegation gate itself is what is under test here).
+        mockMvc.perform(
+                        put("/api/v1/admin/users/" + insideUser + "/roles")
+                                .header("X-Test-User-Id", delegate)
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("If-Match", "2")
+                                .contentType("application/json")
+                                .content("{\"roleIds\":[]}"))
+                .andExpect(status().isOk());
+
+        // Move across the subtree boundary is denied on the target side.
+        mockMvc.perform(
+                        put("/api/v1/admin/users/" + insideUser + "/department")
+                                .header("X-Test-User-Id", delegate)
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("If-Match", "3")
+                                .contentType("application/json")
+                                .content("{\"departmentId\":" + outsideId + "}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void adminAuditListAppliesFiltersCursorAndPlatformAdminScope() throws Exception {
         long platformId = insertPlatform("p-audit");
         long otherPlatformId = insertPlatform("p-audit-other");
