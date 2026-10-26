@@ -298,6 +298,57 @@ public final class AuditQueryService {
         return new AdminAuditPage(List.copyOf(items), next);
     }
 
+    public record SensitiveAccessRow(
+            long id, long operatorId, String reason, List<String> fields, Instant createdAt) {}
+
+    /** Who revealed the plaintext of this request, when and why — the AC audit-trail read. */
+    public List<SensitiveAccessRow> sensitiveAccess(String requestId) {
+        String parsed = parseRequestId(requestId);
+        String sql =
+                "SELECT id, operator_id, reason, fields, create_time FROM audit_sensitive_access"
+                        + " WHERE request_id = ? ORDER BY id DESC LIMIT 100";
+        List<SensitiveAccessRow> rows = new ArrayList<>();
+        try (Connection connection = primary.getConnection();
+                PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setQueryTimeout(5);
+            statement.setString(1, parsed);
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    List<String> fields = List.of();
+                    String raw = result.getString(4);
+                    if (raw != null && !raw.isBlank()) {
+                        String trimmed = raw.trim();
+                        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+                            String body = trimmed.substring(1, trimmed.length() - 1).trim();
+                            if (!body.isEmpty()) {
+                                List<String> parsedFields = new ArrayList<>();
+                                for (String part : body.split(",")) {
+                                    String value = part.trim();
+                                    if (value.length() >= 2
+                                            && value.startsWith("\"")
+                                            && value.endsWith("\"")) {
+                                        parsedFields.add(value.substring(1, value.length() - 1));
+                                    }
+                                }
+                                fields = List.copyOf(parsedFields);
+                            }
+                        }
+                    }
+                    rows.add(
+                            new SensitiveAccessRow(
+                                    result.getLong(1),
+                                    result.getLong(2),
+                                    result.getString(3),
+                                    fields,
+                                    toInstant(result.getObject(5, java.time.LocalDateTime.class))));
+                }
+            }
+        } catch (SQLException error) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+        return List.copyOf(rows);
+    }
+
     public AdminAuditDetail adminDetail(String requestId) {
         String parsed = parseRequestId(requestId);
         try (Connection connection = primary.getConnection();

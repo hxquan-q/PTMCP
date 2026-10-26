@@ -2434,6 +2434,26 @@ class AdminApiTest {
                 assertFalse(result.next());
             }
         }
+
+        // The AC audit-trail read returns the disclosure record to the console.
+        mockMvc.perform(
+                        get("/api/v1/admin/audit/" + requestId + "/sensitive-access")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].operatorId").value(ADMIN_ID))
+                .andExpect(jsonPath("$[0].reason").value("安全事件复查需要原始 SQL"))
+                .andExpect(jsonPath("$[0].fields[0]").value("sqlRaw"))
+                .andExpect(jsonPath("$[0].createdAt").isNotEmpty());
+
+        // A request that was never decrypted has an empty trail.
+        mockMvc.perform(
+                        get("/api/v1/admin/audit/99999999-9999-9999-9999-999999999999/sensitive-access")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
     }
 
     @Test

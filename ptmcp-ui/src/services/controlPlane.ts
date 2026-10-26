@@ -170,5 +170,11 @@ export const controlPlane = {
     get: (id: string, signal?: AbortSignal) => controlRequest<AdminAuditDetail>(`/audit/${encodeURIComponent(id)}`, { signal }, auditReady),
     decrypt: (id: string, reason: string, fields: string[], signal?: AbortSignal) =>
       controlRequest<DecryptedAudit>(`/audit/${encodeURIComponent(id)}/decrypt`, { ...create({ reason, fields }), signal }, auditReady),
+    sensitiveAccess: (id: string, signal?: AbortSignal) =>
+      controlRequest<{ id: string; operatorId: string; reason: string; fields: string[]; createdAt: string }[]>(
+        `/audit/${encodeURIComponent(id)}/sensitive-access`,
+        { signal },
+        auditReady,
+      ),
   },
 };

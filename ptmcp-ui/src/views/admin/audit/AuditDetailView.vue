@@ -50,7 +50,33 @@ const guidance = computed(() =>
         ? '结果被截断，请收窄条件或使用聚合。'
         : '使用 requestId 关联排查，时间均按 Asia/Taipei 展示。',
 );
-watch(requestId, () => void load(), { immediate: true, flush: 'sync' });
+watch(
+  requestId,
+  () => {
+    void load();
+    void loadTrail();
+  },
+  { immediate: true, flush: 'sync' },
+);
+
+const trail = ref<{ id: string; operatorId: string; reason: string; fields: string[]; createdAt: string }[]>([]);
+const trailLoading = ref(false);
+const trailError = ref('');
+let trailSequence = 0;
+async function loadTrail(): Promise<void> {
+  if (!auditReady) return;
+  const own = ++trailSequence;
+  trailLoading.value = true;
+  trailError.value = '';
+  try {
+    const rows = await controlPlane.audit.sensitiveAccess(requestId.value);
+    if (own === trailSequence) trail.value = rows.map((row) => ({ ...row, id: String(row.id), operatorId: String(row.operatorId) }));
+  } catch (reason) {
+    if (own === trailSequence) trailError.value = errorText(reason);
+  } finally {
+    if (own === trailSequence) trailLoading.value = false;
+  }
+}
 </script>
 <template>
   <div class="admin-page">
@@ -97,6 +123,24 @@ watch(requestId, () => void load(), { immediate: true, flush: 'sync' });
         <h3>使用版本</h3>
         <pre>{{ JSON.stringify(item.versions, null, 2) }}</pre>
       </ElCard>
+      <ElCard v-if="session.can('ptmcp:audit:decrypt')" shadow="never">
+        <div class="section-heading">
+          <h3>明文访问记录</h3>
+          <ElButton :loading="trailLoading" @click="loadTrail">重新读取</ElButton>
+        </div>
+        <p class="helper">每次解密都会在此留下操作者、理由与字段；该记录本身不可删除。</p>
+        <ElAlert v-if="trailError" type="error" :title="trailError" :closable="false" />
+        <ElSkeleton v-if="trailLoading" :rows="2" animated />
+        <template v-else-if="trail.length">
+          <div v-for="row in trail" :key="row.id" class="trail-row">
+            <span class="trail-who">{{ row.operatorId }}</span>
+            <span class="trail-when">{{ row.createdAt }}</span>
+            <span class="trail-fields">{{ row.fields.join(' / ') }}</span>
+            <p class="trail-reason">{{ row.reason }}</p>
+          </div>
+        </template>
+        <p v-if="!trailLoading && !trail.length" class="helper">尚无明文访问记录。</p>
+      </ElCard>
     </template>
     <ElEmpty v-else-if="!error" description="审计详情尚未读取，路由 ID 不代表记录已存在。" />
     <AuditDecryptDialog v-if="session.can('ptmcp:audit:decrypt') && item" :key="requestId" v-model="decrypt" :request-id="requestId" />
@@ -133,6 +177,40 @@ pre {
   padding: 16px;
   font-size: 13px;
   line-height: 1.6;
+}
+.helper {
+  color: var(--ptmcp-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+</style>
+<style scoped>
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.trail-row {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--ptmcp-border);
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 4px 12px;
+  font-size: 13px;
+}
+.trail-who {
+  font-weight: 600;
+}
+.trail-when,
+.trail-fields {
+  color: var(--ptmcp-text-muted);
+  font-size: 12px;
+}
+.trail-reason {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--ptmcp-text-muted);
 }
 .helper {
   color: var(--ptmcp-text-muted);

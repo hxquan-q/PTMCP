@@ -42,6 +42,30 @@ public class AuditAdminController {
     /**
      * POST /{requestId}/decrypt: reason-gated plaintext reveal, audited in the same transaction.
      */
+    /** GET /{requestId}/sensitive-access: who revealed this request's plaintext, when and why. */
+    @GetMapping("/{requestId}/sensitive-access")
+    public java.util.List<SensitiveAccessRow> sensitiveAccess(
+            @PathVariable String requestId, HttpServletRequest request) {
+        ManagementScope.requirePlatformAdmin(request);
+        return audits.sensitiveAccess(requestId).stream()
+                .map(
+                        row ->
+                                new SensitiveAccessRow(
+                                        row.id(),
+                                        row.operatorId(),
+                                        row.reason(),
+                                        row.fields(),
+                                        row.createdAt()))
+                .toList();
+    }
+
+    public record SensitiveAccessRow(
+            long id,
+            long operatorId,
+            String reason,
+            java.util.List<String> fields,
+            Instant createdAt) {}
+
     @PostMapping("/{requestId}/decrypt")
     public AuditDecryptService.Reveal decrypt(
             @PathVariable String requestId,
