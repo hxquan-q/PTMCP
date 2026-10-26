@@ -10,12 +10,14 @@ import ClientConfigurationForm from './ClientConfigurationForm.vue';
 import ScopeConfigurationPane from './ScopeConfigurationPane.vue';
 import { useSessionStore } from '../../../stores/session';
 import { controlPlane, type Platform, type PlatformWrite, type Client, type ClientWrite } from '../../../services/controlPlane';
-import { controlPlaneAvailable, mutationNotice } from '../../../services/frontendMode';
+import { controlPlaneAvailable, mutationNotice, platformApiReady } from '../../../services/frontendMode';
 import { useCursorPage } from '../../../composables/useCursorPage';
 import { errorText, isConflict, usePortalTask } from '../../portalUtils';
 const route = useRoute();
 const router = useRouter();
 const session = useSessionStore();
+/** 平台本体 CRUD 已实现；客户端/Scope 域仍在后端切片中，沿用预览门禁。 */
+const platformReady = platformApiReady || controlPlaneAvailable;
 const activeId = computed(() => String(route.params.id ?? ''));
 const activeTab = ref('overview');
 const basicsVisible = ref(false);
@@ -57,7 +59,7 @@ const {
   controlPlane.clients.list(activeId.value, { cursor, type: clientType.value, status: clientStatus.value }, signal),
 );
 async function load(): Promise<void> {
-  if (!controlPlaneAvailable) return;
+  if (!platformReady) return;
   const own = ++detailVersion;
   loading.value = true;
   error.value = '';
@@ -166,7 +168,7 @@ onBeforeUnmount(() => {
     <PageHeader title="平台详情" description="管理平台基础信息、资源 Scope 与 OAuth 客户端。"
       ><template #actions><ElButton @click="router.push('/admin/platforms')">返回平台</ElButton></template></PageHeader
     >
-    <ElAlert v-if="!controlPlaneAvailable" type="warning" :closable="false" title="平台管理服务待接入，当前可检查表单，保存暂不可用。" />
+
     <ElAlert v-if="error" type="error" :title="error" :closable="false"><ElButton @click="load">重新读取</ElButton></ElAlert>
     <ElAlert v-if="conflict" type="warning" title="版本已变化，草稿尚未覆盖服务端。关闭编辑并重新读取后再合并。" :closable="false"
       ><ElButton
@@ -191,9 +193,7 @@ onBeforeUnmount(() => {
         ><ElCard shadow="never">
           <div class="section-heading">
             <h2>平台配置</h2>
-            <ElButton v-if="session.can('ptmcp:platform:update')" :disabled="controlPlaneAvailable && !item" @click="basicsVisible = true"
-              >编辑平台</ElButton
-            >
+            <ElButton v-if="session.can('ptmcp:platform:update')" :disabled="platformReady && !item" @click="basicsVisible = true">编辑平台</ElButton>
           </div>
           <ElDescriptions :column="1" border class="descriptions">
             <ElDescriptionsItem label="Code / 名称">{{ item ? `${item.code} / ${item.name}` : '尚未读取' }}</ElDescriptionsItem>

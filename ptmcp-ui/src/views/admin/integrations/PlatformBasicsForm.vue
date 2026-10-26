@@ -3,7 +3,7 @@ import { computed, reactive, ref, watch } from 'vue';
 import { ElAlert, ElButton, ElForm, ElFormItem, ElInput, ElOption, ElSelect } from 'element-plus';
 import { validateRequired } from './adminSurface';
 import type { Platform, PlatformWrite } from '../../../services/controlPlane';
-import { controlPlaneAvailable } from '../../../services/frontendMode';
+import { platformApiReady } from '../../../services/frontendMode';
 import { errorText } from '../../portalUtils';
 
 const props = withDefaults(defineProps<{ editing?: boolean; initial?: Platform | null; submit?: (body: PlatformWrite) => Promise<void> }>(), {
@@ -48,7 +48,7 @@ function validate(): boolean {
   return !Object.keys(errors.value).length;
 }
 async function save(): Promise<void> {
-  if (saving.value || !props.submit || !controlPlaneAvailable || !validate()) return;
+  if (saving.value || !props.submit || !platformApiReady || !validate()) return;
   saving.value = true;
   try {
     const body: PlatformWrite = {
@@ -73,15 +73,6 @@ async function save(): Promise<void> {
 
 <template>
   <ElForm label-position="top" @submit.prevent="validate">
-    <ElAlert
-      v-if="!controlPlaneAvailable"
-      class="form-notice"
-      type="info"
-      show-icon
-      :closable="false"
-      title="本地表单预览"
-      description="平台管理服务尚未接入，输入只在当前表单保留，保存按钮暂不可用。"
-    />
     <div class="two-col">
       <ElFormItem label="平台 code" required :error="errors.code"
         ><ElInput
@@ -137,7 +128,7 @@ async function save(): Promise<void> {
     <p v-if="message" class="form-result" role="status">{{ message }}</p>
     <div class="form-actions">
       <ElButton native-type="submit" :disabled="saving">校验字段</ElButton
-      ><ElButton type="primary" :loading="saving" :disabled="!controlPlaneAvailable || !submit" @click="save">保存平台</ElButton>
+      ><ElButton type="primary" :loading="saving" :disabled="!platformApiReady || !submit" @click="save">保存平台</ElButton>
     </div>
   </ElForm>
 </template>

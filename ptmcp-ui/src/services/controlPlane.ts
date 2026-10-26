@@ -1,6 +1,6 @@
 import { request, type RequestOptions } from './http';
 import { newUuid } from './uuid';
-import { controlPlaneAvailable, delegationApiReady, effectiveApiReady } from './frontendMode';
+import { controlPlaneAvailable, delegationApiReady, effectiveApiReady, platformApiReady } from './frontendMode';
 import type { AuditDetail, AuditSummary } from './mePortalApi';
 
 export interface Page<T> {
@@ -94,6 +94,8 @@ const create = (body: unknown): RequestOptions => ({ method: 'POST', body, heade
 const delegationReady = delegationApiReady || controlPlaneAvailable;
 /** 当前有效资源端点已实现，预览模式继续走合成判定。 */
 const effectiveReady = effectiveApiReady || controlPlaneAvailable;
+/** 平台 CRUD 已实现；平台详情页的客户端/Scope 域仍由 controlPlaneAvailable 控制。 */
+const platformReady = platformApiReady || controlPlaneAvailable;
 export const controlPlane = {
   effective: (filters: Record<string, string | undefined>, signal?: AbortSignal) =>
     controlRequest<
@@ -101,13 +103,18 @@ export const controlPlane = {
     >(`/acl/effective${queryString(filters)}`, { signal }, effectiveReady),
   platforms: {
     list: (filters: Record<string, string | undefined>, signal?: AbortSignal) =>
-      controlRequest<Page<Platform>>(`/platforms${queryString({ ...filters, pageSize: '20' })}`, { signal }),
-    get: (id: string, signal?: AbortSignal) => controlRequest<Platform>(`/platforms/${encodeURIComponent(id)}`, { signal }),
+      controlRequest<Page<Platform>>(`/platforms${queryString({ ...filters, pageSize: '20' })}`, { signal }, platformReady),
+    get: (id: string, signal?: AbortSignal) => controlRequest<Platform>(`/platforms/${encodeURIComponent(id)}`, { signal }, platformReady),
     save: (body: PlatformWrite, row?: Platform) =>
       row
-        ? controlRequest<Platform>(`/platforms/${encodeURIComponent(row.id)}`, { method: 'PUT', body, headers: versioned(row.version) })
-        : controlRequest<Platform>('/platforms', create(body)),
-    remove: (row: Platform) => controlRequest(`/platforms/${encodeURIComponent(row.id)}`, { method: 'DELETE', headers: versioned(row.version) }),
+        ? controlRequest<Platform>(
+            `/platforms/${encodeURIComponent(row.id)}`,
+            { method: 'PUT', body, headers: versioned(row.version) },
+            platformReady,
+          )
+        : controlRequest<Platform>('/platforms', create(body), platformReady),
+    remove: (row: Platform) =>
+      controlRequest(`/platforms/${encodeURIComponent(row.id)}`, { method: 'DELETE', headers: versioned(row.version) }, platformReady),
   },
   clients: {
     list: (platformId: string, filters: Record<string, string | undefined>, signal?: AbortSignal) =>

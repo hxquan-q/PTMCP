@@ -17,17 +17,18 @@ import {
 } from 'element-plus';
 import PageHeader from '../../../components/common/PageHeader.vue';
 import PageState from '../../../components/common/PageState.vue';
-import { localOnlyReason } from './adminSurface';
 import { useSessionStore } from '../../../stores/session';
 import PlatformBasicsForm from './PlatformBasicsForm.vue';
 import { controlPlane, type PlatformWrite } from '../../../services/controlPlane';
-import { controlPlaneAvailable, mutationNotice } from '../../../services/frontendMode';
+import { mutationNotice, platformApiReady } from '../../../services/frontendMode';
 import { useCursorPage } from '../../../composables/useCursorPage';
 import { errorText, isConflict } from '../../portalUtils';
 
 const filter = reactive({ keyword: '', tier: '', status: '' });
 const dialogVisible = ref(false);
 const session = useSessionStore();
+/** 平台 CRUD 后端已实现（T17-api 切片）；预览模式继续用合成数据。 */
+const platformReady = platformApiReady;
 const router = useRouter();
 const { rows, cursor, loading, error, loaded, reset, load, retry } = useCursorPage((cursor, signal) =>
   controlPlane.platforms.list({ ...filter, cursor }, signal),
@@ -59,7 +60,7 @@ async function remove(id: string): Promise<void> {
 }
 watch(filter, reset, { flush: 'sync' });
 onMounted(() => {
-  if (controlPlaneAvailable) void load();
+  if (platformReady) void load();
 });
 const filterText = computed(() =>
   [filter.keyword, filter.tier, filter.status].filter(Boolean).length ? '筛选条件已准备，接口接入后将按服务端游标查询。' : '平台目录尚未连接。',
@@ -78,14 +79,6 @@ onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearP
         ><ElButton v-if="session.can('ptmcp:platform:create')" type="primary" @click="dialogVisible = true">新建平台</ElButton></template
       >
     </PageHeader>
-    <ElAlert
-      v-if="!controlPlaneAvailable"
-      type="warning"
-      show-icon
-      :closable="false"
-      title="平台管理接口待接入"
-      :description="localOnlyReason('平台与客户端')"
-    />
     <ElCard class="filter-card" shadow="never">
       <div class="filter-row">
         <ElInput v-model="filter.keyword" clearable placeholder="平台名称或 code" aria-label="平台名称或 code" />
@@ -96,11 +89,11 @@ onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearP
           ><ElOption label="启用" value="ACTIVE" /><ElOption label="停用" value="DISABLED"
         /></ElSelect>
         <div>
-          <ElButton type="primary" :loading="loading" :disabled="!controlPlaneAvailable" @click="load()">查询</ElButton
+          <ElButton type="primary" :loading="loading" :disabled="!platformReady" @click="load()">查询</ElButton
           ><ElButton
             @click="
               Object.assign(filter, { keyword: '', tier: '', status: '' });
-              controlPlaneAvailable && load();
+              platformReady && load();
             "
             >重置</ElButton
           >
@@ -113,7 +106,7 @@ onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearP
           <h2>平台目录</h2>
           <p>平台、Scope 和客户端应由后端授权接口返回。</p>
         </div>
-        <ElTag effect="plain" type="info">{{ controlPlaneAvailable ? '开发预览' : '未连接' }}</ElTag>
+        <ElTag effect="plain" type="info">{{ platformReady ? '已接入' : '未连接' }}</ElTag>
       </div>
       <ElAlert v-if="error" type="error" :title="error" :closable="false"><ElButton @click="retry">重试</ElButton></ElAlert>
       <ElSkeleton v-if="loading && !rows.length" :rows="5" animated />
@@ -147,7 +140,7 @@ onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearP
         <template #empty
           ><PageState
             :title="error ? '平台读取失败' : loaded ? '没有符合条件的平台' : '平台目录尚未读取'"
-            :description="controlPlaneAvailable ? '可调整筛选、查询或创建平台。' : filterText"
+            :description="platformReady ? '可调整筛选、查询或创建平台。' : filterText"
         /></template>
       </ElTable>
       <ElButton v-if="cursor" :loading="loading" @click="load(true)">加载更多</ElButton>

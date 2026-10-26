@@ -64,17 +64,17 @@
 [INFO]  T E S T S
 [INFO] -------------------------------------------------------
 [INFO] Running local.ptmcp.common.resource.ResourceRefTest
-[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.092 s -- in local.ptmcp.common.resource.ResourceRefTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.091 s -- in local.ptmcp.common.resource.ResourceRefTest
 [INFO] Running local.ptmcp.common.resource.ResourceIdentifierTest
-[INFO] Tests run: 33, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.059 s -- in local.ptmcp.common.resource.ResourceIdentifierTest
+[INFO] Tests run: 33, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.058 s -- in local.ptmcp.common.resource.ResourceIdentifierTest
 [INFO] Running local.ptmcp.common.resource.ResourceNamespaceTest
-[INFO] Tests run: 34, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.047 s -- in local.ptmcp.common.resource.ResourceNamespaceTest
+[INFO] Tests run: 34, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.045 s -- in local.ptmcp.common.resource.ResourceNamespaceTest
 [INFO] Running local.ptmcp.common.resource.ResourceIdTest
-[INFO] Tests run: 24, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.027 s -- in local.ptmcp.common.resource.ResourceIdTest
+[INFO] Tests run: 24, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.025 s -- in local.ptmcp.common.resource.ResourceIdTest
 [INFO] Running local.ptmcp.common.resource.ResourceKeyTest
-[INFO] Tests run: 37, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.045 s -- in local.ptmcp.common.resource.ResourceKeyTest
+[INFO] Tests run: 37, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.044 s -- in local.ptmcp.common.resource.ResourceKeyTest
 [INFO] Running local.ptmcp.common.error.DomainExceptionTest
-[INFO] Tests run: 53, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.039 s -- in local.ptmcp.common.error.DomainExceptionTest
+[INFO] Tests run: 53, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.038 s -- in local.ptmcp.common.error.DomainExceptionTest
 [INFO] Running local.ptmcp.common.error.ErrorCodeTest
 [INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in local.ptmcp.common.error.ErrorCodeTest
 [INFO] Running local.ptmcp.common.authz.GrantExpanderTest
@@ -82,9 +82,9 @@
 [INFO] Running local.ptmcp.common.authz.PermissionEvaluatorTest
 [INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in local.ptmcp.common.authz.PermissionEvaluatorTest
 [INFO] Running local.ptmcp.common.platform.PlatformProofVerifierTest
-[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in local.ptmcp.common.platform.PlatformProofVerifierTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in local.ptmcp.common.platform.PlatformProofVerifierTest
 [INFO] Running local.ptmcp.common.platform.CidrRangeTest
-[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in local.ptmcp.common.platform.CidrRangeTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in local.ptmcp.common.platform.CidrRangeTest
 [INFO] 
 [INFO] Results:
 [INFO] 
@@ -130,358 +130,358 @@
 SLF4J(W): No SLF4J providers were found.
 SLF4J(W): Defaulting to no-operation (NOP) logger implementation
 SLF4J(W): See https://www.slf4j.org/codes.html#noProviders for further details.
-10月 26, 2026 11:44:45 下午 org.flywaydb.core.FlywayExecutor init
-信息: Database: jdbc:mysql://localhost:32871/security_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
-10月 26, 2026 11:44:45 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
+10月 27, 2026 12:19:35 上午 org.flywaydb.core.FlywayExecutor init
+信息: Database: jdbc:mysql://localhost:32975/security_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+10月 27, 2026 12:19:35 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
 信息: Schema history table `security_schema_test`.`flyway_schema_history` does not exist yet
-10月 26, 2026 11:44:45 下午 org.flywaydb.core.internal.command.DbValidate validate
-信息: Successfully validated 6 migrations (execution time 00:00.015s)
-10月 26, 2026 11:44:45 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory create
+10月 27, 2026 12:19:35 上午 org.flywaydb.core.internal.command.DbValidate validate
+信息: Successfully validated 6 migrations (execution time 00:00.016s)
+10月 27, 2026 12:19:35 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory create
 信息: Creating Schema History table `security_schema_test`.`flyway_schema_history` ...
-10月 26, 2026 11:44:45 下午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
+10月 27, 2026 12:19:35 上午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
 信息: Current version of schema `security_schema_test`: << Empty Schema >>
-10月 26, 2026 11:44:45 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:19:35 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `security_schema_test` to version "1 - security foundation"
-10月 26, 2026 11:44:45 下午 org.flywaydb.core.internal.command.DbMigrate logSummary
-信息: Successfully applied 1 migration to schema `security_schema_test`, now at version v1 (execution time 00:00.024s)
-10月 26, 2026 11:44:45 下午 org.flywaydb.core.FlywayExecutor init
-信息: Database: jdbc:mysql://localhost:32871/security_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
-10月 26, 2026 11:44:45 下午 org.flywaydb.core.internal.command.DbValidate validate
-信息: Successfully validated 6 migrations (execution time 00:00.005s)
-10月 26, 2026 11:44:45 下午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
+10月 27, 2026 12:19:35 上午 org.flywaydb.core.internal.command.DbMigrate logSummary
+信息: Successfully applied 1 migration to schema `security_schema_test`, now at version v1 (execution time 00:00.028s)
+10月 27, 2026 12:19:35 上午 org.flywaydb.core.FlywayExecutor init
+信息: Database: jdbc:mysql://localhost:32975/security_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+10月 27, 2026 12:19:36 上午 org.flywaydb.core.internal.command.DbValidate validate
+信息: Successfully validated 6 migrations (execution time 00:00.009s)
+10月 27, 2026 12:19:36 上午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
 信息: Current version of schema `security_schema_test`: 1
-10月 26, 2026 11:44:45 下午 org.flywaydb.core.internal.command.DbMigrate logSummary
+10月 27, 2026 12:19:36 上午 org.flywaydb.core.internal.command.DbMigrate logSummary
 信息: Schema `security_schema_test` is up to date. No migration necessary.
-10月 26, 2026 11:44:45 下午 org.flywaydb.core.FlywayExecutor init
-信息: Database: jdbc:mysql://localhost:32871/security_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+10月 27, 2026 12:19:36 上午 org.flywaydb.core.FlywayExecutor init
+信息: Database: jdbc:mysql://localhost:32975/security_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
 MySQL boundary: version=8.0.46, time_zone=+00:00, sql_mode=ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION, lower_case_table_names=0, charset=utf8mb4, collation=utf8mb4_0900_bin, isolation=REPEATABLE-READ
-10月 26, 2026 11:44:46 下午 org.flywaydb.core.FlywayExecutor init
-信息: Database: jdbc:mysql://localhost:32871/security_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
-10月 26, 2026 11:44:46 下午 org.flywaydb.core.FlywayExecutor init
-信息: Database: jdbc:mysql://localhost:32871/security_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
-10月 26, 2026 11:44:46 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
+10月 27, 2026 12:19:36 上午 org.flywaydb.core.FlywayExecutor init
+信息: Database: jdbc:mysql://localhost:32975/security_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+10月 27, 2026 12:19:36 上午 org.flywaydb.core.FlywayExecutor init
+信息: Database: jdbc:mysql://localhost:32975/security_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+10月 27, 2026 12:19:36 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
 信息: Schema history table `security_schema_test`.`unknown_schema_history` does not exist yet
-10月 26, 2026 11:44:46 下午 org.flywaydb.core.internal.command.DbValidate validate
+10月 27, 2026 12:19:36 上午 org.flywaydb.core.internal.command.DbValidate validate
 信息: Successfully validated 6 migrations (execution time 00:00.004s)
-[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 10.55 s -- in local.ptmcp.persistence.SecuritySchemaMigrationTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 10.71 s -- in local.ptmcp.persistence.SecuritySchemaMigrationTest
 [INFO] Running local.ptmcp.persistence.OAuthAuditSchemaMigrationTest
-10月 26, 2026 11:44:54 下午 org.flywaydb.core.FlywayExecutor init
-信息: Database: jdbc:mysql://localhost:32872/oauth_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
-10月 26, 2026 11:44:54 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.FlywayExecutor init
+信息: Database: jdbc:mysql://localhost:32976/oauth_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
 信息: Schema history table `oauth_schema_test`.`flyway_schema_history` does not exist yet
-10月 26, 2026 11:44:54 下午 org.flywaydb.core.internal.command.DbValidate validate
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.internal.command.DbValidate validate
 信息: Successfully validated 6 migrations (execution time 00:00.004s)
-10月 26, 2026 11:44:54 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory create
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory create
 信息: Creating Schema History table `oauth_schema_test`.`flyway_schema_history` ...
-10月 26, 2026 11:44:54 下午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
 信息: Current version of schema `oauth_schema_test`: << Empty Schema >>
-10月 26, 2026 11:44:54 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `oauth_schema_test` to version "1 - security foundation"
-10月 26, 2026 11:44:54 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `oauth_schema_test` to version "2 - organization platform resource acl"
-10月 26, 2026 11:44:54 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:44:54 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:44:54 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:44:54 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:44:54 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:44:54 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:44:54 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `oauth_schema_test` to version "3 - oauth audit idempotency lease"
-10月 26, 2026 11:44:55 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:44:55 下午 org.flywaydb.core.internal.command.DbMigrate logSummary
-信息: Successfully applied 3 migrations to schema `oauth_schema_test`, now at version v3 (execution time 00:00.272s)
-10月 26, 2026 11:44:55 下午 org.flywaydb.core.FlywayExecutor init
-信息: Database: jdbc:mysql://localhost:32872/oauth_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
-10月 26, 2026 11:44:55 下午 org.flywaydb.core.internal.command.DbValidate validate
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.internal.command.DbMigrate logSummary
+信息: Successfully applied 3 migrations to schema `oauth_schema_test`, now at version v3 (execution time 00:00.276s)
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.FlywayExecutor init
+信息: Database: jdbc:mysql://localhost:32976/oauth_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.internal.command.DbValidate validate
 信息: Successfully validated 6 migrations (execution time 00:00.004s)
-10月 26, 2026 11:44:55 下午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
 信息: Current version of schema `oauth_schema_test`: 3
-10月 26, 2026 11:44:55 下午 org.flywaydb.core.internal.command.DbMigrate logSummary
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.internal.command.DbMigrate logSummary
 信息: Schema `oauth_schema_test` is up to date. No migration necessary.
-10月 26, 2026 11:44:55 下午 org.flywaydb.core.FlywayExecutor init
-信息: Database: jdbc:mysql://localhost:32872/oauth_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
-[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.253 s -- in local.ptmcp.persistence.OAuthAuditSchemaMigrationTest
+10月 27, 2026 12:19:45 上午 org.flywaydb.core.FlywayExecutor init
+信息: Database: jdbc:mysql://localhost:32976/oauth_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.712 s -- in local.ptmcp.persistence.OAuthAuditSchemaMigrationTest
 [INFO] Running local.ptmcp.persistence.org.OrgManagementStoreTest
-10月 26, 2026 11:45:04 下午 org.flywaydb.core.FlywayExecutor init
-信息: Database: jdbc:mysql://localhost:32873/org_store_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
-10月 26, 2026 11:45:04 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
+10月 27, 2026 12:19:54 上午 org.flywaydb.core.FlywayExecutor init
+信息: Database: jdbc:mysql://localhost:32977/org_store_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+10月 27, 2026 12:19:54 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
 信息: Schema history table `org_store_test`.`flyway_schema_history` does not exist yet
-10月 26, 2026 11:45:04 下午 org.flywaydb.core.internal.command.DbValidate validate
+10月 27, 2026 12:19:54 上午 org.flywaydb.core.internal.command.DbValidate validate
 信息: Successfully validated 6 migrations (execution time 00:00.004s)
-10月 26, 2026 11:45:04 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory create
+10月 27, 2026 12:19:54 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory create
 信息: Creating Schema History table `org_store_test`.`flyway_schema_history` ...
-10月 26, 2026 11:45:04 下午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
+10月 27, 2026 12:19:54 上午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
 信息: Current version of schema `org_store_test`: << Empty Schema >>
-10月 26, 2026 11:45:04 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:19:54 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `org_store_test` to version "1 - security foundation"
-10月 26, 2026 11:45:04 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:19:54 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `org_store_test` to version "2 - organization platform resource acl"
-10月 26, 2026 11:45:04 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:19:54 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:04 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:19:54 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:04 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:19:54 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:04 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:19:54 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:04 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:19:54 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:04 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:19:54 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:04 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:19:54 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `org_store_test` to version "3 - oauth audit idempotency lease"
-10月 26, 2026 11:45:04 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:19:54 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:04 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:19:54 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `org_store_test` to version "4 - metadata sync job"
-10月 26, 2026 11:45:04 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:19:54 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `org_store_test` to version "5 - admin org management"
-10月 26, 2026 11:45:04 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:19:55 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `org_store_test` to version "6 - job type"
-10月 26, 2026 11:45:04 下午 org.flywaydb.core.internal.command.DbMigrate logSummary
-信息: Successfully applied 6 migrations to schema `org_store_test`, now at version v6 (execution time 00:00.345s)
-[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.902 s -- in local.ptmcp.persistence.org.OrgManagementStoreTest
+10月 27, 2026 12:19:55 上午 org.flywaydb.core.internal.command.DbMigrate logSummary
+信息: Successfully applied 6 migrations to schema `org_store_test`, now at version v6 (execution time 00:00.338s)
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.600 s -- in local.ptmcp.persistence.org.OrgManagementStoreTest
 [INFO] Running local.ptmcp.persistence.MetadataSchemaMigrationTest
-10月 26, 2026 11:45:13 下午 org.flywaydb.core.FlywayExecutor init
-信息: Database: jdbc:mysql://localhost:32874/metadata_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
-10月 26, 2026 11:45:13 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
+10月 27, 2026 12:20:04 上午 org.flywaydb.core.FlywayExecutor init
+信息: Database: jdbc:mysql://localhost:32978/metadata_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+10月 27, 2026 12:20:04 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
 信息: Schema history table `metadata_schema_test`.`flyway_schema_history` does not exist yet
-10月 26, 2026 11:45:13 下午 org.flywaydb.core.internal.command.DbValidate validate
-信息: Successfully validated 6 migrations (execution time 00:00.003s)
-10月 26, 2026 11:45:13 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory create
+10月 27, 2026 12:20:04 上午 org.flywaydb.core.internal.command.DbValidate validate
+信息: Successfully validated 6 migrations (execution time 00:00.002s)
+10月 27, 2026 12:20:04 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory create
 信息: Creating Schema History table `metadata_schema_test`.`flyway_schema_history` ...
-10月 26, 2026 11:45:13 下午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
+10月 27, 2026 12:20:04 上午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
 信息: Current version of schema `metadata_schema_test`: << Empty Schema >>
-10月 26, 2026 11:45:13 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:04 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `metadata_schema_test` to version "1 - security foundation"
-10月 26, 2026 11:45:13 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:04 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `metadata_schema_test` to version "2 - organization platform resource acl"
-10月 26, 2026 11:45:14 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:04 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:14 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:04 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:14 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:04 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:14 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:04 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:14 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:04 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:14 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:04 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:14 下午 org.flywaydb.core.internal.command.DbMigrate logSummary
-信息: Successfully applied 2 migrations to schema `metadata_schema_test`, now at version v2 (execution time 00:00.144s)
-10月 26, 2026 11:45:14 下午 org.flywaydb.core.FlywayExecutor init
-信息: Database: jdbc:mysql://localhost:32874/metadata_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
-10月 26, 2026 11:45:14 下午 org.flywaydb.core.internal.command.DbValidate validate
-信息: Successfully validated 6 migrations (execution time 00:00.003s)
-10月 26, 2026 11:45:14 下午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
+10月 27, 2026 12:20:04 上午 org.flywaydb.core.internal.command.DbMigrate logSummary
+信息: Successfully applied 2 migrations to schema `metadata_schema_test`, now at version v2 (execution time 00:00.140s)
+10月 27, 2026 12:20:04 上午 org.flywaydb.core.FlywayExecutor init
+信息: Database: jdbc:mysql://localhost:32978/metadata_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+10月 27, 2026 12:20:04 上午 org.flywaydb.core.internal.command.DbValidate validate
+信息: Successfully validated 6 migrations (execution time 00:00.002s)
+10月 27, 2026 12:20:04 上午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
 信息: Current version of schema `metadata_schema_test`: 2
-10月 26, 2026 11:45:14 下午 org.flywaydb.core.internal.command.DbMigrate logSummary
+10月 27, 2026 12:20:04 上午 org.flywaydb.core.internal.command.DbMigrate logSummary
 信息: Schema `metadata_schema_test` is up to date. No migration necessary.
-10月 26, 2026 11:45:14 下午 org.flywaydb.core.FlywayExecutor init
-信息: Database: jdbc:mysql://localhost:32874/metadata_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
-[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 8.980 s -- in local.ptmcp.persistence.MetadataSchemaMigrationTest
+10月 27, 2026 12:20:04 上午 org.flywaydb.core.FlywayExecutor init
+信息: Database: jdbc:mysql://localhost:32978/metadata_schema_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.332 s -- in local.ptmcp.persistence.MetadataSchemaMigrationTest
 [INFO] Running local.ptmcp.persistence.security.SecurityStateTest
-10月 26, 2026 11:45:22 下午 org.flywaydb.core.FlywayExecutor init
-信息: Database: jdbc:mysql://localhost:32875/security_state_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
-10月 26, 2026 11:45:22 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
+10月 27, 2026 12:20:13 上午 org.flywaydb.core.FlywayExecutor init
+信息: Database: jdbc:mysql://localhost:32979/security_state_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+10月 27, 2026 12:20:13 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
 信息: Schema history table `security_state_test`.`flyway_schema_history` does not exist yet
-10月 26, 2026 11:45:22 下午 org.flywaydb.core.internal.command.DbValidate validate
-信息: Successfully validated 6 migrations (execution time 00:00.004s)
-10月 26, 2026 11:45:22 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory create
+10月 27, 2026 12:20:13 上午 org.flywaydb.core.internal.command.DbValidate validate
+信息: Successfully validated 6 migrations (execution time 00:00.003s)
+10月 27, 2026 12:20:13 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory create
 信息: Creating Schema History table `security_state_test`.`flyway_schema_history` ...
-10月 26, 2026 11:45:22 下午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
+10月 27, 2026 12:20:13 上午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
 信息: Current version of schema `security_state_test`: << Empty Schema >>
-10月 26, 2026 11:45:22 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:13 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `security_state_test` to version "1 - security foundation"
-10月 26, 2026 11:45:22 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:13 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `security_state_test` to version "2 - organization platform resource acl"
-10月 26, 2026 11:45:23 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:13 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:23 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:13 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:23 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:13 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:23 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:13 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:23 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:13 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:23 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:13 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:23 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:13 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `security_state_test` to version "3 - oauth audit idempotency lease"
-10月 26, 2026 11:45:23 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:13 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:23 下午 org.flywaydb.core.internal.command.DbMigrate logSummary
-信息: Successfully applied 3 migrations to schema `security_state_test`, now at version v3 (execution time 00:00.269s)
-[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.191 s -- in local.ptmcp.persistence.security.SecurityStateTest
+10月 27, 2026 12:20:13 上午 org.flywaydb.core.internal.command.DbMigrate logSummary
+信息: Successfully applied 3 migrations to schema `security_state_test`, now at version v3 (execution time 00:00.267s)
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.094 s -- in local.ptmcp.persistence.security.SecurityStateTest
 [INFO] Running local.ptmcp.persistence.audit.AuditRepositoryTest
-10月 26, 2026 11:45:32 下午 org.flywaydb.core.FlywayExecutor init
-信息: Database: jdbc:mysql://localhost:32876/audit_repository_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
-10月 26, 2026 11:45:32 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
+10月 27, 2026 12:20:22 上午 org.flywaydb.core.FlywayExecutor init
+信息: Database: jdbc:mysql://localhost:32980/audit_repository_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+10月 27, 2026 12:20:22 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
 信息: Schema history table `audit_repository_test`.`flyway_schema_history` does not exist yet
-10月 26, 2026 11:45:32 下午 org.flywaydb.core.internal.command.DbValidate validate
+10月 27, 2026 12:20:22 上午 org.flywaydb.core.internal.command.DbValidate validate
 信息: Successfully validated 6 migrations (execution time 00:00.003s)
-10月 26, 2026 11:45:32 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory create
+10月 27, 2026 12:20:22 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory create
 信息: Creating Schema History table `audit_repository_test`.`flyway_schema_history` ...
-10月 26, 2026 11:45:32 下午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
+10月 27, 2026 12:20:22 上午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
 信息: Current version of schema `audit_repository_test`: << Empty Schema >>
-10月 26, 2026 11:45:32 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:22 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `audit_repository_test` to version "1 - security foundation"
-10月 26, 2026 11:45:32 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:22 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `audit_repository_test` to version "2 - organization platform resource acl"
-10月 26, 2026 11:45:32 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:22 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:32 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:22 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:32 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:22 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:32 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:22 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:32 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:22 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:32 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:22 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:32 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:22 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `audit_repository_test` to version "3 - oauth audit idempotency lease"
-10月 26, 2026 11:45:32 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:22 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:32 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:22 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `audit_repository_test` to version "4 - metadata sync job"
-10月 26, 2026 11:45:32 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:22 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `audit_repository_test` to version "5 - admin org management"
-10月 26, 2026 11:45:32 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:22 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `audit_repository_test` to version "6 - job type"
-10月 26, 2026 11:45:32 下午 org.flywaydb.core.internal.command.DbMigrate logSummary
-信息: Successfully applied 6 migrations to schema `audit_repository_test`, now at version v6 (execution time 00:00.345s)
-[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.259 s -- in local.ptmcp.persistence.audit.AuditRepositoryTest
+10月 27, 2026 12:20:22 上午 org.flywaydb.core.internal.command.DbMigrate logSummary
+信息: Successfully applied 6 migrations to schema `audit_repository_test`, now at version v6 (execution time 00:00.342s)
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.139 s -- in local.ptmcp.persistence.audit.AuditRepositoryTest
 [INFO] Running local.ptmcp.persistence.audit.wal.TerminalWalReplayTest
-10月 26, 2026 11:45:41 下午 org.flywaydb.core.FlywayExecutor init
-信息: Database: jdbc:mysql://localhost:32877/audit_repository_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
-10月 26, 2026 11:45:41 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
+10月 27, 2026 12:20:31 上午 org.flywaydb.core.FlywayExecutor init
+信息: Database: jdbc:mysql://localhost:32981/audit_repository_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+10月 27, 2026 12:20:31 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
 信息: Schema history table `audit_repository_test`.`flyway_schema_history` does not exist yet
-10月 26, 2026 11:45:41 下午 org.flywaydb.core.internal.command.DbValidate validate
+10月 27, 2026 12:20:31 上午 org.flywaydb.core.internal.command.DbValidate validate
 信息: Successfully validated 6 migrations (execution time 00:00.003s)
-10月 26, 2026 11:45:41 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory create
+10月 27, 2026 12:20:31 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory create
 信息: Creating Schema History table `audit_repository_test`.`flyway_schema_history` ...
-10月 26, 2026 11:45:41 下午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
+10月 27, 2026 12:20:31 上午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
 信息: Current version of schema `audit_repository_test`: << Empty Schema >>
-10月 26, 2026 11:45:41 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:31 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `audit_repository_test` to version "1 - security foundation"
-10月 26, 2026 11:45:41 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:31 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `audit_repository_test` to version "2 - organization platform resource acl"
-10月 26, 2026 11:45:41 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:31 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:41 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:31 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:41 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:31 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:41 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:31 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:41 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:31 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:41 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:31 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:41 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:31 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `audit_repository_test` to version "3 - oauth audit idempotency lease"
-10月 26, 2026 11:45:41 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:31 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:41 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:32 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `audit_repository_test` to version "4 - metadata sync job"
-10月 26, 2026 11:45:41 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:32 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `audit_repository_test` to version "5 - admin org management"
-10月 26, 2026 11:45:41 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:32 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `audit_repository_test` to version "6 - job type"
-10月 26, 2026 11:45:41 下午 org.flywaydb.core.internal.command.DbMigrate logSummary
-信息: Successfully applied 6 migrations to schema `audit_repository_test`, now at version v6 (execution time 00:00.333s)
-[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.537 s -- in local.ptmcp.persistence.audit.wal.TerminalWalReplayTest
+10月 27, 2026 12:20:32 上午 org.flywaydb.core.internal.command.DbMigrate logSummary
+信息: Successfully applied 6 migrations to schema `audit_repository_test`, now at version v6 (execution time 00:00.355s)
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.477 s -- in local.ptmcp.persistence.audit.wal.TerminalWalReplayTest
 [INFO] Running local.ptmcp.persistence.SecurityChangeTransactionTest
-10月 26, 2026 11:45:50 下午 org.flywaydb.core.FlywayExecutor init
-信息: Database: jdbc:mysql://localhost:32878/security_tx_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
-10月 26, 2026 11:45:50 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
+10月 27, 2026 12:20:41 上午 org.flywaydb.core.FlywayExecutor init
+信息: Database: jdbc:mysql://localhost:32982/security_tx_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+10月 27, 2026 12:20:41 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
 信息: Schema history table `security_tx_test`.`flyway_schema_history` does not exist yet
-10月 26, 2026 11:45:50 下午 org.flywaydb.core.internal.command.DbValidate validate
+10月 27, 2026 12:20:41 上午 org.flywaydb.core.internal.command.DbValidate validate
 信息: Successfully validated 6 migrations (execution time 00:00.003s)
-10月 26, 2026 11:45:50 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory create
+10月 27, 2026 12:20:41 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory create
 信息: Creating Schema History table `security_tx_test`.`flyway_schema_history` ...
-10月 26, 2026 11:45:50 下午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
+10月 27, 2026 12:20:41 上午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
 信息: Current version of schema `security_tx_test`: << Empty Schema >>
-10月 26, 2026 11:45:50 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:41 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `security_tx_test` to version "1 - security foundation"
-10月 26, 2026 11:45:50 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:41 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `security_tx_test` to version "2 - organization platform resource acl"
-10月 26, 2026 11:45:50 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:41 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:50 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:41 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:50 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:41 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:50 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:41 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:51 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:41 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:51 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:41 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:51 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:41 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `security_tx_test` to version "3 - oauth audit idempotency lease"
-10月 26, 2026 11:45:51 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:41 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:45:51 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:41 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `security_tx_test` to version "4 - metadata sync job"
-10月 26, 2026 11:45:51 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:41 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `security_tx_test` to version "5 - admin org management"
-10月 26, 2026 11:45:51 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:41 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `security_tx_test` to version "6 - job type"
-10月 26, 2026 11:45:51 下午 org.flywaydb.core.internal.command.DbMigrate logSummary
-信息: Successfully applied 6 migrations to schema `security_tx_test`, now at version v6 (execution time 00:00.357s)
-[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.344 s -- in local.ptmcp.persistence.SecurityChangeTransactionTest
+10月 27, 2026 12:20:41 上午 org.flywaydb.core.internal.command.DbMigrate logSummary
+信息: Successfully applied 6 migrations to schema `security_tx_test`, now at version v6 (execution time 00:00.337s)
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.316 s -- in local.ptmcp.persistence.SecurityChangeTransactionTest
 [INFO] Running local.ptmcp.persistence.schema.MetadataSyncStoreTest
-10月 26, 2026 11:46:00 下午 org.flywaydb.core.FlywayExecutor init
-信息: Database: jdbc:mysql://localhost:32879/sync_store_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
-10月 26, 2026 11:46:00 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
+10月 27, 2026 12:20:50 上午 org.flywaydb.core.FlywayExecutor init
+信息: Database: jdbc:mysql://localhost:32983/sync_store_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+10月 27, 2026 12:20:50 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
 信息: Schema history table `sync_store_test`.`flyway_schema_history` does not exist yet
-10月 26, 2026 11:46:00 下午 org.flywaydb.core.internal.command.DbValidate validate
+10月 27, 2026 12:20:50 上午 org.flywaydb.core.internal.command.DbValidate validate
 信息: Successfully validated 6 migrations (execution time 00:00.003s)
-10月 26, 2026 11:46:00 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory create
+10月 27, 2026 12:20:50 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory create
 信息: Creating Schema History table `sync_store_test`.`flyway_schema_history` ...
-10月 26, 2026 11:46:00 下午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
+10月 27, 2026 12:20:50 上午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
 信息: Current version of schema `sync_store_test`: << Empty Schema >>
-10月 26, 2026 11:46:00 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:50 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `sync_store_test` to version "1 - security foundation"
-10月 26, 2026 11:46:00 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:50 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `sync_store_test` to version "2 - organization platform resource acl"
-10月 26, 2026 11:46:00 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:50 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:46:00 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:50 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:46:00 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:50 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:46:00 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:50 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:46:00 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:50 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:46:00 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:50 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:46:00 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:50 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `sync_store_test` to version "3 - oauth audit idempotency lease"
-10月 26, 2026 11:46:00 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:20:50 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:46:00 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:50 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `sync_store_test` to version "4 - metadata sync job"
-10月 26, 2026 11:46:00 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:50 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `sync_store_test` to version "5 - admin org management"
-10月 26, 2026 11:46:00 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:20:50 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `sync_store_test` to version "6 - job type"
-10月 26, 2026 11:46:00 下午 org.flywaydb.core.internal.command.DbMigrate logSummary
-信息: Successfully applied 6 migrations to schema `sync_store_test`, now at version v6 (execution time 00:00.346s)
-[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 11.74 s -- in local.ptmcp.persistence.schema.MetadataSyncStoreTest
+10月 27, 2026 12:20:50 上午 org.flywaydb.core.internal.command.DbMigrate logSummary
+信息: Successfully applied 6 migrations to schema `sync_store_test`, now at version v6 (execution time 00:00.342s)
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 11.91 s -- in local.ptmcp.persistence.schema.MetadataSyncStoreTest
 [INFO] 
 [INFO] Results:
 [INFO] 
@@ -527,54 +527,54 @@ MySQL boundary: version=8.0.46, time_zone=+00:00, sql_mode=ONLY_FULL_GROUP_BY,ST
 SLF4J(W): No SLF4J providers were found.
 SLF4J(W): Defaulting to no-operation (NOP) logger implementation
 SLF4J(W): See https://www.slf4j.org/codes.html#noProviders for further details.
-[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 12.98 s -- in local.ptmcp.datasource.MysqlReadOnlyExecutorTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 12.91 s -- in local.ptmcp.datasource.MysqlReadOnlyExecutorTest
 [INFO] Running local.ptmcp.datasource.metadata.MetadataSyncRunnerIntegrationTest
-10月 26, 2026 11:46:25 下午 org.flywaydb.core.FlywayExecutor init
-信息: Database: jdbc:mysql://localhost:32882/runner_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
-10月 26, 2026 11:46:25 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
+10月 27, 2026 12:21:16 上午 org.flywaydb.core.FlywayExecutor init
+信息: Database: jdbc:mysql://localhost:32986/runner_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+10月 27, 2026 12:21:16 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory allAppliedMigrations
 信息: Schema history table `runner_test`.`flyway_schema_history` does not exist yet
-10月 26, 2026 11:46:25 下午 org.flywaydb.core.internal.command.DbValidate validate
-信息: Successfully validated 6 migrations (execution time 00:00.016s)
-10月 26, 2026 11:46:25 下午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory create
+10月 27, 2026 12:21:16 上午 org.flywaydb.core.internal.command.DbValidate validate
+信息: Successfully validated 6 migrations (execution time 00:00.015s)
+10月 27, 2026 12:21:16 上午 org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory create
 信息: Creating Schema History table `runner_test`.`flyway_schema_history` ...
-10月 26, 2026 11:46:25 下午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
+10月 27, 2026 12:21:16 上午 org.flywaydb.core.internal.command.DbMigrate migrateGroup
 信息: Current version of schema `runner_test`: << Empty Schema >>
-10月 26, 2026 11:46:25 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:21:16 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `runner_test` to version "1 - security foundation"
-10月 26, 2026 11:46:25 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:21:16 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `runner_test` to version "2 - organization platform resource acl"
-10月 26, 2026 11:46:25 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:21:16 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:46:25 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:21:16 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:46:25 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:21:16 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:46:25 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:21:16 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:46:25 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:21:16 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:46:25 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:21:16 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:46:26 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:21:16 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `runner_test` to version "3 - oauth audit idempotency lease"
-10月 26, 2026 11:46:26 下午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
+10月 27, 2026 12:21:16 上午 org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor printWarnings
 警告: DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-10月 26, 2026 11:46:26 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:21:16 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `runner_test` to version "4 - metadata sync job"
-10月 26, 2026 11:46:26 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:21:16 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `runner_test` to version "5 - admin org management"
-10月 26, 2026 11:46:26 下午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
+10月 27, 2026 12:21:16 上午 org.flywaydb.core.internal.command.DbMigrate doMigrateGroup
 信息: Migrating schema `runner_test` to version "6 - job type"
-10月 26, 2026 11:46:26 下午 org.flywaydb.core.internal.command.DbMigrate logSummary
-信息: Successfully applied 6 migrations to schema `runner_test`, now at version v6 (execution time 00:00.361s)
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.635 s -- in local.ptmcp.datasource.metadata.MetadataSyncRunnerIntegrationTest
+10月 27, 2026 12:21:16 上午 org.flywaydb.core.internal.command.DbMigrate logSummary
+信息: Successfully applied 6 migrations to schema `runner_test`, now at version v6 (execution time 00:00.381s)
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.711 s -- in local.ptmcp.datasource.metadata.MetadataSyncRunnerIntegrationTest
 [INFO] Running local.ptmcp.datasource.metadata.MetadataCollectorTest
-[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 10.09 s -- in local.ptmcp.datasource.metadata.MetadataCollectorTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 10.26 s -- in local.ptmcp.datasource.metadata.MetadataCollectorTest
 [INFO] Running local.ptmcp.datasource.postgres.PgApprovedQueryAdapterTest
-[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.529 s -- in local.ptmcp.datasource.postgres.PgApprovedQueryAdapterTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.584 s -- in local.ptmcp.datasource.postgres.PgApprovedQueryAdapterTest
 [INFO] Running local.ptmcp.datasource.postgres.PgReadOnlyExecutorTest
-T11-a wide-row heap bytes: before=85907416 peak=136239064 after=136239064
-[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.276 s -- in local.ptmcp.datasource.postgres.PgReadOnlyExecutorTest
+T11-a wide-row heap bytes: before=85679144 peak=136010792 after=136010792
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.226 s -- in local.ptmcp.datasource.postgres.PgReadOnlyExecutorTest
 [INFO] 
 [INFO] Results:
 [INFO] 
@@ -587,7 +587,7 @@ T11-a wide-row heap bytes: before=85907416 peak=136239064 after=136239064
 [INFO] --------------------------------[ jar ]---------------------------------
 [INFO] 
 [INFO] --- spotless:3.1.0:check (format-check) @ ptmcp-admin ---
-[INFO] Spotless.Java is keeping 50 files clean - 0 needs changes to be clean, 0 were already clean, 50 were skipped because caching determined they were already clean
+[INFO] Spotless.Java is keeping 51 files clean - 0 needs changes to be clean, 0 were already clean, 51 were skipped because caching determined they were already clean
 [INFO] 
 [INFO] --- checkstyle:3.6.0:check (semantic-style-check) @ ptmcp-admin ---
 [INFO] 开始检查……
@@ -617,47 +617,47 @@ T11-a wide-row heap bytes: before=85907416 peak=136239064 after=136239064
 [INFO]  T E S T S
 [INFO] -------------------------------------------------------
 [INFO] Running local.ptmcp.admin.SessionApiTest
-23:46:41.788 [main] INFO org.testcontainers.images.PullPolicy -- Image pull policy will be performed by: DefaultPullPolicy()
-23:46:41.790 [main] INFO org.testcontainers.utility.ImageNameSubstitutor -- Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
-23:46:41.795 [main] INFO org.testcontainers.DockerClientFactory -- Testcontainers version: 2.0.5
-23:46:41.986 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Loaded org.testcontainers.dockerclient.UnixSocketClientProviderStrategy from ~/.testcontainers.properties, will try it first
-23:46:42.281 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Found Docker environment with local Unix socket (unix:///var/run/docker.sock)
-23:46:42.282 [main] INFO org.testcontainers.DockerClientFactory -- Docker host IP address is localhost
-23:46:42.297 [main] INFO org.testcontainers.DockerClientFactory -- Connected to docker: 
+00:21:32.497 [main] INFO org.testcontainers.images.PullPolicy -- Image pull policy will be performed by: DefaultPullPolicy()
+00:21:32.500 [main] INFO org.testcontainers.utility.ImageNameSubstitutor -- Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+00:21:32.505 [main] INFO org.testcontainers.DockerClientFactory -- Testcontainers version: 2.0.5
+00:21:32.695 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Loaded org.testcontainers.dockerclient.UnixSocketClientProviderStrategy from ~/.testcontainers.properties, will try it first
+00:21:32.983 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Found Docker environment with local Unix socket (unix:///var/run/docker.sock)
+00:21:32.984 [main] INFO org.testcontainers.DockerClientFactory -- Docker host IP address is localhost
+00:21:32.999 [main] INFO org.testcontainers.DockerClientFactory -- Connected to docker: 
   Server Version: 29.5.3
   API Version: 1.54
   Operating System: Ubuntu 22.04.5 LTS
   Total Memory: 515609 MB
-23:46:42.379 [main] INFO tc.testcontainers/ryuk:0.14.0 -- Creating container for image: testcontainers/ryuk:0.14.0
-23:46:42.463 [main] INFO tc.testcontainers/ryuk:0.14.0 -- Container testcontainers/ryuk:0.14.0 is starting: 40eb5a63a6b08d0dd91c047981d8da7b37cb70036d612fd9f3d6a7dc98eba8b6
-23:46:42.873 [main] INFO tc.testcontainers/ryuk:0.14.0 -- Container testcontainers/ryuk:0.14.0 started in PT0.493766226S
-23:46:42.879 [main] INFO org.testcontainers.utility.RyukResourceReaper -- Ryuk started - will monitor and terminate Testcontainers containers on JVM exit
-23:46:42.880 [main] INFO org.testcontainers.DockerClientFactory -- Checking the system...
-23:46:42.880 [main] INFO org.testcontainers.DockerClientFactory -- ✔︎ Docker server version should be at least 1.6.0
-23:46:42.880 [main] INFO tc.mysql:8.0 -- Creating container for image: mysql:8.0
-23:46:42.900 [main] INFO tc.mysql:8.0 -- Container mysql:8.0 is starting: c04733576a9c88a9291db52e66c4481b9966cf1c330dc6710cc73a4d11466219
-23:46:43.097 [main] INFO tc.mysql:8.0 -- Waiting for database connection to become available at jdbc:mysql://localhost:32888/session_api_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false using query 'SELECT 1'
-23:46:51.031 [main] INFO tc.mysql:8.0 -- Container mysql:8.0 started in PT8.150697412S
-23:46:51.032 [main] INFO tc.mysql:8.0 -- Container is started (JDBC URL: jdbc:mysql://localhost:32888/session_api_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false)
-23:46:51.289 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:mysql://localhost:32888/session_api_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
-23:46:51.433 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table `session_api_test`.`flyway_schema_history` does not exist yet
-23:46:51.436 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 6 migrations (execution time 00:00.018s)
-23:46:51.449 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table `session_api_test`.`flyway_schema_history` ...
-23:46:51.495 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema `session_api_test`: << Empty Schema >>
-23:46:51.504 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema `session_api_test` to version "1 - security foundation"
-23:46:51.557 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema `session_api_test` to version "2 - organization platform resource acl"
-23:46:51.605 [main] WARN org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor -- DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-23:46:51.625 [main] WARN org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor -- DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-23:46:51.626 [main] WARN org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor -- DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-23:46:51.626 [main] WARN org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor -- DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-23:46:51.643 [main] WARN org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor -- DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-23:46:51.652 [main] WARN org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor -- DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-23:46:51.711 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema `session_api_test` to version "3 - oauth audit idempotency lease"
-23:46:51.826 [main] WARN org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor -- DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-23:46:51.866 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema `session_api_test` to version "4 - metadata sync job"
-23:46:51.896 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema `session_api_test` to version "5 - admin org management"
-23:46:51.973 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema `session_api_test` to version "6 - job type"
-23:46:52.015 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 6 migrations to schema `session_api_test`, now at version v6 (execution time 00:00.406s)
+00:21:33.078 [main] INFO tc.testcontainers/ryuk:0.14.0 -- Creating container for image: testcontainers/ryuk:0.14.0
+00:21:33.154 [main] INFO tc.testcontainers/ryuk:0.14.0 -- Container testcontainers/ryuk:0.14.0 is starting: 1e0d7ad93b35090b12824923891237e8f2a258f29a69c560623af2c93e75af3f
+00:21:33.568 [main] INFO tc.testcontainers/ryuk:0.14.0 -- Container testcontainers/ryuk:0.14.0 started in PT0.490162533S
+00:21:33.573 [main] INFO org.testcontainers.utility.RyukResourceReaper -- Ryuk started - will monitor and terminate Testcontainers containers on JVM exit
+00:21:33.574 [main] INFO org.testcontainers.DockerClientFactory -- Checking the system...
+00:21:33.574 [main] INFO org.testcontainers.DockerClientFactory -- ✔︎ Docker server version should be at least 1.6.0
+00:21:33.575 [main] INFO tc.mysql:8.0 -- Creating container for image: mysql:8.0
+00:21:33.597 [main] INFO tc.mysql:8.0 -- Container mysql:8.0 is starting: 2aa3bff330559f05754294b7c4049370fab0491b2512bb9a49791247cc760f5b
+00:21:33.800 [main] INFO tc.mysql:8.0 -- Waiting for database connection to become available at jdbc:mysql://localhost:32992/session_api_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false using query 'SELECT 1'
+00:21:41.939 [main] INFO tc.mysql:8.0 -- Container mysql:8.0 started in PT8.364733423S
+00:21:41.940 [main] INFO tc.mysql:8.0 -- Container is started (JDBC URL: jdbc:mysql://localhost:32992/session_api_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false)
+00:21:42.172 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:mysql://localhost:32992/session_api_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+00:21:42.316 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table `session_api_test`.`flyway_schema_history` does not exist yet
+00:21:42.319 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 6 migrations (execution time 00:00.019s)
+00:21:42.333 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table `session_api_test`.`flyway_schema_history` ...
+00:21:42.379 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema `session_api_test`: << Empty Schema >>
+00:21:42.388 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema `session_api_test` to version "1 - security foundation"
+00:21:42.441 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema `session_api_test` to version "2 - organization platform resource acl"
+00:21:42.486 [main] WARN org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor -- DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+00:21:42.511 [main] WARN org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor -- DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+00:21:42.512 [main] WARN org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor -- DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+00:21:42.512 [main] WARN org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor -- DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+00:21:42.529 [main] WARN org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor -- DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+00:21:42.540 [main] WARN org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor -- DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+00:21:42.599 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema `session_api_test` to version "3 - oauth audit idempotency lease"
+00:21:42.704 [main] WARN org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor -- DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+00:21:42.740 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema `session_api_test` to version "4 - metadata sync job"
+00:21:42.763 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema `session_api_test` to version "5 - admin org management"
+00:21:42.823 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema `session_api_test` to version "6 - job type"
+00:21:42.856 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 6 migrations to schema `session_api_test`, now at version v6 (execution time 00:00.367s)
 
   .   ____          _            __ _ _
  /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
@@ -668,48 +668,48 @@ T11-a wide-row heap bytes: before=85907416 peak=136239064 after=136239064
 
  :: Spring Boot ::                (v4.1.2)
 
-2026-10-26T23:46:52.235+08:00  INFO 3319240 --- [ptmcp-admin] [           main] local.ptmcp.admin.SessionApiTest         : Starting SessionApiTest using Java 21.0.12.1 with PID 3319240 (started by ubuntu in /home/ubuntu/ALLSTAR_DATACHAT_SUB/ptmcp-parent/ptmcp-admin)
-2026-10-26T23:46:52.236+08:00  INFO 3319240 --- [ptmcp-admin] [           main] local.ptmcp.admin.SessionApiTest         : No active profile set, falling back to 1 default profile: "default"
-2026-10-26T23:46:52.918+08:00  INFO 3319240 --- [ptmcp-admin] [           main] com.zaxxer.hikari.HikariDataSource       : ptmcp-admin-meta - Starting...
-2026-10-26T23:46:52.942+08:00  INFO 3319240 --- [ptmcp-admin] [           main] com.zaxxer.hikari.pool.HikariPool        : ptmcp-admin-meta - Added connection com.mysql.cj.jdbc.ConnectionImpl@4468c0ea
-2026-10-26T23:46:52.944+08:00  INFO 3319240 --- [ptmcp-admin] [           main] com.zaxxer.hikari.HikariDataSource       : ptmcp-admin-meta - Start completed.
-2026-10-26T23:46:53.622+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
-2026-10-26T23:46:53.623+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
-2026-10-26T23:46:53.627+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
-2026-10-26T23:46:53.634+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 10 ms
-2026-10-26T23:46:53.672+08:00  INFO 3319240 --- [ptmcp-admin] [           main] local.ptmcp.admin.SessionApiTest         : Started SessionApiTest in 1.63 seconds (process running for 12.683)
+2026-10-27T00:21:43.075+08:00  INFO 3435902 --- [ptmcp-admin] [           main] local.ptmcp.admin.SessionApiTest         : Starting SessionApiTest using Java 21.0.12.1 with PID 3435902 (started by ubuntu in /home/ubuntu/ALLSTAR_DATACHAT_SUB/ptmcp-parent/ptmcp-admin)
+2026-10-27T00:21:43.076+08:00  INFO 3435902 --- [ptmcp-admin] [           main] local.ptmcp.admin.SessionApiTest         : No active profile set, falling back to 1 default profile: "default"
+2026-10-27T00:21:43.768+08:00  INFO 3435902 --- [ptmcp-admin] [           main] com.zaxxer.hikari.HikariDataSource       : ptmcp-admin-meta - Starting...
+2026-10-27T00:21:43.782+08:00  INFO 3435902 --- [ptmcp-admin] [           main] com.zaxxer.hikari.pool.HikariPool        : ptmcp-admin-meta - Added connection com.mysql.cj.jdbc.ConnectionImpl@53d2b827
+2026-10-27T00:21:43.783+08:00  INFO 3435902 --- [ptmcp-admin] [           main] com.zaxxer.hikari.HikariDataSource       : ptmcp-admin-meta - Start completed.
+2026-10-27T00:21:44.431+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-27T00:21:44.431+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-27T00:21:44.435+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-10-27T00:21:44.441+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 10 ms
+2026-10-27T00:21:44.478+08:00  INFO 3435902 --- [ptmcp-admin] [           main] local.ptmcp.admin.SessionApiTest         : Started SessionApiTest in 1.594 seconds (process running for 12.777)
 Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build as described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org.mockito/org/mockito/Mockito.html#0.3
 OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
 WARNING: A Java agent has been loaded dynamically (/home/ubuntu/.m2/repository/net/bytebuddy/byte-buddy-agent/1.18.15/byte-buddy-agent-1.18.15.jar)
 WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
 WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
 WARNING: Dynamic loading of agents will be disallowed by default in a future release
-[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 16.98 s -- in local.ptmcp.admin.SessionApiTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 17.07 s -- in local.ptmcp.admin.SessionApiTest
 [INFO] Running local.ptmcp.admin.DatasourceApiTest
-2026-10-26T23:46:58.515+08:00  INFO 3319240 --- [ptmcp-admin] [           main] tc.mysql:8.0                             : Creating container for image: mysql:8.0
-2026-10-26T23:46:58.532+08:00  INFO 3319240 --- [ptmcp-admin] [           main] tc.mysql:8.0                             : Container mysql:8.0 is starting: ed61c61700172a3c1f44519409a313f2fb17a02535b926e38bce70bbf83316dd
-2026-10-26T23:46:58.721+08:00  INFO 3319240 --- [ptmcp-admin] [           main] tc.mysql:8.0                             : Waiting for database connection to become available at jdbc:mysql://localhost:32889/datasource_api_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false using query 'SELECT 1'
-2026-10-26T23:47:06.670+08:00  INFO 3319240 --- [ptmcp-admin] [           main] tc.mysql:8.0                             : Container mysql:8.0 started in PT8.155329791S
-2026-10-26T23:47:06.670+08:00  INFO 3319240 --- [ptmcp-admin] [           main] tc.mysql:8.0                             : Container is started (JDBC URL: jdbc:mysql://localhost:32889/datasource_api_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false)
-2026-10-26T23:47:06.686+08:00  INFO 3319240 --- [ptmcp-admin] [           main] org.flywaydb.core.FlywayExecutor         : Database: jdbc:mysql://localhost:32889/datasource_api_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
-2026-10-26T23:47:06.704+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.c.i.s.JdbcTableSchemaHistory         : Schema history table `datasource_api_test`.`flyway_schema_history` does not exist yet
-2026-10-26T23:47:06.705+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbValidate     : Successfully validated 6 migrations (execution time 00:00.005s)
-2026-10-26T23:47:06.717+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.c.i.s.JdbcTableSchemaHistory         : Creating Schema History table `datasource_api_test`.`flyway_schema_history` ...
-2026-10-26T23:47:06.740+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Current version of schema `datasource_api_test`: << Empty Schema >>
-2026-10-26T23:47:06.743+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `datasource_api_test` to version "1 - security foundation"
-2026-10-26T23:47:06.778+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `datasource_api_test` to version "2 - organization platform resource acl"
-2026-10-26T23:47:06.819+08:00  WARN 3319240 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-2026-10-26T23:47:06.839+08:00  WARN 3319240 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-2026-10-26T23:47:06.839+08:00  WARN 3319240 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-2026-10-26T23:47:06.839+08:00  WARN 3319240 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-2026-10-26T23:47:06.856+08:00  WARN 3319240 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-2026-10-26T23:47:06.865+08:00  WARN 3319240 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-2026-10-26T23:47:06.918+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `datasource_api_test` to version "3 - oauth audit idempotency lease"
-2026-10-26T23:47:07.020+08:00  WARN 3319240 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-2026-10-26T23:47:07.053+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `datasource_api_test` to version "4 - metadata sync job"
-2026-10-26T23:47:07.073+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `datasource_api_test` to version "5 - admin org management"
-2026-10-26T23:47:07.128+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `datasource_api_test` to version "6 - job type"
-2026-10-26T23:47:07.156+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Successfully applied 6 migrations to schema `datasource_api_test`, now at version v6 (execution time 00:00.344s)
+2026-10-27T00:21:49.308+08:00  INFO 3435902 --- [ptmcp-admin] [           main] tc.mysql:8.0                             : Creating container for image: mysql:8.0
+2026-10-27T00:21:49.330+08:00  INFO 3435902 --- [ptmcp-admin] [           main] tc.mysql:8.0                             : Container mysql:8.0 is starting: c9c3034fc023902a727f35ad01ab1e3e054549e00e8159510d730ad0258e1c3a
+2026-10-27T00:21:49.530+08:00  INFO 3435902 --- [ptmcp-admin] [           main] tc.mysql:8.0                             : Waiting for database connection to become available at jdbc:mysql://localhost:32993/datasource_api_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false using query 'SELECT 1'
+2026-10-27T00:21:57.404+08:00  INFO 3435902 --- [ptmcp-admin] [           main] tc.mysql:8.0                             : Container mysql:8.0 started in PT8.095419172S
+2026-10-27T00:21:57.404+08:00  INFO 3435902 --- [ptmcp-admin] [           main] tc.mysql:8.0                             : Container is started (JDBC URL: jdbc:mysql://localhost:32993/datasource_api_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false)
+2026-10-27T00:21:57.413+08:00  INFO 3435902 --- [ptmcp-admin] [           main] org.flywaydb.core.FlywayExecutor         : Database: jdbc:mysql://localhost:32993/datasource_api_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+2026-10-27T00:21:57.437+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.c.i.s.JdbcTableSchemaHistory         : Schema history table `datasource_api_test`.`flyway_schema_history` does not exist yet
+2026-10-27T00:21:57.438+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbValidate     : Successfully validated 6 migrations (execution time 00:00.005s)
+2026-10-27T00:21:57.448+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.c.i.s.JdbcTableSchemaHistory         : Creating Schema History table `datasource_api_test`.`flyway_schema_history` ...
+2026-10-27T00:21:57.470+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Current version of schema `datasource_api_test`: << Empty Schema >>
+2026-10-27T00:21:57.473+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `datasource_api_test` to version "1 - security foundation"
+2026-10-27T00:21:57.508+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `datasource_api_test` to version "2 - organization platform resource acl"
+2026-10-27T00:21:57.549+08:00  WARN 3435902 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+2026-10-27T00:21:57.569+08:00  WARN 3435902 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+2026-10-27T00:21:57.569+08:00  WARN 3435902 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+2026-10-27T00:21:57.569+08:00  WARN 3435902 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+2026-10-27T00:21:57.587+08:00  WARN 3435902 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+2026-10-27T00:21:57.598+08:00  WARN 3435902 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+2026-10-27T00:21:57.659+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `datasource_api_test` to version "3 - oauth audit idempotency lease"
+2026-10-27T00:21:57.766+08:00  WARN 3435902 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+2026-10-27T00:21:57.800+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `datasource_api_test` to version "4 - metadata sync job"
+2026-10-27T00:21:57.818+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `datasource_api_test` to version "5 - admin org management"
+2026-10-27T00:21:57.878+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `datasource_api_test` to version "6 - job type"
+2026-10-27T00:21:57.905+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Successfully applied 6 migrations to schema `datasource_api_test`, now at version v6 (execution time 00:00.368s)
 
   .   ____          _            __ _ _
  /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
@@ -720,42 +720,42 @@ WARNING: Dynamic loading of agents will be disallowed by default in a future rel
 
  :: Spring Boot ::                (v4.1.2)
 
-2026-10-26T23:47:07.178+08:00  INFO 3319240 --- [ptmcp-admin] [           main] local.ptmcp.admin.DatasourceApiTest      : Starting DatasourceApiTest using Java 21.0.12.1 with PID 3319240 (started by ubuntu in /home/ubuntu/ALLSTAR_DATACHAT_SUB/ptmcp-parent/ptmcp-admin)
-2026-10-26T23:47:07.178+08:00  INFO 3319240 --- [ptmcp-admin] [           main] local.ptmcp.admin.DatasourceApiTest      : No active profile set, falling back to 1 default profile: "default"
-2026-10-26T23:47:07.351+08:00  INFO 3319240 --- [ptmcp-admin] [           main] com.zaxxer.hikari.HikariDataSource       : ptmcp-admin-meta - Starting...
-2026-10-26T23:47:07.355+08:00  INFO 3319240 --- [ptmcp-admin] [           main] com.zaxxer.hikari.pool.HikariPool        : ptmcp-admin-meta - Added connection com.mysql.cj.jdbc.ConnectionImpl@47cce306
-2026-10-26T23:47:07.356+08:00  INFO 3319240 --- [ptmcp-admin] [           main] com.zaxxer.hikari.HikariDataSource       : ptmcp-admin-meta - Start completed.
-2026-10-26T23:47:07.558+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
-2026-10-26T23:47:07.558+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
-2026-10-26T23:47:07.559+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
-2026-10-26T23:47:07.562+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 4 ms
-2026-10-26T23:47:07.570+08:00  INFO 3319240 --- [ptmcp-admin] [           main] local.ptmcp.admin.DatasourceApiTest      : Started DatasourceApiTest in 0.409 seconds (process running for 26.581)
-[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 10.13 s -- in local.ptmcp.admin.DatasourceApiTest
+2026-10-27T00:21:57.928+08:00  INFO 3435902 --- [ptmcp-admin] [           main] local.ptmcp.admin.DatasourceApiTest      : Starting DatasourceApiTest using Java 21.0.12.1 with PID 3435902 (started by ubuntu in /home/ubuntu/ALLSTAR_DATACHAT_SUB/ptmcp-parent/ptmcp-admin)
+2026-10-27T00:21:57.928+08:00  INFO 3435902 --- [ptmcp-admin] [           main] local.ptmcp.admin.DatasourceApiTest      : No active profile set, falling back to 1 default profile: "default"
+2026-10-27T00:21:58.069+08:00  INFO 3435902 --- [ptmcp-admin] [           main] com.zaxxer.hikari.HikariDataSource       : ptmcp-admin-meta - Starting...
+2026-10-27T00:21:58.073+08:00  INFO 3435902 --- [ptmcp-admin] [           main] com.zaxxer.hikari.pool.HikariPool        : ptmcp-admin-meta - Added connection com.mysql.cj.jdbc.ConnectionImpl@19fdcaba
+2026-10-27T00:21:58.073+08:00  INFO 3435902 --- [ptmcp-admin] [           main] com.zaxxer.hikari.HikariDataSource       : ptmcp-admin-meta - Start completed.
+2026-10-27T00:21:58.295+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-27T00:21:58.295+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-27T00:21:58.296+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-10-27T00:21:58.299+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 4 ms
+2026-10-27T00:21:58.306+08:00  INFO 3435902 --- [ptmcp-admin] [           main] local.ptmcp.admin.DatasourceApiTest      : Started DatasourceApiTest in 0.394 seconds (process running for 26.606)
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 10.05 s -- in local.ptmcp.admin.DatasourceApiTest
 [INFO] Running local.ptmcp.admin.AdminApiTest
-2026-10-26T23:47:08.649+08:00  INFO 3319240 --- [ptmcp-admin] [           main] tc.mysql:8.0                             : Creating container for image: mysql:8.0
-2026-10-26T23:47:08.670+08:00  INFO 3319240 --- [ptmcp-admin] [           main] tc.mysql:8.0                             : Container mysql:8.0 is starting: 7d2d711dca6691dff16b81d794a677bc597db7bf844741dcd2ab7b367555dad3
-2026-10-26T23:47:08.865+08:00  INFO 3319240 --- [ptmcp-admin] [           main] tc.mysql:8.0                             : Waiting for database connection to become available at jdbc:mysql://localhost:32890/admin_api_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false using query 'SELECT 1'
-2026-10-26T23:47:16.835+08:00  INFO 3319240 --- [ptmcp-admin] [           main] tc.mysql:8.0                             : Container mysql:8.0 started in PT8.185882757S
-2026-10-26T23:47:16.837+08:00  INFO 3319240 --- [ptmcp-admin] [           main] tc.mysql:8.0                             : Container is started (JDBC URL: jdbc:mysql://localhost:32890/admin_api_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false)
-2026-10-26T23:47:16.860+08:00  INFO 3319240 --- [ptmcp-admin] [           main] org.flywaydb.core.FlywayExecutor         : Database: jdbc:mysql://localhost:32890/admin_api_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
-2026-10-26T23:47:16.876+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.c.i.s.JdbcTableSchemaHistory         : Schema history table `admin_api_test`.`flyway_schema_history` does not exist yet
-2026-10-26T23:47:16.877+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbValidate     : Successfully validated 6 migrations (execution time 00:00.004s)
-2026-10-26T23:47:16.885+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.c.i.s.JdbcTableSchemaHistory         : Creating Schema History table `admin_api_test`.`flyway_schema_history` ...
-2026-10-26T23:47:16.906+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Current version of schema `admin_api_test`: << Empty Schema >>
-2026-10-26T23:47:16.908+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `admin_api_test` to version "1 - security foundation"
-2026-10-26T23:47:16.939+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `admin_api_test` to version "2 - organization platform resource acl"
-2026-10-26T23:47:16.979+08:00  WARN 3319240 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-2026-10-26T23:47:17.001+08:00  WARN 3319240 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-2026-10-26T23:47:17.001+08:00  WARN 3319240 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-2026-10-26T23:47:17.001+08:00  WARN 3319240 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-2026-10-26T23:47:17.018+08:00  WARN 3319240 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-2026-10-26T23:47:17.026+08:00  WARN 3319240 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-2026-10-26T23:47:17.071+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `admin_api_test` to version "3 - oauth audit idempotency lease"
-2026-10-26T23:47:17.171+08:00  WARN 3319240 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
-2026-10-26T23:47:17.200+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `admin_api_test` to version "4 - metadata sync job"
-2026-10-26T23:47:17.217+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `admin_api_test` to version "5 - admin org management"
-2026-10-26T23:47:17.270+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `admin_api_test` to version "6 - job type"
-2026-10-26T23:47:17.297+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Successfully applied 6 migrations to schema `admin_api_test`, now at version v6 (execution time 00:00.337s)
+2026-10-27T00:21:59.357+08:00  INFO 3435902 --- [ptmcp-admin] [           main] tc.mysql:8.0                             : Creating container for image: mysql:8.0
+2026-10-27T00:21:59.375+08:00  INFO 3435902 --- [ptmcp-admin] [           main] tc.mysql:8.0                             : Container mysql:8.0 is starting: 5e2afaf9d87f6af057ae8d3bcea0a6048c8f9dbebf113964167c59954734bf3e
+2026-10-27T00:21:59.566+08:00  INFO 3435902 --- [ptmcp-admin] [           main] tc.mysql:8.0                             : Waiting for database connection to become available at jdbc:mysql://localhost:32994/admin_api_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false using query 'SELECT 1'
+2026-10-27T00:22:07.512+08:00  INFO 3435902 --- [ptmcp-admin] [           main] tc.mysql:8.0                             : Container mysql:8.0 started in PT8.154866516S
+2026-10-27T00:22:07.512+08:00  INFO 3435902 --- [ptmcp-admin] [           main] tc.mysql:8.0                             : Container is started (JDBC URL: jdbc:mysql://localhost:32994/admin_api_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false)
+2026-10-27T00:22:07.522+08:00  INFO 3435902 --- [ptmcp-admin] [           main] org.flywaydb.core.FlywayExecutor         : Database: jdbc:mysql://localhost:32994/admin_api_test?allowPublicKeyRetrieval=true&forceConnectionTimeZoneToSession=true&connectionTimeZone=UTC&useSSL=false (MySQL 8.0)
+2026-10-27T00:22:07.539+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.c.i.s.JdbcTableSchemaHistory         : Schema history table `admin_api_test`.`flyway_schema_history` does not exist yet
+2026-10-27T00:22:07.540+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbValidate     : Successfully validated 6 migrations (execution time 00:00.004s)
+2026-10-27T00:22:07.551+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.c.i.s.JdbcTableSchemaHistory         : Creating Schema History table `admin_api_test`.`flyway_schema_history` ...
+2026-10-27T00:22:07.573+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Current version of schema `admin_api_test`: << Empty Schema >>
+2026-10-27T00:22:07.575+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `admin_api_test` to version "1 - security foundation"
+2026-10-27T00:22:07.605+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `admin_api_test` to version "2 - organization platform resource acl"
+2026-10-27T00:22:07.646+08:00  WARN 3435902 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+2026-10-27T00:22:07.666+08:00  WARN 3435902 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+2026-10-27T00:22:07.666+08:00  WARN 3435902 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+2026-10-27T00:22:07.667+08:00  WARN 3435902 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+2026-10-27T00:22:07.684+08:00  WARN 3435902 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+2026-10-27T00:22:07.692+08:00  WARN 3435902 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+2026-10-27T00:22:07.740+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `admin_api_test` to version "3 - oauth audit idempotency lease"
+2026-10-27T00:22:07.842+08:00  WARN 3435902 --- [ptmcp-admin] [           main] o.f.c.i.s.DefaultSqlScriptExecutor       : DB: Integer display width is deprecated and will be removed in a future release. (SQL State: HY000 - Error Code: 1681)
+2026-10-27T00:22:07.874+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `admin_api_test` to version "4 - metadata sync job"
+2026-10-27T00:22:07.892+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `admin_api_test` to version "5 - admin org management"
+2026-10-27T00:22:07.949+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `admin_api_test` to version "6 - job type"
+2026-10-27T00:22:07.976+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.f.core.internal.command.DbMigrate      : Successfully applied 6 migrations to schema `admin_api_test`, now at version v6 (execution time 00:00.347s)
 
   .   ____          _            __ _ _
  /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
@@ -766,17 +766,277 @@ WARNING: Dynamic loading of agents will be disallowed by default in a future rel
 
  :: Spring Boot ::                (v4.1.2)
 
-2026-10-26T23:47:17.316+08:00  INFO 3319240 --- [ptmcp-admin] [           main] local.ptmcp.admin.AdminApiTest           : Starting AdminApiTest using Java 21.0.12.1 with PID 3319240 (started by ubuntu in /home/ubuntu/ALLSTAR_DATACHAT_SUB/ptmcp-parent/ptmcp-admin)
-2026-10-26T23:47:17.316+08:00  INFO 3319240 --- [ptmcp-admin] [           main] local.ptmcp.admin.AdminApiTest           : No active profile set, falling back to 1 default profile: "default"
-2026-10-26T23:47:17.428+08:00  INFO 3319240 --- [ptmcp-admin] [           main] com.zaxxer.hikari.HikariDataSource       : ptmcp-admin-meta - Starting...
-2026-10-26T23:47:17.432+08:00  INFO 3319240 --- [ptmcp-admin] [           main] com.zaxxer.hikari.pool.HikariPool        : ptmcp-admin-meta - Added connection com.mysql.cj.jdbc.ConnectionImpl@563f53d8
-2026-10-26T23:47:17.432+08:00  INFO 3319240 --- [ptmcp-admin] [           main] com.zaxxer.hikari.HikariDataSource       : ptmcp-admin-meta - Start completed.
-2026-10-26T23:47:17.648+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
-2026-10-26T23:47:17.648+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
-2026-10-26T23:47:17.649+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
-2026-10-26T23:47:17.651+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 3 ms
-2026-10-26T23:47:17.657+08:00  INFO 3319240 --- [ptmcp-admin] [           main] local.ptmcp.admin.AdminApiTest           : Started AdminApiTest in 0.355 seconds (process running for 36.669)
-[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.960 s -- in local.ptmcp.admin.AdminApiTest
+2026-10-27T00:22:07.992+08:00  INFO 3435902 --- [ptmcp-admin] [           main] local.ptmcp.admin.AdminApiTest           : Starting AdminApiTest using Java 21.0.12.1 with PID 3435902 (started by ubuntu in /home/ubuntu/ALLSTAR_DATACHAT_SUB/ptmcp-parent/ptmcp-admin)
+2026-10-27T00:22:07.992+08:00  INFO 3435902 --- [ptmcp-admin] [           main] local.ptmcp.admin.AdminApiTest           : No active profile set, falling back to 1 default profile: "default"
+2026-10-27T00:22:08.105+08:00  INFO 3435902 --- [ptmcp-admin] [           main] com.zaxxer.hikari.HikariDataSource       : ptmcp-admin-meta - Starting...
+2026-10-27T00:22:08.109+08:00  INFO 3435902 --- [ptmcp-admin] [           main] com.zaxxer.hikari.pool.HikariPool        : ptmcp-admin-meta - Added connection com.mysql.cj.jdbc.ConnectionImpl@5bb1c104
+2026-10-27T00:22:08.109+08:00  INFO 3435902 --- [ptmcp-admin] [           main] com.zaxxer.hikari.HikariDataSource       : ptmcp-admin-meta - Start completed.
+2026-10-27T00:22:08.292+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-27T00:22:08.292+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-27T00:22:08.294+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-10-27T00:22:08.295+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 3 ms
+2026-10-27T00:22:08.302+08:00  INFO 3435902 --- [ptmcp-admin] [           main] local.ptmcp.admin.AdminApiTest           : Started AdminApiTest in 0.323 seconds (process running for 36.601)
+local.ptmcp.common.error.DomainException: INVALID_ARGUMENT
+	at local.ptmcp.admin.platform.PlatformAdminService.requireCodeFree(PlatformAdminService.java:426)
+	at local.ptmcp.admin.platform.PlatformAdminService.create(PlatformAdminService.java:73)
+	at local.ptmcp.admin.api.PlatformAdminController.lambda$doCreate$0(PlatformAdminController.java:112)
+	at local.ptmcp.admin.api.IdempotentWrites.execute(IdempotentWrites.java:52)
+	at local.ptmcp.admin.api.PlatformAdminController.doCreate(PlatformAdminController.java:103)
+	at local.ptmcp.admin.api.PlatformAdminController.create(PlatformAdminController.java:91)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.web.method.support.InvocableHandlerMethod.doInvoke(InvocableHandlerMethod.java:252)
+	at org.springframework.web.method.support.InvocableHandlerMethod.invokeForRequest(InvocableHandlerMethod.java:184)
+	at org.springframework.web.servlet.mvc.method.annotation.ServletInvocableHandlerMethod.invokeAndHandle(ServletInvocableHandlerMethod.java:117)
+	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.invokeHandlerMethod(RequestMappingHandlerAdapter.java:934)
+	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.handleInternal(RequestMappingHandlerAdapter.java:853)
+	at org.springframework.web.servlet.mvc.method.AbstractHandlerMethodAdapter.handle(AbstractHandlerMethodAdapter.java:86)
+	at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:963)
+	at org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:866)
+	at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1000)
+	at org.springframework.web.servlet.FrameworkServlet.doPost(FrameworkServlet.java:903)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:649)
+	at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:874)
+	at org.springframework.test.web.servlet.TestDispatcherServlet.service(TestDispatcherServlet.java:72)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:710)
+	at org.springframework.mock.web.MockFilterChain$ServletFilterProxy.doFilter(MockFilterChain.java:160)
+	at org.springframework.mock.web.MockFilterChain.doFilter(MockFilterChain.java:127)
+	at local.ptmcp.admin.api.TestPrincipalFilter.doFilter(TestPrincipalFilter.java:46)
+	at org.springframework.test.web.servlet.setup.MockMvcFilterDecorator.doFilter(MockMvcFilterDecorator.java:160)
+	at org.springframework.mock.web.MockFilterChain.doFilter(MockFilterChain.java:127)
+	at local.ptmcp.admin.session.SessionAuthFilter.doFilter(SessionAuthFilter.java:30)
+	at org.springframework.test.web.servlet.setup.MockMvcFilterDecorator.doFilter(MockMvcFilterDecorator.java:160)
+	at org.springframework.mock.web.MockFilterChain.doFilter(MockFilterChain.java:127)
+	at org.springframework.web.filter.RequestContextFilter.doFilterInternal(RequestContextFilter.java:100)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.springframework.test.web.servlet.setup.MockMvcFilterDecorator.doFilter(MockMvcFilterDecorator.java:160)
+	at org.springframework.mock.web.MockFilterChain.doFilter(MockFilterChain.java:127)
+	at org.springframework.web.filter.FormContentFilter.doFilterInternal(FormContentFilter.java:93)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.springframework.test.web.servlet.setup.MockMvcFilterDecorator.doFilter(MockMvcFilterDecorator.java:160)
+	at org.springframework.mock.web.MockFilterChain.doFilter(MockFilterChain.java:127)
+	at org.springframework.web.filter.ServerHttpObservationFilter.doFilterInternal(ServerHttpObservationFilter.java:110)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.springframework.test.web.servlet.setup.MockMvcFilterDecorator.doFilter(MockMvcFilterDecorator.java:160)
+	at org.springframework.mock.web.MockFilterChain.doFilter(MockFilterChain.java:127)
+	at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:199)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.springframework.test.web.servlet.setup.MockMvcFilterDecorator.doFilter(MockMvcFilterDecorator.java:160)
+	at org.springframework.mock.web.MockFilterChain.doFilter(MockFilterChain.java:127)
+	at org.springframework.test.web.servlet.MockMvc.perform(MockMvc.java:199)
+	at local.ptmcp.admin.AdminApiTest.platformCrudSealsProofConfigAndKeepsItUnreadable(AdminApiTest.java:1175)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:701)
+	at org.junit.platform.commons.support.ReflectionSupport.invokeMethod(ReflectionSupport.java:502)
+	at org.junit.jupiter.engine.support.MethodReflectionUtils.invoke(MethodReflectionUtils.java:45)
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:61)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:124)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:163)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:148)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:86)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:123)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:105)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:99)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:66)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:47)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:39)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:104)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:98)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invokeVoid(InterceptingExecutableInvoker.java:71)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$0(TestMethodTestDescriptor.java:219)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:215)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:157)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:70)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:176)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:42)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:180)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:42)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:180)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:36)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:52)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:58)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.executeEngine(EngineExecutionOrchestrator.java:246)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.failOrExecuteEngine(EngineExecutionOrchestrator.java:218)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:179)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:108)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:66)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:157)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:65)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:125)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:114)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:58)
+	at org.junit.platform.launcher.core.InterceptingLauncher.lambda$execute$2(InterceptingLauncher.java:57)
+	at org.junit.platform.launcher.core.ClasspathAlignmentCheckingLauncherInterceptor.intercept(ClasspathAlignmentCheckingLauncherInterceptor.java:25)
+	at org.junit.platform.launcher.core.InterceptingLauncher.execute(InterceptingLauncher.java:56)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:58)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.apache.maven.surefire.api.util.ReflectionUtils.invokeMethodWithArray(ReflectionUtils.java:125)
+	at org.apache.maven.surefire.junitplatform.LauncherAdapter.executeWithCancellationToken(LauncherAdapter.java:68)
+	at org.apache.maven.surefire.junitplatform.LauncherAdapter.execute(LauncherAdapter.java:54)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.execute(JUnitPlatformProvider.java:203)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invokeAllTests(JUnitPlatformProvider.java:168)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invoke(JUnitPlatformProvider.java:136)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+local.ptmcp.common.error.DomainException: INVALID_ARGUMENT
+	at local.ptmcp.admin.platform.PlatformAdminService.requireFields(PlatformAdminService.java:306)
+	at local.ptmcp.admin.platform.PlatformAdminService.create(PlatformAdminService.java:66)
+	at local.ptmcp.admin.api.PlatformAdminController.lambda$doCreate$0(PlatformAdminController.java:112)
+	at local.ptmcp.admin.api.IdempotentWrites.execute(IdempotentWrites.java:52)
+	at local.ptmcp.admin.api.PlatformAdminController.doCreate(PlatformAdminController.java:103)
+	at local.ptmcp.admin.api.PlatformAdminController.create(PlatformAdminController.java:91)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.web.method.support.InvocableHandlerMethod.doInvoke(InvocableHandlerMethod.java:252)
+	at org.springframework.web.method.support.InvocableHandlerMethod.invokeForRequest(InvocableHandlerMethod.java:184)
+	at org.springframework.web.servlet.mvc.method.annotation.ServletInvocableHandlerMethod.invokeAndHandle(ServletInvocableHandlerMethod.java:117)
+	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.invokeHandlerMethod(RequestMappingHandlerAdapter.java:934)
+	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.handleInternal(RequestMappingHandlerAdapter.java:853)
+	at org.springframework.web.servlet.mvc.method.AbstractHandlerMethodAdapter.handle(AbstractHandlerMethodAdapter.java:86)
+	at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:963)
+	at org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:866)
+	at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1000)
+	at org.springframework.web.servlet.FrameworkServlet.doPost(FrameworkServlet.java:903)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:649)
+	at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:874)
+	at org.springframework.test.web.servlet.TestDispatcherServlet.service(TestDispatcherServlet.java:72)
+	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:710)
+	at org.springframework.mock.web.MockFilterChain$ServletFilterProxy.doFilter(MockFilterChain.java:160)
+	at org.springframework.mock.web.MockFilterChain.doFilter(MockFilterChain.java:127)
+	at local.ptmcp.admin.api.TestPrincipalFilter.doFilter(TestPrincipalFilter.java:46)
+	at org.springframework.test.web.servlet.setup.MockMvcFilterDecorator.doFilter(MockMvcFilterDecorator.java:160)
+	at org.springframework.mock.web.MockFilterChain.doFilter(MockFilterChain.java:127)
+	at local.ptmcp.admin.session.SessionAuthFilter.doFilter(SessionAuthFilter.java:30)
+	at org.springframework.test.web.servlet.setup.MockMvcFilterDecorator.doFilter(MockMvcFilterDecorator.java:160)
+	at org.springframework.mock.web.MockFilterChain.doFilter(MockFilterChain.java:127)
+	at org.springframework.web.filter.RequestContextFilter.doFilterInternal(RequestContextFilter.java:100)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.springframework.test.web.servlet.setup.MockMvcFilterDecorator.doFilter(MockMvcFilterDecorator.java:160)
+	at org.springframework.mock.web.MockFilterChain.doFilter(MockFilterChain.java:127)
+	at org.springframework.web.filter.FormContentFilter.doFilterInternal(FormContentFilter.java:93)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.springframework.test.web.servlet.setup.MockMvcFilterDecorator.doFilter(MockMvcFilterDecorator.java:160)
+	at org.springframework.mock.web.MockFilterChain.doFilter(MockFilterChain.java:127)
+	at org.springframework.web.filter.ServerHttpObservationFilter.doFilterInternal(ServerHttpObservationFilter.java:110)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.springframework.test.web.servlet.setup.MockMvcFilterDecorator.doFilter(MockMvcFilterDecorator.java:160)
+	at org.springframework.mock.web.MockFilterChain.doFilter(MockFilterChain.java:127)
+	at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:199)
+	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116)
+	at org.springframework.test.web.servlet.setup.MockMvcFilterDecorator.doFilter(MockMvcFilterDecorator.java:160)
+	at org.springframework.mock.web.MockFilterChain.doFilter(MockFilterChain.java:127)
+	at org.springframework.test.web.servlet.MockMvc.perform(MockMvc.java:199)
+	at local.ptmcp.admin.AdminApiTest.platformCrudSealsProofConfigAndKeepsItUnreadable(AdminApiTest.java:1185)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:701)
+	at org.junit.platform.commons.support.ReflectionSupport.invokeMethod(ReflectionSupport.java:502)
+	at org.junit.jupiter.engine.support.MethodReflectionUtils.invoke(MethodReflectionUtils.java:45)
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:61)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:124)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:163)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:148)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:86)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:123)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:105)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:99)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:66)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:47)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:39)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:104)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:98)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invokeVoid(InterceptingExecutableInvoker.java:71)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$0(TestMethodTestDescriptor.java:219)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:215)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:157)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:70)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:176)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:42)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:180)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:42)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:180)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:36)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:52)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:58)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.executeEngine(EngineExecutionOrchestrator.java:246)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.failOrExecuteEngine(EngineExecutionOrchestrator.java:218)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:179)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:108)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:66)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:157)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:65)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:125)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:114)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:58)
+	at org.junit.platform.launcher.core.InterceptingLauncher.lambda$execute$2(InterceptingLauncher.java:57)
+	at org.junit.platform.launcher.core.ClasspathAlignmentCheckingLauncherInterceptor.intercept(ClasspathAlignmentCheckingLauncherInterceptor.java:25)
+	at org.junit.platform.launcher.core.InterceptingLauncher.execute(InterceptingLauncher.java:56)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:58)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.apache.maven.surefire.api.util.ReflectionUtils.invokeMethodWithArray(ReflectionUtils.java:125)
+	at org.apache.maven.surefire.junitplatform.LauncherAdapter.executeWithCancellationToken(LauncherAdapter.java:68)
+	at org.apache.maven.surefire.junitplatform.LauncherAdapter.execute(LauncherAdapter.java:54)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.execute(JUnitPlatformProvider.java:203)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invokeAllTests(JUnitPlatformProvider.java:168)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invoke(JUnitPlatformProvider.java:136)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.976 s -- in local.ptmcp.admin.AdminApiTest
 [INFO] Running local.ptmcp.admin.AdminApplicationHttpStartupTest
 
   .   ____          _            __ _ _
@@ -788,59 +1048,59 @@ WARNING: Dynamic loading of agents will be disallowed by default in a future rel
 
  :: Spring Boot ::                (v4.1.2)
 
-2026-10-26T23:47:18.623+08:00  INFO 3319240 --- [ptmcp-admin] [           main] l.p.a.AdminApplicationHttpStartupTest    : Starting AdminApplicationHttpStartupTest using Java 21.0.12.1 with PID 3319240 (started by ubuntu in /home/ubuntu/ALLSTAR_DATACHAT_SUB/ptmcp-parent/ptmcp-admin)
-2026-10-26T23:47:18.623+08:00  INFO 3319240 --- [ptmcp-admin] [           main] l.p.a.AdminApplicationHttpStartupTest    : No active profile set, falling back to 1 default profile: "default"
-2026-10-26T23:47:18.794+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat initialized with port 0 (http)
-2026-10-26T23:47:18.805+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
-2026-10-26T23:47:18.805+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/11.0.27]
-2026-10-26T23:47:18.830+08:00  INFO 3319240 --- [ptmcp-admin] [           main] b.w.c.s.WebApplicationContextInitializer : Root WebApplicationContext: initialization completed in 206 ms
-2026-10-26T23:47:18.897+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
-2026-10-26T23:47:18.911+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat started on port 44199 (http) with context path '/'
-2026-10-26T23:47:18.913+08:00  INFO 3319240 --- [ptmcp-admin] [           main] l.p.a.AdminApplicationHttpStartupTest    : Started AdminApplicationHttpStartupTest in 0.303 seconds (process running for 37.924)
-2026-10-26T23:47:18.991+08:00  INFO 3319240 --- [ptmcp-admin] [1-auto-1-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
-2026-10-26T23:47:18.991+08:00  INFO 3319240 --- [ptmcp-admin] [1-auto-1-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
-2026-10-26T23:47:18.991+08:00  INFO 3319240 --- [ptmcp-admin] [1-auto-1-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 0 ms
-[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.434 s -- in local.ptmcp.admin.AdminApplicationHttpStartupTest
+2026-10-27T00:22:09.352+08:00  INFO 3435902 --- [ptmcp-admin] [           main] l.p.a.AdminApplicationHttpStartupTest    : Starting AdminApplicationHttpStartupTest using Java 21.0.12.1 with PID 3435902 (started by ubuntu in /home/ubuntu/ALLSTAR_DATACHAT_SUB/ptmcp-parent/ptmcp-admin)
+2026-10-27T00:22:09.352+08:00  INFO 3435902 --- [ptmcp-admin] [           main] l.p.a.AdminApplicationHttpStartupTest    : No active profile set, falling back to 1 default profile: "default"
+2026-10-27T00:22:09.524+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat initialized with port 0 (http)
+2026-10-27T00:22:09.536+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-10-27T00:22:09.536+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/11.0.27]
+2026-10-27T00:22:09.563+08:00  INFO 3435902 --- [ptmcp-admin] [           main] b.w.c.s.WebApplicationContextInitializer : Root WebApplicationContext: initialization completed in 210 ms
+2026-10-27T00:22:09.658+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-10-27T00:22:09.673+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat started on port 46517 (http) with context path '/'
+2026-10-27T00:22:09.676+08:00  INFO 3435902 --- [ptmcp-admin] [           main] l.p.a.AdminApplicationHttpStartupTest    : Started AdminApplicationHttpStartupTest in 0.341 seconds (process running for 37.975)
+2026-10-27T00:22:09.765+08:00  INFO 3435902 --- [ptmcp-admin] [1-auto-1-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-10-27T00:22:09.765+08:00  INFO 3435902 --- [ptmcp-admin] [1-auto-1-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-10-27T00:22:09.765+08:00  INFO 3435902 --- [ptmcp-admin] [1-auto-1-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 0 ms
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.487 s -- in local.ptmcp.admin.AdminApplicationHttpStartupTest
 [INFO] Running local.ptmcp.admin.web.ErrorMappingTest
-[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in local.ptmcp.admin.web.ErrorMappingTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in local.ptmcp.admin.web.ErrorMappingTest
 [INFO] Running local.ptmcp.admin.web.WebBoundaryMockMvcTest
-2026-10-26T23:47:19.052+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
-2026-10-26T23:47:19.053+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
-2026-10-26T23:47:19.053+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
-2026-10-26T23:47:19.058+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
-2026-10-26T23:47:19.058+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
-2026-10-26T23:47:19.058+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
-2026-10-26T23:47:19.063+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
-2026-10-26T23:47:19.063+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
-2026-10-26T23:47:19.063+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
-2026-10-26T23:47:19.095+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
-2026-10-26T23:47:19.095+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
-2026-10-26T23:47:19.095+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
-2026-10-26T23:47:19.098+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
-2026-10-26T23:47:19.098+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
-2026-10-26T23:47:19.098+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
-2026-10-26T23:47:19.101+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
-2026-10-26T23:47:19.101+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
-2026-10-26T23:47:19.101+08:00  INFO 3319240 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
-[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.057 s -- in local.ptmcp.admin.web.WebBoundaryMockMvcTest
+2026-10-27T00:22:09.831+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-10-27T00:22:09.831+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-27T00:22:09.832+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-10-27T00:22:09.837+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-10-27T00:22:09.837+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-27T00:22:09.837+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-27T00:22:09.842+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-10-27T00:22:09.843+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-27T00:22:09.843+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-27T00:22:09.876+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-10-27T00:22:09.876+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-27T00:22:09.876+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-27T00:22:09.879+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-10-27T00:22:09.879+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-27T00:22:09.879+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-27T00:22:09.883+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-10-27T00:22:09.883+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-27T00:22:09.883+08:00  INFO 3435902 --- [ptmcp-admin] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.061 s -- in local.ptmcp.admin.web.WebBoundaryMockMvcTest
 [INFO] Running local.ptmcp.admin.web.StrictJsonTest
-[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in local.ptmcp.admin.web.StrictJsonTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in local.ptmcp.admin.web.StrictJsonTest
 [INFO] 
 [INFO] Results:
 [INFO] 
-[INFO] Tests run: 49, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 50, Failures: 0, Errors: 0, Skipped: 0
 [INFO] 
 [INFO] ------------------------------------------------------------------------
 [INFO] Reactor Summary for PTMCP 0.1.0-SNAPSHOT:
 [INFO] 
-[INFO] PTMCP .............................................. SUCCESS [  0.985 s]
-[INFO] ptmcp-common ....................................... SUCCESS [  1.334 s]
+[INFO] PTMCP .............................................. SUCCESS [  0.947 s]
+[INFO] ptmcp-common ....................................... SUCCESS [  1.340 s]
 [INFO] ptmcp-persistence .................................. SUCCESS [01:28 min]
-[INFO] ptmcp-datasource ................................... SUCCESS [ 37.107 s]
-[INFO] ptmcp-admin ........................................ SUCCESS [ 38.317 s]
+[INFO] ptmcp-datasource ................................... SUCCESS [ 37.309 s]
+[INFO] ptmcp-admin ........................................ SUCCESS [ 38.400 s]
 [INFO] ------------------------------------------------------------------------
 [INFO] BUILD SUCCESS
 [INFO] ------------------------------------------------------------------------
-[INFO] Total time:  02:46 min
-[INFO] Finished at: 2026-10-26T23:47:19+08:00
+[INFO] Total time:  02:47 min
+[INFO] Finished at: 2026-10-27T00:22:09+08:00
 [INFO] ------------------------------------------------------------------------

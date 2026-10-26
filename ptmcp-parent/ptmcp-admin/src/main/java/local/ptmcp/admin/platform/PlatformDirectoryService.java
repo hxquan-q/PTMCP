@@ -72,6 +72,9 @@ public final class PlatformDirectoryService {
         if (normalizedStatus != null) {
             sql.append(" AND status = ?");
             parameters.add(normalizedStatus);
+        } else {
+            // The directory shows live platforms; deleted rows stay only in the audit trail.
+            sql.append(" AND status <> 'DELETED'");
         }
         if (afterId != null) {
             sql.append(" AND id > ?");
@@ -118,6 +121,41 @@ public final class PlatformDirectoryService {
             items.subList(limit, items.size()).clear();
         }
         return new Page(List.copyOf(items), next);
+    }
+
+    /**
+     * Single-row projection of a live platform; {@code null} when the id does not exist or the row
+     * is deleted. The console version is the security version.
+     */
+    public PlatformView byId(long id) {
+        String sql =
+                "SELECT id, code, name, tier, status, catalog_mode, proof_mode,"
+                        + " proof_config_cipher IS NOT NULL, scope_version, security_version"
+                        + " FROM platform_registry WHERE id = ? AND status <> 'DELETED'";
+        try (Connection connection = primary.getConnection();
+                PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setQueryTimeout(5);
+            statement.setLong(1, id);
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    return null;
+                }
+                return new PlatformView(
+                        Long.toString(result.getLong(1)),
+                        result.getString(2),
+                        result.getString(3),
+                        result.getInt(4),
+                        result.getString(5),
+                        result.getString(6),
+                        result.getString(7),
+                        result.getBoolean(8),
+                        Long.toString(result.getLong(9)),
+                        Long.toString(result.getLong(10)),
+                        Long.toString(result.getLong(10)));
+            }
+        } catch (SQLException error) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
     }
 
     private static String escapeLike(String value) {

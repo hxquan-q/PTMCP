@@ -2,6 +2,7 @@ package local.ptmcp.admin;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -43,7 +44,12 @@ import java.util.List;
 import java.util.UUID;
 
 /** Admin org/ACL APIs against the real MySQL schema; identity uses the documented test shim. */
-@SpringBootTest(classes = AdminApplication.class, properties = "ptmcp.admin.test-principal=true")
+@SpringBootTest(
+        classes = AdminApplication.class,
+        properties = {
+            "ptmcp.admin.test-principal=true",
+            "ptmcp.admin.credential-key=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+        })
 @AutoConfigureMockMvc
 class AdminApiTest {
     private static final String MYSQL_IMAGE =
@@ -140,6 +146,9 @@ class AdminApiTest {
         registry.add("ptmcp.admin.datasource.url", MYSQL::getJdbcUrl);
         registry.add("ptmcp.admin.datasource.username", MYSQL::getUsername);
         registry.add("ptmcp.admin.datasource.password", MYSQL::getPassword);
+        // 32-byte base64 key so the platform proof-config cipher is exercised for real.
+        registry.add(
+                "ptmcp.admin.credential-key", () -> "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=");
     }
 
     @AfterAll
@@ -1103,6 +1112,198 @@ class AdminApiTest {
                 .andExpect(jsonPath("$.items[3].resourceType").value("OBJECT"));
     }
 
+    @Test
+    void platformCrudSealsProofConfigAndKeepsItUnreadable() throws Exception {
+        String createBody =
+                "{\"code\":\"p-console\",\"name\":\"控制台平台\",\"tier\":2,"
+                        + "\"catalogMode\":\"HIDE\",\"proofMode\":\"PROXY_SECRET\","
+                        + "\"status\":\"ACTIVE\",\"proofConfig\":{"
+                        + "\"proxyNetwork\":\"10.0.0.0/8\",\"secret\":\"write-only-secret\"}}";
+
+        MvcResult created =
+                mockMvc.perform(
+                                post("/api/v1/admin/platforms")
+                                        .header("X-Test-User-Id", ADMIN_ID)
+                                        .header("X-Test-Platform-Admin", "true")
+                                        .header("Idempotency-Key", "platform-create-1")
+                                        .contentType("application/json")
+                                        .content(createBody))
+                        .andExpect(
+                                result -> {
+                                    if (result.getResponse().getStatus() != 201) {
+                                        System.out.println(
+                                                "PLATFORM-DEBUG: "
+                                                        + result.getResponse()
+                                                                .getContentAsString());
+                                    }
+                                })
+                        .andExpect(status().isCreated())
+                        .andExpect(jsonPath("$.code").value("p-console"))
+                        .andExpect(jsonPath("$.proofConfigured").value(true))
+                        .andExpect(jsonPath("$.version").value("1"))
+                        .andExpect(
+                                result -> {
+                                    String body = result.getResponse().getContentAsString();
+                                    if (body.contains("write-only-secret")
+                                            || body.contains("10.0.0.0/8")) {
+                                        throw new AssertionError("proof material leaked: " + body);
+                                    }
+                                })
+                        .andExpect(
+                                result -> {
+                                    String etag = result.getResponse().getHeader("ETag");
+                                    if (!"\"1\"".equals(etag)) {
+                                        throw new AssertionError("unexpected ETag: " + etag);
+                                    }
+                                })
+                        .andReturn();
+        // Platform views carry string ids (long-id safety), so parse the quoted value.
+        long platformId = readQuotedLong(created.getResponse().getContentAsString(), "id");
+
+        // Same key replays the recorded creation instead of duplicating the row.
+        mockMvc.perform(
+                        post("/api/v1/admin/platforms")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", "platform-create-1")
+                                .contentType("application/json")
+                                .content(createBody))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Idempotent-Replay", "true"));
+
+        // Duplicate codes are refused without writing a second registry row.
+        mockMvc.perform(
+                        post("/api/v1/admin/platforms")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", "platform-create-dupe")
+                                .contentType("application/json")
+                                .content(createBody))
+                .andExpect(status().isBadRequest());
+
+        // Tier 1 without proof stays impossible at the API level too.
+        mockMvc.perform(
+                        post("/api/v1/admin/platforms")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", "platform-tier1")
+                                .contentType("application/json")
+                                .content(
+                                        "{\"code\":\"p-tier1\",\"name\":\"受信\",\"tier\":1,"
+                                                + "\"catalogMode\":\"HIDE\",\"proofMode\":\"NONE\","
+                                                + "\"status\":\"ACTIVE\"}"))
+                .andExpect(status().isBadRequest());
+
+        // Proof-mode change without fresh material is rejected; the code is immutable.
+        mockMvc.perform(
+                        put("/api/v1/admin/platforms/" + platformId)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "1")
+                                .contentType("application/json")
+                                .content(
+                                        "{\"code\":\"p-console\",\"name\":\"改名\",\"tier\":2,"
+                                                + "\"catalogMode\":\"HIDE\",\"proofMode\":\"MTLS\","
+                                                + "\"status\":\"ACTIVE\"}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(
+                        put("/api/v1/admin/platforms/" + platformId)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "9")
+                                .contentType("application/json")
+                                .content(
+                                        "{\"code\":\"p-other\",\"name\":\"改名\",\"tier\":2,"
+                                                + "\"catalogMode\":\"HIDE\",\"proofMode\":\"PROXY_SECRET\","
+                                                + "\"status\":\"ACTIVE\"}"))
+                .andExpect(status().isBadRequest());
+
+        MvcResult renamed =
+                mockMvc.perform(
+                                put("/api/v1/admin/platforms/" + platformId)
+                                        .header("X-Test-User-Id", ADMIN_ID)
+                                        .header("X-Test-Platform-Admin", "true")
+                                        .header("If-Match", "1")
+                                        .contentType("application/json")
+                                        .content(
+                                                "{\"code\":\"p-console\",\"name\":\"改名平台\",\"tier\":2,"
+                                                        + "\"catalogMode\":\"HIDE\",\"proofMode\":\"PROXY_SECRET\","
+                                                        + "\"status\":\"ACTIVE\"}"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.name").value("改名平台"))
+                        .andExpect(jsonPath("$.version").value("2"))
+                        .andExpect(jsonPath("$.proofConfigured").value(true))
+                        .andReturn();
+        long updatedVersion = readQuotedLong(renamed.getResponse().getContentAsString(), "version");
+
+        // Detail reads stay masked; storage keeps ciphertext, never the plaintext.
+        mockMvc.perform(
+                        get("/api/v1/admin/platforms/" + platformId)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.proofConfigured").value(true))
+                .andExpect(
+                        result -> {
+                            String body = result.getResponse().getContentAsString();
+                            if (body.contains("secret")) {
+                                throw new AssertionError("detail leaked proof material: " + body);
+                            }
+                        });
+
+        try (Connection connection = connect();
+                PreparedStatement cipher =
+                        connection.prepareStatement(
+                                "SELECT proof_config_cipher, proof_key_id FROM platform_registry"
+                                        + " WHERE id = ?")) {
+            cipher.setLong(1, platformId);
+            try (ResultSet result = cipher.executeQuery()) {
+                assertTrue(result.next());
+                byte[] stored = result.getBytes(1);
+                assertNotNull(stored);
+                String plaintext = new String(stored, java.nio.charset.StandardCharsets.UTF_8);
+                if (plaintext.contains("write-only-secret")) {
+                    throw new AssertionError("storage kept plaintext proof material");
+                }
+                assertNotNull(result.getString(2));
+            }
+        }
+
+        // Logical delete bumps the version and leaves the row auditable as DELETED.
+        mockMvc.perform(
+                        delete("/api/v1/admin/platforms/" + platformId)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", String.valueOf(updatedVersion)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("DELETED"))
+                .andExpect(jsonPath("$.version").value(String.valueOf(updatedVersion + 1)));
+
+        mockMvc.perform(
+                        get("/api/v1/admin/platforms/" + platformId)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
+                .andExpect(status().isNotFound());
+
+        try (Connection connection = connect();
+                PreparedStatement log =
+                        connection.prepareStatement(
+                                "SELECT action FROM admin_operation_log"
+                                        + " WHERE aggregate_type = 'PLATFORM' AND aggregate_id = ?"
+                                        + " ORDER BY id")) {
+            log.setLong(1, platformId);
+            try (ResultSet result = log.executeQuery()) {
+                assertTrue(result.next());
+                assertEquals("PLATFORM_CREATE", result.getString(1));
+                assertTrue(result.next());
+                assertEquals("PLATFORM_UPDATE", result.getString(1));
+                assertTrue(result.next());
+                assertEquals("PLATFORM_DELETE", result.getString(1));
+            }
+        }
+    }
+
     private long insertActiveNamespace(long datasourceId) throws Exception {
         try (Connection connection = connect();
                 Statement statement = connection.createStatement()) {
@@ -1353,6 +1554,17 @@ class AdminApiTest {
 
     private static java.time.LocalDateTime now() {
         return java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
+    }
+
+    /** Reads a quoted numeric field, e.g. {@code "id":"12"}. */
+    private static long readQuotedLong(String json, String field) {
+        int at = json.indexOf("\"" + field + "\":\"");
+        int start = at + field.length() + 4;
+        int end = start;
+        while (end < json.length() && Character.isDigit(json.charAt(end))) {
+            end++;
+        }
+        return Long.parseLong(json.substring(start, end));
     }
 
     private static long readLong(String json, String field) {
