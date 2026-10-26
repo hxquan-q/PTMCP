@@ -337,6 +337,8 @@ final class McpToolService {
                 throw failure;
             }
             int durationMs = elapsedMillis(startedNanos);
+            // The attempted SQL is sealed even when the guard denied it: what a caller tried and
+            // was refused is precisely what an auditor reads behind the console's reason gate.
             terminal(
                     requestId,
                     identity,
@@ -350,7 +352,8 @@ final class McpToolService {
                     null,
                     false,
                     approved == null ? null : approved.sqlHash(),
-                    "execute_readonly_sql");
+                    "execute_readonly_sql",
+                    sql);
             return envelope(
                     id, callToolResult(true, errorContent(requestId, failure.errorCode(), stage)));
         }
@@ -463,7 +466,8 @@ final class McpToolService {
                     items.size(),
                     false,
                     null,
-                    "list_databases_and_tables");
+                    "list_databases_and_tables",
+                    null);
             return body;
         } catch (DomainException failure) {
             if (failure.errorCode() == ErrorCode.AUDIT_UNAVAILABLE) {
@@ -484,7 +488,8 @@ final class McpToolService {
                     null,
                     false,
                     null,
-                    "list_databases_and_tables");
+                    "list_databases_and_tables",
+                    null);
             return envelope(
                     id,
                     callToolResult(
@@ -578,7 +583,8 @@ final class McpToolService {
                     tables.size(),
                     false,
                     null,
-                    "get_table_schema");
+                    "get_table_schema",
+                    null);
             return body;
         } catch (DomainException failure) {
             if (failure.errorCode() == ErrorCode.AUDIT_UNAVAILABLE) {
@@ -599,7 +605,8 @@ final class McpToolService {
                     null,
                     false,
                     null,
-                    "get_table_schema");
+                    "get_table_schema",
+                    null);
             return envelope(
                     id,
                     callToolResult(
@@ -901,6 +908,12 @@ final class McpToolService {
         }
     }
 
+    /**
+     * Generic terminal for catalog tools and rejected/failed query attempts. {@code attemptedSql}
+     * is the raw SQL the caller tried to run (null for catalog tools); when the audit sealer is
+     * enabled it is sealed so the console can reveal what was attempted behind its reason gate —
+     * denials are exactly what an auditor needs to read.
+     */
     private void terminal(
             UUID requestId,
             McpIdentity identity,
@@ -914,7 +927,14 @@ final class McpToolService {
             Integer rowsReturned,
             boolean truncated,
             byte[] sqlFingerprint,
-            String tool) {
+            String tool,
+            String attemptedSql) {
+        byte[] sealed = null;
+        String keyId = null;
+        if (auditSealer.enabled() && attemptedSql != null && !attemptedSql.isBlank()) {
+            sealed = auditSealer.seal(attemptedSql);
+            keyId = auditSealer.keyId();
+        }
         audit.terminal(
                 new AuditTerminal(
                         requestId,
@@ -927,8 +947,8 @@ final class McpToolService {
                         truncated,
                         null,
                         sqlFingerprint,
-                        null,
-                        null,
+                        sealed,
+                        keyId,
                         tool,
                         identity.userId(),
                         identity.platformId(),

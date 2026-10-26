@@ -416,8 +416,45 @@ class McpQueryFlowTest {
                 result.path("structuredContent").path("error").path("code").asText());
         assertEquals("denied", result.path("structuredContent").path("status").asText());
         assertEquals(before, after);
-        assertTerminal(
-                result.path("structuredContent").path("requestId").asText(), "ERROR", "DENY");
+        String deniedRequestId = result.path("structuredContent").path("requestId").asText();
+        assertTerminal(deniedRequestId, "ERROR", "DENY");
+        // The attempted SQL is sealed even for guard denials: what a caller tried and was
+        // refused is what an auditor reads behind the console's reason gate.
+        String attempted = "SELECT id FROM secret";
+        byte[] sealed;
+        String keyId;
+        try (Connection meta = PRIMARY.getConnection();
+                PreparedStatement sqlStatement =
+                        meta.prepareStatement(
+                                "SELECT sql_raw_cipher, key_id FROM audit_log"
+                                        + " WHERE request_id = ?")) {
+            sqlStatement.setString(1, deniedRequestId);
+            try (ResultSet row = sqlStatement.executeQuery()) {
+                assertTrue(row.next(), "missing audit row for " + deniedRequestId);
+                sealed = row.getBytes(1);
+                keyId = row.getString(2);
+            }
+        }
+        assertNotNull(sealed, "denied terminal must carry the sealed attempted SQL");
+        byte[] rawKey = Base64.getDecoder().decode(AUDIT_KEY);
+        String expectedKeyId =
+                "local:"
+                        + java.util.HexFormat.of()
+                                .formatHex(MessageDigest.getInstance("SHA-256").digest(rawKey))
+                                .substring(0, 16);
+        assertEquals(expectedKeyId, keyId);
+        javax.crypto.spec.SecretKeySpec auditKey =
+                new javax.crypto.spec.SecretKeySpec(rawKey, "AES");
+        javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(
+                javax.crypto.Cipher.DECRYPT_MODE,
+                auditKey,
+                new javax.crypto.spec.GCMParameterSpec(128, sealed, 0, 12));
+        String revealed =
+                new String(
+                        cipher.doFinal(sealed, 12, sealed.length - 12),
+                        java.nio.charset.StandardCharsets.UTF_8);
+        assertEquals(attempted, revealed);
     }
 
     @Test
