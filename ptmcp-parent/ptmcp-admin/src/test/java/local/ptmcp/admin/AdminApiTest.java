@@ -1,9 +1,13 @@
 package local.ptmcp.admin;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -29,6 +33,7 @@ import java.security.SecureRandom;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Duration;
@@ -158,6 +163,7 @@ class AdminApiTest {
                             "acl_grant",
                             "platform_scope",
                             "admin_delegation",
+                            "admin_operation_log",
                             "sys_user_role",
                             "sys_user_profile",
                             "sys_user_login_name",
@@ -687,6 +693,269 @@ class AdminApiTest {
     }
 
     @Test
+    void delegationLifecycleResolvesGenerationAndDerivesStatus() throws Exception {
+        seedAdminDelegationCodes();
+        long datasourceId = insertActiveDatasource();
+        long deptId = createDepartment("委派部");
+        // The reset empties sys_user_login_name, so ids restart at 1 (the shim admin's id);
+        // a throwaway row keeps the delegated user distinct from the acting admin.
+        createUser("throwaway-one", "占位用户", deptId);
+        long delegate = createUser("delegate-user", "受控管理员", deptId);
+        String window =
+                "{\"userId\":"
+                        + delegate
+                        + ",\"departmentRootId\":"
+                        + deptId
+                        + ",\"resourceType\":\"DATASOURCE\",\"resourceId\":"
+                        + datasourceId
+                        + ",\"allowedActions\":[\"ptmcp:acl:list\",\"ptmcp:user:list\"]"
+                        + ",\"validFrom\":\"2030-01-01T00:00:00Z\""
+                        + ",\"validTo\":\"2030-01-02T00:00:00Z\"}";
+
+        MvcResult created =
+                mockMvc.perform(
+                                post("/api/v1/admin/delegations")
+                                        .header("X-Test-User-Id", ADMIN_ID)
+                                        .header("X-Test-Platform-Admin", "true")
+                                        .header("Idempotency-Key", "delegation-create-1")
+                                        .contentType("application/json")
+                                        .content(window))
+                        .andExpect(status().isCreated())
+                        .andExpect(jsonPath("$.resourceGeneration").value(1))
+                        .andExpect(jsonPath("$.status").value("ACTIVE"))
+                        .andExpect(jsonPath("$.allowedActions.length()").value(2))
+                        .andExpect(jsonPath("$.version").value(1))
+                        .andReturn();
+        long delegationId = readLong(created.getResponse().getContentAsString(), "id");
+
+        // The future window reads as ACTIVE; the same row is absent from the EXPIRED and
+        // REVOKED projections because no write derived those states.
+        mockMvc.perform(
+                        get("/api/v1/admin/delegations")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("status", "ACTIVE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(delegationId))
+                .andExpect(jsonPath("$.nextCursor").doesNotExist());
+
+        mockMvc.perform(
+                        get("/api/v1/admin/delegations")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("status", "EXPIRED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(0));
+
+        mockMvc.perform(
+                        delete("/api/v1/admin/delegations/" + delegationId)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REVOKED"))
+                .andExpect(jsonPath("$.version").value(2))
+                .andExpect(
+                        result -> {
+                            String etag = result.getResponse().getHeader("ETag");
+                            if (!"\"2\"".equals(etag)) {
+                                throw new AssertionError("unexpected ETag: " + etag);
+                            }
+                        });
+
+        mockMvc.perform(
+                        get("/api/v1/admin/delegations")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("status", "REVOKED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].status").value("REVOKED"));
+
+        // The operation log recorded both transitions inside the same transaction.
+        try (Connection connection = connect();
+                PreparedStatement log =
+                        connection.prepareStatement(
+                                "SELECT action FROM admin_operation_log"
+                                        + " WHERE aggregate_type = 'ADMIN_DELEGATION' AND aggregate_id = ?"
+                                        + " ORDER BY id")) {
+            log.setLong(1, delegationId);
+            try (ResultSet result = log.executeQuery()) {
+                assertTrue(result.next());
+                assertEquals("DELEGATION_CREATE", result.getString(1));
+                assertTrue(result.next());
+                assertEquals("DELEGATION_REVOKE", result.getString(1));
+                assertFalse(result.next());
+            }
+        }
+    }
+
+    @Test
+    void delegationRejectsSelfEscalationDuplicatesAndForeignActions() throws Exception {
+        seedAdminDelegationCodes();
+        long datasourceId = insertActiveDatasource();
+        long deptId = createDepartment("委派部二");
+        createUser("throwaway-two", "占位用户二", deptId);
+        long delegate = createUser("delegate-two", "受控管理员二", deptId);
+        String base =
+                "{\"departmentRootId\":"
+                        + deptId
+                        + ",\"resourceType\":\"DATASOURCE\",\"resourceId\":"
+                        + datasourceId
+                        + ",\"allowedActions\":[\"ptmcp:acl:list\"]"
+                        + ",\"validFrom\":\"2030-01-01T00:00:00Z\""
+                        + ",\"validTo\":\"2030-01-02T00:00:00Z\"}";
+
+        // Self-delegation is blocked without any row written.
+        mockMvc.perform(
+                        post("/api/v1/admin/delegations")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", "self-delegation")
+                                .contentType("application/json")
+                                .content(
+                                        base.replace(
+                                                "\"departmentRootId\"",
+                                                "\"userId\":"
+                                                        + ADMIN_ID
+                                                        + ",\"departmentRootId\"")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SELF_PRIVILEGE_ESCALATION"));
+
+        // An action the caller does not hold cannot be delegated.
+        mockMvc.perform(
+                        post("/api/v1/admin/delegations")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", "foreign-action")
+                                .contentType("application/json")
+                                .content(base.replace("ptmcp:acl:list", "ptmcp:audit:decrypt")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ARGUMENT"));
+
+        MvcResult first =
+                mockMvc.perform(
+                                post("/api/v1/admin/delegations")
+                                        .header("X-Test-User-Id", ADMIN_ID)
+                                        .header("X-Test-Platform-Admin", "true")
+                                        .header("Idempotency-Key", "dupe-delegation-1")
+                                        .contentType("application/json")
+                                        .content(
+                                                base.replace(
+                                                        "\"departmentRootId\"",
+                                                        "\"userId\":"
+                                                                + delegate
+                                                                + ",\"departmentRootId\"")))
+                        .andExpect(status().isCreated())
+                        .andReturn();
+        long delegationId = readLong(first.getResponse().getContentAsString(), "id");
+
+        // Same subject/resource/window overlap is a duplicate grant.
+        mockMvc.perform(
+                        post("/api/v1/admin/delegations")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", "dupe-delegation-2")
+                                .contentType("application/json")
+                                .content(
+                                        base.replace(
+                                                "\"departmentRootId\"",
+                                                "\"userId\":"
+                                                        + delegate
+                                                        + ",\"departmentRootId\"")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("DUPLICATE_GRANT"));
+
+        // A stale If-Match cannot revoke.
+        mockMvc.perform(
+                        delete("/api/v1/admin/delegations/" + delegationId)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "7"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
+
+        // The delegated admin cannot revoke the delegation held in their name.
+        mockMvc.perform(
+                        delete("/api/v1/admin/delegations/" + delegationId)
+                                .header("X-Test-User-Id", delegate)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "1"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SELF_PRIVILEGE_ESCALATION"));
+    }
+
+    @Test
+    void delegationReplayReturnsRecordedResponseAndUnknownResourceIsRejected() throws Exception {
+        seedAdminDelegationCodes();
+        long deptId = createDepartment("委派部三");
+        createUser("throwaway-three", "占位用户三", deptId);
+        long delegate = createUser("delegate-three", "受控管理员三", deptId);
+        String body =
+                "{\"userId\":"
+                        + delegate
+                        + ",\"departmentRootId\":"
+                        + deptId
+                        + ",\"resourceType\":\"DATASOURCE\",\"resourceId\":987654"
+                        + ",\"allowedActions\":[\"ptmcp:acl:list\"]"
+                        + ",\"validFrom\":\"2030-01-01T00:00:00Z\""
+                        + ",\"validTo\":\"2030-01-02T00:00:00Z\"}";
+
+        mockMvc.perform(
+                        post("/api/v1/admin/delegations")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", "unknown-resource")
+                                .contentType("application/json")
+                                .content(body))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+
+        long datasourceId = insertActiveDatasource();
+        String known = body.replace("\"resourceId\":987654", "\"resourceId\":" + datasourceId);
+        MvcResult created =
+                mockMvc.perform(
+                                post("/api/v1/admin/delegations")
+                                        .header("X-Test-User-Id", ADMIN_ID)
+                                        .header("X-Test-Platform-Admin", "true")
+                                        .header("Idempotency-Key", "replay-key-1")
+                                        .contentType("application/json")
+                                        .content(known))
+                        .andExpect(status().isCreated())
+                        .andReturn();
+
+        // Same key + same body replays the recorded response instead of inserting again.
+        mockMvc.perform(
+                        post("/api/v1/admin/delegations")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", "replay-key-1")
+                                .contentType("application/json")
+                                .content(known))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Idempotent-Replay", "true"))
+                .andExpect(
+                        result -> {
+                            String original = created.getResponse().getContentAsString();
+                            if (!original.equals(result.getResponse().getContentAsString())) {
+                                throw new AssertionError("replayed body differs");
+                            }
+                        });
+
+        try (Connection connection = connect();
+                PreparedStatement count =
+                        connection.prepareStatement(
+                                "SELECT COUNT(*) FROM admin_delegation WHERE user_id = ?")) {
+            count.setLong(1, delegate);
+            try (ResultSet result = count.executeQuery()) {
+                assertTrue(result.next());
+                assertEquals(1, result.getInt(1));
+            }
+        }
+    }
+
+    @Test
     void previewJudgesWithoutTouchingBusinessData() throws Exception {
         long platformId = insertPlatform("p-admin-preview");
         long datasourceId = insertActiveDatasource();
@@ -775,6 +1044,39 @@ class AdminApiTest {
                         .getResponse()
                         .getContentAsString(),
                 "id");
+    }
+
+    /** Delegation tests need the acting admin to hold org/ACL capability codes. */
+    private void seedAdminDelegationCodes() throws Exception {
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            statement.execute(
+                    "INSERT INTO sys_role (role_key, role_name, status, del_flag,"
+                            + " create_time, update_time) VALUES"
+                            + " ('ptmcp-platform-admin', '平台管理员', '0', '0', NOW(6), NOW(6))",
+                    Statement.RETURN_GENERATED_KEYS);
+            long roleId;
+            try (var keys = statement.getGeneratedKeys()) {
+                keys.next();
+                roleId = keys.getLong(1);
+            }
+            for (String code : List.of("ptmcp:acl:list", "ptmcp:user:list")) {
+                statement.execute(
+                        "INSERT INTO sys_role_permission (role_id, permission_code, create_time,"
+                                + " update_time) VALUES ("
+                                + roleId
+                                + ", '"
+                                + code
+                                + "', NOW(6), NOW(6))");
+            }
+            statement.execute(
+                    "INSERT INTO sys_user_role (user_id, role_id, create_time, update_time)"
+                            + " VALUES ("
+                            + ADMIN_ID
+                            + ", "
+                            + roleId
+                            + ", NOW(6), NOW(6))");
+        }
     }
 
     private long insertActiveDatasource() throws Exception {

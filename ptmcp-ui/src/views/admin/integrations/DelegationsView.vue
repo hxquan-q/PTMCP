@@ -5,13 +5,15 @@ import PageHeader from '../../../components/common/PageHeader.vue';
 import PageState from '../../../components/common/PageState.vue';
 import { useSessionStore } from '../../../stores/session';
 import { controlPlane } from '../../../services/controlPlane';
-import { controlPlaneAvailable, mutationNotice } from '../../../services/frontendMode';
+import { controlPlaneAvailable, delegationApiReady, mutationNotice } from '../../../services/frontendMode';
 import { orgPortalApi, type User, type Department } from '../../../services/orgPortalApi';
 import { listDatasources, listMetadata } from '../../../services/data';
 import { useCursorPage } from '../../../composables/useCursorPage';
 import { errorText, formatDate, usePortalTask } from '../../portalUtils';
 import { validateRequired, validateWindow } from './adminSurface';
 const session = useSessionStore();
+/** 委派后端已实现（T17-api 切片）；预览模式继续用合成数据走完整交互。 */
+const delegationReady = delegationApiReady || controlPlaneAvailable;
 const filter = reactive({ userId: '', status: '', resourceType: '' });
 const { rows, cursor, loading, error, loaded, reset, load, retry } = useCursorPage((cursor, signal) =>
   controlPlane.delegations.list({ ...filter, cursor }, signal),
@@ -59,7 +61,7 @@ const directoryTask = usePortalTask(() => {
   resources.value = [];
 });
 async function loadDirectories(): Promise<void> {
-  if (!controlPlaneAvailable) return;
+  if (!delegationReady) return;
   directoryError.value = '';
   try {
     const result = await directoryTask.run(async (signal) => {
@@ -109,7 +111,7 @@ function validate(): boolean {
   return !Object.keys(errors.value).length;
 }
 async function submit(): Promise<void> {
-  if (saving.value || !validate() || !controlPlaneAvailable || directoryError.value || !session.can('ptmcp:delegation:create')) return;
+  if (saving.value || !validate() || !delegationReady || directoryError.value || !session.can('ptmcp:delegation:create')) return;
   saving.value = true;
   const own = editorVersion;
   try {
@@ -156,7 +158,7 @@ async function revoke(id: string): Promise<void> {
 }
 watch(filter, reset, { flush: 'sync' });
 onMounted(() => {
-  if (controlPlaneAvailable) {
+  if (delegationReady) {
     void load();
     void loadDirectories();
   }
@@ -169,12 +171,6 @@ onMounted(() => {
         ><ElButton v-if="session.can('ptmcp:delegation:create')" type="primary" @click="openCreate">新建委派</ElButton></template
       ></PageHeader
     >
-    <ElAlert
-      v-if="!controlPlaneAvailable"
-      type="warning"
-      :closable="false"
-      title="委派管理接口待接入，正常模式禁止提交；独立开发预览支持完整前端交互。"
-    />
     <ElAlert v-if="directoryError" type="error" :title="directoryError" :closable="false"
       ><ElButton @click="loadDirectories">重新加载目录</ElButton></ElAlert
     >
@@ -191,11 +187,11 @@ onMounted(() => {
             ><ElOption label="数据源" value="DATASOURCE" /><ElOption label="命名空间" value="NAMESPACE" /><ElOption
               label="对象"
               value="OBJECT" /></ElSelect></ElFormItem
-        ><ElButton native-type="submit" type="primary" :disabled="!controlPlaneAvailable" :loading="loading">查询</ElButton
+        ><ElButton native-type="submit" type="primary" :disabled="!delegationReady" :loading="loading">查询</ElButton
         ><ElButton
           @click="
             Object.assign(filter, { userId: '', status: '', resourceType: '' });
-            controlPlaneAvailable && load();
+            delegationReady && load();
           "
           >重置</ElButton
         ></ElForm
@@ -240,10 +236,10 @@ onMounted(() => {
       <ElForm label-position="top" @submit.prevent="submit"
         ><div class="two-col">
           <ElFormItem label="管理员" required :error="errors.userId"
-            ><ElSelect v-model="draft.userId" filterable :disabled="!controlPlaneAvailable || saving" placeholder="选择其他管理员"
+            ><ElSelect v-model="draft.userId" filterable :disabled="!delegationReady || saving" placeholder="选择其他管理员"
               ><ElOption v-for="user in users" :key="user.id" :value="user.id" :label="user.displayName" /></ElSelect></ElFormItem
           ><ElFormItem label="部门根" required :error="errors.departmentRootId"
-            ><ElSelect v-model="draft.departmentRootId" filterable :disabled="!controlPlaneAvailable || saving"
+            ><ElSelect v-model="draft.departmentRootId" filterable :disabled="!delegationReady || saving"
               ><ElOption v-for="dept in departments" :key="dept.id" :value="dept.id" :label="dept.name" /></ElSelect></ElFormItem
           ><ElFormItem label="资源类型"
             ><ElSelect v-model="draft.resourceType" :disabled="saving" @change="draft.resourceId = ''">
@@ -251,7 +247,7 @@ onMounted(() => {
                 label="对象"
                 value="OBJECT" /></ElSelect></ElFormItem
           ><ElFormItem label="目标资源" required :error="errors.resourceId"
-            ><ElSelect v-model="draft.resourceId" filterable :disabled="!controlPlaneAvailable || saving"
+            ><ElSelect v-model="draft.resourceId" filterable :disabled="!delegationReady || saving"
               ><ElOption
                 v-for="resource in resources.filter((row) => row.type === draft.resourceType)"
                 :key="resource.id"
@@ -276,9 +272,7 @@ onMounted(() => {
       >
       <template #footer
         ><ElButton @click="clear">关闭</ElButton><ElButton :disabled="saving" @click="validate">校验字段</ElButton
-        ><ElButton type="primary" :disabled="!controlPlaneAvailable || !!directoryError" :loading="saving" @click="submit"
-          >提交委派</ElButton
-        ></template
+        ><ElButton type="primary" :disabled="!delegationReady || !!directoryError" :loading="saving" @click="submit">提交委派</ElButton></template
       >
     </ElDialog>
   </div>

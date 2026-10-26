@@ -19,6 +19,7 @@ import local.ptmcp.admin.session.AdminSessionService;
 import local.ptmcp.admin.session.SessionAuthFilter;
 import local.ptmcp.persistence.org.AclDirectory;
 import local.ptmcp.persistence.org.AclGrantStore;
+import local.ptmcp.persistence.org.DelegationStore;
 import local.ptmcp.persistence.org.IdempotencyRecorder;
 import local.ptmcp.persistence.org.OrgStore;
 import local.ptmcp.persistence.schema.MetadataSyncJobRunner;
@@ -90,6 +91,11 @@ public class AdminStoresConfiguration {
     @Bean
     public AuditQueryService auditQueryService(DataSource dataSource) {
         return new AuditQueryService(dataSource);
+    }
+
+    @Bean
+    public DelegationStore delegationStore(DataSource dataSource) {
+        return new DelegationStore(dataSource);
     }
 
     @Bean

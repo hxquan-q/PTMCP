@@ -1,6 +1,6 @@
 import { request, type RequestOptions } from './http';
 import { newUuid } from './uuid';
-import { controlPlaneAvailable } from './frontendMode';
+import { controlPlaneAvailable, delegationApiReady } from './frontendMode';
 import type { AuditDetail, AuditSummary } from './mePortalApi';
 
 export interface Page<T> {
@@ -84,12 +84,14 @@ export function queryString(values: Record<string, string | undefined>): string 
   for (const [key, value] of Object.entries(values)) if (value) params.set(key, value);
   return params.size ? `?${params}` : '';
 }
-async function controlRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  if (!controlPlaneAvailable) throw new Error('该管理接口尚未接入，请在独立前端预览模式检查交互。');
+async function controlRequest<T>(path: string, options: RequestOptions = {}, ready: boolean = controlPlaneAvailable): Promise<T> {
+  if (!ready) throw new Error('该管理接口尚未接入，请在独立前端预览模式检查交互。');
   return (await request<T>(`/api/v1/admin${path}`, options)).data;
 }
 const versioned = (version: string): HeadersInit => ({ 'If-Match': `"${version}"`, 'Idempotency-Key': newUuid() });
 const create = (body: unknown): RequestOptions => ({ method: 'POST', body, headers: { 'Idempotency-Key': newUuid() } });
+/** 委派域后端已实现（DelegationAdminController），预览模式继续走合成数据。 */
+const delegationReady = delegationApiReady || controlPlaneAvailable;
 export const controlPlane = {
   effective: (filters: Record<string, string | undefined>, signal?: AbortSignal) =>
     controlRequest<
@@ -123,9 +125,10 @@ export const controlPlane = {
   },
   delegations: {
     list: (filters: Record<string, string | undefined>, signal?: AbortSignal) =>
-      controlRequest<Page<Delegation>>(`/delegations${queryString(filters)}`, { signal }),
-    create: (body: DelegationWrite) => controlRequest<Delegation>('/delegations', create(body)),
-    revoke: (row: Delegation) => controlRequest(`/delegations/${encodeURIComponent(row.id)}`, { method: 'DELETE', headers: versioned(row.version) }),
+      controlRequest<Page<Delegation>>(`/delegations${queryString(filters)}`, { signal }, delegationReady),
+    create: (body: DelegationWrite) => controlRequest<Delegation>('/delegations', create(body), delegationReady),
+    revoke: (row: Delegation) =>
+      controlRequest(`/delegations/${encodeURIComponent(row.id)}`, { method: 'DELETE', headers: versioned(row.version) }, delegationReady),
   },
   audit: {
     list: (filters: Record<string, string | undefined>, signal?: AbortSignal) =>
