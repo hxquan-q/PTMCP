@@ -2,6 +2,9 @@ package local.ptmcp.admin.api;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+import local.ptmcp.common.error.DomainException;
+import local.ptmcp.common.error.ErrorCode;
+import local.ptmcp.persistence.org.DelegationScopeResolver;
 import local.ptmcp.persistence.org.IdempotencyRecorder;
 import local.ptmcp.persistence.org.OrgStore;
 
@@ -17,19 +20,31 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import java.time.Instant;
 import java.util.List;
 
-/** /api/v1/admin/roles CRUD; response bodies are explicit DTOs (R<T> wrapper pending). */
+/**
+ * /api/v1/admin/roles CRUD; response bodies are explicit DTOs (R<T> wrapper pending).
+ *
+ * <p>Roles are shared across management scopes (PRD: a delegated admin must not modify them), so
+ * writes stay platform-admin only. Delegated admins keep read access to the catalog — assigning
+ * existing roles to their subtree users needs it — gated on holding any effective delegation.
+ */
 @RestController
 @ConditionalOnProperty("ptmcp.admin.datasource.url")
 @RequestMapping("/api/v1/admin/roles")
 public class RoleAdminController {
     private final OrgStore orgStore;
     private final IdempotencyRecorder idempotency;
+    private final DelegationScopeResolver scopeResolver;
 
-    public RoleAdminController(OrgStore orgStore, IdempotencyRecorder idempotency) {
+    public RoleAdminController(
+            OrgStore orgStore,
+            IdempotencyRecorder idempotency,
+            DelegationScopeResolver scopeResolver) {
         this.orgStore = orgStore;
         this.idempotency = idempotency;
+        this.scopeResolver = scopeResolver;
     }
 
     public record RoleWrite(
@@ -45,7 +60,7 @@ public class RoleAdminController {
 
     @GetMapping
     public List<RoleRead> list(HttpServletRequest request) {
-        ManagementScope.requirePlatformAdmin(request);
+        requireCatalogAccess(request);
         return orgStore.listRoles().stream().map(RoleAdminController::toRead).toList();
     }
 
@@ -73,7 +88,7 @@ public class RoleAdminController {
 
     @GetMapping("/{id}")
     public RoleRead get(@PathVariable long id, HttpServletRequest request) {
-        ManagementScope.requirePlatformAdmin(request);
+        requireCatalogAccess(request);
         return toRead(orgStore.getRole(id));
     }
 
@@ -104,6 +119,17 @@ public class RoleAdminController {
         ManagementScope.requirePlatformAdmin(request);
         orgStore.deleteRole(id, expectedVersion, actorId(request));
         return ResponseEntity.noContent().build();
+    }
+
+    /** Catalog read: platform admins, or delegated admins with any effective delegation. */
+    private void requireCatalogAccess(HttpServletRequest request) {
+        AdminPrincipal principal = AdminPrincipal.require(request);
+        if (principal.platformAdmin()) {
+            return;
+        }
+        if (scopeResolver.effectiveDelegations(principal.userId(), Instant.now()).isEmpty()) {
+            throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
+        }
     }
 
     private static long actorId(HttpServletRequest request) {

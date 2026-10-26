@@ -845,6 +845,61 @@ class AdminApiTest {
     }
 
     @Test
+    void delegatedAdminReadsRoleCatalogButCannotWriteIt() throws Exception {
+        seedAdminDelegationCodes();
+        long datasourceId = insertActiveDatasource();
+        long rootId = createDepartment("角色目录部");
+        createUser("roletest-throwaway", "占位用户", rootId);
+        long delegate = createUser("roletest-delegate", "角色目录受控员", rootId);
+
+        mockMvc.perform(
+                        post("/api/v1/admin/delegations")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", "role-catalog-delegation-1")
+                                .contentType("application/json")
+                                .content(
+                                        "{\"userId\":"
+                                                + delegate
+                                                + ",\"departmentRootId\":"
+                                                + rootId
+                                                + ",\"resourceType\":\"DATASOURCE\",\"resourceId\":"
+                                                + datasourceId
+                                                + ",\"allowedActions\":[\"ptmcp:user:assign-role\"]"
+                                                + ",\"validFrom\":\"2020-01-01T00:00:00Z\""
+                                                + ",\"validTo\":\"2030-01-01T00:00:00Z\"}"))
+                .andExpect(status().isCreated());
+
+        // Catalog read succeeds for the delegated admin.
+        mockMvc.perform(
+                        get("/api/v1/admin/roles")
+                                .header("X-Test-User-Id", delegate)
+                                .header("X-Test-Platform-Admin", "false"))
+                .andExpect(status().isOk());
+
+        // Writes stay platform-only: roles are shared across management scopes.
+        mockMvc.perform(
+                        post("/api/v1/admin/roles")
+                                .header("X-Test-User-Id", delegate)
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("Idempotency-Key", "role-write-" + UUID.randomUUID())
+                                .contentType("application/json")
+                                .content(
+                                        "{\"key\":\"rogue\",\"name\":\"越权角色\",\"enabled\":true,"
+                                                + "\"permissionCodes\":[]}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+
+        // A caller with no delegation at all is denied even the catalog.
+        mockMvc.perform(
+                        get("/api/v1/admin/roles")
+                                .header("X-Test-User-Id", 42L)
+                                .header("X-Test-Platform-Admin", "false"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+    }
+
+    @Test
     void adminAuditListAppliesFiltersCursorAndPlatformAdminScope() throws Exception {
         long platformId = insertPlatform("p-audit");
         long otherPlatformId = insertPlatform("p-audit-other");
@@ -2436,7 +2491,8 @@ class AdminApiTest {
                 keys.next();
                 roleId = keys.getLong(1);
             }
-            for (String code : List.of("ptmcp:acl:list", "ptmcp:user:list")) {
+            for (String code :
+                    List.of("ptmcp:acl:list", "ptmcp:user:list", "ptmcp:user:assign-role")) {
                 statement.execute(
                         "INSERT INTO sys_role_permission (role_id, permission_code, create_time,"
                                 + " update_time) VALUES ("
