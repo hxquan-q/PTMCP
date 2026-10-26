@@ -92,6 +92,14 @@ public class OAuthSecurityConfiguration {
                                                                                 clients,
                                                                                 properties
                                                                                         .audience())))
+                                        .clientAuthentication(
+                                                clientAuthentication ->
+                                                        clientAuthentication
+                                                                .authenticationConverter(
+                                                                        new PublicRefreshClientAuthenticationConverter())
+                                                                .authenticationProvider(
+                                                                        new PublicRefreshClientAuthenticationProvider(
+                                                                                clients)))
                                         .authorizationServerMetadataEndpoint(
                                                 metadata ->
                                                         metadata
@@ -157,7 +165,9 @@ public class OAuthSecurityConfiguration {
         metadata.grantTypes(
                 grants ->
                         grants.retainAll(
-                                List.of(AuthorizationGrantType.AUTHORIZATION_CODE.getValue())));
+                                List.of(
+                                        AuthorizationGrantType.AUTHORIZATION_CODE.getValue(),
+                                        AuthorizationGrantType.REFRESH_TOKEN.getValue())));
         metadata.tokenEndpointAuthenticationMethods(
                 methods -> {
                     methods.retainAll(

@@ -93,9 +93,12 @@ public final class PtmcpRegisteredClientRepository implements RegisteredClientRe
         Set<String> scopes =
                 new LinkedHashSet<>(OAuthStoreSupport.splitCsv(rs.getString("scopes")));
 
-        // This slice is code-only: refresh/password/implicit/client_credentials rows are ignored
-        // so neither the AS nor a hand-edited client row can mint a token outside the code flow.
-        grants.retainAll(Set.of(AuthorizationGrantType.AUTHORIZATION_CODE));
+        // Only the code and refresh grants are supported. Refresh remains gated by the client's
+        // recorded grant list; password/implicit/client_credentials rows never become active.
+        grants.retainAll(
+                Set.of(
+                        AuthorizationGrantType.AUTHORIZATION_CODE,
+                        AuthorizationGrantType.REFRESH_TOKEN));
 
         if ("PUBLIC".equals(clientType)) {
             if (!methods.isEmpty() && !methods.equals(Set.of(ClientAuthenticationMethod.NONE))) {
@@ -123,6 +126,7 @@ public final class PtmcpRegisteredClientRepository implements RegisteredClientRe
                         .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED)
                         .authorizationCodeTimeToLive(properties.authorizationCodeTtl())
                         .accessTokenTimeToLive(properties.accessTokenTtl())
+                        .refreshTokenTimeToLive(properties.refreshTokenTtl())
                         .reuseRefreshTokens(false)
                         .build();
 

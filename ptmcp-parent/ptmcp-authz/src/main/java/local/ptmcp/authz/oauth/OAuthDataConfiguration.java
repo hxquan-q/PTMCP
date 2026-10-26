@@ -110,12 +110,15 @@ public class OAuthDataConfiguration {
 
     @Bean
     public OAuth2TokenGenerator<?> tokenGenerator(
-            JwtEncoder jwtEncoder, OAuth2TokenCustomizer<JwtEncodingContext> jwtCustomizer) {
+            JwtEncoder jwtEncoder,
+            OAuth2TokenCustomizer<JwtEncodingContext> jwtCustomizer,
+            OAuthProperties properties) {
         JwtGenerator jwtGenerator = new JwtGenerator(jwtEncoder);
         jwtGenerator.setJwtCustomizer(jwtCustomizer);
-        // No refresh generator in this slice: a refresh token cannot be minted even if a client
-        // row is later edited to include the refresh grant.
-        return new DelegatingOAuth2TokenGenerator(jwtGenerator, new OAuth2AccessTokenGenerator());
+        return new DelegatingOAuth2TokenGenerator(
+                jwtGenerator,
+                new OAuth2AccessTokenGenerator(),
+                new PtmcpRefreshTokenGenerator(properties));
     }
 
     @Bean

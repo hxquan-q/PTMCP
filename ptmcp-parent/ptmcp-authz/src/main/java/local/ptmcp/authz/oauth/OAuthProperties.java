@@ -12,7 +12,9 @@ public record OAuthProperties(
         String audience,
         String signingKeyFile,
         Duration authorizationCodeTtl,
-        Duration accessTokenTtl) {
+        Duration accessTokenTtl,
+        Duration refreshTokenTtl,
+        Duration refreshFamilyAbsoluteTtl) {
 
     public OAuthProperties {
         if (issuer == null || issuer.isBlank()) {
@@ -27,6 +29,12 @@ public record OAuthProperties(
         if (accessTokenTtl == null) {
             accessTokenTtl = Duration.ofMinutes(10);
         }
+        if (refreshTokenTtl == null) {
+            refreshTokenTtl = Duration.ofDays(7);
+        }
+        if (refreshFamilyAbsoluteTtl == null) {
+            refreshFamilyAbsoluteTtl = Duration.ofDays(30);
+        }
         if (enabled && (signingKeyFile == null || signingKeyFile.isBlank())) {
             throw new IllegalArgumentException(
                     "ptmcp.authz.oauth.signing-key-file is required when OAuth is enabled");
@@ -34,7 +42,12 @@ public record OAuthProperties(
         if (authorizationCodeTtl.isZero()
                 || authorizationCodeTtl.isNegative()
                 || accessTokenTtl.isZero()
-                || accessTokenTtl.isNegative()) {
+                || accessTokenTtl.isNegative()
+                || refreshTokenTtl.isZero()
+                || refreshTokenTtl.isNegative()
+                || refreshFamilyAbsoluteTtl.isZero()
+                || refreshFamilyAbsoluteTtl.isNegative()
+                || refreshTokenTtl.compareTo(refreshFamilyAbsoluteTtl) > 0) {
             throw new IllegalArgumentException("OAuth token lifetimes must be positive");
         }
     }

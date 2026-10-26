@@ -2,6 +2,7 @@ package local.ptmcp.authz.oauth;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -83,12 +84,15 @@ class OAuthAuthorizationCodeFlowTest {
     private static final String CONFIDENTIAL_CLIENT_ID = "confidential-client";
     private static final String PUBLIC_CLIENT_ID = "public-client";
     private static final String ESCAPE_CLIENT_ID = "escape-client";
+    private static final String REFRESH_CLIENT_ID = "refresh-client";
     private static final String CONFIDENTIAL_CLIENT_ROW = "rc-confidential";
     private static final String PUBLIC_CLIENT_ROW = "rc-public";
     private static final String ESCAPE_CLIENT_ROW = "rc-escape";
+    private static final String REFRESH_CLIENT_ROW = "rc-refresh";
     private static final String CONFIDENTIAL_REDIRECT = "https://app.example/callback";
     private static final String PUBLIC_REDIRECT = "http://127.0.0.1:7777/callback";
     private static final String ESCAPE_REDIRECT = "http://127.0.0.1:7778/callback";
+    private static final String REFRESH_REDIRECT = "http://127.0.0.1:7779/callback";
     private static final String SCOPES = "mcp:query mcp:catalog";
     private static final String CLIENT_SCOPES = "mcp:query,mcp:catalog";
     private static final String PUBLIC_SCOPES = "mcp:query";
@@ -137,6 +141,8 @@ class OAuthAuthorizationCodeFlowTest {
     @BeforeEach
     void clearAuthorizationState() throws SQLException {
         try (Connection connection = db()) {
+            execute(connection, "DELETE FROM oauth_refresh_token");
+            execute(connection, "DELETE FROM oauth_refresh_family");
             execute(connection, "DELETE FROM oauth2_authorization_consent");
             execute(connection, "DELETE FROM oauth2_authorization");
         }
@@ -518,6 +524,112 @@ class OAuthAuthorizationCodeFlowTest {
     }
 
     @Test
+    void publicClientRefreshRotatesAndReplayRevokesFamily() throws Exception {
+        HttpSession session = login();
+        String verifier = verifier();
+        String code =
+                issueCode(
+                        session,
+                        REFRESH_CLIENT_ID,
+                        REFRESH_REDIRECT,
+                        PUBLIC_SCOPES,
+                        state(),
+                        verifier,
+                        true);
+
+        Response token = exchange(code, verifier, REFRESH_REDIRECT, REFRESH_CLIENT_ID, null);
+        assertEquals(200, token.status(), token.body());
+        JsonNode body = JSON.readTree(token.body());
+        String refresh = body.get("refresh_token").asString();
+        assertFalse(refresh.isBlank());
+        String familyId =
+                SignedJWT.parse(body.get("access_token").asString())
+                        .getJWTClaimsSet()
+                        .getStringClaim("sid");
+        assertNotNull(familyId);
+        try (Connection connection = db()) {
+            assertEquals(
+                    1,
+                    scalar(
+                            connection,
+                            "SELECT COUNT(*) FROM oauth_refresh_family "
+                                    + "WHERE id = ? AND status = 'ACTIVE'",
+                            familyId));
+            assertEquals(
+                    1,
+                    scalar(
+                            connection,
+                            "SELECT COUNT(*) FROM oauth_refresh_token "
+                                    + "WHERE family_id = ? AND generation = 1 AND status = 'ACTIVE'",
+                            familyId));
+        }
+
+        Response refreshed =
+                new HttpSession()
+                        .postForm(
+                                "/oauth2/token",
+                                form(
+                                        Map.of(
+                                                "grant_type", "refresh_token",
+                                                "refresh_token", refresh,
+                                                "client_id", REFRESH_CLIENT_ID)),
+                                Map.of());
+        assertEquals(200, refreshed.status(), refreshed.body());
+        JsonNode next = JSON.readTree(refreshed.body());
+        String nextRefresh = next.get("refresh_token").asString();
+        assertNotEquals(refresh, nextRefresh);
+        assertEquals(
+                familyId,
+                SignedJWT.parse(next.get("access_token").asString())
+                        .getJWTClaimsSet()
+                        .getStringClaim("sid"));
+        try (Connection connection = db()) {
+            assertEquals(
+                    1,
+                    scalar(
+                            connection,
+                            "SELECT COUNT(*) FROM oauth_refresh_token "
+                                    + "WHERE family_id = ? AND generation = 1 AND status = 'CONSUMED'",
+                            familyId));
+            assertEquals(
+                    1,
+                    scalar(
+                            connection,
+                            "SELECT COUNT(*) FROM oauth_refresh_token "
+                                    + "WHERE family_id = ? AND generation = 2 AND status = 'ACTIVE'",
+                            familyId));
+        }
+
+        Response replay =
+                new HttpSession()
+                        .postForm(
+                                "/oauth2/token",
+                                form(
+                                        Map.of(
+                                                "grant_type", "refresh_token",
+                                                "refresh_token", refresh,
+                                                "client_id", REFRESH_CLIENT_ID)),
+                                Map.of());
+        assertOAuthError(replay, 400, "invalid_grant");
+        try (Connection connection = db()) {
+            assertEquals(
+                    0,
+                    scalar(
+                            connection,
+                            "SELECT COUNT(*) FROM oauth_refresh_family "
+                                    + "WHERE id = ? AND status = 'ACTIVE'",
+                            familyId));
+            assertEquals(
+                    0,
+                    scalar(
+                            connection,
+                            "SELECT COUNT(*) FROM oauth_refresh_token "
+                                    + "WHERE family_id = ? AND status <> 'REVOKED'",
+                            familyId));
+        }
+    }
+
+    @Test
     void discoveryAdvertisesOnlyTheImplementedSurface() throws Exception {
         Response metadata = new HttpSession().get("/.well-known/oauth-authorization-server");
         assertEquals(200, metadata.status());
@@ -528,8 +640,10 @@ class OAuthAuthorizationCodeFlowTest {
                 ISSUER + "/oauth2/authorize", document.get("authorization_endpoint").asString());
         assertEquals(ISSUER + "/oauth2/token", document.get("token_endpoint").asString());
         assertEquals(ISSUER + "/oauth2/jwks", document.get("jwks_uri").asString());
-        assertEquals(1, document.get("grant_types_supported").size());
-        assertEquals("authorization_code", document.get("grant_types_supported").get(0).asString());
+        assertEquals(2, document.get("grant_types_supported").size());
+        Set<String> grants = new HashSet<>();
+        document.get("grant_types_supported").forEach(node -> grants.add(node.asString()));
+        assertEquals(Set.of("authorization_code", "refresh_token"), grants);
         Set<String> methods = new HashSet<>();
         document.get("token_endpoint_auth_methods_supported")
                 .forEach(node -> methods.add(node.asString()));
@@ -928,6 +1042,18 @@ class OAuthAuthorizationCodeFlowTest {
                     PUBLIC_CLIENT_SCOPES,
                     "PUBLIC",
                     now);
+            insertClient(
+                    connection,
+                    REFRESH_CLIENT_ROW,
+                    REFRESH_CLIENT_ID,
+                    null,
+                    "Public refresh client",
+                    "none",
+                    REFRESH_REDIRECT,
+                    PUBLIC_CLIENT_SCOPES,
+                    "PUBLIC",
+                    now,
+                    "authorization_code,refresh_token");
         } catch (SQLException failure) {
             throw new IllegalStateException("Unable to seed OAuth test data", failure);
         }
@@ -945,6 +1071,33 @@ class OAuthAuthorizationCodeFlowTest {
             String type,
             LocalDateTime now)
             throws SQLException {
+        insertClient(
+                connection,
+                id,
+                clientId,
+                secret,
+                name,
+                methods,
+                redirectUri,
+                scopes,
+                type,
+                now,
+                "authorization_code");
+    }
+
+    private static void insertClient(
+            Connection connection,
+            String id,
+            String clientId,
+            String secret,
+            String name,
+            String methods,
+            String redirectUri,
+            String scopes,
+            String type,
+            LocalDateTime now,
+            String grants)
+            throws SQLException {
         execute(
                 connection,
                 "INSERT INTO oauth2_registered_client (id, client_id, client_secret, client_name, "
@@ -958,7 +1111,7 @@ class OAuthAuthorizationCodeFlowTest {
                 secret,
                 name,
                 methods,
-                "authorization_code",
+                grants,
                 redirectUri,
                 scopes,
                 "{\"settings.client.require-authorization-consent\":true}",

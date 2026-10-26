@@ -1,5 +1,6 @@
 package local.ptmcp.authz.oauth;
 
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -87,6 +88,44 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
                     + "refresh_token_issued_at = ?, refresh_token_expires_at = ?, update_time = ?, "
                     + "updated_by = ?, version = version + 1 WHERE id = ?";
     private static final String DELETE = "DELETE FROM oauth2_authorization WHERE id = ?";
+    private static final String SELECT_REFRESH =
+            "SELECT t.family_id, t.generation, t.issued_at, t.expires_at, t.consumed_at,"
+                    + " t.status AS token_status, f.authorization_id, f.status AS family_status,"
+                    + " f.absolute_expires_at, f.idle_expires_at, f.auth_version AS family_auth_version"
+                    + " FROM oauth_refresh_token t JOIN oauth_refresh_family f ON f.id = t.family_id"
+                    + " WHERE t.token_hash = ?";
+    private static final String SELECT_FAMILY =
+            "SELECT status, absolute_expires_at, idle_expires_at FROM oauth_refresh_family"
+                    + " WHERE id = ?";
+    private static final String SELECT_ACTIVE_REFRESH =
+            "SELECT token_hash, generation FROM oauth_refresh_token WHERE family_id = ?"
+                    + " AND status = 'ACTIVE' ORDER BY generation DESC LIMIT 1";
+    private static final String INSERT_FAMILY =
+            "INSERT INTO oauth_refresh_family (id, authorization_id, user_id,"
+                    + " registered_client_id, platform_id, status, auth_version,"
+                    + " absolute_expires_at, idle_expires_at, last_rotated_at, create_time,"
+                    + " update_time, version) VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?, ?, ?, ?, 1)";
+    private static final String INSERT_REFRESH =
+            "INSERT INTO oauth_refresh_token (token_hash, family_id, generation, issued_at,"
+                    + " expires_at, status, create_time, update_time) VALUES (?, ?, ?, ?, ?,"
+                    + " 'ACTIVE', ?, ?)";
+    private static final String CONSUME_REFRESH =
+            "UPDATE oauth_refresh_token SET status = 'CONSUMED', consumed_at = ?,"
+                    + " successor_hash = ?, update_time = ? WHERE token_hash = ?"
+                    + " AND status = 'ACTIVE'";
+    private static final String UPDATE_FAMILY =
+            "UPDATE oauth_refresh_family SET idle_expires_at = ?, last_rotated_at = ?,"
+                    + " version = version + 1, update_time = ? WHERE id = ? AND status = 'ACTIVE'";
+    private static final String REVOKE_FAMILY =
+            "UPDATE oauth_refresh_family SET status = 'REVOKED', revoked_at = ?,"
+                    + " revoke_reason = ?, version = version + 1, update_time = ?"
+                    + " WHERE id = ? AND status <> 'REVOKED'";
+    private static final String REVOKE_FAMILY_TOKENS =
+            "UPDATE oauth_refresh_token SET status = 'REVOKED', update_time = ?"
+                    + " WHERE family_id = ? AND status <> 'REVOKED'";
+    private static final String REVOKE_FAMILY_AUTHORIZATION =
+            "UPDATE oauth2_authorization SET status = 'REVOKED', version = version + 1,"
+                    + " update_time = ? WHERE family_id = ? AND status <> 'REVOKED'";
 
     private final JdbcTemplate jdbc;
     private final PtmcpRegisteredClientRepository registeredClients;
@@ -165,12 +204,24 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
         OAuth2Authorization.Token<OidcIdToken> idToken = authorization.getToken(OidcIdToken.class);
         OAuth2Authorization.Token<OAuth2RefreshToken> refreshToken =
                 authorization.getRefreshToken();
+        FamilyState family = familyId == null ? null : familyState(familyId);
+        if (family != null && !"ACTIVE".equals(family.status())) {
+            throw invalidGrant();
+        }
+        Instant familyAbsolute =
+                family == null
+                        ? now.plus(properties.refreshFamilyAbsoluteTtl())
+                        : family.absoluteExpiresAt();
+        Instant refreshExpires =
+                refreshToken == null
+                        ? null
+                        : earliest(refreshToken.getToken().getExpiresAt(), familyAbsolute);
         Instant expiresAt =
                 latest(
                         code == null ? null : code.getToken().getExpiresAt(),
                         accessToken == null ? null : accessToken.getToken().getExpiresAt(),
                         idToken == null ? null : idToken.getToken().getExpiresAt(),
-                        refreshToken == null ? null : refreshToken.getToken().getExpiresAt());
+                        refreshExpires);
         Map<String, Object> attributeMap = attributes(account, familyId, authVersion);
         if (request != null && request.getState() != null) {
             attributeMap.put(OAuthAttributes.CLIENT_STATE, request.getState());
@@ -225,40 +276,149 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
                     toTimestamp(tokenIssuedAt(idToken)),
                     toTimestamp(tokenExpiresAt(idToken)),
                     toTimestamp(tokenIssuedAt(refreshToken)),
-                    toTimestamp(tokenExpiresAt(refreshToken)),
+                    toTimestamp(refreshExpires),
                     timestamp,
                     timestamp,
                     account.userId(),
                     account.userId());
+        } else {
+            jdbc.update(
+                    UPDATE,
+                    scopesCsv,
+                    attributes,
+                    state,
+                    codeHash,
+                    toTimestamp(code == null ? null : code.getToken().getExpiresAt()),
+                    redirectUri,
+                    challenge,
+                    challengeMethod,
+                    scopesJson,
+                    familyId,
+                    authVersion,
+                    "ACTIVE",
+                    toTimestamp(expiresAt),
+                    toTimestamp(tokenIssuedAt(accessToken)),
+                    toTimestamp(tokenExpiresAt(accessToken)),
+                    accessToken == null ? null : "Bearer",
+                    accessToken == null ? null : scopesCsv,
+                    toTimestamp(tokenIssuedAt(idToken)),
+                    toTimestamp(tokenExpiresAt(idToken)),
+                    toTimestamp(tokenIssuedAt(refreshToken)),
+                    toTimestamp(refreshExpires),
+                    timestamp,
+                    account.userId(),
+                    authorization.getId());
+        }
+        if (familyId != null) {
+            persistRefreshFamily(
+                    familyId,
+                    authorization,
+                    account,
+                    authVersion,
+                    refreshToken,
+                    refreshExpires,
+                    now,
+                    timestamp);
+        }
+    }
+
+    private void persistRefreshFamily(
+            String familyId,
+            OAuth2Authorization authorization,
+            AsPrincipal account,
+            long authVersion,
+            OAuth2Authorization.Token<OAuth2RefreshToken> refreshToken,
+            Instant refreshExpires,
+            Instant now,
+            LocalDateTime timestamp) {
+        FamilyState family = familyState(familyId);
+        if (family == null) {
+            RegisteredClient client =
+                    registeredClients.findById(authorization.getRegisteredClientId());
+            if (client == null) {
+                throw invalidGrant();
+            }
+            Object platform =
+                    client.getClientSettings()
+                            .getSetting(PtmcpRegisteredClientRepository.PLATFORM_ID_SETTING);
+            Long platformId = platform instanceof Number number ? number.longValue() : null;
+            Instant absolute = now.plus(properties.refreshFamilyAbsoluteTtl());
+            Instant idle = earliest(now.plus(properties.refreshTokenTtl()), absolute);
+            jdbc.update(
+                    INSERT_FAMILY,
+                    familyId,
+                    authorization.getId(),
+                    account.userId(),
+                    authorization.getRegisteredClientId(),
+                    platformId,
+                    authVersion,
+                    toTimestamp(absolute),
+                    toTimestamp(idle),
+                    timestamp,
+                    timestamp,
+                    timestamp);
+            family = new FamilyState("ACTIVE", absolute, idle);
+        }
+        if (refreshToken == null) {
             return;
         }
+        byte[] nextHash = OAuthStoreSupport.sha256(refreshToken.getToken().getTokenValue());
+        ActiveRefresh previous = activeRefresh(familyId);
+        long generation = previous == null ? 1 : previous.generation() + 1;
+        if (previous != null) {
+            int consumed =
+                    jdbc.update(
+                            CONSUME_REFRESH, timestamp, nextHash, timestamp, previous.tokenHash());
+            if (consumed != 1) {
+                revokeFamily(familyId, "REFRESH_REPLAY");
+                throw invalidGrant();
+            }
+        }
+        try {
+            jdbc.update(
+                    INSERT_REFRESH,
+                    nextHash,
+                    familyId,
+                    generation,
+                    timestamp,
+                    toTimestamp(refreshExpires),
+                    timestamp,
+                    timestamp);
+        } catch (DuplicateKeyException duplicate) {
+            revokeFamily(familyId, "REFRESH_REPLAY");
+            throw invalidGrant();
+        }
+        Instant idle = earliest(now.plus(properties.refreshTokenTtl()), family.absoluteExpiresAt());
+        jdbc.update(UPDATE_FAMILY, toTimestamp(idle), timestamp, timestamp, familyId);
+    }
 
-        jdbc.update(
-                UPDATE,
-                scopesCsv,
-                attributes,
-                state,
-                codeHash,
-                toTimestamp(code == null ? null : code.getToken().getExpiresAt()),
-                redirectUri,
-                challenge,
-                challengeMethod,
-                scopesJson,
-                familyId,
-                authVersion,
-                "ACTIVE",
-                toTimestamp(expiresAt),
-                toTimestamp(tokenIssuedAt(accessToken)),
-                toTimestamp(tokenExpiresAt(accessToken)),
-                accessToken == null ? null : "Bearer",
-                accessToken == null ? null : scopesCsv,
-                toTimestamp(tokenIssuedAt(idToken)),
-                toTimestamp(tokenExpiresAt(idToken)),
-                toTimestamp(tokenIssuedAt(refreshToken)),
-                toTimestamp(tokenExpiresAt(refreshToken)),
-                timestamp,
-                account.userId(),
-                authorization.getId());
+    private FamilyState familyState(String familyId) {
+        List<FamilyState> rows =
+                jdbc.query(
+                        SELECT_FAMILY,
+                        (rs, index) ->
+                                new FamilyState(
+                                        rs.getString("status"),
+                                        OAuthStoreSupport.toInstant(
+                                                rs.getObject(
+                                                        "absolute_expires_at",
+                                                        LocalDateTime.class)),
+                                        OAuthStoreSupport.toInstant(
+                                                rs.getObject(
+                                                        "idle_expires_at", LocalDateTime.class))),
+                        familyId);
+        return rows.isEmpty() ? null : rows.getFirst();
+    }
+
+    private ActiveRefresh activeRefresh(String familyId) {
+        List<ActiveRefresh> rows =
+                jdbc.query(
+                        SELECT_ACTIVE_REFRESH,
+                        (rs, index) ->
+                                new ActiveRefresh(
+                                        rs.getBytes("token_hash"), rs.getLong("generation")),
+                        familyId);
+        return rows.isEmpty() ? null : rows.getFirst();
     }
 
     @Override
@@ -273,9 +433,13 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
     }
 
     @Override
+    @Transactional
     public OAuth2Authorization findByToken(String token, OAuth2TokenType tokenType) {
         if (!StringUtils.hasText(token) || tokenType == null) {
             return null;
+        }
+        if (OAuth2ParameterNames.REFRESH_TOKEN.equals(tokenType.getValue())) {
+            return findByRefreshToken(token);
         }
         StoredAuthorization row;
         String codeValue = null;
@@ -301,6 +465,68 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
         return row == null ? null : reconstruct(row, codeValue);
     }
 
+    private OAuth2Authorization findByRefreshToken(String token) {
+        List<RefreshState> rows =
+                jdbc.query(
+                        SELECT_REFRESH,
+                        (rs, index) ->
+                                new RefreshState(
+                                        rs.getString("family_id"),
+                                        rs.getLong("generation"),
+                                        OAuthStoreSupport.toInstant(
+                                                rs.getObject("issued_at", LocalDateTime.class)),
+                                        OAuthStoreSupport.toInstant(
+                                                rs.getObject("expires_at", LocalDateTime.class)),
+                                        rs.getObject("consumed_at", LocalDateTime.class),
+                                        rs.getString("token_status"),
+                                        rs.getString("authorization_id"),
+                                        rs.getString("family_status"),
+                                        OAuthStoreSupport.toInstant(
+                                                rs.getObject(
+                                                        "absolute_expires_at",
+                                                        LocalDateTime.class)),
+                                        OAuthStoreSupport.toInstant(
+                                                rs.getObject(
+                                                        "idle_expires_at", LocalDateTime.class)),
+                                        rs.getLong("family_auth_version")),
+                        OAuthStoreSupport.sha256(token));
+        if (rows.isEmpty()) {
+            return null;
+        }
+        RefreshState state = rows.getFirst();
+        Instant now = Instant.now();
+        if (!"ACTIVE".equals(state.tokenStatus())) {
+            revokeFamily(state.familyId(), "REFRESH_REPLAY");
+            return null;
+        }
+        if (!"ACTIVE".equals(state.familyStatus())
+                || now.isAfter(state.tokenExpiresAt())
+                || now.isAfter(state.idleExpiresAt())
+                || now.isAfter(state.absoluteExpiresAt())) {
+            revokeFamily(state.familyId(), "FAMILY_INACTIVE");
+            return null;
+        }
+        StoredAuthorization authorization =
+                jdbc.query(SELECT_BY_ID, (rs, row) -> map(rs), state.authorizationId()).stream()
+                        .findFirst()
+                        .orElse(null);
+        if (authorization == null
+                || authorization.familyId() == null
+                || !state.familyId().equals(authorization.familyId())
+                || authorization.authVersion() != state.familyAuthVersion()) {
+            revokeFamily(state.familyId(), "AUTHORIZATION_MISMATCH");
+            return null;
+        }
+        return reconstruct(authorization, null, token, state.issuedAt(), state.tokenExpiresAt());
+    }
+
+    private void revokeFamily(String familyId, String reason) {
+        LocalDateTime now = OAuthStoreSupport.toUtc(Instant.now());
+        jdbc.update(REVOKE_FAMILY, now, reason, now, familyId);
+        jdbc.update(REVOKE_FAMILY_TOKENS, now, familyId);
+        jdbc.update(REVOKE_FAMILY_AUTHORIZATION, now, familyId);
+    }
+
     @Override
     @Transactional
     public void remove(OAuth2Authorization authorization) {
@@ -310,6 +536,15 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
     }
 
     private OAuth2Authorization reconstruct(StoredAuthorization row, String codeValue) {
+        return reconstruct(row, codeValue, null, null, null);
+    }
+
+    private OAuth2Authorization reconstruct(
+            StoredAuthorization row,
+            String codeValue,
+            String refreshValue,
+            Instant refreshIssuedAt,
+            Instant refreshExpiresAt) {
         RegisteredClient client = registeredClients.findById(row.registeredClientId());
         if (client == null) {
             return null;
@@ -381,6 +616,13 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
                 builder.token(code);
             }
         }
+        if (refreshValue != null && refreshExpiresAt != null) {
+            Instant issuedAt =
+                    refreshIssuedAt == null
+                            ? refreshExpiresAt.minus(properties.refreshTokenTtl())
+                            : refreshIssuedAt;
+            builder.token(new OAuth2RefreshToken(refreshValue, issuedAt, refreshExpiresAt));
+        }
         return builder.build();
     }
 
@@ -434,6 +676,16 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
     private static String stringParameter(Map<String, Object> parameters, String name) {
         Object value = parameters == null ? null : parameters.get(name);
         return value instanceof String text && StringUtils.hasText(text) ? text : null;
+    }
+
+    private static Instant earliest(Instant left, Instant right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null) {
+            return left;
+        }
+        return left.isBefore(right) ? left : right;
     }
 
     private static Instant latest(Instant... candidates) {
@@ -505,6 +757,32 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
         Object displayName = values.get("display_name");
         return displayName instanceof String text ? text : null;
     }
+
+    private record ActiveRefresh(byte[] tokenHash, long generation) {
+        private ActiveRefresh {
+            tokenHash = tokenHash.clone();
+        }
+
+        @Override
+        public byte[] tokenHash() {
+            return tokenHash.clone();
+        }
+    }
+
+    private record FamilyState(String status, Instant absoluteExpiresAt, Instant idleExpiresAt) {}
+
+    private record RefreshState(
+            String familyId,
+            long generation,
+            Instant issuedAt,
+            Instant tokenExpiresAt,
+            LocalDateTime consumedAt,
+            String tokenStatus,
+            String authorizationId,
+            String familyStatus,
+            Instant absoluteExpiresAt,
+            Instant idleExpiresAt,
+            long familyAuthVersion) {}
 
     private record StoredAuthorization(
             String id,
