@@ -109,14 +109,15 @@ async function save(): Promise<void> {
     ></ElFormItem>
     <p class="helper">{{ proofHint }}{{ initial?.proofConfigured ? ' 已配置，留空保持原值。' : '' }}</p>
     <ElFormItem v-if="form.proofMode === 'MTLS'" label="SHA-256 证书指纹" :error="errors.proofConfig"
-      ><ElInput v-model="proof.certificateFingerprint" maxlength="95" placeholder="写入新指纹；不读取现有配置"
-    /></ElFormItem>
+      ><ElInput v-model="proof.certificateFingerprint" maxlength="95" placeholder="留空保持已配置指纹；填写将立即替换" />
+      <p v-if="initial?.proofConfigured" class="helper">已配置指纹不回显，只有服务端知道是否匹配。</p></ElFormItem
+    >
     <template v-if="form.proofMode === 'PROXY_SECRET'">
       <ElFormItem label="代理网络约束" :error="errors.proofConfig"
         ><ElInput v-model="proof.proxyNetwork" placeholder="批准的代理地址 / CIDR"
       /></ElFormItem>
       <ElFormItem label="替换代理 secret（只写）"
-        ><ElInput v-model="proof.secret" type="password" autocomplete="new-password" placeholder="留空保持已配置值"
+        ><ElInput v-model="proof.secret" type="password" autocomplete="new-password" placeholder="留空保持已配置值；填写将立即替换"
       /></ElFormItem>
     </template>
     <ElAlert

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue';
+import { computed, h, ref, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { controlPlane, type ScopeRule, type ScopeRead } from '../../../services/controlPlane';
 import { listDatasources, listMetadata, type DatasourceRead } from '../../../services/data';
@@ -108,6 +108,21 @@ async function loadObjects(more = false): Promise<void> {
     error.value = errorText(reason);
   }
 }
+function ruleText(row: ScopeRule): string {
+  const descendants = row.includeDescendants ? '（含子树）' : '';
+  return `${row.resourceType}:${row.resourceId}@${row.resourceGeneration} · ${row.action}${descendants}`;
+}
+function diffList(label: string, rows: ScopeRule[]) {
+  if (!rows.length) return h('p', { class: 'scope-diff-none' }, `${label}：无`);
+  return h('div', null, [
+    h('p', { class: 'scope-diff-title' }, `${label} ${rows.length} 条：`),
+    h(
+      'ul',
+      { class: 'scope-diff-list' },
+      rows.map((row) => h('li', null, ruleText(row))),
+    ),
+  ]);
+}
 function add(): void {
   const option = options.value.find((row) => row.key === resource.value);
   if (!option || !option.rule.resourceGeneration || draft.value.length >= 100) return;
@@ -121,7 +136,12 @@ async function save(): Promise<void> {
   saving.value = true;
   try {
     await ElMessageBox.confirm(
-      `新增 ${changes.value.added.length}、修改 ${changes.value.modified.length}、删除 ${changes.value.removed.length} 条。Scope 为空将无法读库。确认替换整组资源范围？`,
+      h('div', { class: 'scope-diff' }, [
+        h('p', null, '确认替换整组资源范围？Scope 为空将无法读库。'),
+        diffList('新增', changes.value.added),
+        diffList('修改', changes.value.modified),
+        diffList('删除', changes.value.removed),
+      ]),
       '确认 Scope 差异',
       { type: 'warning' },
     );
@@ -216,6 +236,23 @@ onMounted(() => {
     </div>
   </section>
 </template>
+<style scoped>
+.scope-diff :deep(.scope-diff-title) {
+  margin: 8px 0 2px;
+  font-weight: 600;
+}
+.scope-diff :deep(.scope-diff-none) {
+  margin: 8px 0 0;
+  color: var(--ptmcp-text-muted);
+}
+.scope-diff :deep(.scope-diff-list) {
+  margin: 0;
+  padding-left: 20px;
+  font-family: var(--ptmcp-font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.7;
+}
+</style>
 <style scoped>
 .section-heading,
 .scope-footer {

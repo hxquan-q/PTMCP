@@ -99,7 +99,7 @@ onBeforeUnmount(() => {
     >
     <ElAlert v-if="error" type="error" :title="error" :closable="false" />
     <section v-if="value" class="plaintext">
-      <p role="status">剩余 {{ remaining }} 秒，到期自动清除。expiresAt：{{ value.expiresAt }}</p>
+      <p role="status" aria-live="polite">明文已解锁。剩余 {{ remaining }} 秒，到期自动清除（expiresAt：{{ value.expiresAt }}）。</p>
       <template v-if="value.sqlRaw"
         ><h3>sqlRaw</h3>
         <pre>{{ value.sqlRaw }}</pre></template
