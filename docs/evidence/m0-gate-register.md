@@ -1,25 +1,30 @@
 # M0 验证门禁与证据登记
 
-版本：1.0-design · 2026-10-23 · 以下M0产品证据当前均未完成。
+版本：1.0-design · 2026-10-23；候选纵切状态更新：2026-10-26。**M0 仍未正式通过。**
+下表只按工作项中的实际证据升级；`PARTIAL` 表示已有实现与定向测试，但不能替代该项完整验收，
+也不能据此勾选 M0 或升级发布结论。独立安全评审、私有资产、外部客户端与生产部署缺失项保持
+`NOT_RUN/BLOCKED`。
 
 | ID | 验证项 | 预期材料 | 当前状态/阻塞 | 责任角色 |
 | --- | --- | --- | --- | --- |
-| G-01 | 依赖收敛与三进程启动 | effective POM/tree、锁定依赖、自动配置/启动日志 | PARTIAL：框架effective POM/tree见[框架证据](framework-bootstrap-validation.md)，新增[三应用HTTP启动回归](../../tasks/work-items/T01-a.md)已组合verify；业务/安全依赖接入后仍须重验，T01-b正反例未完成 | 后端 |
-| G-02 | 关系/列作用域绑定 | 六例各自集合、列限定/相关子查询/双源同名fixture | NOT_RUN：仅有原版组件缺陷证据 | 内核 |
-| G-03 | SQL改写等价 | 原SQL/final_sql、列序/类型/结果比较与截断转换预期 | NOT_RUN：guard与测试库未建立 | 内核/QA |
-| G-04 | 单MySQL+PAT+ACL纵切 | 允许/拒绝、静态拒绝0业务连接、持久START/terminal | NOT_RUN：实现未建立 | 后端/QA |
-| G-05 | 公开OAuth完整链 | NONE+S256真实客户端、全部converter/provider/轮换/重放日志 | NOT_RUN：AS与客户端环境未建立 | 认证/安全 |
-| G-06 | Tier1平台证明 | token端点认证与每次MCP请求证明、伪造/冲突/撤销 | NOT_RUN：受信代理/mTLS未建立 | 认证/运维 |
-| G-07 | 权限时效 | 主库提交时间、各副本拒绝时间、丢通知/过期/主库故障 | NOT_RUN：状态缓存未实现 | 后端/QA |
-| G-08 | 宽行/驱动/内存 | 指定驱动、10MiB单格、Unicode/JSON/BLOB、批次/并发峰值 | NOT_RUN：输出限幅与测试库未建立 | 执行器/QA |
-| G-09 | 安全取消 | 在途任务与迟到取消时间线、rollback/evict、下一请求无误杀 | NOT_RUN：执行状态机未实现 | 执行器/QA |
-| G-10 | 审计持久性 | START前后杀进程、terminal/WAL重放、UNKNOWN、磁盘满 | NOT_RUN：审计通道未实现 | 后端/运维 |
-| G-11 | 元库迁移与恢复 | MySQL8.4 DDL、唯一键竞争、恢复后令牌作废 | PARTIAL：[T03-a1](../../tasks/work-items/T03-a1.md)安全三表V1已有真实MySQL边界候选；完整元库、写事务/令牌恢复和部署演练仍NOT_RUN，不以三表代替全域验收 | 数据/运维 |
-| G-12 | 私有29VQ与≥300回归 | fixture清单、参数渲染、预期、CI日志及脱敏证明 | BLOCKED：原始私有资产未提供 | 业务/QA |
-| G-13 | 四客户端矩阵 | WorkBuddy/Cursor/Claude Code/VS Code实际版本与流程记录 | NOT_RUN：不能由文档推断兼容 | 集成 |
-| G-14 | UI/权限委派 | 可运行页面、会话/CSRF、跨部门/跨资源、自授权拒绝 | NOT_RUN：UI/管理API未实现 | 前端/QA |
+| G-01 | 依赖收敛与三进程启动 | effective POM/tree、锁定依赖、自动配置/启动日志 | PARTIAL：框架 effective POM/tree 与三应用 HTTP 启动回归已组合 verify；T19-a 新增 gateway 生产依赖与条件装配，业务/安全依赖收敛尚未做最终全量复核 | 后端 |
+| G-02 | 关系/列作用域绑定 | 六例各自集合、列限定/相关子查询/双源同名 fixture | PARTIAL：[T06-a](../../tasks/work-items/T06-a.md) 六例逐例断言物理关系集合，[T06-b](../../tasks/work-items/T06-b.md) 列绑定/`t.*` 展开单元证据；精确大小写/引号归一化仍由快照 producer 供给，未做完整真实 Schema 集成与独立评审 | 内核 |
+| G-03 | SQL改写等价 | 原SQL/final_sql、列序/类型/结果比较与截断转换预期 | PARTIAL：[T07-a](../../tasks/work-items/T07-a.md)/[T07-b](../../tasks/work-items/T07-b.md)/[T07-c](../../tasks/work-items/T07-c.md) 已有 LIMIT、限定名与重解析等价断言；T19-a 执行 final SQL 但未做原 SQL/改写 SQL 的真实数据库结果对照，`REWRITE_VALIDATION_FAILED` 真实方言覆盖仍缺 | 内核/QA |
+| G-04 | 单MySQL+PAT+ACL纵切 | 允许/拒绝、静态拒绝0业务连接、持久START/terminal | PARTIAL：[T19-a](../../tasks/work-items/T19-a.md) 本机真实 HTTP 闭环 14 例，覆盖 PAT/JWT、ACL 交集、写入/多语句拒绝零业务连接、START/terminal 与 WAL；仅隔离 MySQL、同步路径，PG/并发预算/独立安全评审未完成 | 后端/QA |
+| G-05 | 公开OAuth完整链 | NONE+S256真实客户端、全部converter/provider/轮换/重放日志 | PARTIAL：[T13-a](../../tasks/work-items/T13-a.md) 13 例授权码流程通过；PUBLIC refresh 轮换/revoke、双副本竞争、丢响应注入与真实客户端仍未执行 | 认证/安全 |
+| G-06 | Tier1平台证明 | token端点认证与每次MCP请求证明、伪造/冲突/撤销 | NOT_RUN：[T19-a](../../tasks/work-items/T19-a.md) 未接线 mTLS/代理 proof 验证器，Tier1 平台当前 fail-closed 403 `PLATFORM_PROOF_REQUIRED` | 认证/运维 |
+| G-07 | 权限时效 | 主库提交时间、各副本拒绝时间、丢通知/过期/主库故障 | PARTIAL：[T08-a](../../tasks/work-items/T08-a.md)、[T08-b](../../tasks/work-items/T08-b.md)、[T12-a](../../tasks/work-items/T12-a.md) 有纯函数/安全状态测试，T19-a 在借连接前复核安全状态；≤5 秒撤权、多副本、丢事件与主库故障实验未做 | 后端/QA |
+| G-08 | 宽行/驱动/内存 | 指定驱动、10MiB单格、Unicode/JSON/BLOB、批次/并发峰值 | PARTIAL：[T10-a](../../tasks/work-items/T10-a.md)/[T11-a](../../tasks/work-items/T11-a.md) 有 MySQL/PG 真实执行、限幅与类型投影，T19-a 覆盖 4KiB 单格与 1MiB 响应预算；10MiB 单格、JSON/BLOB、内存峰值与并发批次未证明 | 执行器/QA |
+| G-09 | 安全取消 | 在途任务与迟到取消时间线、rollback/evict、下一请求无误杀 | PARTIAL：[T10-a](../../tasks/work-items/T10-a.md) 有取消/连接淘汰测试；M0 网络延迟注入、迟到取消竞态与生产规模未执行 | 执行器/QA |
+| G-10 | 审计持久性 | START前后杀进程、terminal/WAL重放、UNKNOWN、磁盘满 | PARTIAL：[T09-a](../../tasks/work-items/T09-a.md)/[T09-b](../../tasks/work-items/T09-b.md) 与 T19-a 已有加密 WAL、回放、START 不可写 503、terminal 回退；磁盘满、跨实例回放、180 天保留与独立安全评审仍缺 | 后端/运维 |
+| G-11 | 元库迁移与恢复 | MySQL8.4 DDL、唯一键竞争、恢复后令牌作废 | PARTIAL：[T03-a1](../../tasks/work-items/T03-a1.md)/[T03-a2](../../tasks/work-items/T03-a2.md)/[T03-b](../../tasks/work-items/T03-b.md)/[T03-c](../../tasks/work-items/T03-c.md) 已有真实 MySQL 空库/升级/并发/回滚与 V1–V6 迁移候选；完整元库运行恢复、令牌作废和部署演练仍 NOT_RUN | 数据/运维 |
+| G-12 | 私有29VQ与≥300回归 | fixture清单、参数渲染、预期、CI日志及脱敏证明 | BLOCKED：原始私有资产未提供；T18 分支的合成 509 例不是 29VQ 验收，且未合入当前基线 | 业务/QA |
+| G-13 | 四客户端矩阵 | WorkBuddy/Cursor/Claude Code/VS Code实际版本与流程记录 | NOT_RUN：用户尚未提供客户端版本；不能由文档或 MCP 协议测试推断兼容 | 集成 |
+| G-14 | UI/权限委派 | 可运行页面、会话/CSRF、跨部门/跨资源、自授权拒绝 | PARTIAL：[T17-ui-business](../../tasks/work-items/T17-ui-business.md) 有 18 组页面、真实会话/CSRF、隔离后端浏览器走查；委派/平台写操作/审计解密在后端仍未完整，真实 18 组全流程与人工接受 pending | 前端/QA |
 
-原版JSQLParser的6例已经运行，其2个对照正确、4个反例漏表，状态为HISTORICAL_COMPONENT；这不填充G-02的PTMCP实现PASS。
+原版 JSQLParser 的 6 例已经运行，其 2 个对照正确、4 个反例漏表，状态为 HISTORICAL_COMPONENT；
+这不填充 G-02 的 PTMCP 实现 PASS。2026-10-26 的候选纵切证据见
+[测试报告](../test/test-report.md)；M0 的正式退出仍需补齐上表 PARTIAL/NOT_RUN/BLOCKED 项。
 
 ## 构件与外部依赖冻结记录
 
