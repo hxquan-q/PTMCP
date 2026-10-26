@@ -46,6 +46,8 @@ class OrgManagementStoreTest {
     private static AclGrantStore grantStore;
     private static IdempotencyRecorder idempotency;
     private static AclDirectory directory;
+    private static DelegationStore delegationStore;
+    private static DelegationScopeResolver scopeResolver;
 
     @BeforeAll
     static void startSyntheticPlatformDatabase() throws Exception {
@@ -139,6 +141,8 @@ class OrgManagementStoreTest {
                     }
                 };
         orgStore = new OrgStore(dataSource);
+        delegationStore = new DelegationStore(dataSource);
+        scopeResolver = new DelegationScopeResolver(dataSource);
         grantStore = new AclGrantStore(dataSource);
         idempotency = new IdempotencyRecorder(dataSource);
         directory = new AclDirectory(dataSource);
@@ -850,5 +854,159 @@ class OrgManagementStoreTest {
                                 now)
                         .allowGrantIds()
                         .get(0));
+    }
+
+    @Test
+    void delegationScopeResolutionHonorsWindowActionsAndSubtree() throws Exception {
+        OrgStore.DepartmentRow root = orgStore.createDepartment(null, "委派根", true, 1L);
+        OrgStore.DepartmentRow child = orgStore.createDepartment(root.id(), "委派子部", true, 1L);
+        OrgStore.DepartmentRow outside = orgStore.createDepartment(null, "委派外部", true, 1L);
+        // Reset empties sys_user_login_name; ids restart at 1 (the actor's id), so a throwaway
+        // keeps the delegated user distinct from the acting admin.
+        orgStore.createUser(
+                "scope-throwaway",
+                "占位用户",
+                root.id(),
+                "$2a$10$scopescopescopescopescopescopescopescopescopesc0pe",
+                List.of(),
+                true,
+                1L);
+        long delegate =
+                orgStore.createUser(
+                                "scope-walker",
+                                "作用域走查",
+                                root.id(),
+                                "$2a$10$scopescopescopescopescopescopescopescopescopesc0pe",
+                                List.of(),
+                                true,
+                                1L)
+                        .id();
+        long datasourceId = 0;
+        try (java.sql.Connection connection = dataSource.getConnection();
+                java.sql.Statement statement = connection.createStatement()) {
+            statement.execute(
+                    "INSERT INTO datasource (code, name, engine, host, port, database_name,"
+                            + " username, credential_cipher, key_id, tls_mode, pool_max, status,"
+                            + " create_time, update_time, created_by, updated_by) VALUES"
+                            + " ('ds-scope', '作用域库', 'MYSQL', '127.0.0.1', 3306, 'biz',"
+                            + " 'ro', X'00', 'k1', 'VERIFY_FULL', 2, 'ACTIVE', NOW(6), NOW(6), 1, 1)",
+                    java.sql.Statement.RETURN_GENERATED_KEYS);
+            try (var keys = statement.getGeneratedKeys()) {
+                keys.next();
+                datasourceId = keys.getLong(1);
+            }
+        }
+
+        delegationStore.create(
+                1L,
+                "scope-test-request",
+                new DelegationStore.DelegationDraft(
+                        delegate,
+                        root.id(),
+                        "DATASOURCE",
+                        datasourceId,
+                        List.of("ptmcp:user:list", "ptmcp:acl:list"),
+                        java.time.Instant.parse("2020-01-01T00:00:00Z"),
+                        java.time.Instant.parse("2030-01-01T00:00:00Z")),
+                Set.of("ptmcp:user:list", "ptmcp:acl:list", "ptmcp:audit:decrypt"));
+        java.time.Instant now = java.time.Instant.now();
+        List<DelegationScopeResolver.EffectiveDelegation> effective =
+                scopeResolver.effectiveDelegations(delegate, now);
+        assertEquals(1, effective.size());
+
+        DelegationScopeResolver.EffectiveDelegation delegation = effective.get(0);
+        // Department subtree: root itself, the child, and a subject in the child are covered;
+        // an unrelated root is not.
+        assertTrue(
+                scopeResolver.covers(
+                        delegation,
+                        DelegationScopeResolver.Target.department(root.id()),
+                        "ptmcp:user:list",
+                        now));
+        assertTrue(
+                scopeResolver.covers(
+                        delegation,
+                        DelegationScopeResolver.Target.department(child.id()),
+                        "ptmcp:acl:list",
+                        now));
+        assertTrue(
+                scopeResolver.covers(
+                        delegation,
+                        new DelegationScopeResolver.Target(
+                                DelegationScopeResolver.TargetKind.SUBJECT, null, 0, child.id()),
+                        null,
+                        now));
+        assertFalse(
+                scopeResolver.covers(
+                        delegation,
+                        DelegationScopeResolver.Target.department(outside.id()),
+                        "ptmcp:user:list",
+                        now));
+
+        // Resource: exact type+id match; a different datasource or type is outside.
+        assertTrue(
+                scopeResolver.covers(
+                        delegation,
+                        DelegationScopeResolver.Target.resource("DATASOURCE", datasourceId),
+                        "ptmcp:acl:list",
+                        now));
+        assertFalse(
+                scopeResolver.covers(
+                        delegation,
+                        DelegationScopeResolver.Target.resource("DATASOURCE", datasourceId + 1),
+                        "ptmcp:acl:list",
+                        now));
+        assertFalse(
+                scopeResolver.covers(
+                        delegation,
+                        DelegationScopeResolver.Target.resource("OBJECT", datasourceId),
+                        "ptmcp:acl:list",
+                        now));
+
+        // Actions outside the delegated subset never pass, even inside the subtree.
+        assertFalse(
+                scopeResolver.covers(
+                        delegation,
+                        DelegationScopeResolver.Target.department(child.id()),
+                        "ptmcp:audit:decrypt",
+                        now));
+        assertFalse(
+                scopeResolver.covers(
+                        delegation,
+                        DelegationScopeResolver.Target.resource("DATASOURCE", datasourceId),
+                        "ptmcp:audit:decrypt",
+                        now));
+
+        // Window: an expired delegation grants nothing (second delegated user to avoid the
+        // duplicate-window guard, which correctly rejects overlapping rows for the same subject).
+        OrgStore.UserRow expiredUser =
+                orgStore.createUser(
+                        "scope-expired",
+                        "过期走查",
+                        root.id(),
+                        "$2a$10$scopescopescopescopescopescopescopescopescopesc0pe",
+                        List.of(),
+                        true,
+                        1L);
+        delegationStore.create(
+                1L,
+                "scope-test-expired",
+                new DelegationStore.DelegationDraft(
+                        expiredUser.id(),
+                        root.id(),
+                        "DATASOURCE",
+                        datasourceId,
+                        List.of("ptmcp:user:list"),
+                        java.time.Instant.parse("2020-01-01T00:00:00Z"),
+                        java.time.Instant.parse("2021-01-01T00:00:00Z")),
+                Set.of("ptmcp:user:list"));
+        // Still one effective row for the active subject; the expired row never enters the set.
+        assertEquals(1, scopeResolver.effectiveDelegations(delegate, now).size());
+        assertEquals(0, scopeResolver.effectiveDelegations(expiredUser.id(), now).size());
+
+        // A revoked delegation drops out of the effective set.
+        DelegationStore.DelegationRow active = delegationStore.get(effective.get(0).id());
+        delegationStore.revoke(active.id(), active.version(), 1L, "scope-test-revoke");
+        assertEquals(0, scopeResolver.effectiveDelegations(delegate, now).size());
     }
 }

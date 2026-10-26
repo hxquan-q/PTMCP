@@ -501,6 +501,11 @@ public final class DelegationStore {
                 + "\"}";
     }
 
+    /** Package-shared parse for scope resolution; values are regex-checked on read. */
+    static List<String> readActionsPublic(String raw) {
+        return parseActions(raw);
+    }
+
     /** Action codes match ACTION_CODE, so plain JSON string joining needs no escaping. */
     private static String actionsJson(Set<String> actions) {
         StringBuilder json = new StringBuilder("[");
