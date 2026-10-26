@@ -31,6 +31,7 @@ import local.ptmcp.persistence.audit.AuditTerminal;
 import local.ptmcp.persistence.audit.wal.TerminalWal;
 import local.ptmcp.persistence.org.AuthorizationReader;
 import local.ptmcp.persistence.schema.PublishedSnapshotReader;
+import local.ptmcp.persistence.security.QuotaLimiter;
 import local.ptmcp.persistence.security.SecuritySnapshot;
 import local.ptmcp.persistence.security.SecurityStateReader;
 
@@ -82,6 +83,7 @@ final class McpToolService {
     private final DataSourcePoolRegistry pools;
     private final ApprovedQueryAdapter adapter;
     private final PgApprovedQueryAdapter pgAdapter;
+    private final QuotaLimiter quotas;
     private final BoundedParser parser;
     private final McpAuthentication authentication;
 
@@ -95,6 +97,7 @@ final class McpToolService {
             DataSourcePoolRegistry pools,
             ApprovedQueryAdapter adapter,
             PgApprovedQueryAdapter pgAdapter,
+            QuotaLimiter quotas,
             BoundedParser parser,
             McpAuthentication authentication) {
         this.security = Objects.requireNonNull(security, "security");
@@ -106,6 +109,7 @@ final class McpToolService {
         this.pools = Objects.requireNonNull(pools, "pools");
         this.adapter = Objects.requireNonNull(adapter, "adapter");
         this.pgAdapter = Objects.requireNonNull(pgAdapter, "pgAdapter");
+        this.quotas = Objects.requireNonNull(quotas, "quotas");
         this.parser = Objects.requireNonNull(parser, "parser");
         this.authentication = Objects.requireNonNull(authentication, "authentication");
     }
@@ -207,6 +211,7 @@ final class McpToolService {
         }
         Instant startedAt = Instant.now();
         long startedNanos = System.nanoTime();
+        Integer queueMs = null;
         audit.start(
                 new AuditStart(
                         requestId,
@@ -262,30 +267,41 @@ final class McpToolService {
             approved = GuardPipeline.guard(sql, context, policy, deps);
 
             stage = Stage.EXECUTION;
-            PoolHandle handle = activatePool(published, engine);
+            long queueStarted = System.nanoTime();
+            QuotaLimiter.ExecutionPermit permit;
+            try {
+                permit = awaitExecution(identity.userId(), datasourceId);
+            } finally {
+                queueMs = elapsedMillis(queueStarted);
+            }
             ToolResultEncoder.Encoded encoded;
-            if (engine == DatabaseEngine.MYSQL) {
-                ReadOnlyResult result =
-                        adapter.execute(
-                                approved,
-                                datasource -> {
-                                    authentication.revalidate(identity);
-                                    audit.confirmStart(requestId);
-                                },
-                                new ReadOnlyCancellation());
-                encoded = ToolResultEncoder.encode(result, result.limitReached());
-            } else {
-                PgReadOnlyResult result =
-                        pgAdapter.execute(
-                                approved,
-                                handle.dataSource(),
-                                handle.generation(),
-                                datasource -> {
-                                    authentication.revalidate(identity);
-                                    audit.confirmStart(requestId);
-                                },
-                                new ReadOnlyCancellation());
-                encoded = ToolResultEncoder.encode(result);
+            try {
+                PoolHandle handle = activatePool(published, engine);
+                if (engine == DatabaseEngine.MYSQL) {
+                    ReadOnlyResult result =
+                            adapter.execute(
+                                    approved,
+                                    datasource -> {
+                                        authentication.revalidate(identity);
+                                        audit.confirmStart(requestId);
+                                    },
+                                    new ReadOnlyCancellation());
+                    encoded = ToolResultEncoder.encode(result, result.limitReached());
+                } else {
+                    PgReadOnlyResult result =
+                            pgAdapter.execute(
+                                    approved,
+                                    handle.dataSource(),
+                                    handle.generation(),
+                                    datasource -> {
+                                        authentication.revalidate(identity);
+                                        audit.confirmStart(requestId);
+                                    },
+                                    new ReadOnlyCancellation());
+                    encoded = ToolResultEncoder.encode(result);
+                }
+            } finally {
+                quotas.release(permit);
             }
 
             stage = Stage.ENCODE;
@@ -308,6 +324,7 @@ final class McpToolService {
                     AuditTerminal.Verdict.ALLOW,
                     null,
                     durationMs,
+                    queueMs,
                     success.rowsReturned(),
                     success.truncated(),
                     approved.sqlHash(),
@@ -327,6 +344,7 @@ final class McpToolService {
                     verdictFor(stage, failure.errorCode()),
                     failure.errorCode().name(),
                     durationMs,
+                    queueMs,
                     null,
                     false,
                     approved == null ? null : approved.sqlHash(),
@@ -439,6 +457,7 @@ final class McpToolService {
                     AuditTerminal.Verdict.ALLOW,
                     null,
                     elapsedMillis(startedNanos),
+                    null,
                     items.size(),
                     false,
                     null,
@@ -459,6 +478,7 @@ final class McpToolService {
                             : AuditTerminal.Verdict.ERROR,
                     failure.errorCode().name(),
                     elapsedMillis(startedNanos),
+                    null,
                     null,
                     false,
                     null,
@@ -552,6 +572,7 @@ final class McpToolService {
                     AuditTerminal.Verdict.ALLOW,
                     null,
                     elapsedMillis(startedNanos),
+                    null,
                     tables.size(),
                     false,
                     null,
@@ -572,6 +593,7 @@ final class McpToolService {
                             : AuditTerminal.Verdict.ERROR,
                     failure.errorCode().name(),
                     elapsedMillis(startedNanos),
+                    null,
                     null,
                     false,
                     null,
@@ -845,6 +867,38 @@ final class McpToolService {
         }
     }
 
+    /**
+     * Bounded wait for one execution slot. Each attempt takes a queue slot, then tries the user,
+     * datasource and gateway gauges; a rejected attempt returns its queue slot before the next
+     * attempt. The overall wait never exceeds the quota queue window, and the caller revalidates
+     * the security state again immediately before the business connection is borrowed.
+     */
+    private QuotaLimiter.ExecutionPermit awaitExecution(long userId, long datasourceId) {
+        long deadline = System.nanoTime() + QuotaLimiter.QUEUE_WINDOW_NANOS;
+        while (true) {
+            QuotaLimiter.QueuePermit queued = quotas.acquireQueue(userId);
+            try {
+                return quotas.acquireExecution(userId, datasourceId, queued);
+            } catch (DomainException failure) {
+                ErrorCode code = failure.errorCode();
+                if (code != ErrorCode.USER_CONCURRENCY_LIMIT
+                        && code != ErrorCode.DATASOURCE_CONCURRENCY_LIMIT
+                        && code != ErrorCode.GATEWAY_BUSY) {
+                    throw failure;
+                }
+                if (System.nanoTime() >= deadline) {
+                    throw new DomainException(ErrorCode.GATEWAY_BUSY);
+                }
+                try {
+                    Thread.sleep(25L);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new DomainException(ErrorCode.GATEWAY_BUSY);
+                }
+            }
+        }
+    }
+
     private void terminal(
             UUID requestId,
             McpIdentity identity,
@@ -854,6 +908,7 @@ final class McpToolService {
             AuditTerminal.Verdict verdict,
             String errorCode,
             Integer durationMs,
+            Integer queueMs,
             Integer rowsReturned,
             boolean truncated,
             byte[] sqlFingerprint,
@@ -865,7 +920,7 @@ final class McpToolService {
                         verdict,
                         errorCode,
                         durationMs == null ? null : durationMs.longValue(),
-                        null,
+                        queueMs,
                         rowsReturned,
                         truncated,
                         null,

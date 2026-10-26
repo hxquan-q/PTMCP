@@ -20,6 +20,8 @@ import local.ptmcp.persistence.audit.wal.WalKey;
 import local.ptmcp.persistence.audit.wal.WalKeyProvider;
 import local.ptmcp.persistence.org.AuthorizationReader;
 import local.ptmcp.persistence.schema.PublishedSnapshotReader;
+import local.ptmcp.persistence.security.InMemoryQuotaLimiter;
+import local.ptmcp.persistence.security.QuotaLimiter;
 import local.ptmcp.persistence.security.SecurityStateReader;
 
 import org.springframework.beans.factory.ObjectProvider;
@@ -162,6 +164,11 @@ class McpGatewayConfiguration {
     }
 
     @Bean
+    QuotaLimiter quotaLimiter() {
+        return new InMemoryQuotaLimiter();
+    }
+
+    @Bean
     McpToolService mcpToolService(
             SecurityStateReader security,
             AuditRepository auditRepository,
@@ -171,6 +178,7 @@ class McpGatewayConfiguration {
             DataSourcePoolRegistry poolRegistry,
             ApprovedQueryAdapter adapter,
             PgApprovedQueryAdapter pgAdapter,
+            QuotaLimiter quotaLimiter,
             BoundedParser parser,
             McpAuthentication authentication,
             ObjectProvider<TerminalWal> terminalWal) {
@@ -184,6 +192,7 @@ class McpGatewayConfiguration {
                 poolRegistry,
                 adapter,
                 pgAdapter,
+                quotaLimiter,
                 parser,
                 authentication);
     }

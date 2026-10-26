@@ -15,10 +15,12 @@ import com.zaxxer.hikari.HikariDataSource;
 import local.ptmcp.datasource.connection.CredentialCipher;
 import local.ptmcp.datasource.metadata.MysqlMetadataCollector;
 import local.ptmcp.persistence.schema.SchemaSnapshotStore;
+import local.ptmcp.persistence.security.QuotaLimiter;
 
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -111,6 +113,8 @@ class McpQueryFlowTest {
     }
 
     @LocalServerPort private int port;
+
+    @Autowired private QuotaLimiter quotas;
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry properties) {
@@ -355,6 +359,40 @@ class McpQueryFlowTest {
         assertEquals(before, after);
         assertTerminal(
                 result.path("structuredContent").path("requestId").asText(), "ERROR", "DENY");
+    }
+
+    @Test
+    void userConcurrencyLimitQueuesThenRejectsWithoutBusinessCheckout() throws Exception {
+        List<QuotaLimiter.ExecutionPermit> held = new java.util.ArrayList<>();
+        for (int index = 0; index < QuotaLimiter.USER_MAX; index++) {
+            QuotaLimiter.QueuePermit queued = quotas.acquireQueue(1);
+            held.add(quotas.acquireExecution(1, 1, queued));
+        }
+        long before = businessConnections();
+        try {
+            long started = System.nanoTime();
+            HttpResponse<String> response = call("SELECT id FROM orders", PAT);
+            long elapsedMillis = (System.nanoTime() - started) / 1_000_000;
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode result = JSON.readTree(response.body()).path("result");
+            assertTrue(result.path("isError").asBoolean(false), response.body());
+            assertEquals(
+                    "GATEWAY_BUSY",
+                    result.path("structuredContent").path("error").path("code").asText());
+            assertTrue(
+                    elapsedMillis >= QuotaLimiter.QUEUE_WINDOW_NANOS / 1_000_000 - 500,
+                    "expected a bounded queue wait, got " + elapsedMillis + "ms");
+            assertEquals(before, businessConnections());
+            assertTerminal(
+                    result.path("structuredContent").path("requestId").asText(), "ERROR", "ALLOW");
+        } finally {
+            held.forEach(quotas::release);
+        }
+        HttpResponse<String> after = call("SELECT id FROM orders", PAT);
+        assertEquals(200, after.statusCode(), after.body());
+        assertFalse(
+                JSON.readTree(after.body()).path("result").path("isError").asBoolean(true),
+                after.body());
     }
 
     @Test
