@@ -1,5 +1,6 @@
 package local.ptmcp.admin.me;
 
+import local.ptmcp.admin.audit.AuditQueryService;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.persistence.org.AclDirectory;
@@ -12,7 +13,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -38,8 +38,6 @@ import javax.sql.DataSource;
 public final class MeService {
     private static final int MAX_PAGE = 100;
     private static final int DEFAULT_PAGE = 20;
-    private static final Duration HISTORY_MAX_WINDOW = Duration.ofDays(31);
-    private static final Duration HISTORY_DEFAULT_WINDOW = Duration.ofDays(7);
     private static final ZoneOffset UTC = ZoneOffset.UTC;
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final Set<String> CLIENT_TYPES =
@@ -48,11 +46,14 @@ public final class MeService {
     private final DataSource primary;
     private final AclDirectory directory;
     private final String mcpUrl;
+    private final AuditQueryService audits;
 
-    public MeService(DataSource primary, AclDirectory directory, String mcpUrl) {
+    public MeService(
+            DataSource primary, AclDirectory directory, String mcpUrl, AuditQueryService audits) {
         this.primary = Objects.requireNonNull(primary, "primary");
         this.directory = Objects.requireNonNull(directory, "directory");
         this.mcpUrl = mcpUrl == null || mcpUrl.isBlank() ? null : mcpUrl.trim();
+        this.audits = Objects.requireNonNull(audits, "audits");
     }
 
     public record PlatformItem(String type, long id, String name, int tier, String catalogMode) {}
@@ -109,43 +110,6 @@ public final class MeService {
             List<ColumnView> columns,
             List<Object> foreignKeys,
             boolean foreignKeysRestricted) {}
-
-    public record AuditSummary(
-            String requestId,
-            String tool,
-            Long datasourceId,
-            Long platformId,
-            Instant startedAt,
-            Instant completedAt,
-            String result,
-            String verdict,
-            String errorCode,
-            String sqlMasked,
-            Long durationMs,
-            Integer rowsReturned,
-            boolean truncated) {}
-
-    public record AuditPage(List<AuditSummary> items, String nextCursor) {}
-
-    public record AuditDetail(
-            String requestId,
-            String tool,
-            Long datasourceId,
-            Long platformId,
-            Instant startedAt,
-            Instant completedAt,
-            String result,
-            String verdict,
-            String errorCode,
-            String sqlMasked,
-            Object resourceRefs,
-            Object versions,
-            Long durationMs,
-            Integer queueMs,
-            Integer dbMs,
-            Integer rowsReturned,
-            Integer responseBytes,
-            boolean truncated) {}
 
     public record McpConfig(
             String transport,
@@ -461,7 +425,7 @@ public final class MeService {
 
     // ------------------------------------------------------------------ history
 
-    public AuditPage history(
+    public AuditQueryService.AuditPage history(
             long userId,
             Instant from,
             Instant to,
@@ -470,117 +434,12 @@ public final class MeService {
             String verdict,
             String cursor,
             Integer pageSize) {
-        int limit = pageSize(pageSize);
-        Instant end = to == null ? Instant.now() : to;
-        Instant start = from == null ? end.minus(HISTORY_DEFAULT_WINDOW) : from;
-        if (!start.isBefore(end)
-                || Duration.between(start, end).compareTo(HISTORY_MAX_WINDOW) > 0) {
-            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
-        }
-        String normalizedTool = optionalFilter(tool, 64);
-        String normalizedResult =
-                optionalEnum(result, Set.of("RUNNING", "SUCCESS", "ERROR", "UNKNOWN"));
-        String normalizedVerdict =
-                optionalEnum(verdict, Set.of("ALLOW", "DENY", "ERROR", "UNKNOWN"));
-        HistoryCursor decoded = decodeHistoryCursor(cursor);
-        StringBuilder sql =
-                new StringBuilder(
-                        "SELECT request_id, tool, datasource_id, platform_id, started_at,"
-                                + " completed_at, result, verdict, error_code, sql_masked,"
-                                + " duration_ms, rows_returned, truncated FROM audit_log"
-                                + " WHERE user_id = ? AND started_at >= ? AND started_at <= ?");
-        List<Object> parameters = new ArrayList<>();
-        parameters.add(userId);
-        parameters.add(utc(start));
-        parameters.add(utc(end));
-        if (normalizedTool != null) {
-            sql.append(" AND tool = ?");
-            parameters.add(normalizedTool);
-        }
-        if (normalizedResult != null) {
-            sql.append(" AND result = ?");
-            parameters.add(normalizedResult);
-        }
-        if (normalizedVerdict != null) {
-            sql.append(" AND verdict = ?");
-            parameters.add(normalizedVerdict);
-        }
-        if (decoded != null) {
-            sql.append(" AND (started_at < ? OR (started_at = ? AND request_id < ?))");
-            parameters.add(utc(decoded.startedAt()));
-            parameters.add(utc(decoded.startedAt()));
-            parameters.add(decoded.requestId());
-        }
-        sql.append(" ORDER BY started_at DESC, request_id DESC LIMIT ?");
-        parameters.add(limit + 1);
-        List<AuditSummary> items = new ArrayList<>();
-        String next = null;
-        try (Connection connection = primary.getConnection();
-                PreparedStatement statement = connection.prepareStatement(sql.toString())) {
-            bind(statement, parameters);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                while (resultSet.next()) {
-                    items.add(auditSummary(resultSet));
-                }
-            }
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
-        }
-        if (items.size() > limit) {
-            AuditSummary last = items.get(limit - 1);
-            next = encodeHistoryCursor(last.startedAt(), last.requestId());
-            items.subList(limit, items.size()).clear();
-        }
-        return new AuditPage(List.copyOf(items), next);
+        return audits.history(userId, from, to, tool, result, verdict, cursor, pageSize);
     }
 
-    public AuditDetail historyDetail(long userId, String requestId) {
-        UUID parsed;
-        try {
-            parsed = UUID.fromString(requestId);
-        } catch (RuntimeException failure) {
-            throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
-        }
-        try (Connection connection = primary.getConnection();
-                PreparedStatement statement =
-                        connection.prepareStatement(
-                                "SELECT request_id, tool, datasource_id, platform_id, started_at,"
-                                        + " completed_at, result, verdict, error_code, sql_masked,"
-                                        + " resource_refs, versions, duration_ms, queue_ms, db_ms,"
-                                        + " rows_returned, response_bytes, truncated FROM audit_log"
-                                        + " WHERE request_id = ? AND user_id = ?")) {
-            statement.setString(1, parsed.toString());
-            statement.setLong(2, userId);
-            try (ResultSet result = statement.executeQuery()) {
-                if (!result.next()) {
-                    throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
-                }
-                return new AuditDetail(
-                        result.getString(1),
-                        result.getString(2),
-                        nullableLong(result, 3),
-                        nullableLong(result, 4),
-                        toInstant(result.getObject(5, LocalDateTime.class)),
-                        toInstant(result.getObject(6, LocalDateTime.class)),
-                        result.getString(7),
-                        result.getString(8),
-                        result.getString(9),
-                        result.getString(10),
-                        parseJson(result.getString(11)),
-                        parseJson(result.getString(12)),
-                        nullableLong(result, 13),
-                        nullableInt(result, 14),
-                        nullableInt(result, 15),
-                        nullableInt(result, 16),
-                        nullableInt(result, 17),
-                        result.getInt(18) == 1);
-            }
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
-        }
+    public AuditQueryService.AuditDetail historyDetail(long userId, String requestId) {
+        return audits.historyDetail(userId, requestId);
     }
-
-    private record HistoryCursor(Instant startedAt, String requestId) {}
 
     // ------------------------------------------------------------------ mcp config
 
@@ -1146,27 +1005,6 @@ public final class MeService {
                 result.getLong(1), result.getLong(2), result.getString(3), result.getString(4));
     }
 
-    private static AuditSummary auditSummary(ResultSet result) throws SQLException {
-        String masked = result.getString(10);
-        if (masked != null && masked.length() > 512) {
-            masked = masked.substring(0, 512) + "…";
-        }
-        return new AuditSummary(
-                result.getString(1),
-                result.getString(2),
-                nullableLong(result, 3),
-                nullableLong(result, 4),
-                toInstant(result.getObject(5, LocalDateTime.class)),
-                toInstant(result.getObject(6, LocalDateTime.class)),
-                result.getString(7),
-                result.getString(8),
-                result.getString(9),
-                masked,
-                nullableLong(result, 11),
-                nullableInt(result, 12),
-                result.getInt(13) == 1);
-    }
-
     private static String displayName(NamespaceRow namespace) {
         return namespace.schema() == null || namespace.schema().isBlank()
                 ? namespace.catalog()
@@ -1228,32 +1066,6 @@ public final class MeService {
         }
     }
 
-    private static String encodeHistoryCursor(Instant startedAt, String requestId) {
-        String raw = startedAt.toString() + "|" + requestId;
-        return Base64.getUrlEncoder()
-                .withoutPadding()
-                .encodeToString(raw.getBytes(StandardCharsets.UTF_8));
-    }
-
-    private static HistoryCursor decodeHistoryCursor(String cursor) {
-        if (cursor == null || cursor.isBlank()) {
-            return null;
-        }
-        try {
-            String raw =
-                    new String(
-                            Base64.getUrlDecoder().decode(cursor.trim()), StandardCharsets.UTF_8);
-            int separator = raw.lastIndexOf('|');
-            if (separator <= 0) {
-                throw new IllegalArgumentException("missing separator");
-            }
-            return new HistoryCursor(
-                    Instant.parse(raw.substring(0, separator)), raw.substring(separator + 1));
-        } catch (IllegalArgumentException | DateTimeParseException failure) {
-            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
-        }
-    }
-
     private static String encodeAuthorizationCursor(Instant issuedAt, String id) {
         String raw = issuedAt.toString() + "|" + id;
         return Base64.getUrlEncoder()
@@ -1278,10 +1090,6 @@ public final class MeService {
         } catch (IllegalArgumentException | DateTimeParseException failure) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
-    }
-
-    private static Object parseJson(String json) {
-        return json == null || json.isBlank() ? null : JSON.readValue(json, Object.class);
     }
 
     private static void bind(PreparedStatement statement, List<Object> parameters)

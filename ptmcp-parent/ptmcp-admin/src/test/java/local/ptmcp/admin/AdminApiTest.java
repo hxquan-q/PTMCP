@@ -28,11 +28,14 @@ import org.testcontainers.mysql.MySQLContainer;
 import java.security.SecureRandom;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
+import java.util.UUID;
 
 /** Admin org/ACL APIs against the real MySQL schema; identity uses the documented test shim. */
 @SpringBootTest(classes = AdminApplication.class, properties = "ptmcp.admin.test-principal=true")
@@ -160,6 +163,8 @@ class AdminApiTest {
                             "sys_role",
                             "sys_dept",
                             "platform_registry",
+                            "audit_log",
+                            "audit_outbox",
                             "api_idempotency")) {
                 statement.execute("DELETE FROM " + table);
             }
@@ -421,6 +426,265 @@ class AdminApiTest {
     }
 
     @Test
+    void adminAuditListAppliesFiltersCursorAndPlatformAdminScope() throws Exception {
+        long platformId = insertPlatform("p-audit");
+        long otherPlatformId = insertPlatform("p-audit-other");
+        long datasourceId = insertActiveDatasource();
+        String oldest = UUID.randomUUID().toString();
+        String middle = UUID.randomUUID().toString();
+        String newest = UUID.randomUUID().toString();
+        insertAudit(
+                oldest, 11L, platformId, datasourceId, "mcp.query", "SUCCESS", "ALLOW", null, 40);
+        insertAudit(
+                middle, 11L, platformId, datasourceId, "mcp.catalog", "SUCCESS", "ALLOW", null, 20);
+        insertAudit(
+                newest,
+                12L,
+                otherPlatformId,
+                datasourceId,
+                "mcp.query",
+                "ERROR",
+                "DENY",
+                "SQL_DENIED",
+                10);
+
+        mockMvc.perform(get("/api/v1/admin/audit").header("X-Test-User-Id", ADMIN_ID))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+
+        mockMvc.perform(get("/api/v1/admin/audit")).andExpect(status().isUnauthorized());
+
+        mockMvc.perform(
+                        get("/api/v1/admin/audit")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(3))
+                .andExpect(jsonPath("$.items[0].requestId").value(newest))
+                .andExpect(jsonPath("$.items[0].userId").value("12"))
+                .andExpect(jsonPath("$.items[0].datasourceId").value(String.valueOf(datasourceId)))
+                .andExpect(jsonPath("$.items[0].errorCode").value("SQL_DENIED"))
+                .andExpect(jsonPath("$.items[2].requestId").value(oldest))
+                .andExpect(jsonPath("$.nextCursor").isEmpty());
+
+        mockMvc.perform(
+                        get("/api/v1/admin/audit")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("userId", "11"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(2));
+
+        mockMvc.perform(
+                        get("/api/v1/admin/audit")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("tool", "mcp.catalog"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].requestId").value(middle));
+
+        mockMvc.perform(
+                        get("/api/v1/admin/audit")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("result", "ERROR")
+                                .param("verdict", "DENY")
+                                .param("errorCode", "SQL_DENIED")
+                                .param("platformId", Long.toString(otherPlatformId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].requestId").value(newest));
+
+        mockMvc.perform(
+                        get("/api/v1/admin/audit")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("datasourceId", Long.toString(datasourceId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(3));
+
+        MvcResult firstPage =
+                mockMvc.perform(
+                                get("/api/v1/admin/audit")
+                                        .header("X-Test-User-Id", ADMIN_ID)
+                                        .header("X-Test-Platform-Admin", "true")
+                                        .param("pageSize", "2"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.items.length()").value(2))
+                        .andReturn();
+        String cursor = jsonPathCursor(firstPage.getResponse().getContentAsString());
+        mockMvc.perform(
+                        get("/api/v1/admin/audit")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("pageSize", "2")
+                                .param("cursor", cursor))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].requestId").value(oldest))
+                .andExpect(jsonPath("$.nextCursor").isEmpty());
+
+        mockMvc.perform(
+                        get("/api/v1/admin/audit")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("from", Instant.now().toString())
+                                .param("to", Instant.now().minusSeconds(600).toString()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ARGUMENT"));
+
+        mockMvc.perform(
+                        get("/api/v1/admin/audit")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("from", Instant.now().minus(Duration.ofDays(40)).toString())
+                                .param("to", Instant.now().toString()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ARGUMENT"));
+
+        mockMvc.perform(
+                        get("/api/v1/admin/audit")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("cursor", "not-a-cursor"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ARGUMENT"));
+
+        mockMvc.perform(
+                        get("/api/v1/admin/audit")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("userId", "not-a-number"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ARGUMENT"));
+    }
+
+    @Test
+    void adminAuditDetailStaysMaskedAndScopedToPlatformAdmin() throws Exception {
+        long platformId = insertPlatform("p-audit-detail");
+        long datasourceId = insertActiveDatasource();
+        String requestId = UUID.randomUUID().toString();
+        insertAudit(
+                requestId,
+                11L,
+                platformId,
+                datasourceId,
+                "mcp.query",
+                "SUCCESS",
+                "ALLOW",
+                null,
+                5,
+                "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
+
+        mockMvc.perform(get("/api/v1/admin/audit/" + requestId).header("X-Test-User-Id", ADMIN_ID))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+
+        mockMvc.perform(
+                        get("/api/v1/admin/audit/" + requestId)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.requestId").value(requestId))
+                .andExpect(jsonPath("$.userId").value("11"))
+                .andExpect(jsonPath("$.sqlMasked").value("SELECT * FROM orders WHERE id = ?"))
+                .andExpect(jsonPath("$.sqlRawCipher").doesNotExist())
+                .andExpect(jsonPath("$.sqlFinalCipher").doesNotExist())
+                .andExpect(jsonPath("$.keyId").doesNotExist())
+                .andExpect(
+                        jsonPath("$.fingerprint")
+                                .value(
+                                        "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"))
+                .andExpect(jsonPath("$.resourceRefs.datasourceId").value(datasourceId))
+                .andExpect(jsonPath("$.durationMs").value(12))
+                .andExpect(jsonPath("$.truncated").value(false));
+
+        mockMvc.perform(
+                        get("/api/v1/admin/audit/" + UUID.randomUUID())
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+
+        mockMvc.perform(
+                        get("/api/v1/admin/audit/not-an-uuid")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+    }
+
+    @Test
+    void adminPlatformDirectoryIsReadOnlyAndCursorPaged() throws Exception {
+        long first = insertPlatform("dir-1");
+        long second = insertPlatform("dir-2", "DISABLED");
+
+        mockMvc.perform(get("/api/v1/admin/platforms").header("X-Test-User-Id", ADMIN_ID))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+
+        mockMvc.perform(
+                        get("/api/v1/admin/platforms")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items[0].id").value(String.valueOf(first)))
+                .andExpect(jsonPath("$.items[0].code").value("dir-1"))
+                .andExpect(jsonPath("$.items[0].name").value("平台"))
+                .andExpect(jsonPath("$.items[0].tier").value(3))
+                .andExpect(jsonPath("$.items[0].status").value("ACTIVE"))
+                .andExpect(jsonPath("$.items[0].catalogMode").value("DISCOVER"))
+                .andExpect(jsonPath("$.items[0].proofMode").value("NONE"))
+                .andExpect(jsonPath("$.items[0].scopeVersion").value("1"))
+                .andExpect(jsonPath("$.items[0].securityVersion").value("1"))
+                .andExpect(jsonPath("$.items[0].version").value("1"))
+                .andExpect(jsonPath("$.items[0].proofConfigured").value(false))
+                .andExpect(jsonPath("$.nextCursor").isEmpty());
+
+        MvcResult pageOne =
+                mockMvc.perform(
+                                get("/api/v1/admin/platforms")
+                                        .header("X-Test-User-Id", ADMIN_ID)
+                                        .header("X-Test-Platform-Admin", "true")
+                                        .param("pageSize", "1"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.items.length()").value(1))
+                        .andReturn();
+        mockMvc.perform(
+                        get("/api/v1/admin/platforms")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("pageSize", "1")
+                                .param(
+                                        "cursor",
+                                        jsonPathCursor(pageOne.getResponse().getContentAsString())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(String.valueOf(second)))
+                .andExpect(jsonPath("$.nextCursor").isEmpty());
+
+        mockMvc.perform(
+                        get("/api/v1/admin/platforms")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("status", "DISABLED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].code").value("dir-2"));
+
+        mockMvc.perform(
+                        get("/api/v1/admin/platforms")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("keyword", "dir-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].code").value("dir-1"));
+    }
+
+    @Test
     void previewJudgesWithoutTouchingBusinessData() throws Exception {
         long platformId = insertPlatform("p-admin-preview");
         long datasourceId = insertActiveDatasource();
@@ -529,6 +793,10 @@ class AdminApiTest {
     }
 
     private long insertPlatform(String code) throws Exception {
+        return insertPlatform(code, "ACTIVE");
+    }
+
+    private long insertPlatform(String code, String status) throws Exception {
         try (Connection connection = connect();
                 Statement statement = connection.createStatement()) {
             statement.execute(
@@ -536,14 +804,95 @@ class AdminApiTest {
                             + " proof_mode, scope_version, security_version, create_time,"
                             + " update_time, created_by, updated_by) VALUES ('"
                             + code
-                            + "', '平台', 3, 'ACTIVE', 'DISCOVER', 'NONE', 1, 1, NOW(6), NOW(6),"
-                            + " 1, 1)",
+                            + "', '平台', 3, '"
+                            + status
+                            + "', 'DISCOVER', 'NONE', 1, 1, NOW(6), NOW(6), 1, 1)",
                     Statement.RETURN_GENERATED_KEYS);
             try (var keys = statement.getGeneratedKeys()) {
                 keys.next();
                 return keys.getLong(1);
             }
         }
+    }
+
+    private void insertAudit(
+            String requestId,
+            long userId,
+            long platformId,
+            long datasourceId,
+            String tool,
+            String result,
+            String verdict,
+            String errorCode,
+            long minutesAgo)
+            throws Exception {
+        insertAudit(
+                requestId,
+                userId,
+                platformId,
+                datasourceId,
+                tool,
+                result,
+                verdict,
+                errorCode,
+                minutesAgo,
+                null);
+    }
+
+    private void insertAudit(
+            String requestId,
+            long userId,
+            long platformId,
+            long datasourceId,
+            String tool,
+            String result,
+            String verdict,
+            String errorCode,
+            long minutesAgo,
+            String fingerprintHex)
+            throws Exception {
+        try (Connection connection = connect();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "INSERT INTO audit_log (request_id, user_id, platform_id, tool,"
+                                        + " datasource_id, started_at, completed_at, result,"
+                                        + " verdict, error_code, sql_masked, sql_fingerprint,"
+                                        + " resource_refs, versions, duration_ms, queue_ms, db_ms,"
+                                        + " rows_returned, response_bytes, truncated, create_time)"
+                                        + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,"
+                                        + (fingerprintHex == null ? " NULL" : " UNHEX(?)")
+                                        + ", ?, ?, 12, 3, 8, 1, 256, 0, ?)")) {
+            int index = 1;
+            statement.setString(index++, requestId);
+            statement.setLong(index++, userId);
+            statement.setLong(index++, platformId);
+            statement.setString(index++, tool);
+            statement.setLong(index++, datasourceId);
+            statement.setObject(index++, now().minusMinutes(minutesAgo));
+            statement.setObject(index++, now().minusMinutes(minutesAgo).plusSeconds(1));
+            statement.setString(index++, result);
+            statement.setString(index++, verdict);
+            statement.setString(index++, errorCode);
+            statement.setString(index++, "SELECT * FROM orders WHERE id = ?");
+            if (fingerprintHex != null) {
+                statement.setString(index++, fingerprintHex);
+            }
+            statement.setString(index++, "{\"datasourceId\":" + datasourceId + "}");
+            statement.setString(index++, "{\"datasource\":\"v1\"}");
+            statement.setObject(index, now());
+            statement.executeUpdate();
+        }
+    }
+
+    private static String jsonPathCursor(String json) {
+        int at = json.indexOf("\"nextCursor\":");
+        int start = json.indexOf('"', at + 13) + 1;
+        int end = json.indexOf('"', start);
+        return json.substring(start, end);
+    }
+
+    private static java.time.LocalDateTime now() {
+        return java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
     }
 
     private static long readLong(String json, String field) {

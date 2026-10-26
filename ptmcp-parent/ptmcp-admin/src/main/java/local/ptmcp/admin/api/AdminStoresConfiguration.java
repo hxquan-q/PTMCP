@@ -3,6 +3,7 @@ package local.ptmcp.admin.api;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
+import local.ptmcp.admin.audit.AuditQueryService;
 import local.ptmcp.admin.datasource.CredentialCipher;
 import local.ptmcp.admin.datasource.DatasourceAdminService;
 import local.ptmcp.admin.datasource.DatasourceConnectionFactory;
@@ -13,6 +14,7 @@ import local.ptmcp.admin.datasource.DestinationPolicy;
 import local.ptmcp.admin.me.MeService;
 import local.ptmcp.admin.me.PersonalTokenService;
 import local.ptmcp.admin.metadata.MetadataCatalogService;
+import local.ptmcp.admin.platform.PlatformDirectoryService;
 import local.ptmcp.admin.session.AdminSessionService;
 import local.ptmcp.admin.session.SessionAuthFilter;
 import local.ptmcp.persistence.org.AclDirectory;
@@ -86,11 +88,22 @@ public class AdminStoresConfiguration {
     }
 
     @Bean
+    public AuditQueryService auditQueryService(DataSource dataSource) {
+        return new AuditQueryService(dataSource);
+    }
+
+    @Bean
+    public PlatformDirectoryService platformDirectoryService(DataSource dataSource) {
+        return new PlatformDirectoryService(dataSource);
+    }
+
+    @Bean
     public MeService meService(
             DataSource dataSource,
             AclDirectory aclDirectory,
+            AuditQueryService audits,
             @Value("${ptmcp.mcp.url:}") String mcpUrl) {
-        return new MeService(dataSource, aclDirectory, mcpUrl);
+        return new MeService(dataSource, aclDirectory, mcpUrl, audits);
     }
 
     @Bean

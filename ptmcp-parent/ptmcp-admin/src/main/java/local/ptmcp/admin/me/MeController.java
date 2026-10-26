@@ -2,6 +2,7 @@ package local.ptmcp.admin.me;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+import local.ptmcp.admin.audit.AuditQueryService;
 import local.ptmcp.admin.session.AdminSessionService;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
@@ -110,7 +111,7 @@ public class MeController {
     }
 
     @GetMapping("/history")
-    public MeService.AuditPage history(
+    public AuditQueryService.AuditPage history(
             @RequestParam(required = false) Instant from,
             @RequestParam(required = false) Instant to,
             @RequestParam(required = false) String tool,
@@ -123,7 +124,7 @@ public class MeController {
     }
 
     @GetMapping("/history/{requestId}")
-    public MeService.AuditDetail historyDetail(
+    public AuditQueryService.AuditDetail historyDetail(
             @PathVariable String requestId, HttpServletRequest request) {
         return me.historyDetail(userId(request), requestId);
     }
