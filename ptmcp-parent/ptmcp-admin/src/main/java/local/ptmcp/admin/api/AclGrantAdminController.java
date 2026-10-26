@@ -11,6 +11,8 @@ import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.persistence.org.AclDirectory;
 import local.ptmcp.persistence.org.AclGrantStore;
+import local.ptmcp.persistence.org.DelegationScopeResolver;
+import local.ptmcp.persistence.org.OrgStore;
 import local.ptmcp.persistence.org.ResourceIds;
 import local.ptmcp.persistence.org.SelfEscalationGuard;
 
@@ -41,10 +43,16 @@ import java.util.List;
 public class AclGrantAdminController {
     private final AclGrantStore grantStore;
     private final AclDirectory directory;
+    private final AclScopeGate scopeGate;
 
-    public AclGrantAdminController(AclGrantStore grantStore, AclDirectory directory) {
+    public AclGrantAdminController(
+            AclGrantStore grantStore,
+            AclDirectory directory,
+            DelegationScopeResolver scopeResolver,
+            OrgStore orgStore) {
         this.grantStore = grantStore;
         this.directory = directory;
+        this.scopeGate = new AclScopeGate(scopeResolver, orgStore);
     }
 
     public record GrantWrite(
@@ -74,7 +82,8 @@ public class AclGrantAdminController {
             Instant validTo,
             String status,
             String reason,
-            long version) {}
+            long version)
+            implements AclScopeGate.AclGrantStoreGrant {}
 
     public record PreviewRequest(
             Long subjectUserId, Long platformId, List<Long> resourceIds, Instant at) {}
@@ -206,17 +215,36 @@ public class AclGrantAdminController {
             @RequestParam(required = false) String subjectType,
             @RequestParam(required = false) Long subjectId,
             HttpServletRequest request) {
-        ManagementScope.requirePlatformAdmin(request);
-        return grantStore.list(subjectType, subjectId).stream()
-                .map(AclGrantAdminController::toRead)
+        AdminPrincipal principal = AdminPrincipal.require(request);
+        List<GrantRead> rows =
+                grantStore.list(subjectType, subjectId).stream()
+                        .map(AclGrantAdminController::toRead)
+                        .toList();
+        // Platform admins see everything; delegated admins only their subtree subjects.
+        if (principal.platformAdmin()) {
+            return rows;
+        }
+        return scopeGate.visibleGrants(request, List.copyOf(rows)).stream()
+                .map(grant -> (GrantRead) grant)
                 .toList();
     }
 
     @PostMapping("/grants")
     public ResponseEntity<GrantRead> create(
             @RequestBody GrantWrite write, HttpServletRequest request) {
-        AdminPrincipal principal = ManagementScope.requirePlatformAdminPrincipal(request);
+        AdminPrincipal principal = AdminPrincipal.require(request);
         AclGrantStore.AclGrantRecord draft = toDraft(write);
+        if (!principal.platformAdmin()) {
+            scopeGate.requireGrantAllowed(
+                    request,
+                    draft.subjectType(),
+                    draft.subjectId(),
+                    draft.resourceType(),
+                    draft.resourceId(),
+                    "ptmcp:acl:" + draft.action().toLowerCase(java.util.Locale.ROOT),
+                    draft.validFrom(),
+                    draft.validTo());
+        }
         List<GrantRow> before = callerGrantsOrNull(directory, principal);
         if (before != null) {
             List<GrantRow> after = new ArrayList<>(before);
@@ -239,12 +267,31 @@ public class AclGrantAdminController {
     public ResponseEntity<GrantRead> update(
             @PathVariable long id, @RequestBody GrantWrite write, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
-        AdminPrincipal principal = ManagementScope.requirePlatformAdminPrincipal(request);
+        AdminPrincipal principal = AdminPrincipal.require(request);
         AclGrantStore.AclGrantRecord current = grantStore.get(id);
         if ("REVOKED".equals(current.status())) {
             throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
         }
+        if (!principal.platformAdmin()) {
+            scopeGate.requireRevokeAllowed(
+                    request,
+                    current.subjectType(),
+                    current.subjectId(),
+                    current.resourceType(),
+                    current.resourceId());
+        }
         AclGrantStore.AclGrantRecord replacement = toDraft(write);
+        if (!principal.platformAdmin()) {
+            scopeGate.requireGrantAllowed(
+                    request,
+                    replacement.subjectType(),
+                    replacement.subjectId(),
+                    replacement.resourceType(),
+                    replacement.resourceId(),
+                    "ptmcp:acl:" + replacement.action().toLowerCase(java.util.Locale.ROOT),
+                    replacement.validFrom(),
+                    replacement.validTo());
+        }
         List<GrantRow> before = callerGrantsOrNull(directory, principal);
         if (before != null) {
             long encodedResource =
@@ -274,7 +321,16 @@ public class AclGrantAdminController {
     @DeleteMapping("/grants/{id}")
     public ResponseEntity<GrantRead> revoke(@PathVariable long id, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
-        AdminPrincipal principal = ManagementScope.requirePlatformAdminPrincipal(request);
+        AdminPrincipal principal = AdminPrincipal.require(request);
+        AclGrantStore.AclGrantRecord existing = grantStore.get(id);
+        if (!principal.platformAdmin()) {
+            scopeGate.requireRevokeAllowed(
+                    request,
+                    existing.subjectType(),
+                    existing.subjectId(),
+                    existing.resourceType(),
+                    existing.resourceId());
+        }
         AclGrantStore.AclGrantRecord revoked =
                 grantStore.revoke(id, expectedVersion, "revoked via API", principal.userId());
         return ResponseEntity.ok().body(toRead(revoked));

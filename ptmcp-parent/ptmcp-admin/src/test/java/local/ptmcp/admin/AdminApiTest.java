@@ -900,6 +900,168 @@ class AdminApiTest {
     }
 
     @Test
+    void delegatedAclGrantsStayInsideEveryDelegationDimension() throws Exception {
+        seedAdminDelegationCodes();
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            statement.execute(
+                    "INSERT INTO sys_role (role_key, role_name, status, del_flag, create_time,"
+                            + " update_time) VALUES ('acl-scope-admin', 'ACL作用域管理员', '0', '0',"
+                            + " NOW(6), NOW(6))",
+                    Statement.RETURN_GENERATED_KEYS);
+            long roleId;
+            try (var keys = statement.getGeneratedKeys()) {
+                keys.next();
+                roleId = keys.getLong(1);
+            }
+            for (String code : List.of("ptmcp:acl:read", "ptmcp:acl:list")) {
+                statement.execute(
+                        "INSERT INTO sys_role_permission (role_id, permission_code, create_time,"
+                                + " update_time) VALUES ("
+                                + roleId
+                                + ", '"
+                                + code
+                                + "', NOW(6), NOW(6))");
+            }
+            statement.execute(
+                    "INSERT INTO sys_user_role (user_id, role_id, create_time, update_time)"
+                            + " VALUES ("
+                            + ADMIN_ID
+                            + ", "
+                            + roleId
+                            + ", NOW(6), NOW(6))");
+        }
+        long datasourceId = insertActiveDatasource();
+        long rootId = createDepartment("ACL作用域根");
+        long outsideId = createDepartment("ACL作用域外");
+        createUser("acl-throwaway", "占位用户", rootId);
+        long delegate = createUser("acl-delegate", "ACL受控员", rootId);
+        long insideSubject = createUser("acl-inside", "子树内主体", rootId);
+        long secondInsideSubject = createUser("acl-inside-two", "子树内主体二", rootId);
+        long outsideSubject = createUser("acl-outside", "子树外主体", outsideId);
+
+        // Windows are computed from now so the test never depends on the wall clock.
+        java.time.Instant delegationFrom =
+                java.time.Instant.now().minus(java.time.Duration.ofDays(30));
+        java.time.Instant delegationTo =
+                java.time.Instant.now().plus(java.time.Duration.ofDays(180));
+        java.time.Instant grantFrom = java.time.Instant.now().plus(java.time.Duration.ofDays(1));
+        java.time.Instant grantTo = java.time.Instant.now().plus(java.time.Duration.ofDays(90));
+
+        mockMvc.perform(
+                        post("/api/v1/admin/delegations")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", "acl-delegation-1")
+                                .contentType("application/json")
+                                .content(
+                                        "{\"userId\":"
+                                                + delegate
+                                                + ",\"departmentRootId\":"
+                                                + rootId
+                                                + ",\"resourceType\":\"DATASOURCE\",\"resourceId\":"
+                                                + datasourceId
+                                                + ",\"allowedActions\":[\"ptmcp:acl:read\"]"
+                                                + ",\"validFrom\":\""
+                                                + delegationFrom
+                                                + "\""
+                                                + ",\"validTo\":\""
+                                                + delegationTo
+                                                + "\"}"))
+                .andExpect(status().isCreated());
+
+        String inWindow =
+                "{\"subjectType\":\"USER\",\"subjectId\":"
+                        + insideSubject
+                        + ",\"resourceType\":\"DATASOURCE\",\"resourceId\":"
+                        + datasourceId
+                        + ",\"resourceGeneration\":1,\"action\":\"READ\",\"effect\":\"ALLOW\","
+                        + "\"includeDescendants\":false,\"validFrom\":\""
+                        + grantFrom
+                        + "\","
+                        + "\"validTo\":\""
+                        + grantTo
+                        + "\",\"reason\":\"委派内授予\"}";
+        String headers = "X-Test-User-Id: " + delegate + ", X-Test-Platform-Admin: false";
+
+        // In-dimension grant succeeds (subject inside, resource matched, READ delegated, window
+        // inside the delegation window).
+        MvcResult granted =
+                mockMvc.perform(
+                                post("/api/v1/admin/acl/grants")
+                                        .header("X-Test-User-Id", delegate)
+                                        .header("X-Test-Platform-Admin", "false")
+                                        .header("Idempotency-Key", "acl-grant-1")
+                                        .contentType("application/json")
+                                        .content(inWindow))
+                        .andExpect(
+                                result -> {
+                                    if (result.getResponse().getStatus() != 201) {
+                                        System.out.println(
+                                                "ACL-DEBUG: "
+                                                        + result.getResponse()
+                                                                .getContentAsString());
+                                    }
+                                })
+                        .andExpect(status().isCreated())
+                        .andReturn();
+        long grantId = readLong(granted.getResponse().getContentAsString(), "id");
+
+        // META is not in the delegated action set.
+        mockMvc.perform(
+                        post("/api/v1/admin/acl/grants")
+                                .header("X-Test-User-Id", delegate)
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("Idempotency-Key", "acl-grant-meta")
+                                .contentType("application/json")
+                                .content(
+                                        inWindow.replace(
+                                                "\"action\":\"READ\"", "\"action\":\"META\"")))
+                .andExpect(status().isForbidden());
+
+        // The grant window may not outlive the delegation (2027 > 2026-06).
+        mockMvc.perform(
+                        post("/api/v1/admin/acl/grants")
+                                .header("X-Test-User-Id", delegate)
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("Idempotency-Key", "acl-grant-window")
+                                .contentType("application/json")
+                                .content(
+                                        inWindow.replace(
+                                                        "\"subjectId\":" + insideSubject,
+                                                        "\"subjectId\":" + secondInsideSubject)
+                                                .replace(
+                                                        grantTo.toString(),
+                                                        java.time.Instant.now()
+                                                                .plus(
+                                                                        java.time.Duration.ofDays(
+                                                                                270))
+                                                                .toString())))
+                .andExpect(status().isForbidden());
+
+        // A subject outside the subtree is denied even for a delegated action.
+        mockMvc.perform(
+                        post("/api/v1/admin/acl/grants")
+                                .header("X-Test-User-Id", delegate)
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("Idempotency-Key", "acl-grant-outside")
+                                .contentType("application/json")
+                                .content(
+                                        inWindow.replace(
+                                                "\"subjectId\":" + insideSubject,
+                                                "\"subjectId\":" + outsideSubject)))
+                .andExpect(status().isForbidden());
+
+        // Revoke inside the delegation succeeds; the platform admin still sees everything.
+        mockMvc.perform(
+                        delete("/api/v1/admin/acl/grants/" + grantId)
+                                .header("X-Test-User-Id", delegate)
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("If-Match", "1"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void adminAuditListAppliesFiltersCursorAndPlatformAdminScope() throws Exception {
         long platformId = insertPlatform("p-audit");
         long otherPlatformId = insertPlatform("p-audit-other");
