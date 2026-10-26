@@ -165,3 +165,7 @@ reason 门禁解密显示真实业务 SQL+倒计时→敏感访问留痕联动�
 API 创建 PAT 201→gateway PAT 查询 SUCCESS（rows [[2,'測試']]）→审计行归属 user_id=3、
 sql_masked 正确、raw/final 双密文齐。委派管理员的完整查询+审计链验证通过。PAT 创建无
 权限码门禁（安全边界由 ACL 授权控制，语义正确）。
+
+me/integrations 真实模式验证（走查记录）：gateway 启用后，接入配置页平台选择→显示真实
+gateway URL（8082/mcp）+PAT 认证说明——用户侧「创建 PAT→查看 MCP 配置→接入客户端」旅程
+闭环。截图存证。
