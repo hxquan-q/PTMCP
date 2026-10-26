@@ -1,7 +1,7 @@
 # Ideas Backlog
 
 - ~~sql_masked 网关侧脱敏器~~ 已完成（4111d09）：SqlLiteralMasker 双解析验证+字面量脱敏，成功/拒绝两路径填充；遗留 MySQL 反斜杠转义字符串保守放弃（null，密文为权威可读形态）。
-- **sqlFinal 密文字段**：S9 已接 sqlRaw 密文（encryptedRaw）；sql_final_cipher 需 AuditTerminal 增加 encryptedFinal 字段+AuditRepository 列映射+terminal 重载扩展+WAL schema 2 演进（WalFormat SCHEMA_VERSION 严格校验，加字段需版本演进与重放兼容）。decrypt 端点 sqlFinal 维度已就绪（null 时返回不含该字段）。决策：增量价值低于 WAL 演进成本，搁置。
+- ~~sqlFinal 密文字段~~ 已完成（f848c11）：AuditTerminal +encryptedFinal+AuditPayloads JSON+AuditRepository 双路写+WalPayload schema 2（v1 兼容读）+gateway 密封。设计更正：payload 版本内嵌于加密载荷、frame 层不透明、无重编码哈希比对——演进成本远低于早前评估。集成断言验证 guard 重写指纹（schema 限定/别名/LIMIT）。
 - **委派作用域执行（T16 核心）**：ManagementScope 目前仅平台管理员二值判定。下一步把 admin_delegation 纳入判定（组织授权管理员=功能码∩有效委派∩部门子树），PRD AC-02/AC-07 的越界拒绝用例。涉及所有 admin 控制器的门禁改造，需单独切片+完整测试。
 - ~~Idempotency-Key 补接线~~ 已完成（S8）：全部 admin 写端点核验——POST 类 IdempotentWrites、PUT/DELETE 类 IfMatch；AuditController 的 decrypt 是查询型解密不适用幂等租约（语义正确）。
 - **本机 MySQL 8.4 验证**：测试镜像参数化后本机用 8.0；8.4 digest 拉取卡层（已多次失败勿重试无脑拉）。待网络好转或镜像源可用时重拉，跑一遍全量 mvn test（不带覆盖参数）恢复 8.4 边界验证。

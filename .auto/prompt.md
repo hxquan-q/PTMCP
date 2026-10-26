@@ -112,6 +112,10 @@ tests_passing 726（admin+gateway 双 reactor + 前端契约），0 失败；四
   sys_user.password 服务 OAuth）；bash 传 bcrypt 用文件 docker cp（$ 展开截断）。
 - **S9 gateway 审计密文写入**（210868f）：AuditSealer 同格式同派生+部署同钥配对；measure
   扩 admin+gateway 双 reactor，tests_passing 476→726（gateway 测试纳入度量）。
+- **S9 续：拒绝路径密封**（961a502）+ **sql_masked 脱敏器**（4111d09）+ **敏感解密频控**
+  （ASVS 4.2.1，c91f680）+ **sqlFinal 密文端到端**（f848c11，解除搁置：payload schema 2
+  内嵌版本演进+v1 兼容读；集成断言 guard 重写指纹）。审计密文三层完整
+  （sqlRaw/sqlFinal/脱敏明文）+敏感访问留痕+操作者频控。tests 726→735。
 - **S1–S6 联调真实化全部完成**（提交 cc93bad→5e353c6）：
   S1 委派 CRUD+幂等+操作日志；S2 ACL effective 稳定分页；S3 平台 CRUD（proof_config 只写
   加密、security_version 乐观锁）；S4 平台 Scope 整组替换双版本自增；S5 客户端一次性
