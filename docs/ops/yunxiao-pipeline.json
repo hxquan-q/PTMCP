@@ -1,0 +1,77 @@
+{
+  "sources": {
+    "codeup": {
+      "type": "codeup",
+      "name": "ALLSTAR_DATACHAT_SUB",
+      "endpoint": "https://codeup.aliyun.com/621301e6c5006adb19febbd6/Allstar_AI/ALLSTAR_DATACHAT_SUB.git",
+      "branch": "dev",
+      "cloneDepth": 0,
+      "triggerEvents": [
+        "push"
+      ],
+      "branchesFilter": "^dev$",
+      "certificate": {
+        "type": "serviceConnection",
+        "serviceConnection": "e35k9qkwkyicf6yy"
+      }
+    }
+  },
+  "stages": {
+    "quality": {
+      "name": "质量检查（dev）",
+      "jobs": {
+        "docs": {
+          "name": "文档与流程检查",
+          "runsOn": {
+            "group": "public/cn-beijing",
+            "container": "build-steps-public-registry.cn-beijing.cr.aliyuncs.com/build-steps/alinux3:latest",
+            "instanceType": "LARGE_4C8G"
+          },
+          "steps": {
+            "docs": {
+              "name": "Repository checks",
+              "step": "Command",
+              "with": {
+                "run": "set -euo pipefail\ndnf install -y python3.11\npython3.11 --version\npython3.11 scripts/check.py\n"
+              }
+            }
+          }
+        },
+        "backend": {
+          "name": "后端编译、格式、模块边界与质量探针",
+          "runsOn": {
+            "group": "public/cn-beijing",
+            "container": "build-steps-public-registry.cn-beijing.cr.aliyuncs.com/build-steps/alinux3:latest",
+            "instanceType": "LARGE_4C8G"
+          },
+          "steps": {
+            "backend": {
+              "name": "Maven verify and quality probes",
+              "step": "Command",
+              "with": {
+                "run": "set -euo pipefail\ndnf install -y python3.11 java-21-openjdk-devel tar gzip xz\npython3.11 --version\njava -version\ncd ptmcp-parent\nsh ./mvnw -B -ntp -DskipTests verify\ncd ..\npython3.11 scripts/check_backend_quality.py --seed-repository \"$HOME/.m2/repository\" --timeout 240\n"
+              }
+            }
+          }
+        },
+        "frontend": {
+          "name": "前端 ESLint/Prettier/类型检查/构建/契约测试",
+          "runsOn": {
+            "group": "public/cn-beijing",
+            "container": "build-steps-public-registry.cn-beijing.cr.aliyuncs.com/build-steps/alinux3:latest",
+            "instanceType": "LARGE_4C8G"
+          },
+          "steps": {
+            "frontend": {
+              "name": "pnpm check and contracts",
+              "step": "Command",
+              "with": {
+                "run": "set -euo pipefail\ndnf install -y tar xz curl\nnode_version=24.22.1\ncurl -fsSLO \"https://nodejs.org/dist/v${node_version}/node-v${node_version}-linux-x64.tar.xz\"\ntar -xJf \"node-v${node_version}-linux-x64.tar.xz\" -C /opt\nexport PATH=\"/opt/node-v${node_version}-linux-x64/bin:$PATH\"\nnode --version\nnpm install -g pnpm@11.9.0\npnpm --version\npnpm --dir ptmcp-ui install --frozen-lockfile --ignore-scripts\npnpm --dir ptmcp-ui check\npnpm --dir ptmcp-ui test:contracts\n"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
