@@ -91,7 +91,12 @@ test('normal mode: delegation domain reaches the network while unimplemented dom
   const revokeCall = calls.find((call) => call.path === '/api/v1/admin/delegations/3');
   assert.equal(revokeCall?.method, 'DELETE');
 
+  // The implemented effective endpoint also reaches the network in normal mode.
+  await assert.rejects(
+    () => controlPlane.effective({ userId: '1', platformId: '1' }),
+    (error) => !(error instanceof Error) || !error.message.includes('尚未接入'),
+  );
+
   // Unimplemented domains keep the explicit gate in normal mode.
   await assert.rejects(() => controlPlane.platforms.list({}), /尚未接入/);
-  await assert.rejects(() => controlPlane.effective({}), /尚未接入/);
 });

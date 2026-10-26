@@ -9,3 +9,5 @@ export const mutationNotice = frontendPreview ? '演示数据已更新，仅保�
  * lands; domains without a flag stay preview-only. See tasks/work-items/T17-api-*.md.
  */
 export const delegationApiReady = true;
+/** GET /api/v1/admin/acl/effective（AclGrantAdminController#effective）。 */
+export const effectiveApiReady = true;

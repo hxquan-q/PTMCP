@@ -85,6 +85,122 @@ public class AclGrantAdminController {
     public record PreviewResponse(
             List<PreviewDecision> decisions, Instant evaluatedAt, Instant nextBoundaryAt) {}
 
+    public record EffectiveRow(
+            String resourceType,
+            long resourceId,
+            boolean meta,
+            boolean read,
+            List<Long> sourceGrantIds,
+            List<String> reasonCodes) {}
+
+    public record EffectivePage(List<EffectiveRow> items, String nextCursor) {}
+
+    /**
+     * GET /acl/effective: the subject's current decisions over the resource tree, one stable
+     * id-ordered page at a time, bounded by the same platform ceiling as execution preview. The
+     * datasource filter selects the datasource node itself plus its namespaces and objects. The
+     * page window is derived from the tree, so a page always reflects the current tree state.
+     */
+    @GetMapping("/effective")
+    public EffectivePage effective(
+            @RequestParam Long userId,
+            @RequestParam Long platformId,
+            @RequestParam(required = false) Long datasourceId,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer pageSize,
+            HttpServletRequest request) {
+        ManagementScope.requirePlatformAdmin(request);
+        int limit = pageSize == null ? 20 : pageSize;
+        if (limit < 1 || limit > 100) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
+        long afterId = 0;
+        if (cursor != null && !cursor.isBlank()) {
+            try {
+                afterId = Long.parseLong(cursor);
+            } catch (NumberFormatException failure) {
+                throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+            }
+            if (afterId < 0) {
+                throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+            }
+        }
+        List<Long> pageIds =
+                effectiveResourceIds(directory.resourceTree(), datasourceId, afterId, limit);
+        List<AclDirectory.ResourceDecision> decisions =
+                pageIds.isEmpty()
+                        ? List.of()
+                        : directory.preview(userId, platformId, pageIds, Instant.now());
+        List<EffectiveRow> items =
+                decisions.stream()
+                        .map(
+                                decision -> {
+                                    ResourceIds.Type type =
+                                            ResourceIds.typeOf(decision.resourceId());
+                                    return new EffectiveRow(
+                                            type.name(),
+                                            decision.resourceId(),
+                                            decision.meta(),
+                                            decision.read(),
+                                            decision.sourceGrantIds(),
+                                            reasonCodes(decision));
+                                })
+                        .toList();
+        String nextCursor = pageIds.size() == limit ? String.valueOf(pageIds.getLast()) : null;
+        return new EffectivePage(items, nextCursor);
+    }
+
+    /** Stable id-ordered window of the tree; an unknown datasource yields an empty page. */
+    private static List<Long> effectiveResourceIds(
+            List<ResourceNode> tree, Long datasourceId, long afterId, int limit) {
+        java.util.Set<Long> selected = new java.util.LinkedHashSet<>();
+        if (datasourceId == null) {
+            for (ResourceNode node : tree) {
+                selected.add(node.id());
+            }
+        } else {
+            long rootId = ResourceIds.encode(ResourceIds.Type.DATASOURCE, datasourceId);
+            java.util.Set<Long> namespaceIds = new java.util.HashSet<>();
+            for (ResourceNode node : tree) {
+                if (node.id() == rootId) {
+                    selected.add(node.id());
+                } else if (ResourceIds.typeOf(node.id()) == ResourceIds.Type.NAMESPACE
+                        && rootId == node.parentId()) {
+                    namespaceIds.add(node.id());
+                    selected.add(node.id());
+                }
+            }
+            for (ResourceNode node : tree) {
+                if (ResourceIds.typeOf(node.id()) == ResourceIds.Type.OBJECT
+                        && node.parentId() != null
+                        && namespaceIds.contains(node.parentId())) {
+                    selected.add(node.id());
+                }
+            }
+            if (selected.isEmpty()) {
+                return List.of();
+            }
+        }
+        return selected.stream().sorted().filter(id -> id > afterId).limit(limit).toList();
+    }
+
+    /** Closed-world explanations: why each decision holds, without inventing grant ids. */
+    private static List<String> reasonCodes(AclDirectory.ResourceDecision decision) {
+        if (decision.resourceId() <= 0) {
+            return List.of("UNKNOWN_RESOURCE");
+        }
+        if (decision.meta() && decision.read()) {
+            return List.of("GRANT_META", "GRANT_READ");
+        }
+        if (decision.meta()) {
+            return List.of("GRANT_META");
+        }
+        if (decision.read()) {
+            return List.of("GRANT_READ");
+        }
+        return List.of("NO_EFFECTIVE_GRANT");
+    }
+
     @GetMapping("/grants")
     public List<GrantRead> list(
             @RequestParam(required = false) String subjectType,

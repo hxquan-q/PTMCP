@@ -985,6 +985,162 @@ class AdminApiTest {
                 .andExpect(jsonPath("$.evaluatedAt").isNotEmpty());
     }
 
+    @Test
+    void effectiveListsTreePagesAndPlatformBoundedDecisions() throws Exception {
+        long platformId = insertPlatform("p-admin-effective");
+        long datasourceId = insertActiveDatasource();
+        long namespaceId = insertActiveNamespace(datasourceId);
+        long firstObject = insertActiveObject(namespaceId, "orders");
+        long secondObject = insertActiveObject(namespaceId, "payments");
+        long deptId = createDepartment("有效部");
+        // Reset empties the user table, so the first created user would collide with the shim
+        // admin's id 1 and any grant for it is (correctly) treated as self-escalation.
+        createUser("effective-throwaway", "占位用户", deptId);
+        long subject = createUser("effective-user", "有效用户", deptId);
+
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            statement.execute(
+                    "INSERT INTO platform_scope (platform_id, resource_type, resource_id,"
+                            + " resource_generation, action, include_descendants, create_time,"
+                            + " update_time, created_by, updated_by) VALUES ("
+                            + platformId
+                            + ", 'DATASOURCE', "
+                            + datasourceId
+                            + ", 1, 'META', 1, NOW(6), NOW(6), 1, 1)");
+            statement.execute(
+                    "INSERT INTO platform_scope (platform_id, resource_type, resource_id,"
+                            + " resource_generation, action, include_descendants, create_time,"
+                            + " update_time, created_by, updated_by) VALUES ("
+                            + platformId
+                            + ", 'DATASOURCE', "
+                            + datasourceId
+                            + ", 1, 'READ', 1, NOW(6), NOW(6), 1, 1)");
+        }
+        // PAGE_SIZE cap and invalid filter rejections first; the subject holds no grants yet.
+        mockMvc.perform(
+                        get("/api/v1/admin/acl/effective")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("userId", String.valueOf(subject))
+                                .param("platformId", String.valueOf(platformId))
+                                .param("pageSize", "101"))
+                .andExpect(status().isBadRequest());
+
+        MvcResult firstPage =
+                mockMvc.perform(
+                                get("/api/v1/admin/acl/effective")
+                                        .header("X-Test-User-Id", ADMIN_ID)
+                                        .header("X-Test-Platform-Admin", "true")
+                                        .param("userId", String.valueOf(subject))
+                                        .param("platformId", String.valueOf(platformId))
+                                        .param("datasourceId", String.valueOf(datasourceId))
+                                        .param("pageSize", "2"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.items.length()").value(2))
+                        .andExpect(jsonPath("$.items[0].resourceType").value("DATASOURCE"))
+                        .andExpect(jsonPath("$.items[0].meta").value(false))
+                        .andExpect(jsonPath("$.items[0].read").value(false))
+                        .andExpect(
+                                jsonPath("$.items[0].reasonCodes[0]").value("NO_EFFECTIVE_GRANT"))
+                        .andExpect(jsonPath("$.nextCursor").isNotEmpty())
+                        .andReturn();
+        String cursor = jsonPathCursor(firstPage.getResponse().getContentAsString());
+
+        MvcResult secondPage =
+                mockMvc.perform(
+                                get("/api/v1/admin/acl/effective")
+                                        .header("X-Test-User-Id", ADMIN_ID)
+                                        .header("X-Test-Platform-Admin", "true")
+                                        .param("userId", String.valueOf(subject))
+                                        .param("platformId", String.valueOf(platformId))
+                                        .param("datasourceId", String.valueOf(datasourceId))
+                                        .param("cursor", cursor)
+                                        .param("pageSize", "2"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.items.length()").value(2))
+                        .andReturn();
+        String secondCursor =
+                com.jayway.jsonpath.JsonPath.read(
+                        secondPage.getResponse().getContentAsString(), "$.nextCursor");
+
+        mockMvc.perform(
+                        get("/api/v1/admin/acl/effective")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("userId", String.valueOf(subject))
+                                .param("platformId", String.valueOf(platformId))
+                                .param("datasourceId", String.valueOf(datasourceId))
+                                .param("cursor", secondCursor)
+                                .param("pageSize", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(0))
+                .andExpect(jsonPath("$.nextCursor").doesNotExist());
+
+        // Grant READ on the datasource subtree; the decisions must flip for the whole subtree.
+        mockMvc.perform(
+                        post("/api/v1/admin/acl/grants")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .contentType("application/json")
+                                .content(grantBody("USER", subject, datasourceId, "READ", "ALLOW")))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(
+                        get("/api/v1/admin/acl/effective")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("userId", String.valueOf(subject))
+                                .param("platformId", String.valueOf(platformId))
+                                .param("pageSize", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(4))
+                // READ Allow implies META Allow; the inherited READ reaches every subtree node.
+                .andExpect(jsonPath("$.items[0].meta").value(true))
+                .andExpect(jsonPath("$.items[0].read").value(true))
+                .andExpect(jsonPath("$.items[0].reasonCodes[0]").value("GRANT_META"))
+                .andExpect(jsonPath("$.items[3].read").value(true))
+                .andExpect(jsonPath("$.items[3].resourceType").value("OBJECT"));
+    }
+
+    private long insertActiveNamespace(long datasourceId) throws Exception {
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            statement.execute(
+                    "INSERT INTO resource_namespace (datasource_id, catalog_raw, catalog_norm,"
+                            + " schema_raw, schema_norm, generation, status, create_time, update_time)"
+                            + " VALUES ("
+                            + datasourceId
+                            + ", 'biz', 'biz', 'app', 'app', 1, 'ACTIVE', NOW(6), NOW(6))",
+                    Statement.RETURN_GENERATED_KEYS);
+            try (var keys = statement.getGeneratedKeys()) {
+                keys.next();
+                return keys.getLong(1);
+            }
+        }
+    }
+
+    private long insertActiveObject(long namespaceId, String name) throws Exception {
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            statement.execute(
+                    "INSERT INTO resource_object (namespace_id, generation, object_raw, object_norm,"
+                            + " quoted, kind, status, definition_hash, first_seen_at, last_seen_at,"
+                            + " create_time, update_time) VALUES ("
+                            + namespaceId
+                            + ", 1, '"
+                            + name
+                            + "', '"
+                            + name
+                            + "', 0, 'TABLE', 'ACTIVE', X'00', NOW(6), NOW(6), NOW(6), NOW(6))",
+                    Statement.RETURN_GENERATED_KEYS);
+            try (var keys = statement.getGeneratedKeys()) {
+                keys.next();
+                return keys.getLong(1);
+            }
+        }
+    }
+
     // ---- helpers -----------------------------------------------------------
 
     private static String grantBody(

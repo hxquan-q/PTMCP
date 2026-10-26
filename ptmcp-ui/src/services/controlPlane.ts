@@ -1,6 +1,6 @@
 import { request, type RequestOptions } from './http';
 import { newUuid } from './uuid';
-import { controlPlaneAvailable, delegationApiReady } from './frontendMode';
+import { controlPlaneAvailable, delegationApiReady, effectiveApiReady } from './frontendMode';
 import type { AuditDetail, AuditSummary } from './mePortalApi';
 
 export interface Page<T> {
@@ -92,11 +92,13 @@ const versioned = (version: string): HeadersInit => ({ 'If-Match': `"${version}"
 const create = (body: unknown): RequestOptions => ({ method: 'POST', body, headers: { 'Idempotency-Key': newUuid() } });
 /** 委派域后端已实现（DelegationAdminController），预览模式继续走合成数据。 */
 const delegationReady = delegationApiReady || controlPlaneAvailable;
+/** 当前有效资源端点已实现，预览模式继续走合成判定。 */
+const effectiveReady = effectiveApiReady || controlPlaneAvailable;
 export const controlPlane = {
   effective: (filters: Record<string, string | undefined>, signal?: AbortSignal) =>
     controlRequest<
       Page<{ resourceId: string; resourceType: string; meta: boolean; read: boolean; sourceGrantIds: string[]; reasonCodes?: string[] }>
-    >(`/acl/effective${queryString(filters)}`, { signal }),
+    >(`/acl/effective${queryString(filters)}`, { signal }, effectiveReady),
   platforms: {
     list: (filters: Record<string, string | undefined>, signal?: AbortSignal) =>
       controlRequest<Page<Platform>>(`/platforms${queryString({ ...filters, pageSize: '20' })}`, { signal }),
