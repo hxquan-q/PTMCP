@@ -15,3 +15,5 @@ export const effectiveApiReady = true;
 export const platformApiReady = true;
 /** GET/PUT /api/v1/admin/platforms/{id}/scopes（PlatformAdminController#*Scopes）。 */
 export const scopeApiReady = true;
+/** /clients/{id} 详情/更新/删除（ClientAdminController）与 /platforms/{id}/clients 创建列表。 */
+export const clientApiReady = true;

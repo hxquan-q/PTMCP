@@ -1,6 +1,6 @@
 import { request, type RequestOptions } from './http';
 import { newUuid } from './uuid';
-import { controlPlaneAvailable, delegationApiReady, effectiveApiReady, platformApiReady, scopeApiReady } from './frontendMode';
+import { clientApiReady, controlPlaneAvailable, delegationApiReady, effectiveApiReady, platformApiReady, scopeApiReady } from './frontendMode';
 import type { AuditDetail, AuditSummary } from './mePortalApi';
 
 export interface Page<T> {
@@ -98,6 +98,8 @@ const effectiveReady = effectiveApiReady || controlPlaneAvailable;
 const platformReady = platformApiReady || controlPlaneAvailable;
 /** 平台 Scope 读写已实现，整组替换 + If-Match。 */
 const scopeReady = scopeApiReady || controlPlaneAvailable;
+/** 客户端管理已实现；secret 只在创建响应出现一次。 */
+const clientReady = clientApiReady || controlPlaneAvailable;
 export const controlPlane = {
   effective: (filters: Record<string, string | undefined>, signal?: AbortSignal) =>
     controlRequest<
@@ -120,14 +122,21 @@ export const controlPlane = {
   },
   clients: {
     list: (platformId: string, filters: Record<string, string | undefined>, signal?: AbortSignal) =>
-      controlRequest<Page<Client>>(`/platforms/${encodeURIComponent(platformId)}/clients${queryString(filters)}`, { signal }),
+      controlRequest<Page<Client>>(`/platforms/${encodeURIComponent(platformId)}/clients${queryString(filters)}`, { signal }, clientReady),
     save: (platformId: string, body: ClientWrite, row?: Client) =>
       row
-        ? controlRequest<Client>(`/clients/${encodeURIComponent(row.id)}`, { method: 'PUT', body, headers: versioned(row.version) }).then(
-            (client) => ({ client }),
-          )
-        : controlRequest<{ client: Client; clientSecret?: string }>(`/platforms/${encodeURIComponent(platformId)}/clients`, create(body)),
-    remove: (row: Client) => controlRequest(`/clients/${encodeURIComponent(row.id)}`, { method: 'DELETE', headers: versioned(row.version) }),
+        ? controlRequest<Client>(
+            `/clients/${encodeURIComponent(row.id)}`,
+            { method: 'PUT', body, headers: versioned(row.version) },
+            clientReady,
+          ).then((client) => ({ client }))
+        : controlRequest<{ client: Client; clientSecret?: string }>(
+            `/platforms/${encodeURIComponent(platformId)}/clients`,
+            create(body),
+            clientReady,
+          ),
+    remove: (row: Client) =>
+      controlRequest(`/clients/${encodeURIComponent(row.id)}`, { method: 'DELETE', headers: versioned(row.version) }, clientReady),
   },
   scopes: {
     get: (id: string, signal?: AbortSignal) => controlRequest<ScopeRead>(`/platforms/${encodeURIComponent(id)}/scopes`, { signal }, scopeReady),

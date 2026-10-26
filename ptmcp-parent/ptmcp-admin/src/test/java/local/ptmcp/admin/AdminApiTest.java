@@ -1414,6 +1414,216 @@ class AdminApiTest {
         }
     }
 
+    @Test
+    void clientLifecycleShowsSecretOnceAndRevokesFamiliesOnChange() throws Exception {
+        long platformId = insertPlatform("p-clients");
+        String callbacks = "[\"https://app.example/callback\",\"http://127.0.0.1:3000/cb\"]";
+
+        // PUBLIC client: no secret material anywhere.
+        MvcResult publicClient =
+                mockMvc.perform(
+                                post("/api/v1/admin/platforms/" + platformId + "/clients")
+                                        .header("X-Test-User-Id", ADMIN_ID)
+                                        .header("X-Test-Platform-Admin", "true")
+                                        .header("Idempotency-Key", "client-public-1")
+                                        .contentType("application/json")
+                                        .content(
+                                                "{\"name\":\"公开端\",\"type\":\"PUBLIC\","
+                                                        + "\"authMethods\":[\"none\"],\"redirectUris\":"
+                                                        + callbacks
+                                                        + ",\"allowedScopes\":[\"mcp:catalog\"],"
+                                                        + "\"status\":\"ACTIVE\"}"))
+                        .andExpect(status().isCreated())
+                        .andExpect(jsonPath("$.client.type").value("PUBLIC"))
+                        .andExpect(jsonPath("$.clientSecret").doesNotExist())
+                        .andExpect(jsonPath("$.client.secretConfigured").value(false))
+                        .andReturn();
+        String publicId =
+                String.valueOf(
+                                readQuotedLong(
+                                                        publicClient
+                                                                .getResponse()
+                                                                .getContentAsString(),
+                                                        "platformId")
+                                                >= 0
+                                        ? 0
+                                        : 0)
+                        + readStringField(publicClient.getResponse().getContentAsString(), "id");
+
+        // CONFIDENTIAL client: the raw secret appears exactly once, never in the detail read.
+        MvcResult confidential =
+                mockMvc.perform(
+                                post("/api/v1/admin/platforms/" + platformId + "/clients")
+                                        .header("X-Test-User-Id", ADMIN_ID)
+                                        .header("X-Test-Platform-Admin", "true")
+                                        .header("Idempotency-Key", "client-conf-1")
+                                        .contentType("application/json")
+                                        .content(
+                                                "{\"name\":\"机密端\",\"type\":\"CONFIDENTIAL\","
+                                                        + "\"authMethods\":[\"client_secret_basic\"],"
+                                                        + "\"redirectUris\":["
+                                                        + "\"https://app.example/callback\"],"
+                                                        + "\"allowedScopes\":[\"mcp:catalog\",\"mcp:query\"],"
+                                                        + "\"status\":\"ACTIVE\"}"))
+                        .andExpect(status().isCreated())
+                        .andExpect(jsonPath("$.client.secretConfigured").value(true))
+                        .andExpect(
+                                result -> {
+                                    String body = result.getResponse().getContentAsString();
+                                    int first = body.indexOf("clientSecret");
+                                    int second = body.indexOf("clientSecret", first + 1);
+                                    if (first < 0 || second >= 0) {
+                                        throw new AssertionError(
+                                                "secret field shape unexpected: " + body);
+                                    }
+                                })
+                        .andReturn();
+        String confidentialBody = confidential.getResponse().getContentAsString();
+        String clientId = readStringField(confidentialBody, "id");
+        String rawSecret = readStringField(confidentialBody, "clientSecret");
+
+        // Storage keeps bcrypt + digest, never the raw value.
+        try (Connection connection = connect();
+                PreparedStatement secret =
+                        connection.prepareStatement(
+                                "SELECT client_secret, client_secret_hash FROM oauth2_registered_client"
+                                        + " WHERE id = ?")) {
+            secret.setString(1, clientId);
+            try (ResultSet result = secret.executeQuery()) {
+                assertTrue(result.next());
+                String stored = result.getString(1);
+                assertNotNull(stored);
+                assertTrue(stored.startsWith("{bcrypt}"));
+                if (stored.contains(rawSecret)) {
+                    throw new AssertionError("raw secret stored");
+                }
+                String expectedDigest;
+                try {
+                    expectedDigest =
+                            java.util.HexFormat.of()
+                                    .formatHex(
+                                            java.security.MessageDigest.getInstance("SHA-256")
+                                                    .digest(
+                                                            rawSecret.getBytes(
+                                                                    java.nio.charset
+                                                                            .StandardCharsets
+                                                                            .UTF_8)));
+                } catch (java.security.NoSuchAlgorithmException failure) {
+                    throw new AssertionError(failure);
+                }
+                assertEquals(
+                        expectedDigest, java.util.HexFormat.of().formatHex(result.getBytes(2)));
+            }
+        }
+
+        mockMvc.perform(
+                        get("/api/v1/admin/clients/" + clientId)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.secretConfigured").value(true))
+                .andExpect(
+                        result -> {
+                            if (result.getResponse().getContentAsString().contains(rawSecret)) {
+                                throw new AssertionError("detail leaked the raw secret");
+                            }
+                        });
+
+        // Unsafe callbacks are rejected with the same rules as DCR.
+        mockMvc.perform(
+                        post("/api/v1/admin/platforms/" + platformId + "/clients")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", "client-unsafe-cb")
+                                .contentType("application/json")
+                                .content(
+                                        "{\"name\":\"坏回调\",\"type\":\"PUBLIC\","
+                                                + "\"authMethods\":[\"none\"],\"redirectUris\":[\"https://app.example/*\"],"
+                                                + "\"allowedScopes\":[\"mcp:catalog\"],\"status\":\"ACTIVE\"}"))
+                .andExpect(status().isBadRequest());
+
+        // Seed one ACTIVE refresh family, then update the client: the family must be revoked.
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            statement.execute(
+                    "INSERT INTO oauth2_authorization (id, registered_client_id, principal_name,"
+                            + " authorization_grant_type, status, create_time, update_time,"
+                            + " created_by, updated_by) VALUES ('auth-1', '"
+                            + clientId
+                            + "', 'delegate-user', 'authorization_code', 'ACTIVE',"
+                            + " UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), 1, 1)");
+            statement.execute(
+                    "INSERT INTO oauth_refresh_family (id, authorization_id, user_id,"
+                            + " registered_client_id, platform_id, status, auth_version,"
+                            + " absolute_expires_at, idle_expires_at, last_rotated_at, version,"
+                            + " create_time, update_time) VALUES ('fam-1', 'auth-1', 1, '"
+                            + clientId
+                            + "', "
+                            + platformId
+                            + ", 'ACTIVE', 1, UTC_TIMESTAMP(6) + INTERVAL 7 DAY,"
+                            + " UTC_TIMESTAMP(6) + INTERVAL 1 DAY, UTC_TIMESTAMP(6), 1,"
+                            + " UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))");
+        }
+
+        mockMvc.perform(
+                        put("/api/v1/admin/clients/" + clientId)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "1")
+                                .contentType("application/json")
+                                .content(
+                                        "{\"name\":\"机密端改名\",\"type\":\"CONFIDENTIAL\","
+                                                + "\"authMethods\":[\"client_secret_basic\"],"
+                                                + "\"redirectUris\":[\"https://app.example/callback\"],"
+                                                + "\"allowedScopes\":[\"mcp:catalog\"],\"status\":\"ACTIVE\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("机密端改名"))
+                .andExpect(jsonPath("$.version").value("2"))
+                .andExpect(jsonPath("$.secretConfigured").value(true));
+
+        try (Connection connection = connect();
+                PreparedStatement families =
+                        connection.prepareStatement(
+                                "SELECT status, revoke_reason FROM oauth_refresh_family WHERE id = 'fam-1'")) {
+            try (ResultSet result = families.executeQuery()) {
+                assertTrue(result.next());
+                assertEquals("REVOKED", result.getString(1));
+                assertNotNull(result.getString(2));
+            }
+        }
+
+        // Delete disables the client and revokes any remaining family.
+        mockMvc.perform(
+                        delete("/api/v1/admin/clients/" + clientId)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("DISABLED"));
+
+        mockMvc.perform(
+                        get("/api/v1/admin/clients/" + clientId)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("DISABLED"));
+
+        // The public client shows up in the platform list.
+        mockMvc.perform(
+                        get("/api/v1/admin/platforms/" + platformId + "/clients")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(2));
+    }
+
+    private static String readStringField(String json, String field) {
+        int at = json.indexOf("\"" + field + "\":\"");
+        int start = at + field.length() + 4;
+        int end = json.indexOf('"', start);
+        return json.substring(start, end);
+    }
+
     private long insertActiveNamespace(long datasourceId) throws Exception {
         try (Connection connection = connect();
                 Statement statement = connection.createStatement()) {

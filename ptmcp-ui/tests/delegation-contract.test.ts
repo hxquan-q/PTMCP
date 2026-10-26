@@ -98,8 +98,11 @@ test('normal mode: delegation domain reaches the network while unimplemented dom
   );
 
   // Unimplemented domains keep the explicit gate in normal mode.
-  await assert.rejects(() => controlPlane.clients.list('1', {}), /尚未接入/);
-  // The implemented platform CRUD and scopes also reach the network in normal mode.
+  // The implemented platform CRUD, scopes and clients also reach the network in normal mode.
+  await assert.rejects(
+    () => controlPlane.clients.list('1', {}),
+    (error) => !(error instanceof Error) || !error.message.includes('尚未接入'),
+  );
   await assert.rejects(
     () => controlPlane.scopes.get('1'),
     (error) => !(error instanceof Error) || !error.message.includes('尚未接入'),

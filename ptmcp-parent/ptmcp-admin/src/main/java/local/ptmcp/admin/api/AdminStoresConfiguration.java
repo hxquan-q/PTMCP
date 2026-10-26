@@ -14,6 +14,7 @@ import local.ptmcp.admin.datasource.DestinationPolicy;
 import local.ptmcp.admin.me.MeService;
 import local.ptmcp.admin.me.PersonalTokenService;
 import local.ptmcp.admin.metadata.MetadataCatalogService;
+import local.ptmcp.admin.platform.ClientAdminService;
 import local.ptmcp.admin.platform.PlatformAdminService;
 import local.ptmcp.admin.platform.PlatformDirectoryService;
 import local.ptmcp.admin.session.AdminSessionService;
@@ -108,6 +109,11 @@ public class AdminStoresConfiguration {
     public PlatformAdminService platformAdminService(
             DataSource dataSource, CredentialCipher cipher) {
         return new PlatformAdminService(dataSource, cipher);
+    }
+
+    @Bean
+    public ClientAdminService clientAdminService(DataSource dataSource) {
+        return new ClientAdminService(dataSource);
     }
 
     @Bean

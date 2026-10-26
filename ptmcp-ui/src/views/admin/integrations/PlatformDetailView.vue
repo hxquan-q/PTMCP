@@ -10,14 +10,15 @@ import ClientConfigurationForm from './ClientConfigurationForm.vue';
 import ScopeConfigurationPane from './ScopeConfigurationPane.vue';
 import { useSessionStore } from '../../../stores/session';
 import { controlPlane, type Platform, type PlatformWrite, type Client, type ClientWrite } from '../../../services/controlPlane';
-import { controlPlaneAvailable, mutationNotice, platformApiReady } from '../../../services/frontendMode';
+import { clientApiReady, mutationNotice, platformApiReady } from '../../../services/frontendMode';
 import { useCursorPage } from '../../../composables/useCursorPage';
 import { errorText, isConflict, usePortalTask } from '../../portalUtils';
 const route = useRoute();
 const router = useRouter();
 const session = useSessionStore();
-/** 平台本体 CRUD 已实现；客户端/Scope 域仍在后端切片中，沿用预览门禁。 */
-const platformReady = platformApiReady || controlPlaneAvailable;
+/** 平台本体 CRUD 已实现；客户端域随后端切片解禁，预览模式继续用合成数据。 */
+const platformReady = platformApiReady;
+const clientReady = clientApiReady;
 const activeId = computed(() => String(route.params.id ?? ''));
 const activeTab = ref('overview');
 const basicsVisible = ref(false);
@@ -143,7 +144,7 @@ async function removeClient(id: string): Promise<void> {
 }
 watch([clientStatus, clientType], resetClients, { flush: 'sync' });
 watch(activeTab, (tab) => {
-  if (tab === 'clients' && controlPlaneAvailable && item.value) void loadClients();
+  if (tab === 'clients' && clientReady && item.value) void loadClients();
 });
 watch(activeId, () => {
   clearForms();
@@ -215,7 +216,7 @@ onBeforeUnmount(() => {
         ><ElCard shadow="never">
           <div class="section-heading">
             <h2>OAuth 客户端</h2>
-            <ElButton v-if="session.can('ptmcp:client:create')" type="primary" :disabled="controlPlaneAvailable && !item" @click="openClient()"
+            <ElButton v-if="session.can('ptmcp:client:create')" type="primary" :disabled="clientReady && !item" @click="openClient()"
               >新建客户端</ElButton
             >
           </div>
@@ -224,7 +225,7 @@ onBeforeUnmount(() => {
               ><ElOption label="PUBLIC" value="PUBLIC" /><ElOption label="CONFIDENTIAL" value="CONFIDENTIAL" /></ElSelect
             ><ElSelect v-model="clientStatus" clearable placeholder="全部状态" aria-label="客户端状态"
               ><ElOption label="启用" value="ACTIVE" /><ElOption label="停用" value="DISABLED" /></ElSelect
-            ><ElButton :loading="clientsLoading" :disabled="!controlPlaneAvailable || !item" @click="loadClients()">查询</ElButton>
+            ><ElButton :loading="clientsLoading" :disabled="!clientReady || !item" @click="loadClients()">查询</ElButton>
           </div>
           <ElAlert v-if="clientsError" :title="clientsError" type="error" :closable="false"><ElButton @click="retryClients">重试</ElButton></ElAlert>
           <ElTable :data="clients" aria-label="客户端列表"

@@ -2,6 +2,7 @@ package local.ptmcp.admin.api;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+import local.ptmcp.admin.platform.ClientAdminService;
 import local.ptmcp.admin.platform.PlatformAdminService;
 import local.ptmcp.admin.platform.PlatformDirectoryService;
 import local.ptmcp.admin.web.StrictJson;
@@ -37,14 +38,17 @@ import java.util.UUID;
 public class PlatformAdminController {
     private final PlatformDirectoryService platforms;
     private final PlatformAdminService mutations;
+    private final ClientAdminService clients;
     private final IdempotencyRecorder idempotency;
 
     public PlatformAdminController(
             PlatformDirectoryService platforms,
             PlatformAdminService mutations,
+            ClientAdminService clients,
             IdempotencyRecorder idempotency) {
         this.platforms = platforms;
         this.mutations = mutations;
+        this.clients = clients;
         this.idempotency = idempotency;
     }
 
@@ -157,6 +161,70 @@ public class PlatformAdminController {
         return ResponseEntity.ok()
                 .eTag(IfMatch.etag(Long.parseLong(deleted.version())))
                 .body(deleted);
+    }
+
+    public record ClientWritePayload(
+            String name,
+            String type,
+            List<String> authMethods,
+            List<String> redirectUris,
+            List<String> allowedScopes,
+            String jwksUri,
+            String status) {}
+
+    /** POST /{id}/clients: registers a client; CONFIDENTIAL secrets appear once, never again. */
+    @PostMapping("/{id}/clients")
+    public ResponseEntity<byte[]> createClient(
+            @PathVariable long id,
+            @RequestBody(required = false) byte[] body,
+            HttpServletRequest request) {
+        AdminPrincipal principal = ManagementScope.requirePlatformAdminPrincipal(request);
+        ClientWritePayload payload = StrictJson.parse(body, ClientWritePayload.class);
+        return IdempotentWrites.execute(
+                idempotency,
+                principal.userId(),
+                "clients.create:" + id,
+                idempotencyKey(request),
+                body,
+                () -> {
+                    ClientAdminService.CreatedClient created =
+                            clients.create(
+                                    id,
+                                    toClientWrite(payload),
+                                    principal.userId(),
+                                    UUID.randomUUID().toString());
+                    return ResponseEntity.status(201)
+                            .location(URI.create("/api/v1/admin/clients/" + created.client().id()))
+                            .body(created);
+                });
+    }
+
+    @GetMapping("/{id}/clients")
+    public java.util.Map<String, Object> listClients(
+            @PathVariable long id,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer pageSize,
+            HttpServletRequest request) {
+        ManagementScope.requirePlatformAdmin(request);
+        List<ClientAdminService.ClientView> items =
+                clients.list(id, type, status, cursor, pageSize);
+        return java.util.Map.of("items", List.copyOf(items));
+    }
+
+    private static ClientAdminService.ClientWrite toClientWrite(ClientWritePayload payload) {
+        if (payload == null) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
+        return new ClientAdminService.ClientWrite(
+                payload.name(),
+                payload.type(),
+                payload.authMethods(),
+                payload.redirectUris(),
+                payload.allowedScopes(),
+                payload.jwksUri(),
+                payload.status());
     }
 
     /** GET /{id}/scopes: the full scope set plus the version the write is keyed on. */
