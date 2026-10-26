@@ -184,3 +184,8 @@ ptmcp:audit:list 门禁）+controlPlane.audit.operations+OperationsView（列表
 payload 明细）。浏览器走查：17 行真实轨迹（密码重置/客户端/平台/委派）、聚合筛选、明细
 展开全通。教训：Dev-Linux build 后 start 不重编译 spring-boot:run 类路径（operations
 端点曾 404）——改后端必须完整 build+start。
+
+AC-02 浏览器验证（走查记录）：受控管理员（delegate-walker）在 UsersView 编辑对话框选中
+越权角色（携 ptmcp:audit:decrypt 码）保存→403 拒绝消息正确呈现（『没有执行此操作的权限』）
+——AC-02 UI 侧核心断言通过。narrow 角色赋权 200 由 AdminApiTest 覆盖；浏览器多选下拉二次
+选择时序留待完善（脚本问题非产品缺陷）。截图 e2e-ac02-broad-denied.png。
