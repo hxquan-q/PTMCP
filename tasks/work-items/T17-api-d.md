@@ -49,6 +49,10 @@ Updated: 2026-10-26
 
 ## 交接
 
-下一步：S2 ACL `GET /acl/effective`（复用 preview 求值服务，前端 EffectiveAccessPane 解禁）；
-随后 S3 平台 CRUD、S4 平台 Scope、S5 客户端一次性 secret、S6 审计解密。域级就绪标志模式
-（`*ApiReady`）在后续切片复用。
+S2 已完成：`GET /api/v1/admin/acl/effective`（AclGrantAdminController#effective，资源树 id 序
+稳定分页、datasourceId 子树筛选、reasonCodes 闭合世界解释），前端 EffectiveAccessPane 解禁，
+提交 ab5ec33。测试注意：清库后首个 createUser id=1 撞 shim 主体，需占位用户（两处已踩）。
+
+下一步：S3 平台 CRUD（POST/PUT/DELETE + GET /{id}，proof_config 加密同 CredentialCipher）、
+S4 平台 Scope（GET/PUT，保存 scope_version+1）、S5 客户端一次性 secret、S6 审计解密。
+域级就绪标志模式（`*ApiReady`）在后续切片复用。
