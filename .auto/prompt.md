@@ -61,7 +61,17 @@ frontendPreview`（仅预览模式放行）把真实模式全部禁用。每个�
 - Idempotency-Key / If-Match 语义与现有控制器一致（见 AclGrantAdminController、
   UserAdminController、DELEGATIONS 前端 `versioned()` 头）。
 
-## Slices（按序，或按调查结果调整）
+## Slices（联调线 S1–S6 已完成；现转入 UI 打磨线）
+
+**UI 打磨切片池**（每轮一个可见改进，pnpm check + 契约测试护住，浏览器走查记录进工作项）：
+- U1 委派列表管理列窄屏折行 + 状态列 EXPIRED 视觉区分。
+- U2 客户端创建后的 secret 一次性弹窗（对照 PAT 模式：关闭后明文节点清空）。
+- U3 Scope 差异确认框 diff 可读性（新增/修改/删除分色列出）。
+- U4 审计解密倒计时可访问性（aria-live + 键盘可达）。
+- U5 EffectiveAccessPane 空态文案与原因码解释。
+- U6 平台表单 proof 配置「留空保持原值」提示一致性。
+
+## 联调 Slices（已完成，留档）
 
 1. **S1 委派**：`/api/v1/admin/delegations` GET/POST、DELETE `/{id}`（admin_delegation 表
    已有）。前端 DelegationsView 解除禁用 + 契约测试。
@@ -81,8 +91,18 @@ frontendPreview`（仅预览模式放行）把真实模式全部禁用。每个�
 
 ## What's Been Tried
 
-- 2026-10-26 会话建立，基线待跑。之前（非本会话）已落地：审计 list/detail、平台只读
-  list、ACL grants CRUD+preview、用户/部门/角色 CRUD、会话+CSRF、me 全套只读端点。
+- **S1–S6 联调真实化全部完成**（提交 cc93bad→5e353c6，tests_passing 372→469）：
+  S1 委派 CRUD+幂等+操作日志；S2 ACL effective 稳定分页；S3 平台 CRUD（proof_config 只写
+  加密、security_version 乐观锁）；S4 平台 Scope 整组替换双版本自增；S5 客户端一次性
+  secret（bcrypt+SHA-256 双哈希、改删撤授权族、V7 迁移）；S6 审计解密（独立密钥、reason
+  门禁、敏感访问同事务落库）。前端六域 `*ApiReady` 全解禁，预览模式合成交互保留。
+- **教训**：AdminApiTest 清库后 POST /users 从 id=1 重编（撞 shim 主体，测试需占位用户）；
+  platform_registry 无 version 列（乐观锁=security_version）；MySQL JSON 列读回带空格；
+  jsonPathCursor 只适用 nextCursor；测试 INSERT 字符串禁裸 ?；调试 printStackTrace 用后即删。
+- **未做/移交 .auto/ideas.md**：gateway 密文写入（encryptedRaw 恒 null）、委派作用域执行
+  （T16）、org POST 幂等接线、MySQL 8.4 复验、浏览器端到端、UI 打磨池。
+- 之前（非本会话）已落地：审计 list/detail、平台只读 list、ACL grants CRUD+preview、
+  用户/部门/角色 CRUD、会话+CSRF、me 全套只读端点。
 
 ## 环境备忘
 
