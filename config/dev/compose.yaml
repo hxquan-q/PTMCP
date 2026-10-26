@@ -13,9 +13,9 @@ services:
       MYSQL_USER: ptmcp_dev
       MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root
       MYSQL_PASSWORD_FILE: /run/secrets/mysql_app
-    command: ['--default-time-zone=+00:00', '--character-set-server=utf8mb4', '--collation-server=utf8mb4_0900_ai_ci']
+    command: ['--default-time-zone=+00:00', '--character-set-server=utf8mb4', '--collation-server=utf8mb4_0900_ai_ci', '--ssl-ca=/etc/mysql/tls/ca.pem', '--ssl-cert=/etc/mysql/tls/server-cert.pem', '--ssl-key=/etc/mysql/tls/server-key.pem']
     secrets: [mysql_root, mysql_app, mysql_client]
-    volumes: [mysql_data:/var/lib/mysql]
+    volumes: [mysql_data:/var/lib/mysql, "${PTMCP_DEV_TLS_DIR:-../.local/dev/tls}:/etc/mysql/tls:ro"]
     mem_limit: 1g
     healthcheck:
       test: ['CMD-SHELL', 'mysql --defaults-extra-file=/run/secrets/mysql_client -N -e "SELECT 1" >/dev/null']

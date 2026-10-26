@@ -333,6 +333,15 @@ final class McpToolService {
                     approved.finalSql());
             return envelope(id, callToolResult(false, success.structured()));
         } catch (DomainException failure) {
+            System.out.println(
+                    "EXEC-PROBE code="
+                            + failure.errorCode()
+                            + " stage="
+                            + stage
+                            + " cause="
+                            + (failure.getCause() == null
+                                    ? "none"
+                                    : failure.getCause().toString()));
             if (failure.errorCode() == ErrorCode.AUDIT_UNAVAILABLE) {
                 throw failure;
             }

@@ -8,6 +8,7 @@ ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 COMPOSE_FILE="$ROOT/config/dev/compose.yaml"
 SECRETS_DIR="$ROOT/config/dev/secrets"
 LOCAL_DIR="$ROOT/.local/dev"
+TLS_DIR="$LOCAL_DIR/dev/tls"
 RUN_DIR="$LOCAL_DIR/run"
 ENV_FILE="$LOCAL_DIR/dev.env"
 MAVEN_SETTINGS="$LOCAL_DIR/maven-settings.xml"
@@ -26,7 +27,11 @@ die() {
     exit 1
 }
 
-compose() { docker compose -f "$COMPOSE_FILE" "$@"; }
+compose() {
+    # TLS mount path variable for the compose file; HOME-based fallback keeps it machine-local.
+    export PTMCP_DEV_TLS_DIR="${PTMCP_DEV_TLS_DIR:-${HOME}/ALLSTAR_DATACHAT_SUB/.local/dev/tls}"
+    docker compose -f "$COMPOSE_FILE" "$@"
+}
 
 require_cmd() {
     command -v "$1" >/dev/null 2>&1 || die "missing command: $1"
@@ -57,7 +62,7 @@ detect_java_home() {
 
 ensure_dirs() {
     umask 077
-    mkdir -p "$SECRETS_DIR" "$LOCAL_DIR" "$RUN_DIR" "$LOCAL_DIR/wal"
+    mkdir -p "$SECRETS_DIR" "$LOCAL_DIR" "$RUN_DIR" "$LOCAL_DIR/wal" "$TLS_DIR"
     chmod 700 "$SECRETS_DIR" "$LOCAL_DIR"
 }
 
@@ -350,6 +355,22 @@ SQL
     done < <(find "$MIGRATION_DIR" -maxdepth 1 -type f -name 'V*__*.sql' -printf '%f\n' | sort -V)
 }
 
+# Generates the disposable MySQL TLS material (SAN: 127.0.0.1/localhost/mysql) when absent, so
+# the business connection can run with sslMode=VERIFY_IDENTITY in local development.
+ensure_mysql_tls() {
+    [ -s "$TLS_DIR/server-cert.pem" ] && return 0
+    info "generating MySQL TLS material in $TLS_DIR"
+    openssl req -x509 -newkey rsa:2048 -nodes -keyout "$TLS_DIR/ca-key.pem" \
+        -out "$TLS_DIR/ca.pem" -days 825 -subj "/CN=ptmcp-dev-mysql-ca"
+    openssl req -newkey rsa:2048 -nodes -keyout "$TLS_DIR/server-key.pem" \
+        -out "$TLS_DIR/server-req.pem" -subj "/CN=mysql"
+    printf 'subjectAltName=IP:127.0.0.1,DNS:localhost,DNS:mysql\n' >"$TLS_DIR/san.ext"
+    openssl x509 -req -in "$TLS_DIR/server-req.pem" -CA "$TLS_DIR/ca.pem" \
+        -CAkey "$TLS_DIR/ca-key.pem" -CAcreateserial -out "$TLS_DIR/server-cert.pem" \
+        -days 825 -extfile "$TLS_DIR/san.ext"
+    chmod 600 "$TLS_DIR"/*.pem
+    rm -f "$TLS_DIR/server-req.pem"
+}
 seed() {
     ensure_mysql
     info "ensuring development identity table"
@@ -379,6 +400,7 @@ up() {
     start_infra "$@"
     migrate
     seed
+    ensure_mysql_tls
     status
     info "next: $0 build && $0 start"
 }
@@ -454,6 +476,7 @@ run_ui() {
     fi
     exec pnpm dev
 }
+
 
 write_launcher() {
     local name="$1"
