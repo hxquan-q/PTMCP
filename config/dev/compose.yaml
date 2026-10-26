@@ -2,7 +2,9 @@ name: ptmcp-dev
 
 services:
   mysql:
-    image: mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69
+    # Default is the pinned MySQL 8.4 image. The override exists only for
+    # disposable local development when the pinned image cannot be pulled.
+    image: ${PTMCP_MYSQL_IMAGE:-mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69}
     container_name: ptmcp-mysql
     restart: unless-stopped
     ports: ['127.0.0.1:13306:3306']

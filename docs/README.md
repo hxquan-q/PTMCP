@@ -73,6 +73,7 @@
 | [测试报告](test/test-report.md) | 当前执行状态、历史证据、阻塞与报告模板 |
 | [部署手册](ops/deploy.md) | 环境、配置/产物契约、迁移、灰度与回滚 |
 | [本机开发环境](ops/development-environment.md) | D盘工具与WSL环境、进入/启动/停止、自检、凭据与连接 |
+| [Linux 开发服务器](ops/development-linux-server.md) | 当前 Linux 服务器上的本地 MySQL 8.4、迁移、管理员种子与启动脚本 |
 | [运维手册](ops/operation-manual.md) | 指标/告警、故障处理、密钥、备份恢复 |
 | [代码规范](standards/code-style.md) | 模块边界、Java/TS风格、安全、测试与DoD |
 | [Git规范](standards/git-rule.md) | 分支/提交/PR、私有资产、版本与文档维护 |
