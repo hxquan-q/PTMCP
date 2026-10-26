@@ -160,3 +160,8 @@ Dev-Linux stop 不停 gateway——需 pkill。
 审计链浏览器解密验证（走查记录）：真实查询行经 admin console 全链 UI 验证——脱敏 SQL→
 reason 门禁解密显示真实业务 SQL+倒计时→敏感访问留痕联动。截图 e2e-decrypt-*.png。
 至此「真实查询→密文→浏览器 reason 门禁解密→复核留痕」在 dev 真实栈全链闭环。
+
+受控管理员 PAT/查询 E2E（走查记录）：delegate-walker access-context 可见委派子树平台→
+API 创建 PAT 201→gateway PAT 查询 SUCCESS（rows [[2,'測試']]）→审计行归属 user_id=3、
+sql_masked 正确、raw/final 双密文齐。委派管理员的完整查询+审计链验证通过。PAT 创建无
+权限码门禁（安全边界由 ACL 授权控制，语义正确）。
