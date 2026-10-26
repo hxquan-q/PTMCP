@@ -2,7 +2,6 @@ package local.ptmcp.gateway.mcp;
 
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
-import local.ptmcp.persistence.org.AuthorizationReader;
 import local.ptmcp.persistence.security.SecuritySnapshot;
 import local.ptmcp.persistence.security.SecurityStateReader;
 
@@ -35,19 +34,19 @@ final class PatJwtAuthentication implements McpAuthentication {
 
     private final IdentityStore identities;
     private final SecurityStateReader security;
-    private final AuthorizationReader authorization;
+    private final Tier1ProofVerifier proofVerifier;
     private final JwtDecoder jwtDecoder;
     private final String resource;
 
     PatJwtAuthentication(
             IdentityStore identities,
             SecurityStateReader security,
-            AuthorizationReader authorization,
+            Tier1ProofVerifier proofVerifier,
             JwtDecoder jwtDecoder,
             String resource) {
         this.identities = identities;
         this.security = security;
-        this.authorization = authorization;
+        this.proofVerifier = proofVerifier;
         this.jwtDecoder = jwtDecoder;
         this.resource = resource == null ? "" : resource;
     }
@@ -58,7 +57,7 @@ final class PatJwtAuthentication implements McpAuthentication {
         McpIdentity identity =
                 bearer.startsWith(PAT_PREFIX) ? authenticatePat(bearer) : authenticateJwt(bearer);
         requirePlatformHeaderConsistency(identity, request);
-        requireSupportedProof(identity);
+        proofVerifier.verify(identity, request);
         return identity;
     }
 
@@ -265,20 +264,6 @@ final class PatJwtAuthentication implements McpAuthentication {
         }
         if (claimed != identity.platformId()) {
             throw new DomainException(ErrorCode.PLATFORM_MISMATCH);
-        }
-    }
-
-    private void requireSupportedProof(McpIdentity identity) {
-        AuthorizationReader.PlatformInfo platform =
-                authorization.loadPlatform(identity.platformId());
-        if (!platform.active()) {
-            throw new DomainException(ErrorCode.TOKEN_INVALID);
-        }
-        if (platform.tier() == 1 && !"NONE".equals(platform.proofMode())) {
-            // Tier 1 platforms must present per-request mTLS or trusted-proxy proof; this build
-            // has no proof verifier wired yet, so such platforms fail closed instead of
-            // executing on an unverified source claim.
-            throw new DomainException(ErrorCode.PLATFORM_PROOF_REQUIRED);
         }
     }
 

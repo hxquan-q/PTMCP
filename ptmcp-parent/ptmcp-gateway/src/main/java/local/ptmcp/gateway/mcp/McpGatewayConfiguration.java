@@ -189,11 +189,17 @@ class McpGatewayConfiguration {
     }
 
     @Bean
+    Tier1ProofVerifier tier1ProofVerifier(
+            AuthorizationReader authorization, CredentialCipher cipher) {
+        return new Tier1ProofVerifier(authorization, cipher);
+    }
+
+    @Bean
     McpAuthentication mcpAuthentication(
             GatewayProperties properties,
             DataSource primaryMetadata,
             SecurityStateReader security,
-            AuthorizationReader authorization) {
+            Tier1ProofVerifier proofVerifier) {
         JwtDecoder jwtDecoder = null;
         if (!properties.jwksUri().isBlank()) {
             if (properties.issuer().isBlank() || properties.resource().isBlank()) {
@@ -207,7 +213,7 @@ class McpGatewayConfiguration {
         return new PatJwtAuthentication(
                 new IdentityStore(primaryMetadata),
                 security,
-                authorization,
+                proofVerifier,
                 jwtDecoder,
                 properties.resource());
     }

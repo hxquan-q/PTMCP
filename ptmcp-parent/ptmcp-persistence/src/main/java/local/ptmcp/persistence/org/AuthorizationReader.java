@@ -76,6 +76,13 @@ public final class AuthorizationReader {
     public record PlatformInfo(
             long id, int tier, String catalogMode, String proofMode, boolean active) {}
 
+    /** Encrypted Tier1 proof policy; plaintext is never returned by the read path. */
+    public record PlatformProofConfig(String proofMode, byte[] configCipher, String configKeyId) {
+        public PlatformProofConfig {
+            configCipher = configCipher == null ? null : configCipher.clone();
+        }
+    }
+
     public SubjectScopeData loadSubjectScope(long userId, boolean departmentInheritance) {
         if (userId <= 0) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
@@ -143,6 +150,29 @@ public final class AuthorizationReader {
                 }
             }
             return rows;
+        } catch (SQLException error) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+    }
+
+    public PlatformProofConfig loadPlatformProofConfig(long platformId) {
+        if (platformId <= 0) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
+        try (Connection connection = openRead();
+                PreparedStatement statement =
+                        statement(
+                                connection,
+                                "SELECT proof_mode, proof_config_cipher, proof_key_id FROM"
+                                        + " platform_registry WHERE id = ? AND status = 'ACTIVE'")) {
+            statement.setLong(1, platformId);
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
+                }
+                return new PlatformProofConfig(
+                        result.getString(1), result.getBytes(2), result.getString(3));
+            }
         } catch (SQLException error) {
             throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }

@@ -2,6 +2,7 @@ package local.ptmcp.authz.platform;
 
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
+import local.ptmcp.common.platform.CidrRange;
 
 import java.net.InetAddress;
 import java.net.URI;

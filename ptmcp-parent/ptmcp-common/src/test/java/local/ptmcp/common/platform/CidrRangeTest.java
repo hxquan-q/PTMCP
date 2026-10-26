@@ -1,4 +1,4 @@
-package local.ptmcp.authz.platform;
+package local.ptmcp.common.platform;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;

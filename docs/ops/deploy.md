@@ -93,7 +93,7 @@ flowchart LR
 
 分别路由UI/admin、AS和MCP域名。对`/mcp`保留`Authorization`、必要MCP协议头、原HTTP状态和`WWW-Authenticate`；支持协议所需请求方法，返回正确Content-Type。Streamable HTTP可能产生流式响应，设置与实际协议匹配的代理缓冲/读取策略；不要把“禁用旧SSE端点”误解为拦截该协议的合法事件流响应。
 
-网关只信任Nginx/负载均衡器的转发头；在入口清除外部伪造的`X-Forwarded-*`及内部平台证明头，再由受控代理重建。不要清除用户必要的OAuth协议参数，也不要让任意公网请求以Header声明Tier1。mTLS若在代理终止，客户端证书身份传递头必须由该代理覆盖并仅经受信网络到gateway，配置与验收成套交付。
+网关只信任Nginx/负载均衡器的转发头；在入口清除外部伪造的`X-Forwarded-*`及内部平台证明头，再由受控代理重建。不要清除用户必要的OAuth协议参数，也不要让任意公网请求以Header声明Tier1。mTLS若在代理终止，客户端证书身份传递头必须由该代理覆盖并仅经受信网络到gateway，配置与验收成套交付。Tier1 proof Header为`X-PTMCP-Client-Cert-Fingerprint`（SHA-256 hex）与`X-PTMCP-Proxy-Secret`（base64）；gateway只从平台proof配置的`proxyCidrs`接受，入口必须无条件剥离外部同名值。
 
 TLS采用组织核准的协议/证书配置，证书链覆盖客户端要求。Cookie均限定各自host，不设置覆盖全部子域的宽Domain：`PTMCP_ADMIN_SESSION`与`PTMCP_AS_SESSION`为HttpOnly/Secure/SameSite=Lax。写操作保留CSRF；CORS按实际批准origin精确配置，不用`*`配凭证。首次生产启用HSTS前核验所有子域HTTPS状态。
 

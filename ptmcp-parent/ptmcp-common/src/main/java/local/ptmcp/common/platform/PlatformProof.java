@@ -1,4 +1,4 @@
-package local.ptmcp.authz.platform;
+package local.ptmcp.common.platform;
 
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;

@@ -39,6 +39,12 @@ Tier1 proof选择：
 
 private_key_jwt证明token端点的一次客户端认证，后续普通Bearer若被盗仍能使用，故不能替代上述proof。CIMD域名、DCR登记、User-Agent、Origin、自报平台Header也不能代替。Tier1 proof失败在工具调用前HTTP403，不能先执行再审计告警。
 
+实现契约（2026-10-26候选，待部署联调）：`platform_registry.proof_config_cipher`存放用部署凭证密钥加密的JSON，`proof_key_id`记录密钥版本。
+
+- MTLS：`{"mode":"MTLS","fingerprints":["<SHA-256 hex>"],"proxyCidrs":["<CIDR>"]}`。直连TLS读取Servlet `X509Certificate`；经代理转发时仅在`proxyCidrs`内读取`X-PTMCP-Client-Cert-Fingerprint`（hex SHA-256）。
+- PROXY_SECRET：`{"mode":"PROXY_SECRET","secret":"<base64>","proxyCidrs":["<CIDR>"]}`。仅在`proxyCidrs`内读取`X-PTMCP-Proxy-Secret`（base64），恒时比较。
+- 入口必须删除外部入站的同名证明Header；missing/格式不符按`PLATFORM_PROOF_REQUIRED`，不匹配/不受信来源按`PLATFORM_MISMATCH`，策略不可解密按`SECURITY_STATE_UNAVAILABLE`。证明值不进入日志或审计payload。
+
 ## 4. Authorization Code + PKCE 完整流程
 
 ~~~mermaid

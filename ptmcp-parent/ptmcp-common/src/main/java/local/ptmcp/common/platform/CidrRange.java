@@ -1,4 +1,4 @@
-package local.ptmcp.authz.platform;
+package local.ptmcp.common.platform;
 
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
@@ -89,7 +89,7 @@ public final class CidrRange {
         return true;
     }
 
-    static InetAddress unwrap(InetAddress address) {
+    public static InetAddress unwrap(InetAddress address) {
         byte[] bytes = address.getAddress();
         if (bytes.length == 16
                 && bytes[10] == 0
