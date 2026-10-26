@@ -17,3 +17,5 @@ export const platformApiReady = true;
 export const scopeApiReady = true;
 /** /clients/{id} 详情/更新/删除（ClientAdminController）与 /platforms/{id}/clients 创建列表。 */
 export const clientApiReady = true;
+/** /audit 列表/详情与 /audit/{id}/decrypt（AuditAdminController）。 */
+export const auditApiReady = true;

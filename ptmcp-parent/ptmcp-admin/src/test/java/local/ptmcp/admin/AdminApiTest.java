@@ -48,7 +48,8 @@ import java.util.UUID;
         classes = AdminApplication.class,
         properties = {
             "ptmcp.admin.test-principal=true",
-            "ptmcp.admin.credential-key=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+            "ptmcp.admin.credential-key=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+            "ptmcp.admin.audit-key=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
         })
 @AutoConfigureMockMvc
 class AdminApiTest {
@@ -1615,6 +1616,84 @@ class AdminApiTest {
                                 .header("X-Test-Platform-Admin", "true"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(2));
+    }
+
+    @Test
+    void auditDecryptRequiresReasonRecordsAccessAndReturnsPlaintext() throws Exception {
+        String requestId = "11111111-2222-3333-4444-555555555555";
+        local.ptmcp.admin.datasource.AuditCipher cipher =
+                new local.ptmcp.admin.datasource.AuditCipher(
+                        "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=");
+        byte[] rawSealed = cipher.encryptForTesting("SELECT card_number FROM payment WHERE id = 1");
+        try (Connection connection = connect();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "INSERT INTO audit_log (request_id, user_id, platform_id, tool,"
+                                        + " datasource_id, started_at, result, verdict, sql_masked,"
+                                        + " sql_raw_cipher, key_id, create_time)"
+                                        + " VALUES (?, 7, 1, 'execute_readonly_sql', 1,"
+                                        + " UTC_TIMESTAMP(6), 'SUCCESS', 'ALLOW', 'SELECT *** FILTERED',"
+                                        + " ?, ?, UTC_TIMESTAMP(6))")) {
+            statement.setString(1, requestId);
+            statement.setBytes(2, rawSealed);
+            statement.setString(3, cipher.keyIdOrNull());
+            statement.executeUpdate();
+        }
+
+        // Short reasons are refused without any sensitive-access row.
+        mockMvc.perform(
+                        post("/api/v1/admin/audit/" + requestId + "/decrypt")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .contentType("application/json")
+                                .content("{\"reason\":\"太短\",\"fields\":[\"sqlRaw\"]}"))
+                .andExpect(status().isBadRequest());
+
+        // Unknown requests are 404.
+        mockMvc.perform(
+                        post("/api/v1/admin/audit/99999999-9999-9999-9999-999999999999/decrypt")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .contentType("application/json")
+                                .content("{\"reason\":\"安全事件复查需要原始 SQL\",\"fields\":[\"sqlRaw\"]}"))
+                .andExpect(status().isNotFound());
+
+        // The valid reveal returns plaintext plus an expiry, and stores one ALLOW row.
+        MvcResult revealed =
+                mockMvc.perform(
+                                post("/api/v1/admin/audit/" + requestId + "/decrypt")
+                                        .header("X-Test-User-Id", ADMIN_ID)
+                                        .header("X-Test-Platform-Admin", "true")
+                                        .contentType("application/json")
+                                        .content(
+                                                "{\"reason\":\"安全事件复查需要原始 SQL\","
+                                                        + "\"fields\":[\"sqlRaw\",\"sqlFinal\"]}"))
+                        .andExpect(status().isOk())
+                        .andExpect(
+                                jsonPath("$.sqlRaw")
+                                        .value("SELECT card_number FROM payment WHERE id = 1"))
+                        .andExpect(jsonPath("$.sqlFinal").doesNotExist())
+                        .andExpect(jsonPath("$.expiresAt").isNotEmpty())
+                        .andReturn();
+        if (!revealed.getResponse().getContentAsString().contains("expiresAt")) {
+            throw new AssertionError("missing expiry");
+        }
+
+        try (Connection connection = connect();
+                PreparedStatement access =
+                        connection.prepareStatement(
+                                "SELECT operator_id, reason, fields, decision FROM audit_sensitive_access"
+                                        + " WHERE request_id = ?")) {
+            access.setString(1, requestId);
+            try (ResultSet result = access.executeQuery()) {
+                assertTrue(result.next());
+                assertEquals(ADMIN_ID, result.getLong(1));
+                assertTrue(result.getString(2).contains("安全事件复查"));
+                assertTrue(result.getString(3).contains("sqlRaw"));
+                assertEquals("ALLOW", result.getString(4));
+                assertFalse(result.next());
+            }
+        }
     }
 
     private static String readStringField(String json, String field) {

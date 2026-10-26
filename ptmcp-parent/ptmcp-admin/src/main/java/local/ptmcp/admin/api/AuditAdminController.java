@@ -2,7 +2,9 @@ package local.ptmcp.admin.api;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+import local.ptmcp.admin.audit.AuditDecryptService;
 import local.ptmcp.admin.audit.AuditQueryService;
+import local.ptmcp.admin.web.StrictJson;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 
@@ -10,6 +12,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,9 +30,26 @@ import java.util.List;
 @RequestMapping("/api/v1/admin/audit")
 public class AuditAdminController {
     private final AuditQueryService audits;
+    private final AuditDecryptService reveals;
 
-    public AuditAdminController(AuditQueryService audits) {
+    public AuditAdminController(AuditQueryService audits, AuditDecryptService reveals) {
         this.audits = audits;
+        this.reveals = reveals;
+    }
+
+    public record DecryptRequest(String reason, java.util.List<String> fields) {}
+
+    /**
+     * POST /{requestId}/decrypt: reason-gated plaintext reveal, audited in the same transaction.
+     */
+    @PostMapping("/{requestId}/decrypt")
+    public AuditDecryptService.Reveal decrypt(
+            @PathVariable String requestId,
+            @RequestBody(required = false) byte[] body,
+            HttpServletRequest request) {
+        AdminPrincipal principal = ManagementScope.requirePlatformAdminPrincipal(request);
+        DecryptRequest payload = StrictJson.parse(body, DecryptRequest.class);
+        return reveals.decrypt(requestId, payload.reason(), payload.fields(), principal.userId());
     }
 
     public record AdminAuditPageView(

@@ -4,12 +4,14 @@ import { useRoute, useRouter } from 'vue-router';
 import PageHeader from '../../../components/common/PageHeader.vue';
 import { useSessionStore } from '../../../stores/session';
 import { controlPlane, type AdminAuditDetail } from '../../../services/controlPlane';
-import { controlPlaneAvailable } from '../../../services/frontendMode';
+import { auditApiReady } from '../../../services/frontendMode';
 import { errorText, formatDate, usePortalTask } from '../../portalUtils';
 import AuditDecryptDialog from './AuditDecryptDialog.vue';
 const route = useRoute();
 const router = useRouter();
 const session = useSessionStore();
+/** 审计详情/解密后端已实现；预览模式继续用合成数据。 */
+const auditReady = auditApiReady;
 const requestId = computed(() => String(route.params.requestId ?? ''));
 const item = ref<AdminAuditDetail | null>(null);
 const error = ref('');
@@ -28,7 +30,7 @@ async function load(): Promise<void> {
   item.value = null;
   decrypt.value = false;
   error.value = '';
-  if (!controlPlaneAvailable) return;
+  if (!auditReady) return;
   loading.value = true;
   try {
     const result = await task.run((signal) => controlPlane.audit.get(requestId.value, signal));
@@ -55,17 +57,11 @@ watch(requestId, () => void load(), { immediate: true, flush: 'sync' });
     <PageHeader title="审计详情" description="调用上下文、脱敏请求、资源版本与持久结局。"
       ><template #actions
         ><ElButton @click="router.push('/admin/audit')">返回审计</ElButton
-        ><ElButton v-if="session.can('ptmcp:audit:decrypt')" type="danger" plain :disabled="!item || !controlPlaneAvailable" @click="decrypt = true"
+        ><ElButton v-if="session.can('ptmcp:audit:decrypt')" type="danger" plain :disabled="!item || !auditReady" @click="decrypt = true"
           >申请查看原始 SQL</ElButton
         ></template
       ></PageHeader
     >
-    <ElAlert
-      v-if="!controlPlaneAvailable"
-      type="warning"
-      :closable="false"
-      title="审计接口待接入，正常模式不读取或解密。独立开发预览仅展示合成记录。"
-    />
     <ElAlert v-if="error" type="error" :title="error" :closable="false"><ElButton @click="load">重新读取</ElButton></ElAlert>
     <ElSkeleton v-if="loading" :rows="9" animated />
     <template v-else-if="item">

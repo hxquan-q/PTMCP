@@ -17,9 +17,9 @@ import {
 } from 'element-plus';
 import PageHeader from '../../../components/common/PageHeader.vue';
 import PageState from '../../../components/common/PageState.vue';
-import { localOnlyReason, validateDateRange } from '../integrations/adminSurface';
+import { validateDateRange } from '../integrations/adminSurface';
 import { controlPlane, type Platform } from '../../../services/controlPlane';
-import { controlPlaneAvailable } from '../../../services/frontendMode';
+import { auditApiReady } from '../../../services/frontendMode';
 import { listDatasources, type DatasourceRead } from '../../../services/data';
 import { useCursorPage } from '../../../composables/useCursorPage';
 import { errorText, formatDate, usePortalTask } from '../../portalUtils';
@@ -31,6 +31,8 @@ const to = ref<Date | null>(new Date());
 const validation = ref('');
 const router = useRouter();
 const session = useSessionStore();
+/** 审计列表/详情/解密后端已实现（T17-api 切片）；预览模式继续用合成数据。 */
+const auditReady = auditApiReady;
 const platforms = ref<Platform[]>([]);
 const sources = ref<DatasourceRead[]>([]);
 const directoryError = ref('');
@@ -43,7 +45,7 @@ const { rows, cursor, loading, error, loaded, reset, load, retry } = useCursorPa
 );
 async function query(): Promise<void> {
   validateFilters();
-  if (!from.value || !to.value || dateRange.value || !controlPlaneAvailable) return;
+  if (!from.value || !to.value || dateRange.value || !auditReady) return;
   await load();
 }
 async function loadDirectories(): Promise<void> {
@@ -69,7 +71,7 @@ watch(
   { flush: 'sync' },
 );
 onMounted(() => {
-  if (controlPlaneAvailable) {
+  if (auditReady) {
     void query();
     void loadDirectories();
   }
@@ -100,14 +102,6 @@ function clearFilters(): void {
 <template>
   <div class="admin-page">
     <PageHeader title="全局审计" description="按时间、员工、平台和结果追踪工具调用；默认只展示脱敏摘要和可见版本。" />
-    <ElAlert
-      v-if="!controlPlaneAvailable"
-      type="warning"
-      show-icon
-      :closable="false"
-      title="全局审计接口待接入"
-      :description="localOnlyReason('全局审计')"
-    />
     <ElAlert v-if="directoryError" type="error" :closable="false" :title="directoryError"
       ><ElButton @click="loadDirectories">重试加载选项</ElButton></ElAlert
     >
@@ -127,11 +121,11 @@ function clearFilters(): void {
           /></ElFormItem>
           <ElFormItem label="员工"><ElInput v-model="filters.userId" clearable placeholder="按员工 ID 筛选" /></ElFormItem>
           <ElFormItem label="平台"
-            ><ElSelect v-model="filters.platformId" :disabled="!controlPlaneAvailable || !!directoryError" clearable placeholder="全部可见平台"
+            ><ElSelect v-model="filters.platformId" :disabled="!auditReady || !!directoryError" clearable placeholder="全部可见平台"
               ><ElOption v-for="row in platforms" :key="row.id" :value="row.id" :label="row.name" /></ElSelect
           ></ElFormItem>
           <ElFormItem label="数据源"
-            ><ElSelect v-model="filters.datasourceId" :disabled="!controlPlaneAvailable || !!directoryError" clearable placeholder="全部可见数据源"
+            ><ElSelect v-model="filters.datasourceId" :disabled="!auditReady || !!directoryError" clearable placeholder="全部可见数据源"
               ><ElOption v-for="row in sources" :key="row.id" :value="row.id" :label="row.name" /></ElSelect
           ></ElFormItem>
           <ElFormItem label="工具"><ElInput v-model="filters.tool" clearable placeholder="工具名称" /></ElFormItem>
@@ -152,7 +146,7 @@ function clearFilters(): void {
       <div class="filter-actions">
         <span v-if="validation" class="validation-message" role="status">{{ validation }}</span
         ><ElButton @click="clearFilters">清空</ElButton><ElButton @click="validateFilters">校验筛选</ElButton
-        ><ElButton type="primary" :disabled="!controlPlaneAvailable || !!dateRange" :loading="loading" @click="query">查询审计</ElButton>
+        ><ElButton type="primary" :disabled="!auditReady || !!dateRange" :loading="loading" @click="query">查询审计</ElButton>
       </div>
     </ElCard>
     <ElCard class="table-card" shadow="never">
@@ -161,7 +155,7 @@ function clearFilters(): void {
           <h2>调用记录</h2>
           <p>列表应由服务端按审计范围过滤后返回；前端不先拉全量再筛选。</p>
         </div>
-        <ElTag type="info" effect="plain">{{ controlPlaneAvailable ? '开发预览' : '未连接' }}</ElTag>
+        <ElTag type="info" effect="plain">{{ auditReady ? '已接入' : '未连接' }}</ElTag>
       </div>
       <ElAlert v-if="error" :title="error" type="error" :closable="false"><ElButton @click="retry">重试</ElButton></ElAlert>
       <ElSkeleton v-if="loading && !rows.length" :rows="6" animated />

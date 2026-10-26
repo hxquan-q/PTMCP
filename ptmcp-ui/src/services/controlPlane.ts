@@ -1,6 +1,14 @@
 import { request, type RequestOptions } from './http';
 import { newUuid } from './uuid';
-import { clientApiReady, controlPlaneAvailable, delegationApiReady, effectiveApiReady, platformApiReady, scopeApiReady } from './frontendMode';
+import {
+  auditApiReady,
+  clientApiReady,
+  controlPlaneAvailable,
+  delegationApiReady,
+  effectiveApiReady,
+  platformApiReady,
+  scopeApiReady,
+} from './frontendMode';
 import type { AuditDetail, AuditSummary } from './mePortalApi';
 
 export interface Page<T> {
@@ -100,6 +108,8 @@ const platformReady = platformApiReady || controlPlaneAvailable;
 const scopeReady = scopeApiReady || controlPlaneAvailable;
 /** 客户端管理已实现；secret 只在创建响应出现一次。 */
 const clientReady = clientApiReady || controlPlaneAvailable;
+/** 审计列表/详情/解密已实现；解密需 reason 并单独落敏感访问审计。 */
+const auditReady = auditApiReady || controlPlaneAvailable;
 export const controlPlane = {
   effective: (filters: Record<string, string | undefined>, signal?: AbortSignal) =>
     controlRequest<
@@ -156,9 +166,9 @@ export const controlPlane = {
   },
   audit: {
     list: (filters: Record<string, string | undefined>, signal?: AbortSignal) =>
-      controlRequest<Page<AdminAuditSummary>>(`/audit${queryString(filters)}`, { signal }),
-    get: (id: string, signal?: AbortSignal) => controlRequest<AdminAuditDetail>(`/audit/${encodeURIComponent(id)}`, { signal }),
+      controlRequest<Page<AdminAuditSummary>>(`/audit${queryString(filters)}`, { signal }, auditReady),
+    get: (id: string, signal?: AbortSignal) => controlRequest<AdminAuditDetail>(`/audit/${encodeURIComponent(id)}`, { signal }, auditReady),
     decrypt: (id: string, reason: string, fields: string[], signal?: AbortSignal) =>
-      controlRequest<DecryptedAudit>(`/audit/${encodeURIComponent(id)}/decrypt`, { ...create({ reason, fields }), signal }),
+      controlRequest<DecryptedAudit>(`/audit/${encodeURIComponent(id)}/decrypt`, { ...create({ reason, fields }), signal }, auditReady),
   },
 };

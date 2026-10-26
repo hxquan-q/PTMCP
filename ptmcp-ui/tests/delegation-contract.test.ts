@@ -97,8 +97,7 @@ test('normal mode: delegation domain reaches the network while unimplemented dom
     (error) => !(error instanceof Error) || !error.message.includes('尚未接入'),
   );
 
-  // Unimplemented domains keep the explicit gate in normal mode.
-  // The implemented platform CRUD, scopes and clients also reach the network in normal mode.
+  // The implemented platform CRUD, scopes, clients and audit also reach the network.
   await assert.rejects(
     () => controlPlane.clients.list('1', {}),
     (error) => !(error instanceof Error) || !error.message.includes('尚未接入'),
@@ -111,4 +110,21 @@ test('normal mode: delegation domain reaches the network while unimplemented dom
     () => controlPlane.platforms.list({}),
     (error) => !(error instanceof Error) || !error.message.includes('尚未接入'),
   );
+  await assert.rejects(
+    () => controlPlane.audit.list({}),
+    (error) => !(error instanceof Error) || !error.message.includes('尚未接入'),
+  );
+  const paths = calls.map((call) => call.path);
+  for (const expected of [
+    '/api/v1/admin/delegations',
+    '/api/v1/admin/acl/effective',
+    '/api/v1/admin/platforms/1/clients',
+    '/api/v1/admin/platforms/1/scopes',
+    '/api/v1/admin/platforms',
+    '/api/v1/admin/audit',
+  ]) {
+    if (!paths.some((path) => path.startsWith(expected))) {
+      throw new Error(`expected a real call to ${expected}`);
+    }
+  }
 });

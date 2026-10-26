@@ -3,7 +3,9 @@ package local.ptmcp.admin.api;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
+import local.ptmcp.admin.audit.AuditDecryptService;
 import local.ptmcp.admin.audit.AuditQueryService;
+import local.ptmcp.admin.datasource.AuditCipher;
 import local.ptmcp.admin.datasource.CredentialCipher;
 import local.ptmcp.admin.datasource.DatasourceAdminService;
 import local.ptmcp.admin.datasource.DatasourceConnectionFactory;
@@ -93,6 +95,16 @@ public class AdminStoresConfiguration {
     @Bean
     public AuditQueryService auditQueryService(DataSource dataSource) {
         return new AuditQueryService(dataSource);
+    }
+
+    @Bean
+    public AuditCipher auditCipher(@Value("${ptmcp.admin.audit-key:}") String key) {
+        return new AuditCipher(key);
+    }
+
+    @Bean
+    public AuditDecryptService auditDecryptService(DataSource dataSource, AuditCipher cipher) {
+        return new AuditDecryptService(dataSource, cipher);
     }
 
     @Bean
