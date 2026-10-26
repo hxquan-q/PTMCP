@@ -83,6 +83,15 @@ S1–S6 全部完成，controlPlane 六域（delegations/effective/platforms/sco
 UI 打磨批次一（b3a781f）：委派状态彩色标签（生效中/已到期/已撤销，对齐数据源页视觉）、
 Scope 差异确认框分条 diff（新增/修改/删除逐条列出）、审计解密倒计时 aria-live、
 EffectiveAccessPane 空态解释+原因码图例、平台 proof 留空占位统一。U2 客户端 secret 一次性
-弹窗已有 OnceSecretDialog 实现无需改动。视觉走查（窄屏/键盘）待浏览器批次统一记录。待办移交 .auto/ideas.md：gateway
+弹窗已有 OnceSecretDialog 实现无需改动。
+
+浏览器端到端走查（f8d7966）：Dev-Linux 真实栈（MySQL:13306 + 迁移 V1–V7 + admin/authz +
+5173），Playwright 登录走查。抓到并修复 3 个真实缺陷：①ClientConfigurationForm 残留
+controlPlaneAvailable 门禁（保存按钮真实模式永禁用，S5 漏网）②委派目录对未同步数据源的
+SCHEMA_STALE 503 整页报错（改单源软失败，数据源节点仍可委派）③平台对话框过时「本地预览」
+标题。复验链路全通：登录→委派列表/EXPIRED 筛选/新建对话框（管理员下拉排除自己）→平台创建
+跳详情→客户端 CONFIDENTIAL 创建→secret 一次性弹窗→MySQL 确认 {bcrypt}+32B hash、
+PUBLIC 无 secret；390px 委派页无横向溢出。截图 .playwright-mcp/e2e-*.png。预期网络噪音
+（登录前 401、软失败 503）与非缺陷记录分离。走查脚本 /tmp/e2e-walk*.py（会话级，不入库）。待办移交 .auto/ideas.md：gateway
 密文写入、委派作用域执行（T16）、org POST 幂等接线、MySQL 8.4 复验、浏览器端到端走查、
 UI 打磨切片池。
