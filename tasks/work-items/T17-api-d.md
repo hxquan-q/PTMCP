@@ -178,3 +178,9 @@ PAT 撤销生命周期 E2E（走查记录）：受控管理员 PAT 撤销前查�
 action/aggregateType/actorId 筛选）——S1-S9 七切片写入的 admin_operation_log（委派/平台/
 客户端/密码重置）自此可读，管理操作审计复核闭环。nextCursor 仅溢出页返回。UI 操作日志页
 为下一切片。
+
+管理操作日志 UI 页（c44e327）：路由 /admin/operations+导航「操作日志」（安全与追踪组，
+ptmcp:audit:list 门禁）+controlPlane.audit.operations+OperationsView（列表/三筛选/展开
+payload 明细）。浏览器走查：17 行真实轨迹（密码重置/客户端/平台/委派）、聚合筛选、明细
+展开全通。教训：Dev-Linux build 后 start 不重编译 spring-boot:run 类路径（operations
+端点曾 404）——改后端必须完整 build+start。
