@@ -125,6 +125,12 @@ class McpGatewayConfiguration {
         return new CredentialCipher(properties.credentialKey());
     }
 
+    /** Disabled unless ptmcp.gateway.audit-key is set; terminals keep null ciphers then. */
+    @Bean
+    AuditSealer auditSealer(GatewayProperties properties) {
+        return new AuditSealer(properties.auditKey());
+    }
+
     @Bean
     DestinationPolicy destinationPolicy(GatewayProperties properties) {
         return new DestinationPolicy(properties.allowedCidrs());
@@ -181,6 +187,7 @@ class McpGatewayConfiguration {
             QuotaLimiter quotaLimiter,
             BoundedParser parser,
             McpAuthentication authentication,
+            AuditSealer auditSealer,
             ObjectProvider<TerminalWal> terminalWal) {
         return new McpToolService(
                 security,
@@ -194,7 +201,8 @@ class McpGatewayConfiguration {
                 pgAdapter,
                 quotaLimiter,
                 parser,
-                authentication);
+                authentication,
+                auditSealer);
     }
 
     @Bean

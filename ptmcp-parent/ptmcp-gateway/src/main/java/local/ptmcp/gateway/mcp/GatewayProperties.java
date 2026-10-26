@@ -24,6 +24,7 @@ public record GatewayProperties(
         String pgSslRootCert,
         String walDirectory,
         String walKey,
+        String auditKey,
         String issuer,
         String resource,
         String jwksUri,
@@ -40,6 +41,7 @@ public record GatewayProperties(
         pgSslRootCert = orEmpty(pgSslRootCert);
         walDirectory = orEmpty(walDirectory);
         walKey = orEmpty(walKey);
+        auditKey = orEmpty(auditKey);
         issuer = orEmpty(issuer);
         resource = orEmpty(resource);
         jwksUri = orEmpty(jwksUri);

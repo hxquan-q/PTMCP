@@ -80,6 +80,7 @@ final class McpToolService {
     private final AuthorizationReader authorization;
     private final ToolPermissionService permissions;
     private final CredentialCipher cipher;
+    private final AuditSealer auditSealer;
     private final DataSourcePoolRegistry pools;
     private final ApprovedQueryAdapter adapter;
     private final PgApprovedQueryAdapter pgAdapter;
@@ -99,7 +100,8 @@ final class McpToolService {
             PgApprovedQueryAdapter pgAdapter,
             QuotaLimiter quotas,
             BoundedParser parser,
-            McpAuthentication authentication) {
+            McpAuthentication authentication,
+            AuditSealer auditSealer) {
         this.security = Objects.requireNonNull(security, "security");
         this.audit = new McpAuditWriter(auditRepository, terminalWal);
         this.snapshots = Objects.requireNonNull(snapshots, "snapshots");
@@ -112,6 +114,7 @@ final class McpToolService {
         this.quotas = Objects.requireNonNull(quotas, "quotas");
         this.parser = Objects.requireNonNull(parser, "parser");
         this.authentication = Objects.requireNonNull(authentication, "authentication");
+        this.auditSealer = Objects.requireNonNull(auditSealer, "auditSealer");
     }
 
     /** One handled JSON-RPC HTTP exchange; {@code body} is the exact response payload. */
@@ -320,15 +323,14 @@ final class McpToolService {
                     identity,
                     datasourceId,
                     startedAt,
-                    AuditTerminal.Result.SUCCESS,
-                    AuditTerminal.Verdict.ALLOW,
-                    null,
                     durationMs,
                     queueMs,
                     success.rowsReturned(),
                     success.truncated(),
                     approved.sqlHash(),
-                    "execute_readonly_sql");
+                    "execute_readonly_sql",
+                    sql,
+                    approved.finalSql());
             return envelope(id, callToolResult(false, success.structured()));
         } catch (DomainException failure) {
             if (failure.errorCode() == ErrorCode.AUDIT_UNAVAILABLE) {
@@ -927,6 +929,47 @@ final class McpToolService {
                         sqlFingerprint,
                         null,
                         null,
+                        tool,
+                        identity.userId(),
+                        identity.platformId(),
+                        datasourceId,
+                        startedAt));
+    }
+
+    /** Success path with the audit SQL sealed for the console's reason-gated reveal. */
+    private void terminal(
+            UUID requestId,
+            McpIdentity identity,
+            Long datasourceId,
+            Instant startedAt,
+            Integer durationMs,
+            Integer queueMs,
+            Integer rowsReturned,
+            boolean truncated,
+            byte[] sqlFingerprint,
+            String tool,
+            String rawSql,
+            String finalSql) {
+        byte[] sealed = null;
+        String keyId = null;
+        if (auditSealer.enabled() && rawSql != null && !rawSql.isBlank()) {
+            sealed = auditSealer.seal(rawSql);
+            keyId = auditSealer.keyId();
+        }
+        audit.terminal(
+                new AuditTerminal(
+                        requestId,
+                        AuditTerminal.Result.SUCCESS,
+                        AuditTerminal.Verdict.ALLOW,
+                        null,
+                        durationMs == null ? null : durationMs.longValue(),
+                        queueMs,
+                        rowsReturned,
+                        truncated,
+                        null,
+                        sqlFingerprint,
+                        sealed,
+                        keyId,
                         tool,
                         identity.userId(),
                         identity.platformId(),

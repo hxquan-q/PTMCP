@@ -169,6 +169,10 @@ ensure_env() {
         if [ -z "${PTMCP_ADMIN_AUDITKEY:-}" ]; then
             printf "PTMCP_ADMIN_AUDITKEY='%s'\n" "$(openssl rand -base64 32 | tr -d '\n')" >>"$ENV_FILE"
         fi
+        # The gateway audit key pairs with the admin one (same secret per deployment).
+        if [ -z "${PTMCP_GATEWAY_AUDITKEY:-}" ] && [ -n "${PTMCP_ADMIN_AUDITKEY:-}" ]; then
+            printf "PTMCP_GATEWAY_AUDITKEY='%s'\n" "${PTMCP_ADMIN_AUDITKEY}" >>"$ENV_FILE"
+        fi
         if [ -z "${PTMCP_ADMIN_IDENTITY_DATASOURCE_URL:-}" ]; then
             {
                 printf "PTMCP_ADMIN_IDENTITY_DATASOURCE_URL='%s'\n" "${PTMCP_ADMIN_DATASOURCE_URL}"
@@ -226,6 +230,7 @@ PTMCP_GATEWAY_CREDENTIALKEY='$gateway_key'
 PTMCP_GATEWAY_ALLOWEDCIDRS='127.0.0.1/32,::1/128'
 PTMCP_GATEWAY_WALDIRECTORY='$LOCAL_DIR/wal'
 PTMCP_GATEWAY_WALKEY='$wal_key'
+PTMCP_GATEWAY_AUDITKEY='$audit_key'
 PTMCP_GATEWAY_ISSUER='http://127.0.0.1:8081'
 PTMCP_GATEWAY_RESOURCE='ptmcp-mcp'
 PTMCP_GATEWAY_JWKSURI='http://127.0.0.1:8081/oauth2/jwks'
