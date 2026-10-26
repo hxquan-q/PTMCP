@@ -59,7 +59,12 @@ security_version 作 If-Match 乐观锁、Tier1 必须逐调用证明、code 不
 提交 79e6af3。注意：platform_registry 无 version 列；readLong 不解析带引号数字（新
 readQuotedLong）；调试 printStackTrace 用后即删。
 
-下一步：S4 平台 Scope（GET/PUT /platforms/{id}/scopes，保存 scope_version+1，
-ScopeConfigurationPane 解禁）、S5 客户端一次性 secret（POST /platforms/{id}/clients、
-PUT/DELETE /clients/{id}，hash 存储、创建响应明文一次）、S6 审计解密。
-域级就绪标志模式（`*ApiReady`）在后续切片复用。
+S4 已完成：平台 Scope（GET/PUT /platforms/{id}/scopes 整组替换、scope_version+security_version
+双自增、If-Match 对 security_version、资源 generation 校验、OBJECT descendants 归一化），
+前端 ScopeConfigurationPane 解禁，提交 1831220。注意：MySQL JSON 列读回带空格规范化；
+jsonPathCursor 只适用 nextCursor（误用曾致 If-Match 怪值）。
+
+下一步：S5 客户端（POST /platforms/{id}/clients、PUT/DELETE /clients/{id}，secret 只存
+client_secret_hash、创建响应明文一次，ClientConfigurationForm 解禁）、S6 审计解密
+（POST /audit/{id}/decrypt，reason 必填 + audit_sensitive_access 落库，密钥与 gateway
+wal-key 同源——先核对 McpGatewayConfiguration 的 WalKeyProvider 与加密格式）。
