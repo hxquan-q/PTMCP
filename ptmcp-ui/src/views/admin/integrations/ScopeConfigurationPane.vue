@@ -3,11 +3,13 @@ import { computed, ref, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { controlPlane, type ScopeRule, type ScopeRead } from '../../../services/controlPlane';
 import { listDatasources, listMetadata, type DatasourceRead } from '../../../services/data';
-import { controlPlaneAvailable, mutationNotice } from '../../../services/frontendMode';
+import { mutationNotice, scopeApiReady } from '../../../services/frontendMode';
 import { useSessionStore } from '../../../stores/session';
 import { errorText, isConflict, usePortalTask } from '../../portalUtils';
 const props = withDefaults(defineProps<{ platformId?: string }>(), { platformId: '' });
 const session = useSessionStore();
+/** 平台 Scope 后端已实现（T17-api 切片）；预览模式继续用合成数据。 */
+const scopeReady = scopeApiReady;
 const current = ref<ScopeRead | null>(null);
 const draft = ref<ScopeRule[]>([]);
 const sources = ref<DatasourceRead[]>([]);
@@ -43,7 +45,7 @@ const changes = computed(() => {
 });
 const dirty = computed(() => Object.values(changes.value).some((items) => items.length));
 async function load(keepDraft = false): Promise<void> {
-  if (!controlPlaneAvailable) return;
+  if (!scopeReady) return;
   loading.value = true;
   error.value = '';
   try {
@@ -138,7 +140,7 @@ async function save(): Promise<void> {
   }
 }
 onMounted(() => {
-  if (controlPlaneAvailable) {
+  if (scopeReady) {
     void load();
     void loadSources();
   }
@@ -148,15 +150,9 @@ onMounted(() => {
   <section aria-labelledby="scope-title">
     <div class="section-heading">
       <h2 id="scope-title">平台资源范围</h2>
-      <ElButton :disabled="!controlPlaneAvailable || saving" @click="load()">重新读取</ElButton>
+      <ElButton :disabled="!scopeReady || saving" @click="load()">重新读取</ElButton>
     </div>
     <p class="helper">范围与用户有效权限取交集。DISCOVER 不开放列结构，META DENY 优先；空 Scope 不可读库。</p>
-    <ElAlert
-      v-if="!controlPlaneAvailable"
-      type="warning"
-      :closable="false"
-      title="Scope 接口待接入，正常模式禁止提交。可在独立前端开发预览中检查完整流程。"
-    />
     <ElAlert v-if="error" type="error" :title="error" :closable="false" />
     <ElAlert v-if="conflict" type="warning" title="版本冲突，草稿已保留。可重新读取并明确将草稿合并至新版本。" :closable="false"
       ><ElButton @click="load(true)">保留草稿，采用新版本</ElButton><ElButton @click="load()">放弃草稿，重新读取</ElButton></ElAlert
@@ -164,7 +160,7 @@ onMounted(() => {
     <ElSkeleton v-if="loading" :rows="4" animated />
     <ElForm v-else label-position="top" class="scope-form" @submit.prevent="add">
       <ElFormItem label="数据源"
-        ><ElSelect v-model="sourceId" :disabled="!controlPlaneAvailable || saving" placeholder="选择数据源" @change="loadObjects()"
+        ><ElSelect v-model="sourceId" :disabled="!scopeReady || saving" placeholder="选择数据源" @change="loadObjects()"
           ><ElOption v-for="source in sources" :key="source.id" :value="source.id" :label="source.name" /></ElSelect
         ><ElButton v-if="sourceCursor" link @click="loadSources(true)">更多数据源</ElButton></ElFormItem
       >
@@ -213,7 +209,7 @@ onMounted(() => {
         v-if="session.can('ptmcp:platform:scope')"
         type="primary"
         :loading="saving"
-        :disabled="!controlPlaneAvailable || !current || !dirty || conflict"
+        :disabled="!scopeReady || !current || !dirty || conflict"
         @click="save"
         >保存 Scope</ElButton
       >

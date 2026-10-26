@@ -1304,6 +1304,116 @@ class AdminApiTest {
         }
     }
 
+    @Test
+    void platformScopeFullSetReplacementIsOptimisticAndLogged() throws Exception {
+        long platformId = insertPlatform("p-scope");
+        long datasourceId = insertActiveDatasource();
+        long namespaceId = insertActiveNamespace(datasourceId);
+        long objectId = insertActiveObject(namespaceId, "orders");
+
+        // Empty at first; the read carries the scope and security versions.
+        MvcResult initial =
+                mockMvc.perform(
+                                get("/api/v1/admin/platforms/" + platformId + "/scopes")
+                                        .header("X-Test-User-Id", ADMIN_ID)
+                                        .header("X-Test-Platform-Admin", "true"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.items.length()").value(0))
+                        .andExpect(jsonPath("$.scopeVersion").value("1"))
+                        .andExpect(jsonPath("$.version").value("1"))
+                        .andReturn();
+        String version =
+                String.valueOf(
+                        readQuotedLong(initial.getResponse().getContentAsString(), "version"));
+
+        // Unknown targets are rejected before any write.
+        mockMvc.perform(
+                        put("/api/v1/admin/platforms/" + platformId + "/scopes")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", version)
+                                .contentType("application/json")
+                                .content(
+                                        "{\"items\":[{\"resourceType\":\"DATASOURCE\","
+                                                + "\"resourceId\":987654,\"resourceGeneration\":1,"
+                                                + "\"action\":\"META\",\"includeDescendants\":true}]}"))
+                .andExpect(
+                        result -> {
+                            if (result.getResponse().getStatus() != 404) {
+                                System.out.println(
+                                        "SCOPE-DEBUG: "
+                                                + result.getResponse().getContentAsString());
+                            }
+                        })
+                .andExpect(status().isNotFound());
+
+        MvcResult saved =
+                mockMvc.perform(
+                                put("/api/v1/admin/platforms/" + platformId + "/scopes")
+                                        .header("X-Test-User-Id", ADMIN_ID)
+                                        .header("X-Test-Platform-Admin", "true")
+                                        .header("If-Match", version)
+                                        .contentType("application/json")
+                                        .content(
+                                                "{\"items\":["
+                                                        + "{\"resourceType\":\"DATASOURCE\",\"resourceId\":"
+                                                        + datasourceId
+                                                        + ",\"resourceGeneration\":1,\"action\":\"META\","
+                                                        + "\"includeDescendants\":true},"
+                                                        + "{\"resourceType\":\"OBJECT\",\"resourceId\":"
+                                                        + objectId
+                                                        + ",\"resourceGeneration\":1,\"action\":\"READ\","
+                                                        + "\"includeDescendants\":true}]}"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.items.length()").value(2))
+                        .andExpect(jsonPath("$.scopeVersion").value("2"))
+                        .andExpect(jsonPath("$.version").value("2"))
+                        // OBJECT rows normalize the descendants flag away.
+                        .andExpect(jsonPath("$.items[1].includeDescendants").value(false))
+                        .andReturn();
+
+        // A stale If-Match cannot replace the set again.
+        mockMvc.perform(
+                        put("/api/v1/admin/platforms/" + platformId + "/scopes")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", version)
+                                .contentType("application/json")
+                                .content("{\"items\":[]}"))
+                .andExpect(status().isConflict());
+
+        // Full replacement really is full: an empty set with the fresh version wipes the scope.
+        String newVersion =
+                String.valueOf(readQuotedLong(saved.getResponse().getContentAsString(), "version"));
+        mockMvc.perform(
+                        put("/api/v1/admin/platforms/" + platformId + "/scopes")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", newVersion)
+                                .contentType("application/json")
+                                .content("{\"items\":[]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(0))
+                .andExpect(jsonPath("$.scopeVersion").value("3"));
+
+        try (Connection connection = connect();
+                PreparedStatement log =
+                        connection.prepareStatement(
+                                "SELECT action, after_masked FROM admin_operation_log"
+                                        + " WHERE aggregate_type = 'PLATFORM' AND aggregate_id = ?"
+                                        + " AND action = 'PLATFORM_SCOPE_SAVE' ORDER BY id")) {
+            log.setLong(1, platformId);
+            try (ResultSet result = log.executeQuery()) {
+                assertTrue(result.next());
+                assertEquals("PLATFORM_SCOPE_SAVE", result.getString(1));
+                String after = result.getString(2);
+                // MySQL normalizes JSON on storage (spacing), so assert on values only.
+                assertTrue(after.contains("DATASOURCE"));
+                assertTrue(after.contains("OBJECT"));
+            }
+        }
+    }
+
     private long insertActiveNamespace(long datasourceId) throws Exception {
         try (Connection connection = connect();
                 Statement statement = connection.createStatement()) {

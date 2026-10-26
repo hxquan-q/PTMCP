@@ -9,6 +9,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -245,6 +247,235 @@ public final class PlatformAdminService {
         } catch (SQLException error) {
             throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
+    }
+
+    // ---- platform scope ----------------------------------------------------
+
+    public record ScopeRule(
+            String resourceType,
+            Long resourceId,
+            Long resourceGeneration,
+            String action,
+            Boolean includeDescendants) {}
+
+    public record ScopeRead(List<ScopeRuleView> items, String scopeVersion, String version) {}
+
+    public record ScopeRuleView(
+            String resourceType,
+            String resourceId,
+            String resourceGeneration,
+            String action,
+            boolean includeDescendants) {}
+
+    /** The whole platform scope in one read; scope edits always replace the full set. */
+    public ScopeRead getScope(long platformId) {
+        try (Connection connection = tx()) {
+            try {
+                Current current = current(connection, platformId);
+                List<ScopeRuleView> items = readScope(connection, platformId);
+                connection.rollback();
+                return new ScopeRead(
+                        items,
+                        Long.toString(current.scopeVersion()),
+                        Long.toString(current.version()));
+            } catch (SQLException | RuntimeException failure) {
+                connection.rollback();
+                throw failure;
+            } finally {
+                connection.setAutoCommit(true);
+            }
+        } catch (SQLException error) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+    }
+
+    /** Replaces the full scope set optimistically and bumps scope + security versions. */
+    public ScopeRead saveScope(
+            long platformId,
+            long expectedVersion,
+            List<ScopeRule> rules,
+            long actorId,
+            String requestId) {
+        requireActor(actorId);
+        if (expectedVersion <= 0) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
+        if (rules == null || rules.size() > 100) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
+        List<NormalizedRule> normalized = new ArrayList<>();
+        for (ScopeRule rule : rules) {
+            normalized.add(normalizeRule(rule));
+        }
+        try (Connection connection = tx()) {
+            try {
+                Current current = current(connection, platformId);
+                List<ScopeRuleView> before = readScope(connection, platformId);
+                for (NormalizedRule rule : normalized) {
+                    requireScopeTargetExists(connection, rule);
+                }
+                try (PreparedStatement delete =
+                        statement(connection, "DELETE FROM platform_scope WHERE platform_id = ?")) {
+                    delete.setLong(1, platformId);
+                    delete.executeUpdate();
+                }
+                try (PreparedStatement insert =
+                        statement(
+                                connection,
+                                "INSERT INTO platform_scope (platform_id, resource_type, resource_id,"
+                                        + " resource_generation, action, include_descendants, create_time,"
+                                        + " update_time, created_by, updated_by)"
+                                        + " VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), ?, ?)")) {
+                    for (NormalizedRule rule : normalized) {
+                        insert.setLong(1, platformId);
+                        insert.setString(2, rule.resourceType());
+                        insert.setLong(3, rule.resourceId());
+                        insert.setLong(4, rule.generation());
+                        insert.setString(5, rule.action());
+                        insert.setInt(6, rule.includeDescendants() ? 1 : 0);
+                        insert.setLong(7, actorId);
+                        insert.setLong(8, actorId);
+                        insert.executeUpdate();
+                    }
+                }
+                int updated;
+                try (PreparedStatement statement =
+                        statement(
+                                connection,
+                                "UPDATE platform_registry SET scope_version = scope_version + 1,"
+                                        + " security_version = security_version + 1,"
+                                        + " update_time = UTC_TIMESTAMP(6), updated_by = ?"
+                                        + " WHERE id = ? AND security_version = ? AND status <> 'DELETED'")) {
+                    statement.setLong(1, actorId);
+                    statement.setLong(2, platformId);
+                    statement.setLong(3, expectedVersion);
+                    updated = statement.executeUpdate();
+                }
+                if (updated != 1) {
+                    throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                }
+                log(
+                        connection,
+                        actorId,
+                        requestId,
+                        "PLATFORM_SCOPE_SAVE",
+                        platformId,
+                        scopeSummary(before),
+                        scopeSummary(readScope(connection, platformId)));
+                connection.commit();
+                return getScope(platformId);
+            } catch (SQLException | RuntimeException failure) {
+                connection.rollback();
+                throw failure;
+            } finally {
+                connection.setAutoCommit(true);
+            }
+        } catch (SQLException error) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+    }
+
+    private record NormalizedRule(
+            String resourceType,
+            long resourceId,
+            long generation,
+            String action,
+            boolean includeDescendants) {}
+
+    private NormalizedRule normalizeRule(ScopeRule rule) {
+        if (rule == null
+                || rule.resourceType() == null
+                || !Set.of("DATASOURCE", "NAMESPACE", "OBJECT").contains(rule.resourceType())
+                || rule.resourceId() == null
+                || rule.resourceId() <= 0
+                || rule.resourceGeneration() == null
+                || rule.resourceGeneration() <= 0
+                || rule.action() == null
+                || !Set.of("META", "READ").contains(rule.action())
+                || rule.includeDescendants() == null) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
+        // OBJECT rows are leaves; a descendants flag on them is meaningless noise.
+        boolean descendants = !"OBJECT".equals(rule.resourceType()) && rule.includeDescendants();
+        return new NormalizedRule(
+                rule.resourceType(),
+                rule.resourceId(),
+                rule.resourceGeneration(),
+                rule.action(),
+                descendants);
+    }
+
+    private void requireScopeTargetExists(Connection connection, NormalizedRule rule)
+            throws SQLException {
+        String sql =
+                switch (rule.resourceType()) {
+                    case "DATASOURCE" ->
+                            "SELECT 1 FROM datasource WHERE id = ? AND status = 'ACTIVE'";
+                    case "NAMESPACE" ->
+                            "SELECT 1 FROM resource_namespace WHERE id = ? AND generation = ?"
+                                    + " AND status = 'ACTIVE'";
+                    default ->
+                            "SELECT 1 FROM resource_object WHERE id = ? AND generation = ?"
+                                    + " AND status = 'ACTIVE'";
+                };
+        try (PreparedStatement statement = statement(connection, sql)) {
+            statement.setLong(1, rule.resourceId());
+            if (!"DATASOURCE".equals(rule.resourceType())) {
+                statement.setLong(2, rule.generation());
+            }
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
+                }
+            }
+        }
+    }
+
+    private List<ScopeRuleView> readScope(Connection connection, long platformId)
+            throws SQLException {
+        List<ScopeRuleView> items = new ArrayList<>();
+        try (PreparedStatement statement =
+                statement(
+                        connection,
+                        "SELECT resource_type, resource_id, resource_generation, action,"
+                                + " include_descendants FROM platform_scope WHERE platform_id = ?"
+                                + " ORDER BY resource_type, resource_id, resource_generation, action")) {
+            statement.setLong(1, platformId);
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    items.add(
+                            new ScopeRuleView(
+                                    result.getString(1),
+                                    Long.toString(result.getLong(2)),
+                                    Long.toString(result.getLong(3)),
+                                    result.getString(4),
+                                    result.getInt(5) == 1));
+                }
+            }
+        }
+        return List.copyOf(items);
+    }
+
+    private static String scopeSummary(List<ScopeRuleView> items) {
+        StringBuilder json = new StringBuilder("{\"items\":[");
+        for (int index = 0; index < items.size(); index++) {
+            ScopeRuleView item = items.get(index);
+            if (index > 0) {
+                json.append(',');
+            }
+            json.append("{\"type\":\"")
+                    .append(item.resourceType())
+                    .append("\",\"id\":")
+                    .append(item.resourceId())
+                    .append(",\"gen\":")
+                    .append(item.resourceGeneration())
+                    .append(",\"action\":\"")
+                    .append(item.action())
+                    .append("\",\"desc\":")
+                    .append(item.includeDescendants())
+                    .append('}');
+        }
+        return json.append("]}").toString();
     }
 
     // ---- validation and proof material -------------------------------------

@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -157,6 +158,60 @@ public class PlatformAdminController {
                 .eTag(IfMatch.etag(Long.parseLong(deleted.version())))
                 .body(deleted);
     }
+
+    /** GET /{id}/scopes: the full scope set plus the version the write is keyed on. */
+    @GetMapping("/{id}/scopes")
+    public PlatformAdminService.ScopeRead getScopes(
+            @PathVariable long id, HttpServletRequest request) {
+        ManagementScope.requirePlatformAdmin(request);
+        return mutations.getScope(id);
+    }
+
+    /** PUT /{id}/scopes: full-set replacement under If-Match; bumps scope + security versions. */
+    @PutMapping("/{id}/scopes")
+    public ResponseEntity<PlatformAdminService.ScopeRead> putScopes(
+            @PathVariable long id,
+            @RequestBody(required = false) byte[] body,
+            HttpServletRequest request) {
+        System.out.println("SCOPE-PUT-DEBUG entered");
+        long expectedVersion = IfMatch.requireVersion(request);
+        System.out.println("SCOPE-PUT-DEBUG version=" + expectedVersion);
+        AdminPrincipal principal = ManagementScope.requirePlatformAdminPrincipal(request);
+        ScopeWrite write = StrictJson.parse(body, ScopeWrite.class);
+        System.out.println(
+                "SCOPE-PUT-DEBUG parsed items="
+                        + (write.items() == null ? -1 : write.items().size()));
+        List<PlatformAdminService.ScopeRule> rules =
+                write.items() == null
+                        ? List.of()
+                        : write.items().stream()
+                                .map(
+                                        item ->
+                                                new PlatformAdminService.ScopeRule(
+                                                        item.resourceType(),
+                                                        item.resourceId(),
+                                                        item.resourceGeneration(),
+                                                        item.action(),
+                                                        item.includeDescendants()))
+                                .toList();
+        PlatformAdminService.ScopeRead saved =
+                mutations.saveScope(
+                        id,
+                        expectedVersion,
+                        rules,
+                        principal.userId(),
+                        UUID.randomUUID().toString());
+        return ResponseEntity.ok().eTag(IfMatch.etag(Long.parseLong(saved.version()))).body(saved);
+    }
+
+    public record ScopeWrite(java.util.List<ScopeItem> items) {}
+
+    public record ScopeItem(
+            String resourceType,
+            Long resourceId,
+            Long resourceGeneration,
+            String action,
+            Boolean includeDescendants) {}
 
     private static PlatformAdminService.Write toServiceWrite(PlatformWrite write) {
         if (write == null) {

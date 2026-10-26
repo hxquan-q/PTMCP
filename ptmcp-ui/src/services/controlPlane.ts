@@ -1,6 +1,6 @@
 import { request, type RequestOptions } from './http';
 import { newUuid } from './uuid';
-import { controlPlaneAvailable, delegationApiReady, effectiveApiReady, platformApiReady } from './frontendMode';
+import { controlPlaneAvailable, delegationApiReady, effectiveApiReady, platformApiReady, scopeApiReady } from './frontendMode';
 import type { AuditDetail, AuditSummary } from './mePortalApi';
 
 export interface Page<T> {
@@ -96,6 +96,8 @@ const delegationReady = delegationApiReady || controlPlaneAvailable;
 const effectiveReady = effectiveApiReady || controlPlaneAvailable;
 /** 平台 CRUD 已实现；平台详情页的客户端/Scope 域仍由 controlPlaneAvailable 控制。 */
 const platformReady = platformApiReady || controlPlaneAvailable;
+/** 平台 Scope 读写已实现，整组替换 + If-Match。 */
+const scopeReady = scopeApiReady || controlPlaneAvailable;
 export const controlPlane = {
   effective: (filters: Record<string, string | undefined>, signal?: AbortSignal) =>
     controlRequest<
@@ -128,9 +130,13 @@ export const controlPlane = {
     remove: (row: Client) => controlRequest(`/clients/${encodeURIComponent(row.id)}`, { method: 'DELETE', headers: versioned(row.version) }),
   },
   scopes: {
-    get: (id: string, signal?: AbortSignal) => controlRequest<ScopeRead>(`/platforms/${encodeURIComponent(id)}/scopes`, { signal }),
+    get: (id: string, signal?: AbortSignal) => controlRequest<ScopeRead>(`/platforms/${encodeURIComponent(id)}/scopes`, { signal }, scopeReady),
     save: (id: string, items: ScopeRule[], version: string) =>
-      controlRequest<ScopeRead>(`/platforms/${encodeURIComponent(id)}/scopes`, { method: 'PUT', body: { items }, headers: versioned(version) }),
+      controlRequest<ScopeRead>(
+        `/platforms/${encodeURIComponent(id)}/scopes`,
+        { method: 'PUT', body: { items }, headers: versioned(version) },
+        scopeReady,
+      ),
   },
   delegations: {
     list: (filters: Record<string, string | undefined>, signal?: AbortSignal) =>

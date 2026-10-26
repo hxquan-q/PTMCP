@@ -11,5 +11,7 @@ export const mutationNotice = frontendPreview ? '演示数据已更新，仅保�
 export const delegationApiReady = true;
 /** GET /api/v1/admin/acl/effective（AclGrantAdminController#effective）。 */
 export const effectiveApiReady = true;
-/** /api/v1/admin/platforms 平台目录与 CRUD（PlatformAdminController）。客户端与 Scope 仍在后端切片中。 */
+/** /api/v1/admin/platforms 平台目录与 CRUD（PlatformAdminController）。客户端仍在后端切片中。 */
 export const platformApiReady = true;
+/** GET/PUT /api/v1/admin/platforms/{id}/scopes（PlatformAdminController#*Scopes）。 */
+export const scopeApiReady = true;
