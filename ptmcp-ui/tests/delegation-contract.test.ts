@@ -114,6 +114,10 @@ test('normal mode: delegation domain reaches the network while unimplemented dom
     () => controlPlane.audit.list({}),
     (error) => !(error instanceof Error) || !error.message.includes('尚未接入'),
   );
+  await assert.rejects(
+    () => controlPlane.audit.sensitiveAccess('req-1'),
+    (error) => !(error instanceof Error) || !error.message.includes('尚未接入'),
+  );
   const paths = calls.map((call) => call.path);
   for (const expected of [
     '/api/v1/admin/delegations',
@@ -122,6 +126,7 @@ test('normal mode: delegation domain reaches the network while unimplemented dom
     '/api/v1/admin/platforms/1/scopes',
     '/api/v1/admin/platforms',
     '/api/v1/admin/audit',
+    '/api/v1/admin/audit/req-1/sensitive-access',
   ]) {
     if (!paths.some((path) => path.startsWith(expected))) {
       throw new Error(`expected a real call to ${expected}`);
