@@ -10,11 +10,15 @@ const items = ref<AuthorizationView[]>([]);
 const loading = ref(false);
 const loadError = ref('');
 const nextCursor = ref<string | null>(null);
+const revoking = ref(false);
+let active = true;
 const listTask = usePortalTask(() => {
+  active = false;
   items.value = [];
   nextCursor.value = null;
 });
 async function load(append = false): Promise<void> {
+  if (loading.value || (append && !nextCursor.value)) return;
   if (!append) nextCursor.value = null;
   loading.value = true;
   loadError.value = '';
@@ -31,16 +35,21 @@ async function load(append = false): Promise<void> {
   }
 }
 async function revoke(item: AuthorizationView): Promise<void> {
+  if (revoking.value || !active) return;
+  revoking.value = true;
   try {
     await ElMessageBox.confirm(`将撤销“${item.clientName}”的整组授权，所有使用该授权族的客户端会话都将受影响。`, '撤销 OAuth 授权', {
       type: 'warning'
     });
+    if (!active) return;
     await mePortalApi.authorizations.revoke(item.id);
     ElMessage.success('授权已撤销');
     await load();
   } catch (error) {
     if (error === 'cancel' || error === 'close') return;
     ElMessage.error(errorText(error));
+  } finally {
+    revoking.value = false;
   }
 }
 onMounted(load);
@@ -50,15 +59,16 @@ onMounted(load);
   <section class="portal-page" aria-labelledby="authorizations-title">
     <div class="page-heading">
       <div>
-        <p class="eyebrow">个人接入</p>
         <h1 id="authorizations-title">我的授权</h1>
         <p class="page-description">查看和撤销外部客户端的 OAuth 授权。退出控制台不会自动撤销这些授权。</p>
       </div>
     </div>
-    <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError" /><ElCard shadow="never" class="portal-card"
-      ><ElSkeleton v-if="loading" :rows="6" animated /><ElEmpty v-else-if="!items.length" description="尚无 OAuth 授权"
+    <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError"
+      ><ElButton @click="load()">重新读取授权</ElButton></ElAlert
+    ><ElCard shadow="never" class="portal-card"
+      ><ElSkeleton v-if="loading" :rows="6" animated /><ElEmpty v-else-if="!items.length && !loadError" description="尚无 OAuth 授权"
         ><ElButton type="primary" plain @click="router.push('/me/integrations')">查看接入说明</ElButton></ElEmpty
-      ><ElTable v-else :data="items" stripe row-key="id" aria-label="OAuth 授权列表"
+      ><ElTable v-else-if="items.length" :data="items" stripe row-key="id" aria-label="OAuth 授权列表"
         ><ElTableColumn prop="clientName" label="客户端" min-width="180" /><ElTableColumn
           prop="platformId"
           label="平台 ID"
@@ -75,7 +85,8 @@ onMounted(load);
           ></ElTableColumn
         ><ElTableColumn label="操作" width="100"
           ><template #default="{ row }"
-            ><ElButton v-if="row.status === 'ACTIVE'" link type="danger" @click="revoke(row as AuthorizationView)">撤销</ElButton></template
+            ><ElButton v-if="row.status === 'ACTIVE'" link type="danger" :disabled="revoking" @click="revoke(row as AuthorizationView)">撤销</ElButton
+            ><ElButton v-else link type="primary" @click="router.push('/me/integrations')">重新接入</ElButton></template
           ></ElTableColumn
         ></ElTable
       >
@@ -88,26 +99,18 @@ onMounted(load);
 .page-heading {
   margin-bottom: 24px;
 }
-.eyebrow {
-  margin: 0 0 6px;
-  color: var(--ptmcp-accent, #0070c9);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 h1 {
   margin: 0;
-  color: var(--ptmcp-ink, #1d2939);
+  color: var(--ptmcp-heading);
   font-size: 28px;
 }
 .page-description {
   margin: 8px 0 0;
-  color: var(--ptmcp-muted, #667085);
+  color: var(--ptmcp-muted);
   font-size: 14px;
 }
 .portal-card {
-  border-color: var(--ptmcp-border, #d9e2ec);
+  border-color: var(--ptmcp-border);
 }
 .load-more {
   padding-top: 16px;

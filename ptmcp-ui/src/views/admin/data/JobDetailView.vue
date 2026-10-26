@@ -106,7 +106,6 @@ onBeforeUnmount(() => {
         <ElButton v-if="session.can('ptmcp:datasource:read') || session.can('ptmcp:datasource:list')" link class="back-link" @click="openDatasource"
           >← 返回数据源</ElButton
         >
-        <p class="eyebrow">异步任务 / 状态</p>
         <h1 id="job-title">{{ job?.type === 'SYNC' ? '元数据同步' : job?.type === 'TEST' ? '连接测试' : '任务详情' }}</h1>
         <p class="subtitle">任务 ID {{ id }}</p>
       </div>
@@ -206,31 +205,23 @@ onBeforeUnmount(() => {
 .back-link {
   margin-bottom: 14px;
   padding: 0;
-  color: #467078;
-}
-.eyebrow {
-  margin: 0 0 6px;
-  color: #0f6f68;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  color: var(--ptmcp-text-muted);
 }
 h1 {
   margin: 0;
-  color: #1d2938;
+  color: var(--ptmcp-heading);
   font-size: clamp(26px, 3vw, 34px);
 }
 .subtitle {
   margin: 7px 0 0;
-  color: #6d7986;
+  color: var(--ptmcp-text-muted);
 }
 .state-alert {
   margin-bottom: 16px;
 }
 .progress-card,
 .detail-card {
-  border-color: #dce5e9;
+  border-color: var(--ptmcp-border);
 }
 .detail-card {
   margin-top: 16px;
@@ -247,22 +238,22 @@ h1 {
   align-items: baseline;
 }
 .label {
-  color: #667583;
+  color: var(--ptmcp-text-muted);
   font-size: 13px;
 }
 .progress-heading strong {
-  color: #1f3443;
+  color: var(--ptmcp-heading);
   font-size: 20px;
 }
 .muted {
-  color: #87919b;
+  color: var(--ptmcp-text-muted);
   font-size: 12px;
 }
 .indeterminate {
   height: 6px;
   overflow: hidden;
   border-radius: 4px;
-  background: #e6eeef;
+  background: var(--ptmcp-bg-neutral);
 }
 .retry-button {
   margin-bottom: 16px;
@@ -272,7 +263,7 @@ h1 {
   width: 35%;
   height: 100%;
   border-radius: inherit;
-  background: #0d7d75;
+  background: var(--ptmcp-blue);
   animation: progress 1.5s ease-in-out infinite;
 }
 @keyframes progress {
@@ -289,10 +280,10 @@ h1 {
   font-size: 13px;
 }
 .failure {
-  color: #b13c3c;
+  color: var(--ptmcp-red);
 }
 .success {
-  color: #1b7e5a;
+  color: var(--ptmcp-green);
 }
 .facts {
   display: grid;
@@ -301,19 +292,19 @@ h1 {
   margin: 0;
 }
 dt {
-  color: #7b8792;
+  color: var(--ptmcp-text-muted);
   font-size: 12px;
 }
 dd {
   margin: 5px 0 0;
-  color: #263646;
+  color: var(--ptmcp-text);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 .link-button {
   padding: 0;
   border: 0;
-  color: #116e75;
+  color: var(--ptmcp-blue);
   background: transparent;
   cursor: pointer;
 }

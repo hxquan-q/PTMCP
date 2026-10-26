@@ -192,7 +192,6 @@ onBeforeUnmount(() => {
   <section class="page-shell" aria-labelledby="metadata-title">
     <div class="page-heading">
       <div>
-        <p class="eyebrow">平台管理 / 结构目录</p>
         <h1 id="metadata-title">元数据与业务字典</h1>
         <p class="subtitle">查看已发布快照中的物理结构，并维护纯文本业务说明。</p>
       </div>
@@ -290,27 +289,19 @@ onBeforeUnmount(() => {
 .page-heading {
   margin-bottom: 24px;
 }
-.eyebrow {
-  margin: 0 0 7px;
-  color: #0f6f68;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 h1 {
   margin: 0;
-  color: #1d2938;
+  color: var(--ptmcp-heading);
   font-size: clamp(26px, 3vw, 34px);
 }
 .subtitle {
   margin: 8px 0 0;
-  color: #627080;
+  color: var(--ptmcp-text-muted);
 }
 .filter-card {
   margin-bottom: 16px;
-  border-color: #dce5e9;
-  background: #f8fafb;
+  border-color: var(--ptmcp-border);
+  background: var(--ptmcp-chrome);
 }
 .filter-card :deep(.el-form-item) {
   margin-bottom: 0;
@@ -322,11 +313,11 @@ h1 {
   justify-content: flex-end;
   flex-wrap: wrap;
   margin: 0 0 16px;
-  color: #6b7785;
+  color: var(--ptmcp-text-muted);
   font-size: 13px;
 }
 .table-card {
-  border-color: #dce5e9;
+  border-color: var(--ptmcp-border);
   overflow: hidden;
 }
 .table-footer {
@@ -334,9 +325,9 @@ h1 {
   justify-content: space-between;
   align-items: center;
   padding: 13px 16px;
-  color: #6b7785;
+  color: var(--ptmcp-text-muted);
   font-size: 13px;
-  border-top: 1px solid #edf1f3;
+  border-top: 1px solid var(--ptmcp-border);
 }
 .link-button {
   display: inline-flex;
@@ -346,7 +337,7 @@ h1 {
   border: 0;
   padding: 0;
   background: transparent;
-  color: #126c72;
+  color: var(--ptmcp-blue);
   cursor: pointer;
   text-align: left;
 }
@@ -355,7 +346,7 @@ h1 {
   text-decoration: underline;
 }
 .link-button small {
-  color: #778492;
+  color: var(--ptmcp-text-muted);
   font-size: 12px;
   font-weight: 400;
 }
@@ -364,7 +355,7 @@ h1 {
 }
 .privacy-note {
   margin: 15px 2px;
-  color: #7b8792;
+  color: var(--ptmcp-text-muted);
   font-size: 12px;
 }
 @media (max-width: 680px) {

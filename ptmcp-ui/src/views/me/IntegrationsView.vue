@@ -11,13 +11,16 @@ const config = ref<McpConfig | null>(null);
 const loading = ref(false);
 const error = ref('');
 const nextPlatformCursor = ref<string | null>(null);
+let configSequence = 0;
 const platformTask = usePortalTask(() => {
   platforms.value = [];
   platformId.value = '';
   nextPlatformCursor.value = null;
 });
 const configTask = usePortalTask(() => {
+  configSequence++;
   config.value = null;
+  loading.value = false;
 });
 const clientTypes = [
   { label: '通用客户端', value: 'GENERIC' },
@@ -41,18 +44,22 @@ async function loadPlatforms(append = false): Promise<void> {
   }
 }
 async function loadConfig(): Promise<void> {
+  const own = ++configSequence;
   configTask.cancel();
   config.value = null;
   error.value = '';
-  if (!platformId.value) return;
+  if (!platformId.value) {
+    loading.value = false;
+    return;
+  }
   loading.value = true;
   try {
     const result = await configTask.run((signal) => mePortalApi.mcpConfig(platformId.value, clientType.value, signal));
-    if (result) config.value = result;
+    if (result && own === configSequence) config.value = result;
   } catch (reason) {
-    error.value = errorText(reason);
+    if (own === configSequence) error.value = errorText(reason);
   } finally {
-    loading.value = false;
+    if (own === configSequence) loading.value = false;
   }
 }
 async function copyConfig(): Promise<void> {
@@ -76,12 +83,13 @@ onMounted(() => {
   <section class="portal-page" aria-labelledby="integrations-title">
     <div class="page-heading">
       <div>
-        <p class="eyebrow">个人接入</p>
         <h1 id="integrations-title">MCP 接入配置</h1>
         <p class="page-description">模板只提供人工配置步骤，不会自动连接客户端或执行查询。</p>
       </div>
     </div>
-    <ElAlert v-if="error" type="error" :closable="false" :title="error" class="mb-4" />
+    <ElAlert v-if="error" type="error" :closable="false" :title="error" class="mb-4"
+      ><ElButton @click="platforms.length ? loadConfig() : loadPlatforms()">重新读取</ElButton></ElAlert
+    >
     <ElCard shadow="never" class="portal-card"
       ><div class="filters">
         <ElFormItem label="平台"
@@ -117,7 +125,16 @@ onMounted(() => {
         />
         <div class="code-heading"><span>配置模板</span><ElButton size="small" @click="copyConfig">复制模板</ElButton></div>
         <pre class="config-block"><code>{{ config.configTemplate }}</code></pre>
-        <p class="muted">PAT 仅作为占位符使用。请通过“我的 PAT”单独创建并安全保存凭证。</p></template
+        <p class="muted">
+          验证版本：{{ config.validatedVersion ?? '尚未验证' }}。PAT 仅作为占位符使用。<RouterLink to="/me/tokens">创建和管理 PAT</RouterLink>
+        </p>
+        <h2>接入步骤</h2>
+        <ol class="muted">
+          <li>确认平台、服务地址及客户端版本，手动复制配置模板。</li>
+          <li>OAuth：在客户端发起登录并核对授权范围；到期或撤销后重新授权。</li>
+          <li>PAT：仅在客户端受控凭证设置中替换占位符，不写入共享配置或提交到仓库。</li>
+          <li>在客户端检查连接。此页面不执行连接测试或查询，也不承诺未经实测的兼容性。</li>
+        </ol></template
       ></ElCard
     >
   </section>
@@ -127,22 +144,14 @@ onMounted(() => {
 .page-heading {
   margin-bottom: 24px;
 }
-.eyebrow {
-  margin: 0 0 6px;
-  color: var(--ptmcp-accent, #0070c9);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 h1 {
   margin: 0;
-  color: var(--ptmcp-ink, #1d2939);
+  color: var(--ptmcp-heading);
   font-size: 28px;
 }
 .page-description,
 .muted {
-  color: var(--ptmcp-muted, #667085);
+  color: var(--ptmcp-muted);
   font-size: 14px;
 }
 .page-description {
@@ -150,7 +159,7 @@ h1 {
 }
 .portal-card {
   margin-bottom: 16px;
-  border-color: var(--ptmcp-border, #d9e2ec);
+  border-color: var(--ptmcp-border);
 }
 .filters {
   display: flex;
@@ -172,12 +181,12 @@ h1 {
 }
 .label {
   display: block;
-  color: var(--ptmcp-muted, #667085);
+  color: var(--ptmcp-muted);
   font-size: 12px;
   margin-bottom: 4px;
 }
 .status-row strong {
-  color: var(--ptmcp-ink, #1d2939);
+  color: var(--ptmcp-ink);
 }
 .code-heading {
   margin: 18px 0 8px;
@@ -188,9 +197,9 @@ h1 {
   max-height: 420px;
   overflow: auto;
   padding: 18px;
-  border: 1px solid var(--ptmcp-border, #d9e2ec);
-  background: #f7f9fb;
-  color: #27364b;
+  border: 1px solid var(--ptmcp-border);
+  background: var(--ptmcp-chrome);
+  color: var(--ptmcp-text);
   white-space: pre-wrap;
   word-break: break-word;
 }

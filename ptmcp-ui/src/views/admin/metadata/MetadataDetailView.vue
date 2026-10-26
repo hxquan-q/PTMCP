@@ -237,7 +237,6 @@ onBeforeUnmount(() => {
     <div class="page-heading">
       <div>
         <ElButton link class="back-link" @click="router.back()">← 返回元数据</ElButton>
-        <p class="eyebrow">元数据 / 业务字典</p>
         <h1 id="metadata-detail-title">{{ detail?.objectName || '对象详情' }}</h1>
         <p class="subtitle">
           {{ detail ? `${detail.databaseName}${detail.schemaName ? ` · ${detail.schemaName}` : ''} · ${detail.objectType}` : '加载中…' }}
@@ -392,24 +391,16 @@ onBeforeUnmount(() => {
   display: block;
   margin-bottom: 14px;
   padding: 0;
-  color: #467078;
-}
-.eyebrow {
-  margin: 0 0 6px;
-  color: #0f6f68;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  color: var(--ptmcp-text-muted);
 }
 h1 {
   margin: 0;
-  color: #1d2938;
+  color: var(--ptmcp-heading);
   font-size: clamp(26px, 3vw, 34px);
 }
 .subtitle {
   margin: 7px 0 0;
-  color: #6d7986;
+  color: var(--ptmcp-text-muted);
 }
 .state-alert {
   margin-bottom: 16px;
@@ -417,7 +408,7 @@ h1 {
 .summary-card,
 .structure-card,
 .dictionary-card {
-  border-color: #dce5e9;
+  border-color: var(--ptmcp-border);
 }
 .structure-card,
 .dictionary-card {
@@ -430,12 +421,12 @@ h1 {
   margin: 0;
 }
 dt {
-  color: #7b8792;
+  color: var(--ptmcp-text-muted);
   font-size: 12px;
 }
 dd {
   margin: 5px 0 0;
-  color: #263646;
+  color: var(--ptmcp-text);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
@@ -443,10 +434,10 @@ dd {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  color: #253545;
+  color: var(--ptmcp-heading);
 }
 .card-title span {
-  color: #7b8792;
+  color: var(--ptmcp-text-muted);
   font-size: 12px;
   font-weight: 400;
 }
@@ -458,15 +449,15 @@ dd {
   justify-content: space-between;
   align-items: baseline;
   margin: 22px 0 9px;
-  color: #2e4050;
+  color: var(--ptmcp-heading);
   font-weight: 700;
 }
 .column-heading small {
-  color: #7b8792;
+  color: var(--ptmcp-text-muted);
   font-weight: 400;
 }
 .column-dictionary {
-  border: 1px solid #e4eaed;
+  border: 1px solid var(--ptmcp-border);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -476,7 +467,7 @@ dd {
   gap: 12px;
   align-items: center;
   padding: 10px 12px;
-  border-bottom: 1px solid #edf1f3;
+  border-bottom: 1px solid var(--ptmcp-border);
 }
 .column-row:last-child {
   border-bottom: 0;
@@ -488,7 +479,7 @@ dd {
   overflow-wrap: anywhere;
 }
 .column-name small {
-  color: #7b8792;
+  color: var(--ptmcp-text-muted);
   font-size: 12px;
   font-weight: 400;
 }
@@ -500,7 +491,7 @@ dd {
   margin-top: 22px;
 }
 .version-note {
-  color: #7b8792;
+  color: var(--ptmcp-text-muted);
   font-size: 12px;
 }
 .removed-draft {

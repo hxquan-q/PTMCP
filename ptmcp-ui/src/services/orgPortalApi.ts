@@ -10,6 +10,7 @@ export interface Department {
   enabled: boolean;
   version: number;
   ancestors: string;
+  orderNum?: number;
 }
 
 export interface User {
@@ -20,6 +21,9 @@ export interface User {
   enabled: boolean;
   roleIds: string[];
   version: number;
+  email?: string;
+  phoneNumber?: string;
+  remark?: string;
 }
 
 export interface Role {
@@ -29,6 +33,8 @@ export interface Role {
   enabled: boolean;
   permissionCodes: string[];
   version: number;
+  memberCount?: number;
+  managedDepartmentIds?: string[];
 }
 
 export interface Grant {

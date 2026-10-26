@@ -21,15 +21,35 @@ body {
 }
 
 :root {
+  /* SAP 视觉令牌（DESIGN.md 为权威）：ink 阶梯、状态色、tag 底色与线 */
   --ptmcp-blue: #0057d2;
   --ptmcp-blue-dark: #0040b0;
   --ptmcp-blue-soft: #e7f2ff;
+  --ptmcp-navy: #022879;
+  --ptmcp-sky: #6bc0ff;
+  --ptmcp-heading: #000000;
   --ptmcp-text: #223548;
+  --ptmcp-text-list: #354a5f;
   --ptmcp-text-muted: #475e75;
+  --ptmcp-text-nav: #545454;
   --ptmcp-border: #e4e8ec;
+  --ptmcp-border-strong: #d6dde3;
+  --ptmcp-border-input: #91a0ad;
   --ptmcp-canvas: #ffffff;
   --ptmcp-surface: #ffffff;
-  --ptmcp-danger: #c9372c;
+  --ptmcp-chrome: #f5f6f7;
+  --ptmcp-band: #eaecee;
+  --ptmcp-wash: #ebf8ff;
+  --ptmcp-selected: #eef6ff;
+  --ptmcp-green: #256f3a;
+  --ptmcp-red: #aa0808;
+  --ptmcp-orange: #8d5200;
+  --ptmcp-danger: var(--ptmcp-red);
+  --ptmcp-bg-success: #edf6ee;
+  --ptmcp-bg-danger: #ffebeb;
+  --ptmcp-bg-warning: #fff3df;
+  --ptmcp-bg-neutral: #f0f3f5;
+  --ptmcp-bg-accent: #e6f1ff;
   --ptmcp-shadow: 0 8px 24px rgba(24, 57, 88, 0.08);
   --ptmcp-ink: var(--ptmcp-text);
   --ptmcp-muted: var(--ptmcp-text-muted);
@@ -40,10 +60,71 @@ body {
   --el-color-primary-light-3: #6aa7df;
   --el-color-primary-light-5: #9bc6eb;
   --el-color-primary-light-7: #c3def3;
+  --el-color-primary-light-8: #dbecfa;
   --el-color-primary-light-9: #eaf3fc;
   --el-color-primary-dark-2: var(--ptmcp-blue-dark);
+  --el-color-success: var(--ptmcp-green);
+  --el-color-success-light-3: #669a75;
+  --el-color-success-light-5: #92b79c;
+  --el-color-success-light-7: #bed4c3;
+  --el-color-success-light-8: #dcecdf;
+  --el-color-success-light-9: var(--ptmcp-bg-success);
+  --el-color-success-dark-2: #1d5930;
+  --el-color-warning: var(--ptmcp-orange);
+  --el-color-warning-light-3: #af864d;
+  --el-color-warning-light-5: #c6a980;
+  --el-color-warning-light-7: #ddcbb3;
+  --el-color-warning-light-8: #ffe7c4;
+  --el-color-warning-light-9: var(--ptmcp-bg-warning);
+  --el-color-warning-dark-2: #714100;
+  --el-color-danger: var(--ptmcp-red);
+  --el-color-danger-light-3: #c35252;
+  --el-color-danger-light-5: #d58383;
+  --el-color-danger-light-7: #e5b5b5;
+  --el-color-danger-light-8: #eecdcd;
+  --el-color-danger-light-9: var(--ptmcp-bg-danger);
+  --el-color-danger-dark-2: #880606;
+  --el-color-error: var(--ptmcp-red);
+  --el-color-error-light-3: #c35252;
+  --el-color-error-light-5: #d58383;
+  --el-color-error-light-7: #e5b5b5;
+  --el-color-error-light-8: #eecdcd;
+  --el-color-error-light-9: var(--ptmcp-bg-danger);
+  --el-color-error-dark-2: #880606;
+  --el-color-info: var(--ptmcp-text-muted);
+  --el-color-info-light-3: #7e8e9e;
+  --el-color-info-light-5: #a3afba;
+  --el-color-info-light-7: #c8cfd6;
+  --el-color-info-light-8: #dadfe4;
+  --el-color-info-light-9: var(--ptmcp-bg-neutral);
+  --el-color-info-dark-2: #394b5e;
+  --el-text-color-primary: var(--ptmcp-text);
+  --el-text-color-regular: var(--ptmcp-text-list);
+  --el-text-color-secondary: var(--ptmcp-text-muted);
+  --el-text-color-placeholder: #52697e;
+  --el-text-color-disabled: #a3abb5;
+  --el-border-color: var(--ptmcp-border-input);
+  --el-border-color-light: var(--ptmcp-border-strong);
+  --el-border-color-lighter: var(--ptmcp-border);
+  --el-border-color-extra-light: var(--ptmcp-bg-neutral);
+  --el-border-color-dark: var(--ptmcp-border-input);
+  --el-border-color-darker: #6e7f8d;
+  --el-fill-color: var(--ptmcp-bg-neutral);
+  --el-fill-color-light: var(--ptmcp-chrome);
+  --el-fill-color-lighter: #f7f9fb;
+  --el-fill-color-extra-light: #fafbfc;
+  --el-fill-color-blank: #ffffff;
+  --el-fill-color-dark: var(--ptmcp-band);
+  --el-fill-color-darker: var(--ptmcp-border-strong);
   --el-border-radius-base: 6px;
+  --el-border-radius-small: 4px;
+  --el-dialog-border-radius: 12px;
   --el-font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+}
+
+::selection {
+  background: #cce8ff;
+  color: #002d6d;
 }
 
 .el-card {
@@ -52,18 +133,31 @@ body {
 }
 .el-button {
   font-weight: 600;
+  border-radius: 8px;
+}
+.el-button.is-link {
+  border-radius: 4px;
 }
 .el-table {
-  --el-table-header-bg-color: #f5f8fb;
-  --el-table-row-hover-bg-color: #f7fbff;
+  --el-table-header-bg-color: var(--ptmcp-chrome);
+  --el-table-header-text-color: var(--ptmcp-text-muted);
+  --el-table-row-hover-bg-color: var(--ptmcp-selected);
+  --el-table-border-color: var(--ptmcp-border);
 }
 .el-input__wrapper,
 .el-select__wrapper {
-  box-shadow: 0 0 0 1px var(--ptmcp-border) inset;
+  box-shadow: 0 0 0 1px var(--ptmcp-border-input) inset;
 }
 .el-input__wrapper.is-focus,
 .el-select__wrapper.is-focused {
   box-shadow: 0 0 0 1px var(--ptmcp-blue) inset;
+}
+.mono,
+.el-table .cell pre {
+  font-variant-numeric: tabular-nums;
+}
+.el-dialog {
+  --el-dialog-border-radius: 12px;
 }
 a:focus-visible,
 button:focus-visible,

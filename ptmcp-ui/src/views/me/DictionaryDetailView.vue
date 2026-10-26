@@ -53,10 +53,10 @@ watch(
     <template v-else-if="detail">
       <div class="page-heading">
         <div>
-          <p class="eyebrow">{{ detail.objectType }}</p>
           <h1 id="detail-title">{{ detail.tableName }}</h1>
           <p class="page-description">
-            {{ [detail.databaseName, detail.schemaName].filter(Boolean).join(' / ') }} · 快照 {{ detail.snapshotVersion }}
+            {{ detail.objectType }} · {{ [detail.databaseName, detail.schemaName].filter(Boolean).join(' / ') }} · 快照
+            {{ detail.snapshotVersion }}
           </p>
         </div>
         <ElTag :type="detail.authorized ? 'success' : 'warning'">{{ detail.authorized ? '可读取' : '仅目录可见' }}</ElTag>
@@ -107,22 +107,14 @@ watch(
 .page-heading {
   margin-bottom: 24px;
 }
-.eyebrow {
-  margin: 0 0 6px;
-  color: var(--ptmcp-accent, #0070c9);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 h1 {
   margin: 0;
-  color: var(--ptmcp-ink, #1d2939);
+  color: var(--ptmcp-heading);
   font-size: 28px;
 }
 .page-description,
 .muted {
-  color: var(--ptmcp-muted, #667085);
+  color: var(--ptmcp-muted);
   font-size: 14px;
 }
 .page-description {
@@ -130,7 +122,7 @@ h1 {
 }
 .portal-card {
   margin-bottom: 16px;
-  border-color: var(--ptmcp-border, #d9e2ec);
+  border-color: var(--ptmcp-border);
 }
 .plain-text {
   white-space: pre-wrap;

@@ -53,7 +53,6 @@ watch(
     ><template v-else-if="item"
       ><div class="page-heading">
         <div>
-          <p class="eyebrow">查询记录</p>
           <h1 id="history-detail-title">{{ item.requestId }}</h1>
           <p class="page-description">{{ formatDate(item.startedAt) }} · {{ item.tool }}</p>
         </div>
@@ -110,27 +109,19 @@ watch(
   gap: 16px;
   margin-bottom: 24px;
 }
-.eyebrow {
-  margin: 0 0 6px;
-  color: var(--ptmcp-accent, #0070c9);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 h1 {
   margin: 0;
-  color: var(--ptmcp-ink, #1d2939);
+  color: var(--ptmcp-heading);
   font-size: 28px;
 }
 .page-description {
   margin: 8px 0 0;
-  color: var(--ptmcp-muted, #667085);
+  color: var(--ptmcp-muted);
   font-size: 14px;
 }
 .portal-card {
   margin-bottom: 16px;
-  border-color: var(--ptmcp-border, #d9e2ec);
+  border-color: var(--ptmcp-border);
 }
 .metrics {
   display: grid;
@@ -139,12 +130,12 @@ h1 {
 }
 .metrics span {
   display: block;
-  color: var(--ptmcp-muted, #667085);
+  color: var(--ptmcp-muted);
   font-size: 12px;
   margin-bottom: 4px;
 }
 .metrics strong {
-  color: var(--ptmcp-ink, #1d2939);
+  color: var(--ptmcp-ink);
 }
 .plain-text {
   margin: 0 0 16px;

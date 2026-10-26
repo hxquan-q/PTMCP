@@ -4,11 +4,12 @@ import { createRenderer, nextTick, reactive } from 'vue';
 import { compileScript, parse } from 'vue/compiler-sfc';
 
 export class FixtureDataError extends Error {
-  constructor(
-    public status: number,
-    public code: string
-  ) {
+  readonly status: number;
+  readonly code: string;
+  constructor(status: number, code: string) {
     super(code);
+    this.status = status;
+    this.code = code;
   }
 }
 

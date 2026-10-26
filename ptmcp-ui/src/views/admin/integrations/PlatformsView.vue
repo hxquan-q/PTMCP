@@ -1,15 +1,54 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { ElAlert, ElButton, ElCard, ElDialog, ElInput, ElOption, ElSelect, ElTable, ElTableColumn, ElTag } from 'element-plus';
 import PageHeader from '../../../components/common/PageHeader.vue';
 import PageState from '../../../components/common/PageState.vue';
 import { localOnlyReason } from './adminSurface';
 import { useSessionStore } from '../../../stores/session';
 import PlatformBasicsForm from './PlatformBasicsForm.vue';
+import { controlPlane, type PlatformWrite } from '../../../services/controlPlane';
+import { controlPlaneAvailable, mutationNotice } from '../../../services/frontendMode';
+import { useCursorPage } from '../../../composables/useCursorPage';
+import { errorText, isConflict } from '../../portalUtils';
 
 const filter = reactive({ keyword: '', tier: '', status: '' });
 const dialogVisible = ref(false);
 const session = useSessionStore();
+const router = useRouter();
+const { rows, cursor, loading, error, loaded, reset, load, retry } = useCursorPage((cursor, signal) =>
+  controlPlane.platforms.list({ ...filter, cursor }, signal)
+);
+const removing = ref(false);
+async function save(body: PlatformWrite): Promise<void> {
+  const row = await controlPlane.platforms.save(body);
+  dialogVisible.value = false;
+  ElMessage.success(mutationNotice);
+  await router.push(`/admin/platforms/${encodeURIComponent(row.id)}`);
+}
+async function remove(id: string): Promise<void> {
+  const row = rows.value.find((item) => item.id === id);
+  if (!row) return;
+  if (removing.value || !session.can('ptmcp:platform:delete')) return;
+  try {
+    await ElMessageBox.confirm(`删除“${row.name}”将影响关联客户端和授权。平台须先停用并处理依赖。`, '删除平台', { type: 'warning' });
+    removing.value = true;
+    await controlPlane.platforms.remove(row);
+    ElMessage.success(mutationNotice);
+    await load();
+  } catch (reason) {
+    if (reason === 'cancel' || reason === 'close') return;
+    ElMessage.error(errorText(reason));
+    if (isConflict(reason)) await load();
+  } finally {
+    removing.value = false;
+  }
+}
+watch(filter, reset, { flush: 'sync' });
+onMounted(() => {
+  if (controlPlaneAvailable) void load();
+});
 const filterText = computed(() =>
   [filter.keyword, filter.tier, filter.status].filter(Boolean).length ? '筛选条件已准备，接口接入后将按服务端游标查询。' : '平台目录尚未连接。'
 );
@@ -27,7 +66,14 @@ onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearP
         ><ElButton v-if="session.can('ptmcp:platform:create')" type="primary" @click="dialogVisible = true">新建平台</ElButton></template
       >
     </PageHeader>
-    <ElAlert type="warning" show-icon :closable="false" title="平台管理接口待接入" :description="localOnlyReason('平台与客户端')" />
+    <ElAlert
+      v-if="!controlPlaneAvailable"
+      type="warning"
+      show-icon
+      :closable="false"
+      title="平台管理接口待接入"
+      :description="localOnlyReason('平台与客户端')"
+    />
     <ElCard class="filter-card" shadow="never">
       <div class="filter-row">
         <ElInput v-model="filter.keyword" clearable placeholder="平台名称或 code" aria-label="平台名称或 code" />
@@ -37,7 +83,16 @@ onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearP
         <ElSelect v-model="filter.status" clearable placeholder="全部状态" aria-label="平台状态"
           ><ElOption label="启用" value="ACTIVE" /><ElOption label="停用" value="DISABLED"
         /></ElSelect>
-        <span>{{ filterText }}</span>
+        <div>
+          <ElButton type="primary" :loading="loading" :disabled="!controlPlaneAvailable" @click="load()">查询</ElButton
+          ><ElButton
+            @click="
+              Object.assign(filter, { keyword: '', tier: '', status: '' });
+              controlPlaneAvailable && load();
+            "
+            >重置</ElButton
+          >
+        </div>
       </div>
     </ElCard>
     <ElCard class="table-card" shadow="never">
@@ -46,17 +101,44 @@ onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearP
           <h2>平台目录</h2>
           <p>平台、Scope 和客户端应由后端授权接口返回。</p>
         </div>
-        <ElTag effect="plain" type="info">未连接</ElTag>
+        <ElTag effect="plain" type="info">{{ controlPlaneAvailable ? '开发预览' : '未连接' }}</ElTag>
       </div>
-      <ElTable :data="[]" class="empty-table" aria-label="平台目录">
+      <ElAlert v-if="error" type="error" :title="error" :closable="false"><ElButton @click="retry">重试</ElButton></ElAlert>
+      <ElSkeleton v-if="loading && !rows.length" :rows="5" animated />
+      <ElTable v-else :data="rows" class="empty-table" aria-label="平台目录">
         <ElTableColumn prop="code" label="Code" min-width="150" />
         <ElTableColumn prop="name" label="名称" min-width="170" />
         <ElTableColumn prop="tier" label="Tier" width="90" />
         <ElTableColumn prop="catalogMode" label="目录模式" min-width="120" />
-        <ElTableColumn prop="proofConfigured" label="逐调用证明" min-width="130" />
+        <ElTableColumn label="逐调用证明" min-width="130"
+          ><template #default="{ row }">{{ row.proofMode }} · {{ row.proofConfigured ? '已配置' : '未配置' }}</template></ElTableColumn
+        >
         <ElTableColumn prop="status" label="状态" width="100" />
-        <template #empty><PageState title="平台目录尚未读取" description="平台管理服务尚未接入。可打开新建表单检查字段，保存暂不可用。" /></template>
+        <ElTableColumn label="操作" min-width="150"
+          ><template #default="{ row }"
+            ><ElButton
+              v-if="session.can('ptmcp:platform:read')"
+              link
+              type="primary"
+              @click="router.push(`/admin/platforms/${encodeURIComponent(row.id)}`)"
+              >详情</ElButton
+            ><ElButton
+              v-if="session.can('ptmcp:platform:delete')"
+              link
+              type="danger"
+              :disabled="removing || row.status !== 'DISABLED'"
+              @click="remove(String(row.id))"
+              >删除</ElButton
+            ></template
+          ></ElTableColumn
+        >
+        <template #empty
+          ><PageState
+            :title="error ? '平台读取失败' : loaded ? '没有符合条件的平台' : '平台目录尚未读取'"
+            :description="controlPlaneAvailable ? '可调整筛选、查询或创建平台。' : filterText"
+        /></template>
       </ElTable>
+      <ElButton v-if="cursor" :loading="loading" @click="load(true)">加载更多</ElButton>
     </ElCard>
     <ElCard class="guide-card" shadow="never">
       <h2>配置原则</h2>
@@ -76,7 +158,7 @@ onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearP
       </div>
     </ElCard>
     <ElDialog v-model="dialogVisible" title="新建平台 · 本地预览" width="min(760px, calc(100vw - 28px))" destroy-on-close
-      ><PlatformBasicsForm v-if="dialogVisible"
+      ><PlatformBasicsForm v-if="dialogVisible" :submit="save"
     /></ElDialog>
   </div>
 </template>
@@ -111,7 +193,7 @@ onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearP
 }
 h2 {
   margin: 0;
-  color: var(--ptmcp-text);
+  color: var(--ptmcp-heading);
   font-size: 16px;
 }
 .section-heading p {
@@ -129,7 +211,7 @@ h2 {
   padding: 16px;
   border: 1px solid var(--ptmcp-border);
   border-radius: 6px;
-  background: #f8fafc;
+  background: var(--ptmcp-chrome);
 }
 .empty-table {
   margin-top: 16px;

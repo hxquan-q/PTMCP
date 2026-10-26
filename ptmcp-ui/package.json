@@ -5,9 +5,10 @@
     "format:check": "prettier --check src",
     "format": "prettier --write src",
     "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "dev:preview": "vite --mode frontend-preview --host 127.0.0.1 --port 5174 --strictPort",
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
     "typecheck": "vue-tsc --noEmit",
-    "test:contracts": "node --experimental-strip-types --test tests/http-contract.test.ts",
+    "test:contracts": "node --experimental-strip-types --test tests/*.test.ts tests/*.test.mjs",
     "build": "vue-tsc --noEmit && vite build",
     "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm build"
   },

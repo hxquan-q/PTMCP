@@ -172,7 +172,6 @@ onMounted(() => {
   <section class="portal-page" aria-labelledby="dictionary-title">
     <div class="page-heading">
       <div>
-        <p class="eyebrow">个人目录</p>
         <h1 id="dictionary-title">我的数据字典</h1>
         <p class="page-description">目录只展示你在当前平台范围内可发现的对象，读取详情仍由服务端再次鉴权。</p>
       </div>
@@ -250,22 +249,14 @@ onMounted(() => {
 .page-heading {
   margin-bottom: 24px;
 }
-.eyebrow {
-  margin: 0 0 6px;
-  color: var(--ptmcp-accent, #0070c9);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 h1 {
   margin: 0;
-  color: var(--ptmcp-ink, #1d2939);
+  color: var(--ptmcp-heading);
   font-size: 28px;
 }
 .page-description,
 .subtext {
-  color: var(--ptmcp-muted, #667085);
+  color: var(--ptmcp-muted);
   font-size: 14px;
 }
 .page-description {
@@ -273,7 +264,7 @@ h1 {
 }
 .portal-card {
   margin-bottom: 16px;
-  border-color: var(--ptmcp-border, #d9e2ec);
+  border-color: var(--ptmcp-border);
 }
 .filters {
   display: flex;
@@ -297,7 +288,7 @@ h1 {
   display: block;
   padding: 0;
   border: 0;
-  color: var(--ptmcp-accent, #0070c9);
+  color: var(--ptmcp-accent);
   background: none;
   font: inherit;
   font-weight: 600;

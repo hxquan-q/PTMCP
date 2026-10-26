@@ -2,9 +2,25 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { ElAlert, ElButton, ElForm, ElFormItem, ElInput, ElOption, ElSelect } from 'element-plus';
 import { validateRequired } from './adminSurface';
+import type { Platform, PlatformWrite } from '../../../services/controlPlane';
+import { controlPlaneAvailable } from '../../../services/frontendMode';
+import { errorText } from '../../portalUtils';
 
-const props = withDefaults(defineProps<{ editing?: boolean }>(), { editing: false });
+const props = withDefaults(defineProps<{ editing?: boolean; initial?: Platform | null; submit?: (body: PlatformWrite) => Promise<void> }>(), {
+  editing: false,
+  initial: null,
+  submit: undefined
+});
 const form = reactive({ code: '', name: '', tier: '3', catalogMode: 'HIDE', proofMode: 'NONE', status: 'DISABLED' });
+const saving = ref(false);
+const proof = reactive({ certificateFingerprint: '', proxyNetwork: '', secret: '' });
+watch(
+  () => props.initial,
+  (value) => {
+    if (value) Object.assign(form, { ...value, tier: String(value.tier) });
+  },
+  { immediate: true }
+);
 const errors = ref<Record<string, string>>({});
 const message = ref('');
 const proofHint = computed(() =>
@@ -18,17 +34,47 @@ watch(form, () => {
   errors.value = {};
   message.value = '';
 });
-function validate(): void {
+function validate(): boolean {
   const values: Record<string, string> = props.editing ? { name: form.name } : { code: form.code, name: form.name };
   errors.value = validateRequired(values, { code: '平台 code', name: '平台名称' });
   if (form.tier === '1' && form.proofMode === 'NONE') errors.value.proofMode = 'Tier 1 必须配置逐调用证明。';
+  if (!props.editing && !/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(form.code)) errors.value.code = '以字母开头，最多64个字母、数字、下划线或短横线。';
+  const keepsProof = props.initial?.proofConfigured && props.initial.proofMode === form.proofMode;
+  if (form.proofMode === 'MTLS' && !keepsProof && !/^(?:[a-fA-F0-9]{2}:?){32}$/.test(proof.certificateFingerprint))
+    errors.value.proofConfig = '请输入 SHA-256 证书指纹（64位十六进制）。';
+  if (form.proofMode === 'PROXY_SECRET' && !keepsProof && (!proof.proxyNetwork.trim() || !proof.secret))
+    errors.value.proofConfig = '请填写代理网络约束和只写 secret。';
   message.value = Object.keys(errors.value).length ? '请检查标出的字段。' : '基础字段校验完成。证明配置需服务端核验，当前尚未保存。';
+  return !Object.keys(errors.value).length;
+}
+async function save(): Promise<void> {
+  if (saving.value || !props.submit || !controlPlaneAvailable || !validate()) return;
+  saving.value = true;
+  try {
+    const body: PlatformWrite = {
+      code: form.code,
+      name: form.name.trim(),
+      tier: Number(form.tier),
+      catalogMode: form.catalogMode,
+      proofMode: form.proofMode,
+      status: form.status
+    };
+    if (form.proofMode === 'MTLS' && proof.certificateFingerprint) body.proofConfig = { certificateFingerprint: proof.certificateFingerprint };
+    if (form.proofMode === 'PROXY_SECRET' && proof.secret) body.proofConfig = { proxyNetwork: proof.proxyNetwork, secret: proof.secret };
+    await props.submit(body);
+  } catch (reason) {
+    message.value = errorText(reason);
+  } finally {
+    proof.secret = '';
+    saving.value = false;
+  }
 }
 </script>
 
 <template>
   <ElForm label-position="top" @submit.prevent="validate">
     <ElAlert
+      v-if="!controlPlaneAvailable"
       class="form-notice"
       type="info"
       show-icon
@@ -70,10 +116,18 @@ function validate(): void {
           label="NONE · 无证明"
           value="NONE" /></ElSelect
     ></ElFormItem>
-    <ElFormItem label="证明配置"
-      ><ElInput disabled :placeholder="proofHint" />
-      <p class="helper">证明配置接口接入后仅展示“已配置”。本表单不收集 secret。</p></ElFormItem
-    >
+    <p class="helper">{{ proofHint }}{{ initial?.proofConfigured ? ' 已配置，留空保持原值。' : '' }}</p>
+    <ElFormItem v-if="form.proofMode === 'MTLS'" label="SHA-256 证书指纹" :error="errors.proofConfig"
+      ><ElInput v-model="proof.certificateFingerprint" maxlength="95" placeholder="写入新指纹；不读取现有配置"
+    /></ElFormItem>
+    <template v-if="form.proofMode === 'PROXY_SECRET'">
+      <ElFormItem label="代理网络约束" :error="errors.proofConfig"
+        ><ElInput v-model="proof.proxyNetwork" placeholder="批准的代理地址 / CIDR"
+      /></ElFormItem>
+      <ElFormItem label="替换代理 secret（只写）"
+        ><ElInput v-model="proof.secret" type="password" autocomplete="new-password" placeholder="留空保持已配置值"
+      /></ElFormItem>
+    </template>
     <ElAlert
       type="warning"
       :closable="false"
@@ -81,7 +135,10 @@ function validate(): void {
       description="private_key_jwt 仅证明 token 端点身份，不能替代每次 MCP 调用的证明。"
     />
     <p v-if="message" class="form-result" role="status">{{ message }}</p>
-    <div class="form-actions"><ElButton native-type="submit">校验字段</ElButton><ElButton type="primary" disabled>保存平台（待接入）</ElButton></div>
+    <div class="form-actions">
+      <ElButton native-type="submit" :disabled="saving">校验字段</ElButton
+      ><ElButton type="primary" :loading="saving" :disabled="!controlPlaneAvailable || !submit" @click="save">保存平台</ElButton>
+    </div>
   </ElForm>
 </template>
 

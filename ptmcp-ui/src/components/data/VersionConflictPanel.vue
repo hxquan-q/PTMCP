@@ -43,15 +43,15 @@ defineEmits<{ refresh: []; latest: []; draft: [] }>();
 <style scoped>
 .conflict-panel {
   margin-bottom: 16px;
-  border-color: #d5a948;
+  border-color: var(--el-color-warning-light-5);
 }
 h2 {
   margin: 0;
-  color: #785516;
+  color: var(--ptmcp-heading);
   font-size: 17px;
 }
 p {
-  color: #5f6d7a;
+  color: var(--ptmcp-text-muted);
   line-height: 1.6;
   font-size: 13px;
 }
@@ -66,7 +66,7 @@ p {
   overflow-wrap: anywhere;
 }
 .changed {
-  color: #875e13;
+  color: var(--ptmcp-orange);
   font-weight: 600;
 }
 .actions {

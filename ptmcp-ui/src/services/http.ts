@@ -40,10 +40,22 @@ export class ApiError extends Error {
 const base = '/backend/admin';
 let csrfToken: string | null = null;
 let csrfPromise: Promise<string> | null = null;
+let sessionGeneration = 0;
 const sessionEvents = new EventTarget();
 
 export function setCsrfToken(value: string | null): void {
   csrfToken = value;
+}
+
+/** Retire reads and writes from a former identity, including pending CSRF bootstrap. */
+export function invalidateSessionRequests(): void {
+  sessionGeneration += 1;
+  csrfToken = null;
+  csrfPromise = null;
+}
+
+function requireSessionGeneration(generation: number): void {
+  if (generation !== sessionGeneration) throw new DOMException('会话上下文已变化，请重新发起操作。', 'AbortError');
 }
 
 export function onSessionExpired(listener: () => void): () => void {
@@ -102,8 +114,10 @@ export function parseApiJson(text: string): unknown {
 
 export async function refreshCsrf(): Promise<string> {
   if (!csrfPromise) {
-    csrfPromise = request<{ csrfToken: string }>('/api/v1/session/csrf', { csrf: false })
+    const generation = sessionGeneration;
+    const pending = request<{ csrfToken: string }>('/api/v1/session/csrf', { csrf: false })
       .then(({ data }) => {
+        requireSessionGeneration(generation);
         if (typeof data.csrfToken !== 'string' || !data.csrfToken) {
           throw new ApiError(502, 'INVALID_RESPONSE', '服务端安全校验响应无效。');
         }
@@ -111,14 +125,16 @@ export async function refreshCsrf(): Promise<string> {
         return data.csrfToken;
       })
       .finally(() => {
-        csrfPromise = null;
+        if (csrfPromise === pending) csrfPromise = null;
       });
+    csrfPromise = pending;
   }
   return csrfPromise;
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<TransportResult<T>> {
   if (!path.startsWith('/api/v1/')) throw new Error('Only same-origin REST API paths are allowed.');
+  const generation = sessionGeneration;
   const method = (options.method ?? 'GET').toUpperCase();
   const headers = new Headers(options.headers);
   headers.set('Accept', 'application/json');
@@ -127,21 +143,26 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     headers.set('X-CSRF-Token', csrfToken ?? (await refreshCsrf()));
   }
   if (options.body !== undefined) headers.set('Content-Type', 'application/json');
+  requireSessionGeneration(generation);
   let response: Response;
   try {
-    response = await fetch(`${base}${path}`, {
-      method,
-      headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      credentials: 'same-origin',
-      cache: 'no-store',
-      signal: options.signal
-    });
+    response =
+      import.meta.env?.DEV && import.meta.env.MODE === 'frontend-preview'
+        ? await (await import('../preview/server')).previewRequest(path, { ...options, method, headers })
+        : await fetch(`${base}${path}`, {
+            method,
+            headers,
+            body: options.body === undefined ? undefined : JSON.stringify(options.body),
+            credentials: 'same-origin',
+            cache: 'no-store',
+            signal: options.signal
+          });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
     throw new ApiError(0, 'NETWORK_ERROR', '无法连接服务，请检查后端服务是否启动。');
   }
   const text = await response.text();
+  requireSessionGeneration(generation);
   let body: unknown = null;
   if (text) {
     try {

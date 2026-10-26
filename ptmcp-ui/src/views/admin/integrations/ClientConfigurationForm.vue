@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue';
 import { ElAlert, ElButton, ElCheckbox, ElCheckboxGroup, ElForm, ElFormItem, ElInput, ElOption, ElSelect } from 'element-plus';
-import { allowedClientScopes, validateAllowedScopes, validateRedirectUris, validateRequired } from './adminSurface';
+import { allowedClientScopes, splitLines, validateAllowedScopes, validateRedirectUris, validateRequired } from './adminSurface';
+import type { Client, ClientWrite } from '../../../services/controlPlane';
+import { controlPlaneAvailable } from '../../../services/frontendMode';
+import { errorText } from '../../portalUtils';
+
+const props = defineProps<{ initial?: Client | null; submit?: (body: ClientWrite) => Promise<void> }>();
+const saving = ref(false);
 
 const form = reactive({
   name: '',
@@ -19,13 +25,21 @@ watch(
   (type) => {
     form.authMethods = type === 'PUBLIC' ? ['none'] : ['private_key_jwt'];
     form.jwksUri = '';
-  }
+  },
+  { flush: 'sync' }
 );
+if (props.initial)
+  Object.assign(form, {
+    ...props.initial,
+    authMethods: [...props.initial.authMethods],
+    allowedScopes: [...props.initial.allowedScopes],
+    redirectUris: props.initial.redirectUris.join('\n')
+  });
 watch(form, () => {
   errors.value = {};
   message.value = '';
 });
-function validate(): void {
+function validate(): boolean {
   errors.value = validateRequired({ name: form.name }, { name: '客户端名称' });
   const uriError = validateRedirectUris(form.redirectUris);
   if (uriError) errors.value.redirectUris = uriError;
@@ -43,12 +57,33 @@ function validate(): void {
   message.value = Object.keys(errors.value).length
     ? '请检查标出的字段。'
     : '客户端字段校验完成。回调 ownership、Scope 审批及 JWKS 网络策略仍需服务端核验，尚未保存。';
+  return !Object.keys(errors.value).length;
+}
+async function save(): Promise<void> {
+  if (saving.value || !controlPlaneAvailable || !props.submit || !validate()) return;
+  saving.value = true;
+  try {
+    await props.submit({
+      name: form.name.trim(),
+      type: form.type,
+      authMethods: [...form.authMethods],
+      allowedScopes: [...form.allowedScopes],
+      status: form.status,
+      redirectUris: splitLines(form.redirectUris),
+      jwksUri: form.authMethods.includes('private_key_jwt') ? form.jwksUri : ''
+    });
+  } catch (reason) {
+    message.value = errorText(reason);
+  } finally {
+    saving.value = false;
+  }
 }
 </script>
 
 <template>
   <ElForm label-position="top" @submit.prevent="validate">
     <ElAlert
+      v-if="!controlPlaneAvailable"
       class="form-notice"
       type="info"
       show-icon
@@ -100,7 +135,8 @@ function validate(): void {
     />
     <p v-if="message" class="form-result" role="status">{{ message }}</p>
     <div class="form-actions">
-      <ElButton native-type="submit">校验字段</ElButton><ElButton type="primary" disabled>保存客户端（待接入）</ElButton>
+      <ElButton native-type="submit" :disabled="saving">校验字段</ElButton
+      ><ElButton type="primary" :loading="saving" :disabled="!controlPlaneAvailable || !submit" @click="save">保存客户端</ElButton>
     </div>
   </ElForm>
 </template>

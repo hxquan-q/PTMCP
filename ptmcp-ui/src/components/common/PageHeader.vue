@@ -1,10 +1,9 @@
 <script setup lang="ts">
-withDefaults(defineProps<{ title: string; description?: string; eyebrow?: string }>(), { description: undefined, eyebrow: undefined });
+withDefaults(defineProps<{ title: string; description?: string }>(), { description: undefined });
 </script>
 <template>
   <header class="page-header">
     <div>
-      <div v-if="eyebrow" class="page-header__eyebrow">{{ eyebrow }}</div>
       <h1>{{ title }}</h1>
       <p v-if="description">{{ description }}</p>
     </div>
@@ -21,7 +20,7 @@ withDefaults(defineProps<{ title: string; description?: string; eyebrow?: string
 }
 .page-header h1 {
   margin: 0;
-  color: var(--ptmcp-text);
+  color: var(--ptmcp-heading);
   font-size: 24px;
   line-height: 1.2;
   letter-spacing: -0.02em;
@@ -30,14 +29,6 @@ withDefaults(defineProps<{ title: string; description?: string; eyebrow?: string
   margin: 8px 0 0;
   color: var(--ptmcp-text-muted);
   line-height: 1.5;
-}
-.page-header__eyebrow {
-  margin-bottom: 6px;
-  color: var(--ptmcp-blue);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 .page-header__actions {
   display: flex;

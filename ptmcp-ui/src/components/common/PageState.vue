@@ -5,8 +5,9 @@ withDefaults(
     title?: string;
     description?: string;
     actionLabel?: string;
+    headingTag?: 'h1' | 'h2';
   }>(),
-  { kind: 'empty', title: undefined, description: undefined, actionLabel: undefined }
+  { kind: 'empty', title: undefined, description: undefined, actionLabel: undefined, headingTag: 'h2' }
 );
 const emit = defineEmits<{ action: [] }>();
 </script>
@@ -20,7 +21,7 @@ const emit = defineEmits<{ action: [] }>();
       <IconEpLock v-else-if="kind === 'forbidden'" />
       <IconEpDocumentDelete v-else />
     </div>
-    <h2>
+    <component :is="headingTag">
       {{
         title ??
         (kind === 'loading'
@@ -33,7 +34,7 @@ const emit = defineEmits<{ action: [] }>();
                 ? '页面不存在'
                 : '加载失败')
       }}
-    </h2>
+    </component>
     <p>
       {{
         description ??
@@ -63,9 +64,10 @@ const emit = defineEmits<{ action: [] }>();
   text-align: center;
   color: var(--ptmcp-text-muted);
 }
+.page-state h1,
 .page-state h2 {
   margin: 0;
-  color: var(--ptmcp-text);
+  color: var(--ptmcp-heading);
   font-size: 18px;
   font-weight: 650;
 }
@@ -85,21 +87,21 @@ const emit = defineEmits<{ action: [] }>();
   font-size: 22px;
 }
 [data-kind='error'] .page-state__mark {
-  background: #fff1f0;
-  color: var(--ptmcp-danger);
+  background: var(--ptmcp-bg-danger);
+  color: var(--ptmcp-red);
 }
 [data-kind='forbidden'] .page-state__mark {
-  background: #fff8e6;
-  color: #b7791f;
+  background: var(--ptmcp-bg-warning);
+  color: var(--ptmcp-orange);
 }
 [data-kind='not-found'] .page-state__mark {
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--ptmcp-bg-neutral);
+  color: var(--ptmcp-text-muted);
 }
 .page-state__spinner {
   width: 38px;
   height: 38px;
-  border: 3px solid #dbe6f3;
+  border: 3px solid var(--ptmcp-bg-accent);
   border-top-color: var(--ptmcp-blue);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;

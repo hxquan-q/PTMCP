@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useSessionStore } from '../../stores/session';
 import { errorText, usePortalTask } from '../portalUtils';
+import { formatDate } from '../portalUtils';
+import { passwordError } from '../../services/formValidation';
 
 const router = useRouter();
 const session = useSessionStore();
@@ -15,16 +17,13 @@ function clearPasswords(): void {
   form.confirmPassword = '';
 }
 usePortalTask(clearPasswords);
-function byteLength(value: string): number {
-  return new TextEncoder().encode(value).length;
-}
 async function changePassword(): Promise<void> {
   if (saving.value) return;
   if (!form.oldPassword) {
     ElMessage.warning('请输入当前密码');
     return;
   }
-  if (form.newPassword.length < 12 || form.newPassword.length > 64 || byteLength(form.newPassword) > 72) {
+  if (passwordError(form.newPassword)) {
     ElMessage.warning('新密码需 12～64 个字符且 UTF-8 不超过 72 字节');
     return;
   }
@@ -57,11 +56,19 @@ onBeforeUnmount(() => {
   <section class="portal-page" aria-labelledby="security-title">
     <div class="page-heading">
       <div>
-        <p class="eyebrow">账号安全</p>
         <h1 id="security-title">安全设置</h1>
         <p class="page-description">修改密码后，当前账号的其他会话、PAT 和授权会按服务端规则失效。</p>
       </div>
     </div>
+    <ElCard shadow="never" class="portal-card account-summary"
+      ><template #header>当前账号</template
+      ><ElDescriptions :column="1" border
+        ><ElDescriptionsItem label="用户名">{{ session.user?.username ?? '—' }}</ElDescriptionsItem
+        ><ElDescriptionsItem label="显示名称">{{ session.user?.displayName ?? '—' }}</ElDescriptionsItem
+        ><ElDescriptionsItem label="部门">{{ session.user?.department?.name ?? '未提供' }}</ElDescriptionsItem
+        ><ElDescriptionsItem label="会话到期（台北）">{{ formatDate(session.user?.expiresAt) }}</ElDescriptionsItem></ElDescriptions
+      ></ElCard
+    >
     <ElCard shadow="never" class="portal-card"
       ><template #header>修改密码</template
       ><ElForm label-position="top" class="security-form" :disabled="saving" @submit.prevent="changePassword"
@@ -82,27 +89,22 @@ onBeforeUnmount(() => {
 .page-heading {
   margin-bottom: 24px;
 }
-.eyebrow {
-  margin: 0 0 6px;
-  color: var(--ptmcp-accent, #0070c9);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 h1 {
   margin: 0;
-  color: var(--ptmcp-ink, #1d2939);
+  color: var(--ptmcp-heading);
   font-size: 28px;
 }
 .page-description {
   margin: 8px 0 0;
-  color: var(--ptmcp-muted, #667085);
+  color: var(--ptmcp-muted);
   font-size: 14px;
 }
 .portal-card {
   max-width: 680px;
-  border-color: var(--ptmcp-border, #d9e2ec);
+  border-color: var(--ptmcp-border);
+}
+.account-summary {
+  margin-bottom: 20px;
 }
 .security-form {
   max-width: 520px;

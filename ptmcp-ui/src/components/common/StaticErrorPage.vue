@@ -10,6 +10,7 @@ const forbidden = computed(() => route.name === 'forbidden');
   <main class="static-error-page">
     <RouterLink to="/" class="static-error-page__brand">PTMCP</RouterLink>
     <PageState
+      heading-tag="h1"
       :kind="forbidden ? 'forbidden' : 'not-found'"
       :title="forbidden ? '无法访问此页面' : '页面不存在'"
       :description="

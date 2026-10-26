@@ -163,7 +163,6 @@ onMounted(async () => {
   <section class="portal-page" aria-labelledby="tokens-title">
     <div class="page-heading">
       <div>
-        <p class="eyebrow">个人接入</p>
         <h1 id="tokens-title">我的 PAT</h1>
         <p class="page-description">PAT 明文只在创建响应中出现一次，关闭提示后无法找回。</p>
       </div>
@@ -216,7 +215,8 @@ onMounted(async () => {
             ></ElSelect
           ></ElFormItem
         ><ElFormItem label="Scope" required
-          ><ElCheckboxGroup v-model="form.scopes"><ElCheckbox v-for="scope in scopes" :key="scope" :label="scope" /></ElCheckboxGroup></ElFormItem
+          ><ElCheckboxGroup v-model="form.scopes"
+            ><ElCheckbox v-for="scope in scopes" :key="scope" :label="scope" :value="scope" /></ElCheckboxGroup></ElFormItem
         ><ElFormItem label="到期时间（本机时区）" required
           ><ElDatePicker
             v-model="form.expiresAt"
@@ -247,29 +247,21 @@ onMounted(async () => {
   gap: 16px;
   margin-bottom: 24px;
 }
-.eyebrow {
-  margin: 0 0 6px;
-  color: var(--ptmcp-accent, #0070c9);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 h1 {
   margin: 0;
-  color: var(--ptmcp-ink, #1d2939);
+  color: var(--ptmcp-heading);
   font-size: 28px;
 }
 .page-description,
 .muted {
-  color: var(--ptmcp-muted, #667085);
+  color: var(--ptmcp-muted);
   font-size: 14px;
 }
 .page-description {
   margin: 8px 0 0;
 }
 .portal-card {
-  border-color: var(--ptmcp-border, #d9e2ec);
+  border-color: var(--ptmcp-border);
 }
 .filters {
   display: flex;
@@ -292,8 +284,8 @@ h1 {
   gap: 12px;
   margin-top: 18px;
   padding: 16px;
-  border: 1px solid #e3a008;
-  background: #fff8e1;
+  border: 1px solid var(--el-color-warning-light-5);
+  background: var(--ptmcp-bg-warning);
   overflow: auto;
 }
 .secret-block code {

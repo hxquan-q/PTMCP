@@ -355,7 +355,6 @@ onBeforeUnmount(() => {
     <div class="page-heading">
       <div>
         <ElButton link class="back-link" @click="router.push('/admin/datasources')">← 返回数据源</ElButton>
-        <p class="eyebrow">连接资源 / 详情</p>
         <h1 id="detail-title">{{ datasource?.name || '数据源详情' }}</h1>
         <p class="subtitle">{{ datasource?.code || '加载中…' }}</p>
       </div>
@@ -505,24 +504,16 @@ onBeforeUnmount(() => {
 .back-link {
   margin-bottom: 16px;
   padding: 0;
-  color: #467078;
-}
-.eyebrow {
-  margin: 0 0 6px;
-  color: #0f6f68;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  color: var(--ptmcp-text-muted);
 }
 h1 {
   margin: 0;
-  color: #1d2938;
+  color: var(--ptmcp-heading);
   font-size: clamp(26px, 3vw, 34px);
 }
 .subtitle {
   margin: 7px 0 0;
-  color: #6d7986;
+  color: var(--ptmcp-text-muted);
 }
 .heading-actions {
   display: flex;
@@ -535,14 +526,14 @@ h1 {
   gap: 14px;
   margin: 16px 0;
   padding: 12px 16px;
-  border: 1px solid #dce5e9;
+  border: 1px solid var(--ptmcp-border);
   border-radius: 8px;
-  background: #f8fafb;
-  color: #5f6d7a;
+  background: var(--ptmcp-chrome);
+  color: var(--ptmcp-text-muted);
   font-size: 13px;
 }
 .status-label {
-  color: #293644;
+  color: var(--ptmcp-text-list);
   font-weight: 700;
 }
 .state-alert {
@@ -551,17 +542,17 @@ h1 {
 .detail-card,
 .meta-card {
   margin-top: 16px;
-  border-color: #dce5e9;
+  border-color: var(--ptmcp-border);
 }
 .card-title {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  color: #253545;
+  color: var(--ptmcp-heading);
   font-weight: 700;
 }
 .version {
-  color: #778492;
+  color: var(--ptmcp-text-muted);
   font-size: 12px;
   font-weight: 400;
 }
@@ -589,12 +580,12 @@ h1 {
   min-width: 0;
 }
 dt {
-  color: #7b8792;
+  color: var(--ptmcp-text-muted);
   font-size: 12px;
 }
 dd {
   margin: 5px 0 0;
-  color: #263646;
+  color: var(--ptmcp-text);
   font-weight: 600;
   overflow-wrap: anywhere;
 }

@@ -171,7 +171,6 @@ onMounted(async () => {
   <section class="portal-page" aria-labelledby="roles-title">
     <div class="page-heading">
       <div>
-        <p class="eyebrow">组织与范围</p>
         <h1 id="roles-title">角色</h1>
         <p class="page-description">角色只管理功能码；数据权限在授权矩阵中单独维护。</p>
         <p class="page-description">成员数量与委派部门信息当前暂不可用。</p>
@@ -198,6 +197,10 @@ onMounted(async () => {
               ><span v-if="!row.permissionCodes.length" class="muted">未配置</span>
             </div></template
           ></ElTableColumn
+        ><ElTableColumn prop="memberCount" label="成员数" width="90"
+          ><template #default="{ row }">{{ row.memberCount ?? '未提供' }}</template></ElTableColumn
+        ><ElTableColumn label="管理部门" min-width="140"
+          ><template #default="{ row }">{{ row.managedDepartmentIds?.join('、') ?? '服务端未提供' }}</template></ElTableColumn
         ><ElTableColumn label="操作" fixed="right" width="130"
           ><template #default="{ row }"
             ><ElButton v-if="session.can('ptmcp:role:update')" link type="primary" @click="openEdit(row as Role)">编辑</ElButton
@@ -253,30 +256,22 @@ onMounted(async () => {
   gap: 16px;
   margin-bottom: 24px;
 }
-.eyebrow {
-  margin: 0 0 6px;
-  color: var(--ptmcp-accent, #0070c9);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 h1 {
   margin: 0;
-  color: var(--ptmcp-ink, #1d2939);
+  color: var(--ptmcp-heading);
   font-size: 28px;
 }
 .page-description,
 .muted,
 .helper {
-  color: var(--ptmcp-muted, #667085);
+  color: var(--ptmcp-muted);
   font-size: 14px;
 }
 .page-description {
   margin: 8px 0 0;
 }
 .portal-card {
-  border-color: var(--ptmcp-border, #d9e2ec);
+  border-color: var(--ptmcp-border);
 }
 .code-list {
   display: flex;

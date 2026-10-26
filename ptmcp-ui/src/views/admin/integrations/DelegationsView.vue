@@ -1,31 +1,29 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
-import {
-  ElAlert,
-  ElButton,
-  ElCard,
-  ElCheckbox,
-  ElCheckboxGroup,
-  ElDialog,
-  ElForm,
-  ElFormItem,
-  ElInput,
-  ElOption,
-  ElSelect,
-  ElTable,
-  ElTableColumn,
-  ElTag
-} from 'element-plus';
+import { computed, reactive, ref, watch, onMounted } from 'vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import PageHeader from '../../../components/common/PageHeader.vue';
 import PageState from '../../../components/common/PageState.vue';
-import { localOnlyReason, validateRequired, validateWindow } from './adminSurface';
 import { useSessionStore } from '../../../stores/session';
-
-const dialogVisible = ref(false);
+import { controlPlane } from '../../../services/controlPlane';
+import { controlPlaneAvailable, mutationNotice } from '../../../services/frontendMode';
+import { orgPortalApi, type User, type Department } from '../../../services/orgPortalApi';
+import { listDatasources, listMetadata } from '../../../services/data';
+import { useCursorPage } from '../../../composables/useCursorPage';
+import { errorText, formatDate, usePortalTask } from '../../portalUtils';
+import { validateRequired, validateWindow } from './adminSurface';
 const session = useSessionStore();
-const validationMessage = ref('');
+const filter = reactive({ userId: '', status: '', resourceType: '' });
+const { rows, cursor, loading, error, loaded, reset, load, retry } = useCursorPage((cursor, signal) =>
+  controlPlane.delegations.list({ ...filter, cursor }, signal)
+);
+const dialogVisible = ref(false);
+const users = ref<User[]>([]);
+const departments = ref<Department[]>([]);
+const resources = ref<{ id: string; label: string; type: string }[]>([]);
+const saving = ref(false);
+const directoryError = ref('');
+const validation = ref('');
 const errors = ref<Record<string, string>>({});
-const filter = reactive({ keyword: '', status: '', resourceType: '' });
 const draft = reactive({
   userId: '',
   departmentRootId: '',
@@ -35,13 +33,12 @@ const draft = reactive({
   validFrom: '',
   validTo: ''
 });
+let alive = true;
+let editorVersion = 0;
 const actionOptions = computed(() => session.user?.permissions.filter((code) => /^ptmcp:(user|department|role|acl):/u.test(code)) ?? []);
-const filteredHint = computed(() => {
-  const values = [filter.keyword, filter.status, filter.resourceType].filter(Boolean);
-  return values.length ? `已保留 ${values.length} 个筛选条件；接口接入后将随请求发送。` : '未设置筛选条件。';
-});
-
-function resetDraft(): void {
+function clear(): void {
+  editorVersion++;
+  dialogVisible.value = false;
   Object.assign(draft, {
     userId: '',
     departmentRootId: '',
@@ -51,14 +48,45 @@ function resetDraft(): void {
     validFrom: '',
     validTo: ''
   });
-  validationMessage.value = '';
+  validation.value = '';
   errors.value = {};
 }
+const directoryTask = usePortalTask(() => {
+  alive = false;
+  clear();
+  users.value = [];
+  departments.value = [];
+  resources.value = [];
+});
+async function loadDirectories(): Promise<void> {
+  if (!controlPlaneAvailable) return;
+  directoryError.value = '';
+  try {
+    const result = await directoryTask.run(async (signal) => {
+      const [people, depts, sources] = await Promise.all([
+        orgPortalApi.users.list({}, signal),
+        orgPortalApi.departments.list(signal),
+        listDatasources({ signal, pageSize: 100 })
+      ]);
+      const objects = await Promise.all(sources.data.items.map((source) => listMetadata({ datasourceId: source.id, signal, pageSize: 100 })));
+      return { people, depts, sources: sources.data.items, objects };
+    });
+    if (!result) return;
+    users.value = result.people.filter((user) => user.id !== session.user?.userId);
+    departments.value = result.depts;
+    resources.value = [
+      ...result.sources.map((row) => ({ id: row.id, label: row.name, type: 'DATASOURCE' })),
+      ...result.objects.flatMap((page) => page.data.items.map((row) => ({ id: row.id, label: row.objectName, type: 'OBJECT' })))
+    ];
+  } catch (reason) {
+    directoryError.value = errorText(reason);
+  }
+}
 function openCreate(): void {
-  resetDraft();
+  clear();
   dialogVisible.value = true;
 }
-function validateDraft(): void {
+function validate(): boolean {
   errors.value = validateRequired(
     {
       userId: draft.userId,
@@ -67,185 +95,211 @@ function validateDraft(): void {
       validFrom: draft.validFrom,
       validTo: draft.validTo
     },
-    { userId: '被委派管理员', departmentRootId: '部门根', resourceId: '资源', validFrom: '开始时间', validTo: '结束时间' }
+    { userId: '管理员', departmentRootId: '部门根', resourceId: '资源', validFrom: '开始时间', validTo: '结束时间' }
   );
   const windowError = validateWindow(draft.validFrom, draft.validTo);
   if (windowError) errors.value.validTo = windowError;
-  if (!draft.allowedActions.length) errors.value.allowedActions = '至少选择一个动作；真实可委派子集仍需服务端核验。';
-  if (draft.userId === session.user?.userId) errors.value.userId = '不能为自己创建或撤销委派。';
-  validationMessage.value = Object.values(errors.value).join('；') || '本地字段校验通过；真实边界仍需服务端核验，尚未提交。';
+  if (!draft.allowedActions.length) errors.value.allowedActions = '至少选择一个动作。';
+  if (!users.value.some((row) => row.id === draft.userId) || draft.userId === session.user?.userId)
+    errors.value.userId = '请选择其他受控管理员，不能自我委派。';
+  if (!departments.value.some((row) => row.id === draft.departmentRootId)) errors.value.departmentRootId = '请选择可管理的部门根。';
+  if (!resources.value.some((row) => row.id === draft.resourceId && row.type === draft.resourceType))
+    errors.value.resourceId = '请选择当前目录资源。';
+  validation.value = Object.keys(errors.value).length ? '请检查标出的字段。' : '字段校验通过，服务端仍须核验管理范围和期限。';
+  return !Object.keys(errors.value).length;
 }
-function clearPreview(): void {
-  dialogVisible.value = false;
-  resetDraft();
+async function submit(): Promise<void> {
+  if (saving.value || !validate() || !controlPlaneAvailable || directoryError.value || !session.can('ptmcp:delegation:create')) return;
+  saving.value = true;
+  const own = editorVersion;
+  try {
+    await ElMessageBox.confirm(
+      `管理员 ${draft.userId}：部门子树 ${draft.departmentRootId} ∩ ${draft.resourceType}:${draft.resourceId} ∩ ${draft.allowedActions.length} 个动作；有效至 ${formatDate(new Date(draft.validTo).toISOString())}（Asia/Taipei）。`,
+      '确认委派边界',
+      { type: 'warning' }
+    );
+    if (own !== editorVersion || !alive) return;
+    await controlPlane.delegations.create({
+      ...draft,
+      allowedActions: [...draft.allowedActions],
+      validFrom: new Date(draft.validFrom).toISOString(),
+      validTo: new Date(draft.validTo).toISOString()
+    });
+    if (own !== editorVersion || !alive) return;
+    clear();
+    ElMessage.success(mutationNotice);
+    await load();
+  } catch (reason) {
+    if (reason !== 'cancel' && reason !== 'close' && own === editorVersion) validation.value = errorText(reason);
+  } finally {
+    saving.value = false;
+  }
 }
-onMounted(() => window.addEventListener('ptmcp:sensitive-clear', clearPreview));
-onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearPreview));
+async function revoke(id: string): Promise<void> {
+  const row = rows.value.find((item) => item.id === id);
+  if (!row) return;
+  if (saving.value || row.userId === session.user?.userId || !session.can('ptmcp:delegation:delete')) return;
+  saving.value = true;
+  try {
+    await ElMessageBox.confirm(`撤销后，管理员 ${row.userId} 将失去此委派范围。变更范围需撤销后新建。`, '撤销委派', { type: 'warning' });
+    await controlPlane.delegations.revoke(row);
+    ElMessage.success(mutationNotice);
+    await load();
+  } catch (reason) {
+    if (reason !== 'cancel' && reason !== 'close') {
+      ElMessage.error(errorText(reason));
+      await load();
+    }
+  } finally {
+    saving.value = false;
+  }
+}
+watch(filter, reset, { flush: 'sync' });
+onMounted(() => {
+  if (controlPlaneAvailable) {
+    void load();
+    void loadDirectories();
+  }
+});
 </script>
-
 <template>
   <div class="admin-page">
-    <PageHeader title="管理委派" description="把管理员能力限定在部门子树、资源、动作和服务器有效期的交集内。">
-      <template #actions><ElButton v-if="session.can('ptmcp:delegation:create')" type="primary" @click="openCreate">新建委派</ElButton></template>
-    </PageHeader>
-
-    <ElAlert type="warning" show-icon :closable="false" title="委派接口待接入" :description="localOnlyReason('管理委派')" />
-
-    <ElCard class="filter-card" shadow="never">
-      <div class="filter-grid" aria-label="委派筛选">
-        <ElInput v-model="filter.keyword" clearable placeholder="筛选管理员 ID（本地预览）" aria-label="管理员 ID" />
-        <ElSelect v-model="filter.status" clearable placeholder="全部状态" aria-label="状态">
-          <ElOption label="生效中" value="ACTIVE" /><ElOption label="已到期" value="EXPIRED" /><ElOption label="已撤销" value="REVOKED" />
-        </ElSelect>
-        <ElSelect v-model="filter.resourceType" clearable placeholder="全部资源类型" aria-label="资源类型">
-          <ElOption label="数据源" value="DATASOURCE" /><ElOption label="命名空间" value="NAMESPACE" /><ElOption label="对象" value="OBJECT" />
-        </ElSelect>
-        <span class="filter-hint">{{ filteredHint }}</span>
-      </div>
-    </ElCard>
-
-    <ElCard class="table-card" shadow="never">
-      <div class="section-heading">
-        <div>
-          <h2>委派记录</h2>
-          <p>记录由服务端返回后才会出现在此处。</p>
-        </div>
-        <ElTag type="info" effect="plain">未连接</ElTag>
-      </div>
-      <ElTable :data="[]" class="empty-table" aria-label="委派记录">
-        <ElTableColumn prop="userId" label="管理员" min-width="150" />
-        <ElTableColumn prop="departmentRootId" label="部门根" min-width="130" />
-        <ElTableColumn prop="resource" label="资源范围" min-width="180" />
-        <ElTableColumn prop="allowedActions" label="动作" min-width="150" />
-        <ElTableColumn prop="validTo" label="有效期" min-width="170" />
-        <ElTableColumn prop="status" label="状态" width="100" />
-        <template #empty><PageState title="委派记录尚未读取" description="管理委派服务尚未接入，暂时无法读取记录或确认有效委派范围。" /></template>
-      </ElTable>
-    </ElCard>
-
-    <ElCard class="boundary-card" shadow="never">
-      <h2>边界说明</h2>
-      <div class="boundary-grid">
-        <div><strong>部门子树</strong><span>只能从可管理根节点向下展开。</span></div>
-        <div><strong>资源范围</strong><span>资源身份和 generation 由服务端确认。</span></div>
-        <div><strong>动作集合</strong><span>不得超过操作者可委派的动作子集。</span></div>
-        <div><strong>有效期</strong><span>服务器时间决定到期，不能由浏览器延长。</span></div>
-      </div>
-    </ElCard>
-
-    <ElDialog v-model="dialogVisible" title="新建委派 · 本地预览" width="min(680px, calc(100vw - 28px))" destroy-on-close @closed="resetDraft">
-      <ElAlert
-        type="info"
-        show-icon
-        :closable="false"
-        title="仅本地预览"
-        description="委派服务尚未接入。管理员、部门根和资源须从服务端受控范围选择，当前不可选；可以检查动作与日期字段。"
-      />
-      <ElForm label-position="top" class="dialog-form" @submit.prevent>
-        <div class="two-col">
-          <ElFormItem label="被委派管理员" required :error="errors.userId"
-            ><ElSelect v-model="draft.userId" disabled placeholder="管理员目录尚未接入"
-          /></ElFormItem>
-          <ElFormItem label="部门根" required :error="errors.departmentRootId"
-            ><ElSelect v-model="draft.departmentRootId" disabled placeholder="可管理部门范围尚未接入"
-          /></ElFormItem>
-        </div>
-        <div class="two-col">
-          <ElFormItem label="资源类型" required
-            ><ElSelect v-model="draft.resourceType"
-              ><ElOption label="数据源" value="DATASOURCE" /><ElOption label="命名空间" value="NAMESPACE" /><ElOption
+    <PageHeader title="管理委派" description="部门子树 ∩ 资源范围 ∩ 动作 ∩ 服务器有效期。"
+      ><template #actions
+        ><ElButton v-if="session.can('ptmcp:delegation:create')" type="primary" @click="openCreate">新建委派</ElButton></template
+      ></PageHeader
+    >
+    <ElAlert
+      v-if="!controlPlaneAvailable"
+      type="warning"
+      :closable="false"
+      title="委派管理接口待接入，正常模式禁止提交；独立开发预览支持完整前端交互。"
+    />
+    <ElAlert v-if="directoryError" type="error" :title="directoryError" :closable="false"
+      ><ElButton @click="loadDirectories">重新加载目录</ElButton></ElAlert
+    >
+    <ElCard shadow="never"
+      ><ElForm class="filters" label-position="top" @submit.prevent="load()"
+        ><ElFormItem label="管理员"><ElInput v-model="filter.userId" clearable placeholder="管理员 ID" /></ElFormItem
+        ><ElFormItem label="状态"
+          ><ElSelect v-model="filter.status" clearable placeholder="全部状态"
+            ><ElOption label="生效中" value="ACTIVE" /><ElOption label="已到期" value="EXPIRED" /><ElOption
+              label="已撤销"
+              value="REVOKED" /></ElSelect></ElFormItem
+        ><ElFormItem label="资源类型"
+          ><ElSelect v-model="filter.resourceType" clearable placeholder="全部类型"
+            ><ElOption label="数据源" value="DATASOURCE" /><ElOption label="命名空间" value="NAMESPACE" /><ElOption
+              label="对象"
+              value="OBJECT" /></ElSelect></ElFormItem
+        ><ElButton native-type="submit" type="primary" :disabled="!controlPlaneAvailable" :loading="loading">查询</ElButton
+        ><ElButton
+          @click="
+            Object.assign(filter, { userId: '', status: '', resourceType: '' });
+            controlPlaneAvailable && load();
+          "
+          >重置</ElButton
+        ></ElForm
+      ></ElCard
+    >
+    <ElCard shadow="never"
+      ><ElAlert v-if="error" :title="error" type="error" :closable="false"><ElButton @click="retry">重试</ElButton></ElAlert
+      ><ElSkeleton v-if="loading" :rows="5" animated /><ElTable v-else :data="rows" aria-label="委派记录"
+        ><ElTableColumn prop="userId" label="管理员" min-width="120" /><ElTableColumn
+          prop="departmentRootId"
+          label="部门根"
+          min-width="120" /><ElTableColumn label="资源范围" min-width="170"
+          ><template #default="{ row }">{{ row.resourceType }}:{{ row.resourceId }}</template></ElTableColumn
+        ><ElTableColumn prop="allowedActions" label="动作" min-width="200" /><ElTableColumn label="有效期（台北）" min-width="260"
+          ><template #default="{ row }">{{ formatDate(row.validFrom) }} 至 {{ formatDate(row.validTo) }}</template></ElTableColumn
+        ><ElTableColumn prop="status" label="状态" width="100" /><ElTableColumn prop="version" label="版本" width="80" /><ElTableColumn
+          label="操作"
+          width="90"
+          ><template #default="{ row }"
+            ><ElButton
+              v-if="session.can('ptmcp:delegation:delete') && row.status === 'ACTIVE'"
+              link
+              type="danger"
+              :disabled="saving || row.userId === session.user?.userId"
+              @click="revoke(String(row.id))"
+              >撤销</ElButton
+            ></template
+          ></ElTableColumn
+        ><template #empty
+          ><PageState
+            :title="loaded ? '没有符合条件的委派' : '委派尚未读取'"
+            description="可调整条件或新建委派；未读取不代表没有委派。" /></template></ElTable
+      ><ElButton v-if="cursor" :loading="loading" @click="load(true)">加载更多</ElButton></ElCard
+    >
+    <ElAlert
+      type="info"
+      :closable="false"
+      title="委派不支持直接编辑"
+      description="变更管理员、资源或期限时，先撤销旧委派再创建。撤销和到期会使对应管理权失效；禁止自我操作，服务端仍需核验能力和有效期。"
+    />
+    <ElDialog v-model="dialogVisible" title="新建委派" width="min(680px, calc(100vw - 28px))" destroy-on-close @close="editorVersion++">
+      <ElForm label-position="top" @submit.prevent="submit"
+        ><div class="two-col">
+          <ElFormItem label="管理员" required :error="errors.userId"
+            ><ElSelect v-model="draft.userId" filterable :disabled="!controlPlaneAvailable || saving" placeholder="选择其他管理员"
+              ><ElOption v-for="user in users" :key="user.id" :value="user.id" :label="user.displayName" /></ElSelect></ElFormItem
+          ><ElFormItem label="部门根" required :error="errors.departmentRootId"
+            ><ElSelect v-model="draft.departmentRootId" filterable :disabled="!controlPlaneAvailable || saving"
+              ><ElOption v-for="dept in departments" :key="dept.id" :value="dept.id" :label="dept.name" /></ElSelect></ElFormItem
+          ><ElFormItem label="资源类型"
+            ><ElSelect v-model="draft.resourceType" :disabled="saving" @change="draft.resourceId = ''">
+              <ElOption label="数据源" value="DATASOURCE" /><ElOption label="命名空间（可信目录待接入）" value="NAMESPACE" disabled /><ElOption
                 label="对象"
-                value="OBJECT" /></ElSelect
+                value="OBJECT" /></ElSelect></ElFormItem
+          ><ElFormItem label="目标资源" required :error="errors.resourceId"
+            ><ElSelect v-model="draft.resourceId" filterable :disabled="!controlPlaneAvailable || saving"
+              ><ElOption
+                v-for="resource in resources.filter((row) => row.type === draft.resourceType)"
+                :key="resource.id"
+                :label="resource.label"
+                :value="resource.id" /></ElSelect
           ></ElFormItem>
-          <ElFormItem label="目标资源" required :error="errors.resourceId"
-            ><ElSelect v-model="draft.resourceId" disabled placeholder="受控资源目录尚未接入"
-          /></ElFormItem>
         </div>
-        <ElFormItem label="动作预览" required :error="errors.allowedActions"
-          ><ElCheckboxGroup v-model="draft.allowedActions"
+        <ElFormItem label="动作" required :error="errors.allowedActions"
+          ><ElCheckboxGroup v-model="draft.allowedActions" :disabled="saving"
             ><ElCheckbox v-for="action in actionOptions" :key="action" :value="action">{{ action }}</ElCheckbox></ElCheckboxGroup
           ></ElFormItem
         >
-        <p class="filter-hint">仅列出当前会话的组织/ACL功能码供预览，不把它视为服务端已确认的可委派子集。</p>
+        <p class="helper">当前会话功能码仅作预选，最终可委派子集须由服务端确认。</p>
         <div class="two-col">
-          <ElFormItem label="开始时间（浏览器本地时区）" required :error="errors.validFrom"
-            ><ElInput v-model="draft.validFrom" type="datetime-local" /></ElFormItem
-          ><ElFormItem label="结束时间（浏览器本地时区）" required :error="errors.validTo"
-            ><ElInput v-model="draft.validTo" type="datetime-local"
+          <ElFormItem label="开始时间（本机时区）" required :error="errors.validFrom"
+            ><ElInput v-model="draft.validFrom" type="datetime-local" :disabled="saving" /></ElFormItem
+          ><ElFormItem label="结束时间（本机时区）" required :error="errors.validTo"
+            ><ElInput v-model="draft.validTo" type="datetime-local" :disabled="saving"
           /></ElFormItem>
         </div>
-        <p v-if="validationMessage" class="validation-message" role="status">{{ validationMessage }}</p>
-      </ElForm>
+        <p v-if="validation" role="status">{{ validation }}</p></ElForm
+      >
       <template #footer
-        ><ElButton @click="dialogVisible = false">关闭</ElButton><ElButton @click="validateDraft">校验预览</ElButton
-        ><ElButton type="primary" disabled title="后端 delegation:create 尚未提供">提交委派</ElButton></template
+        ><ElButton @click="clear">关闭</ElButton><ElButton :disabled="saving" @click="validate">校验字段</ElButton
+        ><ElButton type="primary" :disabled="!controlPlaneAvailable || !!directoryError" :loading="saving" @click="submit"
+          >提交委派</ElButton
+        ></template
       >
     </ElDialog>
   </div>
 </template>
-
 <style scoped>
 .admin-page {
   display: grid;
   gap: 16px;
 }
-.filter-card,
-.table-card,
-.boundary-card {
-  border-radius: 8px;
-}
-.filter-grid {
-  display: grid;
-  grid-template-columns: minmax(180px, 1.5fr) repeat(2, minmax(150px, 1fr)) minmax(180px, 1fr);
-  gap: 10px;
-  align-items: center;
-}
-.filter-hint,
-.section-heading p,
-.boundary-grid span {
-  color: var(--ptmcp-text-muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-.section-heading {
+.filters {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  align-items: flex-end;
+  flex-wrap: wrap;
   gap: 12px;
 }
-h2 {
+.filters .el-form-item {
   margin: 0;
-  color: var(--ptmcp-text);
-  font-size: 16px;
+  flex: 1 1 180px;
+  min-width: 0;
 }
-.section-heading p {
-  margin: 6px 0 0;
-}
-.empty-table {
-  margin-top: 16px;
-}
-.boundary-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  margin-top: 14px;
-}
-.boundary-grid div {
-  display: grid;
-  gap: 6px;
-  padding: 14px;
-  border: 1px solid var(--ptmcp-border);
-  border-radius: 6px;
-  background: #f8fafc;
-}
-.boundary-grid strong {
-  color: var(--ptmcp-text);
-  font-size: 13px;
-}
-.dialog-form {
-  margin-top: 18px;
-}
-.dialog-form .el-select {
+.el-select {
   width: 100%;
 }
 .two-col {
@@ -253,22 +307,14 @@ h2 {
   grid-template-columns: 1fr 1fr;
   gap: 14px;
 }
-.validation-message {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: 6px;
-  background: #f5f8fb;
+.helper {
   color: var(--ptmcp-text-muted);
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.6;
 }
-@media (max-width: 760px) {
-  .filter-grid,
-  .boundary-grid,
+@media (max-width: 700px) {
   .two-col {
     grid-template-columns: 1fr;
-  }
-  .filter-hint {
-    grid-column: auto;
   }
 }
 </style>

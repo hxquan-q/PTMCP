@@ -1,0 +1,566 @@
+/** Synthetic UI fixtures, loaded only by Vite's development-only frontend-preview mode.
+ * No network, browser persistence, real credentials or business SQL are used here. */
+type Row = Record<string, unknown>;
+export type PreviewScenario = 'normal' | 'empty' | 'error' | 'conflict' | 'slow';
+let scenario: PreviewScenario = 'normal';
+export function setPreviewScenario(value: PreviewScenario): void {
+  scenario = value;
+}
+interface PreviewOptions {
+  method?: string;
+  body?: unknown;
+  headers?: HeadersInit;
+  signal?: AbortSignal;
+}
+
+export function createPreviewServer() {
+  const now = new Date().toISOString();
+  const permissions = Object.entries({
+    datasource: 'list read create update delete test sync',
+    metadata: 'list read dictionary',
+    job: 'read',
+    department: 'list read create update delete',
+    user: 'list read create update delete status reset-password assign-role move',
+    role: 'list read create update delete',
+    platform: 'list read create update delete scope',
+    client: 'list read create update delete',
+    delegation: 'list create delete',
+    acl: 'list read create update delete preview effective',
+    audit: 'list read decrypt'
+  }).flatMap(([resource, actions]) => actions.split(' ').map((action) => `ptmcp:${resource}:${action}`));
+  const tables: Record<string, Row[]> = {
+    departments: [
+      { id: '1', name: '演示总部', parentId: null, enabled: true, ancestors: '0', version: 1 },
+      { id: '2', name: '数据团队', parentId: '1', enabled: true, ancestors: '0,1', version: 1 }
+    ],
+    users: [
+      { id: '1', username: 'preview-admin', displayName: '前端演示管理员', deptId: '1', enabled: true, roleIds: ['1'], version: 1 },
+      { id: '2', username: 'preview-analyst', displayName: '合成分析员', deptId: '2', enabled: true, roleIds: ['2'], version: 1 }
+    ],
+    roles: [
+      { id: '1', key: 'PREVIEW_ADMIN', name: '演示管理员', enabled: true, permissionCodes: permissions, version: 1 },
+      { id: '2', key: 'PREVIEW_READER', name: '演示分析员', enabled: true, permissionCodes: [], version: 1 }
+    ],
+    platforms: [
+      {
+        id: '1',
+        code: 'preview-desktop',
+        name: '合成桌面平台',
+        tier: 3,
+        catalogMode: 'DISCOVER',
+        proofMode: 'NONE',
+        proofConfigured: false,
+        status: 'ACTIVE',
+        version: '1',
+        scopeVersion: '1',
+        securityVersion: '1'
+      },
+      {
+        id: '2',
+        code: 'preview-service',
+        name: '合成受信服务',
+        tier: 1,
+        catalogMode: 'HIDE',
+        proofMode: 'MTLS',
+        proofConfigured: true,
+        status: 'DISABLED',
+        version: '1',
+        scopeVersion: '1',
+        securityVersion: '1'
+      }
+    ],
+    clients: [
+      {
+        id: '1',
+        clientId: 'preview-public',
+        platformId: '1',
+        name: '合成公开客户端',
+        type: 'PUBLIC',
+        authMethods: ['none'],
+        redirectUris: ['http://127.0.0.1:3000/callback'],
+        allowedScopes: ['mcp:catalog'],
+        jwksUri: '',
+        status: 'ACTIVE',
+        version: '1',
+        secretConfigured: false
+      }
+    ],
+    delegations: [
+      {
+        id: '1',
+        userId: '2',
+        departmentRootId: '2',
+        resourceType: 'DATASOURCE',
+        resourceId: '1',
+        allowedActions: ['ptmcp:acl:list'],
+        validFrom: now,
+        validTo: new Date(Date.now() + 7 * 86400000).toISOString(),
+        status: 'ACTIVE',
+        version: '1'
+      }
+    ],
+    datasources: [
+      {
+        id: '1',
+        version: '1',
+        code: 'preview-mysql',
+        name: '合成订单库',
+        engine: 'MYSQL',
+        host: 'db.example.test',
+        port: 3306,
+        databaseName: 'synthetic',
+        username: 'preview_reader',
+        tlsMode: 'VERIFY_FULL',
+        poolMax: 2,
+        status: 'ACTIVE',
+        configVersion: '1',
+        resourceVersion: '1',
+        activeSnapshotId: '1',
+        lastSyncAt: now,
+        credentialConfigured: true,
+        health: 'HEALTHY'
+      },
+      {
+        id: '2',
+        version: '1',
+        code: 'preview-pg',
+        name: '合成分析库',
+        engine: 'POSTGRESQL',
+        host: 'pg.example.test',
+        port: 5432,
+        databaseName: 'synthetic',
+        username: 'preview_reader',
+        tlsMode: 'VERIFY_FULL',
+        poolMax: 2,
+        status: 'DRAFT',
+        configVersion: '1',
+        resourceVersion: '1',
+        activeSnapshotId: null,
+        lastSyncAt: null,
+        credentialConfigured: false,
+        health: 'UNKNOWN'
+      }
+    ],
+    objects: [
+      {
+        id: '1',
+        objectId: '1',
+        datasourceId: '1',
+        namespaceId: '1',
+        databaseName: 'synthetic',
+        schemaName: null,
+        objectName: 'synthetic_orders',
+        tableName: 'synthetic_orders',
+        objectType: 'TABLE',
+        tableComment: '前端合成订单表',
+        generation: '1',
+        snapshotId: '1',
+        snapshotVersion: '1',
+        authorized: true,
+        metadataVisible: true,
+        columns: [
+          {
+            ordinal: 1,
+            name: 'id',
+            databaseType: 'BIGINT',
+            jdbcType: -5,
+            nullable: false,
+            precision: 19,
+            scale: 0,
+            maxLength: null,
+            comment: '合成编号',
+            primaryKey: true,
+            foreignKey: null
+          },
+          {
+            ordinal: 2,
+            name: 'amount',
+            databaseType: 'DECIMAL',
+            jdbcType: 3,
+            nullable: false,
+            precision: 12,
+            scale: 2,
+            maxLength: null,
+            comment: '合成金额',
+            primaryKey: false,
+            foreignKey: null
+          }
+        ],
+        dictionary: { title: '合成订单', description: '仅用于前端预览，不对应真实业务表。', ownerUserId: null, version: '1', columns: [] },
+        foreignKeys: [],
+        foreignKeysRestricted: true
+      }
+    ],
+    grants: [
+      {
+        id: '1',
+        subjectType: 'USER',
+        subjectId: '2',
+        resourceType: 'OBJECT',
+        resourceId: '1',
+        resourceGeneration: '1',
+        action: 'READ',
+        effect: 'ALLOW',
+        includeDescendants: false,
+        validFrom: now,
+        validTo: null,
+        reason: '前端合成授权',
+        status: 'ACTIVE',
+        version: '1'
+      }
+    ],
+    tokens: [
+      {
+        id: '1',
+        name: '合成开发令牌',
+        prefix: 'preview_',
+        scopes: ['mcp:catalog'],
+        platformId: '1',
+        expiresAt: '2099-01-01T00:00:00Z',
+        lastUsedAt: null,
+        createdAt: now,
+        status: 'ACTIVE'
+      }
+    ],
+    authorizations: [
+      {
+        id: '1',
+        clientName: '合成公开客户端',
+        platformId: '1',
+        issuedAt: now,
+        lastUsedAt: now,
+        status: 'ACTIVE',
+        absoluteExpiresAt: '2099-01-01T00:00:00Z'
+      }
+    ],
+    audit: ['SUCCESS', 'UNKNOWN', 'ERROR'].map((result, index) => ({
+      requestId: `preview-request-${index + 1}`,
+      userId: '2',
+      platformId: '1',
+      datasourceId: '1',
+      tool: 'query',
+      startedAt: new Date(Date.now() - (index + 1) * 60000).toISOString(),
+      completedAt: result === 'UNKNOWN' ? null : now,
+      result,
+      verdict: result === 'ERROR' ? 'DENY' : 'ALLOW',
+      errorCode: result === 'ERROR' ? 'NOT_AUTHORIZED' : null,
+      sqlMasked: 'SELECT id FROM synthetic_orders WHERE id = ?',
+      durationMs: 24,
+      rowsReturned: result === 'SUCCESS' ? 5 : null,
+      truncated: false,
+      resourceRefs: [{ objectId: '1' }],
+      versions: { securityVersion: '1' },
+      queueMs: 2,
+      dbMs: 15,
+      responseBytes: 160,
+      fingerprint: 'synthetic-fingerprint'
+    })),
+    jobs: [
+      {
+        id: '1',
+        datasourceId: '1',
+        type: 'SYNC',
+        state: 'SUCCEEDED',
+        progress: { processed: 1, total: 1 },
+        startedAt: now,
+        finishedAt: now,
+        snapshotId: '1',
+        errorCode: null
+      }
+    ]
+  };
+  const scope: Record<string, Row> = {
+    '1': {
+      items: [{ resourceType: 'OBJECT', resourceId: '1', resourceGeneration: '1', action: 'READ', includeDescendants: false }],
+      scopeVersion: '1',
+      version: '1'
+    }
+  };
+  let serial = 100;
+  let signedIn = true;
+  const response = (data: unknown, status = 200) =>
+    new Response(JSON.stringify(data), {
+      status,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+        'X-PTMCP-Preview': 'synthetic',
+        ETag: `"${String((data as Row | null)?.version ?? ((data as Row | null)?.dictionary as Row | undefined)?.version ?? '1')}"`
+      }
+    });
+  const fail = (status: number, code: string) => response({ code, retryable: false }, status);
+  function page(rows: Row[], query: URLSearchParams) {
+    let values = rows.filter((row) =>
+      [
+        'status',
+        'type',
+        'tier',
+        'engine',
+        'userId',
+        'subjectId',
+        'subjectType',
+        'result',
+        'verdict',
+        'tool',
+        'errorCode',
+        'platformId',
+        'datasourceId'
+      ].every((key) => !query.get(key) || String(row[key]) === query.get(key))
+    );
+    const keyword = (query.get('keyword') ?? '').toLowerCase();
+    if (keyword)
+      values = values.filter((row) =>
+        ['name', 'code', 'username', 'displayName', 'tableName', 'objectName'].some((key) =>
+          String(row[key] ?? '')
+            .toLowerCase()
+            .includes(keyword)
+        )
+      );
+    if (query.get('departmentId')) values = values.filter((row) => row.deptId === query.get('departmentId'));
+    if (query.get('from')) values = values.filter((row) => String(row.startedAt) >= query.get('from')!);
+    if (query.get('to')) values = values.filter((row) => String(row.startedAt) < query.get('to')!);
+    const start = Number(query.get('cursor') ?? 0);
+    const size = Math.min(Number(query.get('pageSize') ?? 20), 100);
+    return { items: values.slice(start, start + size), nextCursor: values.length > start + size ? String(start + size) : null };
+  }
+  return async (path: string, options: PreviewOptions = {}): Promise<Response> => {
+    if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    const url = new URL(path, 'http://preview.invalid');
+    const parts = url.pathname.replace('/api/v1/', '').split('/');
+    const [area, resource, id, action] = parts;
+    const method = options.method ?? 'GET';
+    const body = options.body && typeof options.body === 'object' ? (options.body as Row) : {};
+    if (area !== 'session') {
+      if (scenario === 'slow')
+        await new Promise<void>((resolve, reject) => {
+          const finish = () => {
+            options.signal?.removeEventListener('abort', abort);
+            resolve();
+          };
+          const timeout = setTimeout(finish, 1200);
+          const abort = () => {
+            clearTimeout(timeout);
+            reject(new DOMException('Aborted', 'AbortError'));
+          };
+          options.signal?.addEventListener('abort', abort, { once: true });
+        });
+      if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      if (scenario === 'error') return fail(503, 'SYNTHETIC_UNAVAILABLE');
+      if (scenario === 'conflict' && !['GET', 'HEAD'].includes(method)) return fail(412, 'VERSION_CONFLICT');
+      if (scenario === 'empty' && method === 'GET') {
+        if ((resource === 'metadata' && !!action) || (resource === 'acl' && id === 'grants' && !!action)) return fail(404, 'NOT_FOUND');
+        if (resource === 'platforms' && action === 'scopes') return response({ items: [], version: '1', scopeVersion: '1' });
+        if (id && !(resource === 'acl' && ['grants', 'effective'].includes(id)) && !(resource === 'metadata' && id === 'objects') && !action)
+          return fail(404, 'NOT_FOUND');
+        return response(
+          ['departments', 'users', 'roles'].includes(resource) || (resource === 'acl' && id === 'grants')
+            ? []
+            : { items: [], nextCursor: null, evaluatedAt: now, versions: {} }
+        );
+      }
+    }
+    if (area === 'session') {
+      if (resource === 'csrf') return response({ csrfToken: 'synthetic-csrf', expiresAt: '2099-01-01T00:00:00Z' });
+      if (resource === 'login') {
+        signedIn = true;
+        return response({});
+      }
+      if (resource === 'logout' || resource === 'password') {
+        signedIn = false;
+        return response({});
+      }
+      if (!signedIn) return fail(401, 'SESSION_EXPIRED');
+      return response({
+        userId: '1',
+        username: 'preview-admin',
+        displayName: '前端演示管理员',
+        department: { id: '1', name: '演示总部' },
+        roles: [{ id: '1', name: '演示管理员' }],
+        permissions,
+        managedScopes: ['PREVIEW_ONLY'],
+        expiresAt: '2099-01-01T00:00:00Z'
+      });
+    }
+    if (!signedIn) return fail(401, 'SESSION_EXPIRED');
+    if (area === 'me' && resource === 'access-context') {
+      const level = url.searchParams.get('level');
+      const rows =
+        level === 'PLATFORM'
+          ? tables.platforms.map((row) => ({ ...row, type: 'PLATFORM' }))
+          : level === 'DATASOURCE'
+            ? tables.datasources.map((row) => ({ ...row, type: 'DATASOURCE' }))
+            : [{ type: 'NAMESPACE', id: '1', databaseName: 'synthetic', schemaName: null, displayName: 'synthetic' }];
+      return response({ ...page(rows, new URLSearchParams({ pageSize: '100' })), evaluatedAt: now, versions: { securityVersion: '1' } });
+    }
+    if (resource === 'mcp-config')
+      return response({
+        transport: 'streamable-http',
+        url: 'https://mcp.example.test/mcp',
+        authentication: ['OAuth', 'PAT'],
+        configTemplate: '{"mcpServers":{"synthetic":{"url":"https://mcp.example.test/mcp","headers":{"Authorization":"Bearer <YOUR_PAT>"}}}}',
+        compatibilityStatus: 'NOT_VALIDATED',
+        validatedVersion: null
+      });
+    if (resource === 'acl' && id === 'effective')
+      return response({
+        items: tables.objects.map((row) => ({
+          resourceId: row.id,
+          resourceType: 'OBJECT',
+          meta: true,
+          read: true,
+          sourceGrantIds: ['1'],
+          reasonCodes: ['SYNTHETIC_PREVIEW']
+        })),
+        nextCursor: null
+      });
+    if (resource === 'acl' && id === 'preview')
+      return response({
+        decisions: ((body.resourceIds as string[]) ?? []).map((resourceId) => ({
+          resourceId,
+          meta: true,
+          read: true,
+          sourceGrantIds: ['1'],
+          reasonCodes: ['SYNTHETIC_PREVIEW']
+        })),
+        evaluatedAt: now,
+        nextBoundaryAt: null,
+        versions: { securityVersion: '1' }
+      });
+    if (resource === 'platforms' && action === 'scopes') {
+      const current = scope[id] ?? { items: [], scopeVersion: '1', version: '1' };
+      if (method === 'PUT') {
+        if (new Headers(options.headers).get('If-Match') !== `"${current.version}"`) return fail(412, 'VERSION_CONFLICT');
+        scope[id] = { items: body.items, scopeVersion: String(Number(current.scopeVersion) + 1), version: String(Number(current.version) + 1) };
+      }
+      return response(scope[id] ?? current);
+    }
+    if (resource === 'audit' && action === 'decrypt') {
+      if (!tables.audit.some((row) => row.requestId === id)) return fail(404, 'NOT_FOUND');
+      if (
+        String(body.reason ?? '').trim().length < 10 ||
+        String(body.reason).length > 500 ||
+        !Array.isArray(body.fields) ||
+        !body.fields.length ||
+        body.fields.some((field) => !['sqlRaw', 'sqlFinal'].includes(String(field)))
+      )
+        return fail(400, 'INVALID_REQUEST');
+      return response({
+        ...Object.fromEntries(
+          (body.fields as string[]).map((field) => [field, 'SELECT id FROM synthetic_orders WHERE id = 42 /* synthetic preview only */'])
+        ),
+        expiresAt: new Date(Date.now() + 30000).toISOString()
+      });
+    }
+    if (resource === 'datasources' && ['test', 'sync'].includes(action)) {
+      const job: Row = { ...tables.jobs[0], id: String(++serial), datasourceId: id, type: action === 'test' ? 'TEST' : 'SYNC' };
+      tables.jobs.push(job);
+      if (action === 'test') job.snapshotId = null;
+      else {
+        const source = tables.datasources.find((row) => row.id === id);
+        if (source) {
+          source.activeSnapshotId = job.snapshotId;
+          source.lastSyncAt = new Date().toISOString();
+        }
+      }
+      return response(job, 202);
+    }
+    let table = resource;
+    let rowId: string | undefined = id;
+    let subAction = action;
+    if (resource === 'metadata') {
+      table = 'objects';
+      rowId = action;
+      subAction = parts[4];
+    }
+    if (resource === 'acl') {
+      table = 'grants';
+      rowId = action;
+      subAction = parts[4];
+    }
+    if (resource === 'dictionary') table = 'objects';
+    if (resource === 'history') table = 'audit';
+    if (resource === 'platforms' && action === 'clients') {
+      table = 'clients';
+      rowId = undefined;
+    }
+    const rows = tables[table];
+    if (!rows) return fail(501, 'PREVIEW_NOT_IMPLEMENTED');
+    const row = rows.find((item) => (table === 'audit' ? item.requestId : item.id) === rowId);
+    if (method === 'GET') {
+      if (table === 'roles')
+        for (const role of rows) {
+          role.memberCount = tables.users.filter((user) => (user.roleIds as string[]).includes(String(role.id))).length;
+          role.managedDepartmentIds = role.id === '1' ? ['1'] : ['2'];
+        }
+      if (rowId) return row ? response(row) : fail(404, 'NOT_FOUND');
+      const selected = resource === 'platforms' && action === 'clients' ? rows.filter((item) => item.platformId === id) : rows;
+      return response(
+        ['departments', 'users', 'roles', 'grants'].includes(table) ? page(selected, url.searchParams).items : page(selected, url.searchParams)
+      );
+    }
+    if (method === 'POST') {
+      const created: Row = { ...body, id: String(++serial), version: '1', status: body.status ?? 'ACTIVE', createdAt: now };
+      // Write-only inputs are never retained in fixtures or included in list/detail DTOs.
+      for (const key of ['credential', 'initialPassword', 'newPassword', 'proofConfig']) delete created[key];
+      if (table === 'datasources')
+        Object.assign(created, {
+          credentialConfigured: true,
+          configVersion: '1',
+          resourceVersion: '1',
+          activeSnapshotId: null,
+          health: 'UNKNOWN',
+          lastSyncAt: null
+        });
+      if (table === 'clients')
+        Object.assign(created, { platformId: id, clientId: `synthetic-client-${created.id}`, secretConfigured: body.type === 'CONFIDENTIAL' });
+      if (table === 'platforms') Object.assign(created, { securityVersion: '1', scopeVersion: '1', proofConfigured: body.proofMode !== 'NONE' });
+      if (table === 'tokens') Object.assign(created, { prefix: 'preview_', lastUsedAt: null, expiresAt: body.expiresAt ?? '2099-01-01T00:00:00Z' });
+      rows.push(created);
+      if (table === 'clients')
+        return response(
+          {
+            client: created,
+            ...(body.type === 'CONFIDENTIAL' && ((body.authMethods as string[]) ?? []).includes('client_secret_basic')
+              ? { clientSecret: 'synthetic-secret-not-a-credential' }
+              : {})
+          },
+          201
+        );
+      if (table === 'tokens') return response({ token: 'synthetic-pat-not-a-credential', metadata: created }, 201);
+      return response(created, 201);
+    }
+    if (!row) return fail(404, 'NOT_FOUND');
+    const expectedVersion = table === 'objects' ? (row.dictionary as Row)?.version : row.version;
+    if (expectedVersion && new Headers(options.headers).get('If-Match') !== `"${expectedVersion}"`) return fail(412, 'VERSION_CONFLICT');
+    if (method === 'DELETE') {
+      if (['delegations', 'grants', 'tokens', 'authorizations'].includes(table)) {
+        row.status = 'REVOKED';
+        row.version = String(Number(row.version ?? 0) + 1);
+      } else rows.splice(rows.indexOf(row), 1);
+      return response({ ...row, deleted: true, revoked: true });
+    }
+    if (method === 'PUT' || method === 'PATCH') {
+      if (subAction === 'dictionary') {
+        row.dictionary = { ...body, version: String(Number((row.dictionary as Row).version) + 1) };
+        row.dictionaryTitle = body.title;
+        row.dictionaryDescription = body.description;
+      } else if (subAction === 'status') row.enabled = body.status === 'ACTIVE';
+      else if (subAction === 'roles') row.roleIds = body.roleIds;
+      else if (subAction === 'department') row.deptId = body.departmentId;
+      else if (subAction !== 'password') {
+        const safe = { ...body };
+        for (const key of ['credential', 'initialPassword', 'newPassword', 'proofConfig']) delete safe[key];
+        Object.assign(row, safe);
+        if (table === 'platforms') {
+          row.proofConfigured = body.proofMode === 'NONE' ? false : !!body.proofConfig || row.proofConfigured;
+          row.securityVersion = String(Number(row.securityVersion ?? 0) + 1);
+        }
+      }
+      if (table !== 'objects') row.version = typeof row.version === 'number' ? row.version + 1 : String(Number(row.version ?? 0) + 1);
+      return response(row);
+    }
+    return fail(501, 'PREVIEW_NOT_IMPLEMENTED');
+  };
+}
+
+export const previewRequest = createPreviewServer();

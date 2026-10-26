@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import { ApiError, onSessionExpired, refreshCsrf, request, setCsrfToken } from '../services/http';
+import { ApiError, invalidateSessionRequests, onSessionExpired, refreshCsrf, request } from '../services/http';
 
 export interface SessionUser {
   userId: string;
@@ -19,6 +19,8 @@ export const useSessionStore = defineStore('session', () => {
   const checking = ref(false);
   const statusError = ref<string | null>(null);
   let initPromise: Promise<void> | null = null;
+  let identityGeneration = 0;
+  let refreshGeneration = 0;
   const isAuthenticated = computed(() => user.value !== null);
   const authenticated = isAuthenticated;
 
@@ -27,8 +29,10 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   function clear(): void {
+    identityGeneration += 1;
+    refreshGeneration += 1;
     user.value = null;
-    setCsrfToken(null);
+    invalidateSessionRequests();
     window.dispatchEvent(new Event('ptmcp:sensitive-clear'));
   }
 
@@ -39,7 +43,10 @@ export const useSessionStore = defineStore('session', () => {
   });
 
   async function refresh(): Promise<void> {
+    const identity = identityGeneration;
+    const generation = ++refreshGeneration;
     const result = await request<SessionUser>('/api/v1/session/me');
+    if (identity !== identityGeneration || generation !== refreshGeneration) return;
     user.value = { ...result.data, userId: String(result.data.userId) };
     statusError.value = null;
   }
@@ -47,9 +54,11 @@ export const useSessionStore = defineStore('session', () => {
   async function init(): Promise<void> {
     if (initialized.value) return;
     if (!initPromise) {
+      const generation = identityGeneration;
       checking.value = true;
       initPromise = refresh()
         .catch((error: unknown) => {
+          if (generation !== identityGeneration) return;
           clear();
           if (!(error instanceof ApiError && error.status === 401)) {
             statusError.value = error instanceof ApiError ? error.message : '暂时无法检查会话。';
@@ -66,21 +75,33 @@ export const useSessionStore = defineStore('session', () => {
 
   async function login(username: string, password: string): Promise<void> {
     clear();
+    const generation = identityGeneration;
+    const requireIdentity = () => {
+      if (generation !== identityGeneration) throw new DOMException('登录流程已失效，请重新登录。', 'AbortError');
+    };
     await refreshCsrf();
+    requireIdentity();
     await request('/api/v1/session/login', { method: 'POST', body: { username, password } });
+    requireIdentity();
     await refreshCsrf();
+    requireIdentity();
     await refresh();
+    requireIdentity();
     initialized.value = true;
   }
 
   async function logout(): Promise<void> {
+    const generation = identityGeneration;
     await request('/api/v1/session/logout', { method: 'POST' });
+    if (generation !== identityGeneration) return;
     clear();
     initialized.value = true;
   }
 
   async function changePassword(oldPassword: string, newPassword: string): Promise<void> {
+    const generation = identityGeneration;
     await request('/api/v1/session/password', { method: 'PUT', body: { oldPassword, newPassword } });
+    if (generation !== identityGeneration) return;
     clear();
     initialized.value = true;
   }

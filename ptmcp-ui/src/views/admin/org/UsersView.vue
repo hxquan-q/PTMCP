@@ -6,6 +6,10 @@ import { useSessionStore } from '../../../stores/session';
 import { orgPortalApi, type Department, type Role, type User } from '../../../services/orgPortalApi';
 import { userChangePlan } from '../../../services/portalMutations';
 import { errorText, isAccessError, isConflict, usePortalTask } from '../../portalUtils';
+import { frontendPreview, controlPlaneAvailable, mutationNotice } from '../../../services/frontendMode';
+import { request } from '../../../services/http';
+import { passwordError, userProfileError } from '../../../services/formValidation';
+import UserPasswordDialog from './UserPasswordDialog.vue';
 
 const loading = ref(false);
 const session = useSessionStore();
@@ -22,6 +26,12 @@ const editing = ref<User | null>(null);
 const conflict = ref<User | null>(null);
 const conflictDetected = ref(false);
 const roleOptionsLoaded = ref(false);
+const passwordVisible = ref(false);
+const passwordUser = ref<User | null>(null);
+const profile = reactive({ email: '', phoneNumber: '', remark: '', initialPassword: '' });
+function clearProfile(): void {
+  Object.assign(profile, { email: '', phoneNumber: '', remark: '', initialPassword: '' });
+}
 const form = reactive({ username: '', displayName: '', deptId: '', roleIds: [] as string[], enabled: true });
 const clearPage = (): void => {
   users.value = [];
@@ -32,6 +42,9 @@ const clearPage = (): void => {
   conflictDetected.value = false;
   dialogVisible.value = false;
   roleOptionsLoaded.value = false;
+  passwordVisible.value = false;
+  passwordUser.value = null;
+  clearProfile();
 };
 const usersTask = usePortalTask(clearPage);
 const detailTask = usePortalTask(clearPage);
@@ -43,6 +56,7 @@ const canMove = computed(() => !editing.value || session.can('ptmcp:user:move'))
 const canAssignRoles = computed(() => session.can('ptmcp:user:assign-role') && roleOptionsLoaded.value);
 
 function resetForm(): void {
+  clearProfile();
   form.username = '';
   form.displayName = '';
   form.deptId = departments.value[0]?.id ?? '';
@@ -59,6 +73,8 @@ function openCreate(): void {
 }
 
 function openEdit(user: User): void {
+  clearProfile();
+  Object.assign(profile, { email: user.email ?? '', phoneNumber: user.phoneNumber ?? '', remark: user.remark ?? '' });
   editing.value = user;
   conflict.value = null;
   conflictDetected.value = false;
@@ -107,6 +123,13 @@ async function save(): Promise<void> {
     ElMessage.warning('请填写用户名、显示名称和部门');
     return;
   }
+  if (frontendPreview) {
+    const issue = userProfileError(profile) ?? (!editing.value ? passwordError(profile.initialPassword) : null);
+    if (issue) {
+      ElMessage.warning(issue);
+      return;
+    }
+  }
   saving.value = true;
   let completed = 0;
   try {
@@ -133,7 +156,12 @@ async function save(): Promise<void> {
       if (plan.includes('profile')) {
         current = await orgPortalApi.users.update(
           current.id,
-          { displayName: form.displayName.trim(), deptId: current.deptId, enabled: current.enabled },
+          {
+            displayName: form.displayName.trim(),
+            deptId: current.deptId,
+            enabled: current.enabled,
+            ...(frontendPreview ? { email: profile.email, phoneNumber: profile.phoneNumber, remark: profile.remark } : {})
+          },
           current.version
         );
         editing.value = current;
@@ -154,9 +182,21 @@ async function save(): Promise<void> {
         editing.value = current;
         completed += 1;
       }
-    } else await orgPortalApi.users.create(body);
+      if (frontendPreview && !plan.includes('profile'))
+        await orgPortalApi.users.update(
+          current.id,
+          {
+            displayName: current.displayName,
+            deptId: current.deptId,
+            enabled: current.enabled,
+            ...{ email: profile.email, phoneNumber: profile.phoneNumber, remark: profile.remark }
+          },
+          current.version
+        );
+    } else await orgPortalApi.users.create({ ...body, ...(frontendPreview ? { ...profile } : {}) });
+    profile.initialPassword = '';
     dialogVisible.value = false;
-    ElMessage.success(editing.value ? '用户已更新' : '用户已创建');
+    ElMessage.success(frontendPreview ? mutationNotice : editing.value ? '用户已更新' : '用户已创建');
     await load();
   } catch (error) {
     if (error === 'cancel' || error === 'close') return;
@@ -166,6 +206,25 @@ async function save(): Promise<void> {
       await refreshConflict();
       ElMessage.warning('检测到版本冲突，草稿已保留。请核对服务器版本后继续。');
     } else ElMessage.error(errorText(error));
+  } finally {
+    saving.value = false;
+  }
+}
+function openPassword(id: string): void {
+  passwordUser.value = users.value.find((row) => row.id === id) ?? null;
+  passwordVisible.value = !!passwordUser.value;
+}
+async function removeUser(id: string): Promise<void> {
+  const row = users.value.find((item) => item.id === id);
+  if (!row || saving.value || !controlPlaneAvailable || !session.can('ptmcp:user:delete')) return;
+  saving.value = true;
+  try {
+    await ElMessageBox.confirm(`删除“${row.displayName}”将使其全部凭证失效。需先停用并处理关联依赖。`, '删除用户', { type: 'warning' });
+    await request(`/api/v1/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { 'If-Match': `"${row.version}"` } });
+    ElMessage.success(mutationNotice);
+    await load();
+  } catch (reason) {
+    if (reason !== 'cancel' && reason !== 'close') ElMessage.error(errorText(reason));
   } finally {
     saving.value = false;
   }
@@ -256,7 +315,6 @@ onMounted(async () => {
   <section class="portal-page" aria-labelledby="users-title">
     <div class="page-heading">
       <div>
-        <p class="eyebrow">组织与范围</p>
         <h1 id="users-title">用户</h1>
         <p class="page-description">管理用户状态、部门归属和角色。每项变更都携带资源版本。</p>
       </div>
@@ -291,7 +349,7 @@ onMounted(async () => {
             ><ElTag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '启用' : '停用' }}</ElTag></template
           ></ElTableColumn
         >
-        <ElTableColumn label="操作" fixed="right" width="180"
+        <ElTableColumn label="操作" fixed="right" width="280"
           ><template #default="{ row }"
             ><ElButton
               v-if="['ptmcp:user:update', 'ptmcp:user:move', 'ptmcp:user:assign-role'].some(session.can)"
@@ -301,12 +359,26 @@ onMounted(async () => {
               >编辑</ElButton
             ><ElButton v-if="session.can('ptmcp:user:status')" link :type="row.enabled ? 'danger' : 'success'" @click="toggleStatus(row as User)">{{
               row.enabled ? '停用' : '启用'
-            }}</ElButton></template
+            }}</ElButton
+            ><ElButton v-if="session.can('ptmcp:user:reset-password')" link @click="openPassword(String(row.id))">重置密码</ElButton
+            ><ElButton
+              v-if="session.can('ptmcp:user:delete')"
+              link
+              type="danger"
+              :disabled="!controlPlaneAvailable || saving || row.enabled"
+              @click="removeUser(String(row.id))"
+              >删除</ElButton
+            ></template
           ></ElTableColumn
         >
       </ElTable>
     </ElCard>
-    <ElDialog v-model="dialogVisible" :title="editing ? '编辑用户' : '新建用户'" width="min(600px, calc(100vw - 32px))">
+    <ElDialog
+      v-model="dialogVisible"
+      :title="editing ? '编辑用户' : '新建用户'"
+      width="min(600px, calc(100vw - 32px))"
+      @close="profile.initialPassword = ''"
+    >
       <ElAlert
         v-if="conflictDetected"
         type="warning"
@@ -324,7 +396,7 @@ onMounted(async () => {
         ><ElButton v-else size="small" @click="refreshConflict">读取当前版本并比较</ElButton>
       </ElAlert>
       <ElAlert
-        v-if="!editing"
+        v-if="!editing && !frontendPreview"
         type="info"
         :closable="false"
         title="当前创建接口只创建外部身份记录，不设置初始密码。创建成功不代表用户已能通过密码登录。"
@@ -349,13 +421,31 @@ onMounted(async () => {
         <ElFormItem label="状态"
           ><ElSwitch v-model="form.enabled" :disabled="!session.can('ptmcp:user:status')" active-text="启用" inactive-text="停用"
         /></ElFormItem>
-        <p class="helper">重置密码、删除用户和设置初始密码的后端接口当前未提供。</p>
+        <ElFormItem label="邮箱（最多50字符）"
+          ><ElInput v-model="profile.email" :disabled="!frontendPreview" maxlength="50" type="email"
+        /></ElFormItem>
+        <ElFormItem label="电话（最多11字符）"><ElInput v-model="profile.phoneNumber" :disabled="!frontendPreview" maxlength="11" /></ElFormItem>
+        <ElFormItem label="备注（最多500字符）"
+          ><ElInput v-model="profile.remark" :disabled="!frontendPreview" type="textarea" maxlength="500" :rows="3"
+        /></ElFormItem>
+        <ElFormItem v-if="!editing" label="初始密码（12～64字符 / UTF-8≤72字节）" :required="frontendPreview"
+          ><ElInput v-model="profile.initialPassword" type="password" autocomplete="new-password" :disabled="!frontendPreview"
+        /></ElFormItem>
+        <p v-if="!frontendPreview" class="helper">邮箱、电话、备注及初始密码接口字段待接入；当前只保存已支持的组织档案。</p>
       </ElForm>
       <template #footer
         ><ElButton @click="dialogVisible = false">取消</ElButton
         ><ElButton type="primary" :disabled="conflictDetected || !canEdit" :loading="saving" @click="save">保存</ElButton></template
       >
     </ElDialog>
+    <UserPasswordDialog
+      v-if="passwordUser"
+      v-model="passwordVisible"
+      :user-id="passwordUser.id"
+      :version="passwordUser.version"
+      :username="passwordUser.username"
+      @saved="load"
+    />
   </section>
 </template>
 
@@ -371,30 +461,22 @@ onMounted(async () => {
   justify-content: space-between;
   margin-bottom: 24px;
 }
-.eyebrow {
-  margin: 0 0 6px;
-  color: var(--ptmcp-accent, #0070c9);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 h1 {
   margin: 0;
-  color: var(--ptmcp-ink, #1d2939);
+  color: var(--ptmcp-heading);
   font-size: 28px;
 }
 .page-description,
 .muted,
 .helper {
-  color: var(--ptmcp-muted, #667085);
+  color: var(--ptmcp-muted);
   font-size: 14px;
 }
 .page-description {
   margin: 8px 0 0;
 }
 .portal-card {
-  border-color: var(--ptmcp-border, #d9e2ec);
+  border-color: var(--ptmcp-border);
 }
 .filters {
   margin-bottom: 18px;

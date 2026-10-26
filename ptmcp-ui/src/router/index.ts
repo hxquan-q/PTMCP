@@ -69,28 +69,39 @@ const adminRoutes: RouteRecordRaw[] = [
     meta: { title: '权限矩阵', permission: 'ptmcp:acl:list' }
   },
   {
+    path: 'permissions/preview',
+    name: 'admin-permissions-preview',
+    component: view('../views/admin/access/PermissionsView.vue'),
+    meta: { title: '有效权限预览', permission: 'ptmcp:acl:preview' }
+  },
+  {
     path: 'delegations',
     name: 'admin-delegations',
-    component: UnavailableView,
+    component: view('../views/admin/integrations/DelegationsView.vue'),
     meta: { title: '管理委派', permission: 'ptmcp:delegation:list' }
   },
   {
     path: 'platforms',
     name: 'admin-platforms',
-    component: UnavailableView,
+    component: view('../views/admin/integrations/PlatformsView.vue'),
     meta: { title: '平台与客户端', permission: 'ptmcp:platform:list' }
   },
   {
     path: 'platforms/:id',
     name: 'admin-platform-detail',
-    component: UnavailableView,
+    component: view('../views/admin/integrations/PlatformDetailView.vue'),
     meta: { title: '平台详情', permission: 'ptmcp:platform:read' }
   },
-  { path: 'audit', name: 'admin-audit', component: UnavailableView, meta: { title: '审计记录', permission: 'ptmcp:audit:list' } },
+  {
+    path: 'audit',
+    name: 'admin-audit',
+    component: view('../views/admin/audit/AuditView.vue'),
+    meta: { title: '审计记录', permission: 'ptmcp:audit:list' }
+  },
   {
     path: 'audit/:requestId',
     name: 'admin-audit-detail',
-    component: UnavailableView,
+    component: view('../views/admin/audit/AuditDetailView.vue'),
     meta: { title: '审计详情', permission: 'ptmcp:audit:read' }
   }
 ];
@@ -115,6 +126,17 @@ const personalRoutes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    ...(import.meta.env.DEV && import.meta.env.MODE === 'frontend-preview'
+      ? [
+          { path: '/__preview/pages', component: () => import('../preview/PagesPreviewView.vue'), meta: { title: '前端页面工作台' } },
+          {
+            path: '/__preview/authorization',
+            component: () => import('../preview/AuthorizationPreviewView.vue'),
+            meta: { title: '授权服务前端预览' }
+          },
+          { path: '/__preview/login', component: view('../views/auth/LoginView.vue'), meta: { title: '登录前端预览' } }
+        ]
+      : []),
     { path: '/', name: 'home', component: UnavailableView, meta: { title: '工作台' } },
     { path: '/login', name: 'login', component: view('../views/auth/LoginView.vue'), meta: { title: '登录' } },
     { path: '/403', name: 'forbidden', component: StaticErrorPage, meta: { title: '无权访问' } },

@@ -207,7 +207,6 @@ onBeforeUnmount(() => {
   <section class="page-shell" aria-labelledby="datasource-title">
     <div class="page-heading">
       <div>
-        <p class="eyebrow">平台管理 / 连接资源</p>
         <h1 id="datasource-title">数据源</h1>
         <p class="subtitle">管理受控数据连接、健康状态和元数据同步。</p>
       </div>
@@ -355,37 +354,32 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   margin-bottom: 24px;
 }
-.eyebrow {
-  margin: 0 0 7px;
-  color: #0f6f68;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 h1 {
   margin: 0;
-  color: #1d2938;
+  color: var(--ptmcp-heading);
   font-size: clamp(26px, 3vw, 34px);
   letter-spacing: -0.02em;
 }
 .subtitle {
   margin: 8px 0 0;
-  color: #627080;
+  color: var(--ptmcp-text-muted);
 }
 .button-icon {
   margin-right: 5px;
 }
 .filter-card {
   margin-bottom: 16px;
-  background: #f8fafb;
-  border-color: #dce5e9;
+  background: var(--ptmcp-chrome);
+  border-color: var(--ptmcp-border);
 }
 .filter-card :deep(.el-form-item) {
   margin-bottom: 0;
 }
+.filter-card :deep(.el-select) {
+  width: 160px;
+}
 .table-card {
-  border-color: #dce5e9;
+  border-color: var(--ptmcp-border);
   overflow: hidden;
 }
 .table-footer {
@@ -393,9 +387,9 @@ h1 {
   justify-content: space-between;
   align-items: center;
   padding: 13px 16px;
-  color: #6b7785;
+  color: var(--ptmcp-text-muted);
   font-size: 13px;
-  border-top: 1px solid #edf1f3;
+  border-top: 1px solid var(--ptmcp-border);
 }
 .link-button {
   display: inline-flex;
@@ -405,7 +399,7 @@ h1 {
   border: 0;
   padding: 0;
   background: transparent;
-  color: #126c72;
+  color: var(--ptmcp-blue);
   cursor: pointer;
   text-align: left;
 }
@@ -414,17 +408,17 @@ h1 {
   text-decoration: underline;
 }
 .link-button small {
-  color: #778492;
+  color: var(--ptmcp-text-muted);
   font-size: 12px;
   font-weight: 400;
 }
 .health-dot {
-  color: #677584;
+  color: var(--ptmcp-text-muted);
   font-size: 12px;
 }
 .health-dot.ok,
 .health-dot.healthy {
-  color: #188453;
+  color: var(--ptmcp-green);
 }
 .state-alert {
   margin-bottom: 16px;
@@ -439,6 +433,21 @@ h1 {
   width: 100%;
 }
 @media (max-width: 680px) {
+  .filter-card :deep(.el-form--inline) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .filter-card :deep(.el-form-item) {
+    width: 100%;
+    margin-right: 0;
+  }
+  .filter-card :deep(.el-form-item__content) {
+    min-width: 0;
+  }
+  .filter-card :deep(.el-select) {
+    width: 100%;
+  }
   .page-heading {
     flex-direction: column;
   }

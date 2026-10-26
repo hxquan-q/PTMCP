@@ -5,6 +5,7 @@ import { useSessionStore } from '../../../stores/session';
 import { orgPortalApi, type Department } from '../../../services/orgPortalApi';
 import { departmentDescendants } from '../../../services/portalMutations';
 import { errorText, isAccessError, isConflict, usePortalTask } from '../../portalUtils';
+import { frontendPreview } from '../../../services/frontendMode';
 
 type DepartmentNode = Department & { children: DepartmentNode[] };
 
@@ -17,13 +18,15 @@ const dialogVisible = ref(false);
 const editing = ref<Department | null>(null);
 const conflict = ref<Department | null>(null);
 const conflictDetected = ref(false);
-const form = reactive({ parentId: '', name: '', enabled: true });
+const form = reactive({ parentId: '', name: '', enabled: true, orderNum: 0 });
+const selected = ref<Department | null>(null);
 const clearPage = (): void => {
   departments.value = [];
   editing.value = null;
   conflict.value = null;
   conflictDetected.value = false;
   dialogVisible.value = false;
+  selected.value = null;
 };
 const departmentsTask = usePortalTask(clearPage);
 const conflictTask = usePortalTask(clearPage);
@@ -37,7 +40,7 @@ const treeData = computed<DepartmentNode[]>(() => {
     else roots.push(node);
   });
   const sort = (items: DepartmentNode[]): void => {
-    items.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+    items.sort((a, b) => (a.orderNum ?? 0) - (b.orderNum ?? 0) || a.name.localeCompare(b.name, 'zh-CN'));
     items.forEach((item) => sort(item.children));
   };
   sort(roots);
@@ -68,6 +71,7 @@ function resetForm(): void {
   form.parentId = '';
   form.name = '';
   form.enabled = true;
+  form.orderNum = 0;
 }
 
 function openCreate(): void {
@@ -85,6 +89,7 @@ function openEdit(item: Department): void {
   form.parentId = item.parentId ?? '';
   form.name = item.name;
   form.enabled = item.enabled;
+  form.orderNum = item.orderNum ?? 0;
   dialogVisible.value = true;
 }
 
@@ -111,7 +116,12 @@ async function save(): Promise<void> {
   }
   saving.value = true;
   try {
-    const body = { parentId: form.parentId || null, name: form.name.trim(), enabled: form.enabled };
+    const body = {
+      parentId: form.parentId || null,
+      name: form.name.trim(),
+      enabled: form.enabled,
+      ...(frontendPreview ? { orderNum: form.orderNum } : {})
+    };
     if (editing.value && body.parentId !== editing.value.parentId) {
       if (body.parentId && descendantIds(editing.value.id).has(body.parentId)) throw new Error('不能移动到当前部门或其子部门');
       await ElMessageBox.confirm(
@@ -184,10 +194,9 @@ onMounted(load);
   <section class="portal-page" aria-labelledby="departments-title">
     <div class="page-heading">
       <div>
-        <p class="eyebrow">组织与范围</p>
         <h1 id="departments-title">部门</h1>
         <p class="page-description">维护部门树和管理范围。移动部门由服务端重算祖先关系。</p>
-        <p class="page-description">当前版本暂不提供部门排序与成员数量。</p>
+        <p v-if="!frontendPreview" class="page-description">部门排序保存接口待接入；子部门数量按当前已读取树计算。</p>
       </div>
       <ElButton v-if="session.can('ptmcp:department:create')" type="primary" @click="openCreate">新建部门</ElButton>
     </div>
@@ -204,7 +213,7 @@ onMounted(load);
       </template>
       <ElSkeleton v-if="loading" :rows="5" animated />
       <ElEmpty v-else-if="!departments.length" description="尚未创建部门" />
-      <ElTree v-else :data="treeData" node-key="id" default-expand-all aria-label="部门树">
+      <ElTree v-else :data="treeData" node-key="id" default-expand-all aria-label="部门树" @node-click="selected = $event">
         <template #default="{ data }">
           <div class="tree-row">
             <span class="tree-name">{{ data.name }}</span>
@@ -216,6 +225,14 @@ onMounted(load);
           </div>
         </template>
       </ElTree>
+      <ElDescriptions v-if="selected" :column="1" border class="department-detail"
+        ><ElDescriptionsItem label="部门 ID">{{ selected.id }}</ElDescriptionsItem
+        ><ElDescriptionsItem label="路径">{{ pathLabel(selected.id) }}</ElDescriptionsItem
+        ><ElDescriptionsItem label="上级 ID">{{ selected.parentId ?? '根节点' }}</ElDescriptionsItem
+        ><ElDescriptionsItem label="排序">{{ selected.orderNum ?? '服务端未提供' }}</ElDescriptionsItem
+        ><ElDescriptionsItem label="直接子部门">{{ departments.filter((row) => row.parentId === selected?.id).length }}</ElDescriptionsItem
+        ><ElDescriptionsItem label="版本">{{ selected.version }}</ElDescriptionsItem></ElDescriptions
+      >
     </ElCard>
 
     <ElDialog v-model="dialogVisible" :title="editing ? '编辑部门' : '新建部门'" width="min(520px, calc(100vw - 32px))">
@@ -237,6 +254,11 @@ onMounted(load);
           </ElSelect>
         </ElFormItem>
         <ElFormItem label="状态"><ElSwitch v-model="form.enabled" active-text="启用" inactive-text="停用" /></ElFormItem>
+        <ElFormItem label="排序号"
+          ><ElInputNumber v-model="form.orderNum" :min="0" :max="9999" :disabled="!frontendPreview" /><span v-if="!frontendPreview" class="helper"
+            >接口待接入</span
+          ></ElFormItem
+        >
       </ElForm>
       <template #footer
         ><ElButton @click="dialogVisible = false">取消</ElButton
@@ -247,6 +269,9 @@ onMounted(load);
 </template>
 
 <style scoped>
+.department-detail {
+  margin-top: 24px;
+}
 .page-heading,
 .card-header,
 .tree-row {
@@ -258,29 +283,21 @@ onMounted(load);
 .page-heading {
   margin-bottom: 24px;
 }
-.eyebrow {
-  margin: 0 0 6px;
-  color: var(--ptmcp-accent, #0070c9);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 h1 {
   margin: 0;
-  color: var(--ptmcp-ink, #1d2939);
+  color: var(--ptmcp-heading);
   font-size: 28px;
 }
 .page-description,
 .muted {
-  color: var(--ptmcp-muted, #667085);
+  color: var(--ptmcp-muted);
   font-size: 14px;
 }
 .page-description {
   margin: 8px 0 0;
 }
 .portal-card {
-  border-color: var(--ptmcp-border, #d9e2ec);
+  border-color: var(--ptmcp-border);
 }
 .tree-row {
   width: 100%;
@@ -288,7 +305,7 @@ h1 {
 }
 .tree-name {
   min-width: 160px;
-  color: var(--ptmcp-ink, #1d2939);
+  color: var(--ptmcp-ink);
   font-weight: 600;
 }
 .tree-actions {
