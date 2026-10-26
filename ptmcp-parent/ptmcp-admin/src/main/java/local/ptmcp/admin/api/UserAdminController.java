@@ -35,7 +35,7 @@ public class UserAdminController {
             DelegationScopeResolver scopeResolver) {
         this.orgStore = orgStore;
         this.idempotency = idempotency;
-        this.scopeGate = new UserScopeGate(scopeResolver);
+        this.scopeGate = new UserScopeGate(scopeResolver, orgStore);
     }
 
     public record UserWrite(
@@ -164,8 +164,9 @@ public class UserAdminController {
     public ResponseEntity<UserRead> setRoles(
             @PathVariable long id, @RequestBody UserWrite write, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
-        scopeGate.requireUserAction(
-                request, orgStore.getUser(id).deptId(), "ptmcp:user:assign-role");
+        OrgStore.UserRow rolesTarget = orgStore.getUser(id);
+        scopeGate.requireUserAction(request, rolesTarget.deptId(), "ptmcp:user:assign-role");
+        scopeGate.requireRoleAssignment(request, rolesTarget.deptId(), write.roleIds());
         if (write.roleIds() == null) {
             throw new local.ptmcp.common.error.DomainException(
                     local.ptmcp.common.error.ErrorCode.INVALID_ARGUMENT);

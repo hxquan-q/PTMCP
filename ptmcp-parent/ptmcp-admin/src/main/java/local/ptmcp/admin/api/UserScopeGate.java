@@ -19,9 +19,53 @@ import java.util.List;
  */
 public final class UserScopeGate {
     private final DelegationScopeResolver resolver;
+    private final OrgStore orgStore;
 
-    public UserScopeGate(DelegationScopeResolver resolver) {
+    public UserScopeGate(DelegationScopeResolver resolver, OrgStore orgStore) {
         this.resolver = resolver;
+        this.orgStore = orgStore;
+    }
+
+    /**
+     * PRD cross-scope role guard (AC-02): a delegated admin may only assign roles whose permission
+     * codes stay inside the delegation's action set. A role carrying management codes beyond the
+     * delegation would silently escalate the subject past the delegated boundary. Platform admins
+     * are unrestricted.
+     */
+    public void requireRoleAssignment(
+            HttpServletRequest request, long targetDeptId, java.util.List<Long> roleIds) {
+        AdminPrincipal principal = AdminPrincipal.require(request);
+        if (principal.platformAdmin() || roleIds == null || roleIds.isEmpty()) {
+            return;
+        }
+        List<DelegationScopeResolver.EffectiveDelegation> delegations = effective(principal);
+        java.util.Set<String> delegatedActions =
+                resolver.effectiveActions(principal.userId(), java.time.Instant.now());
+        for (long roleId : roleIds) {
+            List<String> codes;
+            try {
+                codes = orgStore.getRole(roleId).permissionCodes();
+            } catch (DomainException error) {
+                throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
+            }
+            boolean withinDelegation =
+                    codes.stream()
+                            .filter(code -> code.startsWith("ptmcp:"))
+                            .allMatch(delegatedActions::contains);
+            boolean subjectCovered =
+                    delegations.stream()
+                            .anyMatch(
+                                    delegation ->
+                                            resolver.covers(
+                                                    delegation,
+                                                    DelegationScopeResolver.Target.department(
+                                                            targetDeptId),
+                                                    null,
+                                                    java.time.Instant.now()));
+            if (!withinDelegation || !subjectCovered) {
+                throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
+            }
+        }
     }
 
     /** Platform admins see all users; delegated admins only users inside their subtree. */

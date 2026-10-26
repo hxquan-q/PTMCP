@@ -833,6 +833,74 @@ class AdminApiTest {
                                 .content("{\"roleIds\":[]}"))
                 .andExpect(status().isOk());
 
+        // AC-02 cross-scope role guard: a role carrying codes beyond the delegation is refused,
+        // while a role whose codes all sit inside the delegation passes.
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            statement.execute(
+                    "INSERT INTO sys_role (role_key, role_name, status, del_flag, create_time,"
+                            + " update_time) VALUES ('broad-role', '越权角色', '0', '0', NOW(6), NOW(6))",
+                    Statement.RETURN_GENERATED_KEYS);
+            long broad;
+            try (var keys = statement.getGeneratedKeys()) {
+                keys.next();
+                broad = keys.getLong(1);
+            }
+            statement.execute(
+                    "INSERT INTO sys_role_permission (role_id, permission_code, create_time,"
+                            + " update_time) VALUES ("
+                            + broad
+                            + ", 'ptmcp:audit:decrypt', NOW(6), NOW(6))");
+            statement.execute(
+                    "INSERT INTO sys_role (role_key, role_name, status, del_flag, create_time,"
+                            + " update_time) VALUES ('narrow-role', '委派内角色', '0', '0', NOW(6), NOW(6))",
+                    Statement.RETURN_GENERATED_KEYS);
+            long narrow;
+            try (var keys = statement.getGeneratedKeys()) {
+                keys.next();
+                narrow = keys.getLong(1);
+            }
+            statement.execute(
+                    "INSERT INTO sys_role_permission (role_id, permission_code, create_time,"
+                            + " update_time) VALUES ("
+                            + narrow
+                            + ", 'ptmcp:user:update', NOW(6), NOW(6))");
+        }
+        // Look up both role ids directly.
+        long broadRoleId;
+        long narrowRoleId;
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            var rs =
+                    statement.executeQuery(
+                            "SELECT role_id, role_key FROM sys_role WHERE role_key IN ('broad-role','narrow-role')");
+            broadRoleId = -1;
+            narrowRoleId = -1;
+            while (rs.next()) {
+                if ("broad-role".equals(rs.getString(2))) broadRoleId = rs.getLong(1);
+                else narrowRoleId = rs.getLong(1);
+            }
+        }
+
+        mockMvc.perform(
+                        put("/api/v1/admin/users/" + insideUser + "/roles")
+                                .header("X-Test-User-Id", delegate)
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("If-Match", "3")
+                                .contentType("application/json")
+                                .content("{\"roleIds\":[" + broadRoleId + "]}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+
+        mockMvc.perform(
+                        put("/api/v1/admin/users/" + insideUser + "/roles")
+                                .header("X-Test-User-Id", delegate)
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("If-Match", "3")
+                                .contentType("application/json")
+                                .content("{\"roleIds\":[" + narrowRoleId + "]}"))
+                .andExpect(status().isOk());
+
         // Move across the subtree boundary is denied on the target side.
         mockMvc.perform(
                         put("/api/v1/admin/users/" + insideUser + "/department")
