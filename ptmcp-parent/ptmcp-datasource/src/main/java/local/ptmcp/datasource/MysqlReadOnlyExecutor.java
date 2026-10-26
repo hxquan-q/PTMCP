@@ -212,7 +212,9 @@ public final class MysqlReadOnlyExecutor {
                             new ReadOnlyResult.Column(
                                     label == null ? "" : label,
                                     typeName == null ? "" : typeName,
-                                    metadata.getColumnType(index)));
+                                    metadata.getColumnType(index),
+                                    metadata.isNullable(index)
+                                            != java.sql.ResultSetMetaData.columnNoNulls));
                 }
                 List<List<String>> rows = new ArrayList<>();
                 while (rows.size() < request.maxRows() && resultSet.next()) {

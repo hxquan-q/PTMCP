@@ -1,5 +1,6 @@
 package local.ptmcp.guard.approved;
 
+import local.ptmcp.common.execution.ApprovedSqlPlan;
 import local.ptmcp.common.resource.ResourceId;
 import local.ptmcp.common.resource.ResourceRef;
 
@@ -21,7 +22,7 @@ import java.util.UUID;
  * security check is fresh. {@link #finalSql()} is the only text that may reach JDBC; the original
  * request SQL must never be executed.
  */
-public final class ApprovedQuery {
+public final class ApprovedQuery implements ApprovedSqlPlan {
     /** Transient approval window; the executor must re-verify current state within it. */
     static final Duration APPROVAL_WINDOW = Duration.ofSeconds(10);
 
@@ -129,6 +130,7 @@ public final class ApprovedQuery {
         return sqlHash.clone();
     }
 
+    @Override
     public int effectiveLimit() {
         return effectiveLimit;
     }

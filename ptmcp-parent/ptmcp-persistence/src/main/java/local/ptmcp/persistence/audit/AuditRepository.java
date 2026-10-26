@@ -148,6 +148,29 @@ public final class AuditRepository {
         return recovered;
     }
 
+    /**
+     * Confirms the durable START row for a request exists. The tool path calls this after the guard
+     * passed and before a business connection is borrowed, so an admission that silently
+     * disappeared can never proceed to execution.
+     */
+    public boolean confirmStart(UUID requestId) {
+        if (requestId == null) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
+        return transaction.execute(
+                connection -> {
+                    try (PreparedStatement statement =
+                            AuditTransaction.statement(
+                                    connection,
+                                    "SELECT request_id FROM audit_log WHERE request_id = ?")) {
+                        statement.setString(1, requestId.toString());
+                        try (ResultSet result = statement.executeQuery()) {
+                            return result.next();
+                        }
+                    }
+                });
+    }
+
     private static boolean insertOutbox(
             Connection connection,
             UUID requestId,

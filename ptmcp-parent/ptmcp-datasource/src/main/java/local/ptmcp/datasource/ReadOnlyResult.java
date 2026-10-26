@@ -7,7 +7,7 @@ import java.util.List;
 /** Bounded tabular result. Cell values are strings; SQL NULL stays null. */
 public record ReadOnlyResult(
         List<Column> columns, List<List<String>> rows, boolean limitReached, ExecutionTrace trace) {
-    public record Column(String label, String typeName, int jdbcType) {
+    public record Column(String label, String typeName, int jdbcType, boolean nullable) {
         public Column {
             if (label == null || typeName == null) {
                 throw new IllegalArgumentException("column label and type name are required");
