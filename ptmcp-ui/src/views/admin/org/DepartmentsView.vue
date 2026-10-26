@@ -252,6 +252,7 @@ onMounted(load);
           <ElSelect v-model="form.parentId" clearable placeholder="顶级部门">
             <ElOption v-for="item in parentOptions" :key="item.id" :label="item.name" :value="item.id" />
           </ElSelect>
+          <p class="helper">顶级部门（不选上级）仅平台管理员可创建；委派管理员请选择委派范围内的上级部门。</p>
         </ElFormItem>
         <ElFormItem label="状态"><ElSwitch v-model="form.enabled" active-text="启用" inactive-text="停用" /></ElFormItem>
         <ElFormItem label="排序号"
@@ -269,6 +270,12 @@ onMounted(load);
 </template>
 
 <style scoped>
+.helper {
+  color: var(--ptmcp-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 4px 0 0;
+}
 .department-detail {
   margin-top: 24px;
 }
