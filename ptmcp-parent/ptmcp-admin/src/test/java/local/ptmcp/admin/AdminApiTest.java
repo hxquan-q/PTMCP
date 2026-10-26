@@ -1130,6 +1130,109 @@ class AdminApiTest {
     }
 
     @Test
+    void operationsLogIsCursorPagedFilteredAndPlatformAdminOnly() throws Exception {
+        // Seed three operation rows (as the delegations/platform slices would have written).
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            statement.execute(
+                    "INSERT INTO admin_operation_log (actor_id, request_id, action,"
+                            + " aggregate_type, aggregate_id, before_masked, after_masked,"
+                            + " occurred_at, create_time) VALUES"
+                            + " (1, 'op-req-1', 'DELEGATION_CREATE', 'ADMIN_DELEGATION', 1, NULL,"
+                            + " '{\"a\":1}', NOW(6), NOW(6))");
+            statement.execute(
+                    "INSERT INTO admin_operation_log (actor_id, request_id, action,"
+                            + " aggregate_type, aggregate_id, before_masked, after_masked,"
+                            + " occurred_at, create_time) VALUES"
+                            + " (1, 'op-req-2', 'PLATFORM_CREATE', 'PLATFORM', 2, NULL,"
+                            + " '{\"b\":2}', NOW(6), NOW(6))");
+            statement.execute(
+                    "INSERT INTO admin_operation_log (actor_id, request_id, action,"
+                            + " aggregate_type, aggregate_id, before_masked, after_masked,"
+                            + " occurred_at, create_time) VALUES"
+                            + " (2, 'op-req-3', 'DELEGATION_REVOKE', 'ADMIN_DELEGATION', 1,"
+                            + " '{\"c\":3}', NULL, NOW(6), NOW(6))");
+        }
+
+        // Non-platform admin is denied.
+        mockMvc.perform(
+                        get("/api/v1/admin/operations")
+                                .header("X-Test-User-Id", 42L)
+                                .header("X-Test-Platform-Admin", "false"))
+                .andExpect(status().isForbidden());
+
+        // Unfiltered: all three, newest first, no overflow so no cursor.
+        MvcResult pageOne =
+                mockMvc.perform(
+                                get("/api/v1/admin/operations")
+                                        .header("X-Test-User-Id", ADMIN_ID)
+                                        .header("X-Test-Platform-Admin", "true"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.items.length()").value(3))
+                        .andExpect(jsonPath("$.items[0].action").value("DELEGATION_REVOKE"))
+                        .andExpect(jsonPath("$.items[2].action").value("DELEGATION_CREATE"))
+                        .andExpect(jsonPath("$.nextCursor").doesNotExist())
+                        .andReturn();
+        String cursor = jsonPathCursor(pageOne.getResponse().getContentAsString());
+        // No cursor on a non-overflow page: the cursor-paged case is covered below via pageSize.
+        cursor = null;
+
+        // Action filter narrows to the delegation rows only.
+        mockMvc.perform(
+                        get("/api/v1/admin/operations")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("action", "DELEGATION_CREATE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].action").value("DELEGATION_CREATE"))
+                .andExpect(jsonPath("$.nextCursor").doesNotExist());
+
+        // Aggregate filter + actor filter combined.
+        mockMvc.perform(
+                        get("/api/v1/admin/operations")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("aggregateType", "PLATFORM")
+                                .param("actorId", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].action").value("PLATFORM_CREATE"));
+
+        // Cursor pages through: pageSize=2 overflows, page two holds the oldest row.
+        String paged =
+                mockMvc.perform(
+                                get("/api/v1/admin/operations")
+                                        .header("X-Test-User-Id", ADMIN_ID)
+                                        .header("X-Test-Platform-Admin", "true")
+                                        .param("pageSize", "2"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.items.length()").value(2))
+                        .andExpect(jsonPath("$.nextCursor").isNotEmpty())
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString();
+        String pageTwoCursor = jsonPathCursor(paged);
+        mockMvc.perform(
+                        get("/api/v1/admin/operations")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("cursor", pageTwoCursor)
+                                .param("pageSize", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].action").value("DELEGATION_CREATE"));
+
+        // Invalid aggregate type is rejected.
+        mockMvc.perform(
+                        get("/api/v1/admin/operations")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("aggregateType", "NOT_A_TYPE"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void adminAuditListAppliesFiltersCursorAndPlatformAdminScope() throws Exception {
         long platformId = insertPlatform("p-audit");
         long otherPlatformId = insertPlatform("p-audit-other");
