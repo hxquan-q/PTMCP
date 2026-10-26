@@ -71,6 +71,13 @@ S5 已完成：客户端管理（POST /platforms/{id}/clients 一次性 secret�
 提交 2a541e5。注意：客户端 id 为 VARCHAR，服务层全 String id；独立 /clients/{id} 路由需
 独立 ClientAdminController。
 
-下一步：S6 审计解密（POST /audit/{id}/decrypt，reason 必填 + audit_sensitive_access 落库 +
-有效期；密钥与 gateway wal-key 同源——先核对 McpGatewayConfiguration 的 WalKeyProvider 与
-AuditTerminal.encryptedRaw 的加密格式，admin 侧需新增密钥配置）。之后回到 UI 打磨切片。
+S6 已完成：审计解密（POST /audit/{id}/decrypt，reason 10-500 必填、fields⊆{sqlRaw,sqlFinal}、
+解密与 audit_sensitive_access 落库同事务、expiresAt=now+300s 前端倒计时清除；AuditCipher
+独立部署密钥 ptmcp.admin.audit-key，与 credential-key 分离），前端 AuditView/AuditDetail
+解禁，提交 5e353c6。发现：当前 gateway terminal() 写 encryptedRaw=null，audit_log 密文列
+恒空——密文写入是 gateway 侧切片（已记 .auto/ideas.md），解密通路已就绪并测试覆盖。
+
+S1–S6 全部完成，controlPlane 六域（delegations/effective/platforms/scopes/clients/audit）
+真实模式全部解禁，前端预览模式（5174）合成数据交互保留。待办移交 .auto/ideas.md：gateway
+密文写入、委派作用域执行（T16）、org POST 幂等接线、MySQL 8.4 复验、浏览器端到端走查、
+UI 打磨切片池。
