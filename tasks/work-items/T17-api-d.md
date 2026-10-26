@@ -92,6 +92,18 @@ SCHEMA_STALE 503 整页报错（改单源软失败，数据源节点仍可委派
 标题。复验链路全通：登录→委派列表/EXPIRED 筛选/新建对话框（管理员下拉排除自己）→平台创建
 跳详情→客户端 CONFIDENTIAL 创建→secret 一次性弹窗→MySQL 确认 {bcrypt}+32B hash、
 PUBLIC 无 secret；390px 委派页无横向溢出。截图 .playwright-mcp/e2e-*.png。预期网络噪音
-（登录前 401、软失败 503）与非缺陷记录分离。走查脚本 /tmp/e2e-walk*.py（会话级，不入库）。待办移交 .auto/ideas.md：gateway
+（登录前 401、软失败 503）与非缺陷记录分离。走查脚本 /tmp/e2e-walk*.py（会话级，不入库）。
+
+S7 用户密码重置（0972cb4）：PUT /users/{id}/password 跨库按序设计——元库
+SecurityChangeTransaction 原子提交（安全 epoch bump + USER_SECURITY_CHANGED 事件 + ACTIVE
+授权族撤销 + sys_user_profile 版本递增〔If-Match〕+ 掩码操作日志）→ 提交后身份库写 bcrypt
+hash（12～64 字符、UTF-8≤72B 校验；明文只存在于单请求帧、不入日志）。身份库写入失败时失败
+封闭（凭证已撤销，重试即可）。identity 数据源为可选装配
+（ptmcp.admin.identity-datasource.*，生产指向宿主身份库，dev 同库）；adminDataSource 标注
+@Primary。前端 UserPasswordDialog/UsersView 解禁，警告文案对齐真实行为。遗留：web_session
+行级撤销未做（epoch 机制已使旧票据失效），PasswordDialog 的「会话」表述由 epoch 兜底。
+
+至此 T17-api 的管理面端点缺口（委派/平台/客户端/Scope/effective/审计解密/密码重置）全部
+补齐，仅剩 ideas 中的 gateway 密文写入与 T16 委派作用域执行。待办移交 .auto/ideas.md：gateway
 密文写入、委派作用域执行（T16）、org POST 幂等接线、MySQL 8.4 复验、浏览器端到端走查、
 UI 打磨切片池。
