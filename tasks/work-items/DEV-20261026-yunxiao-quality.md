@@ -31,8 +31,9 @@ Updated: 2026-10-26
 
 ## 实施与验证
 
-- 代码检测方案启用文件路径过滤，排除生成文件 `ptmcp-ui/src/components.d.ts`
-  （该文件由 unplugin-vue-components 生成，成员分隔符和 `~icons` 导入不应进入质量门禁）。
+- 生成文件 `ptmcp-ui/src/components.d.ts` 不再纳入 Git（加入 `.gitignore`），由
+  unplugin-vue-components 在本地/构建时生成；代码检测不再扫描该产物，避免 52 条成员分隔符
+  和 21 条 `~icons` 未解析导入进入质量门禁。`pnpm typecheck` 在文件缺失时仍通过。
 - 前端：Prettier `trailingComma=all` 并格式化 `src`/`tests`；合并重复 import；
   去掉 `void` 浮动 Promise，改为显式 `.catch`。
 - Java 测试：`Executors.new*` 改为有界 `ThreadPoolExecutor`；测试中的字面 secret
@@ -51,7 +52,7 @@ python scripts/check.py        → 48 项 PASS
 
 ## 结果与证据
 
-- 生成文件排除后，预计消除 73 条严重问题（52 成员分隔符 + 21 未解析图标导入）。
+- 生成文件移出 Git 后，预计消除 73 条严重问题（52 成员分隔符 + 21 未解析图标导入）。
 - 前端格式/重复导入/no-void 改动并通过构建与 68 项契约测试。
 - Java 线程池、局部集合、测试 secret 与 default 分支改动通过全仓 Maven verify。
 - 剩余 P3C lowerCamelCase 警告为 record/类名误报，保留不改业务命名。
