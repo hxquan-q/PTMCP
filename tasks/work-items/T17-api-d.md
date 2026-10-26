@@ -169,3 +169,7 @@ sql_masked 正确、raw/final 双密文齐。委派管理员的完整查询+审�
 me/integrations 真实模式验证（走查记录）：gateway 启用后，接入配置页平台选择→显示真实
 gateway URL（8082/mcp）+PAT 认证说明——用户侧「创建 PAT→查看 MCP 配置→接入客户端」旅程
 闭环。截图存证。
+
+PAT 撤销生命周期 E2E（走查记录）：受控管理员 PAT 撤销前查询 SUCCESS→DELETE 撤销→撤销后
+查询 401 TOKEN_REVOKED（gateway 实时强制撤销，无缓存延迟）——T12 撤销传播的真实栈验证
+通过。
