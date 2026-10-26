@@ -61,6 +61,13 @@ frontendPreview`（仅预览模式放行）把真实模式全部禁用。每个�
 - Idempotency-Key / If-Match 语义与现有控制器一致（见 AclGrantAdminController、
   UserAdminController、DELEGATIONS 前端 `versioned()` 头）。
 
+## 会话稳定点（2026-10-27）
+
+tests_passing 726（admin+gateway 双 reactor + 前端契约），0 失败；四轮浏览器走查零缺陷；
+全部提交推送 xquan/feat-backend。UI 池实质项已消化，剩余为风格微调（收益递减不硬凑）。
+移交池保留：MySQL 8.4 复验（网络）、WAL schema 2（sqlFinal）、gateway TLS 启用、跨范围
+共享角色的 UI 提示。后续会话可从任一项继续，或按用户新指令开新线。
+
 ## Slices（联调线 S1–S6 已完成；现转入 UI 打磨线）
 
 **UI 打磨切片池**（每轮一个可见改进，pnpm check + 契约测试护住，浏览器走查记录进工作项）：
