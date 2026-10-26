@@ -99,6 +99,12 @@ const adminRoutes: RouteRecordRaw[] = [
     meta: { title: '审计记录', permission: 'ptmcp:audit:list' },
   },
   {
+    path: 'operations',
+    name: 'admin-operations',
+    component: view('../views/admin/audit/OperationsView.vue'),
+    meta: { title: '操作日志', permission: 'ptmcp:audit:list' },
+  },
+  {
     path: 'audit/:requestId',
     name: 'admin-audit-detail',
     component: view('../views/admin/audit/AuditDetailView.vue'),

@@ -176,5 +176,21 @@ export const controlPlane = {
         { signal },
         auditReady,
       ),
+    operations: {
+      list: (filters: Record<string, string | undefined>, signal?: AbortSignal) =>
+        controlRequest<
+          Page<{
+            id: string;
+            actorId: string;
+            requestId: string;
+            action: string;
+            aggregateType: string;
+            aggregateId: string;
+            beforeMasked: string | null;
+            afterMasked: string | null;
+            occurredAt: string;
+          }>
+        >(`/operations${queryString(filters)}`, { signal }, auditReady),
+    },
   },
 };
