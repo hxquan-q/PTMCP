@@ -1,5 +1,6 @@
 import { normalizeOrgResponse } from './portalIds';
 import { ApiError, request as transportRequest, setCsrfToken } from './http';
+import { newUuid } from './uuid';
 
 export { ApiError };
 
@@ -81,13 +82,20 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 function etag(version: number): string {
   return `"${version}"`;
 }
+function idempotent(headers: Record<string, string> = {}): Record<string, string> {
+  return { ...headers, 'Idempotency-Key': newUuid() };
+}
 
 export const orgPortalApi = {
   departments: {
     list: (signal?: AbortSignal) => request<Department[]>('/api/v1/admin/departments', { signal }),
     get: (id: string, signal?: AbortSignal) => request<Department>(`/api/v1/admin/departments/${encodeURIComponent(id)}`, { signal }),
     create: (body: { parentId: string | null; name: string; enabled: boolean }) =>
-      request<Department>('/api/v1/admin/departments', { method: 'POST', body: JSON.stringify(body) }),
+      request<Department>('/api/v1/admin/departments', {
+        method: 'POST',
+        headers: idempotent(),
+        body: JSON.stringify(body),
+      }),
     update: (id: string, body: { parentId: string | null; name: string; enabled: boolean }, version: number) =>
       request<Department>(`/api/v1/admin/departments/${encodeURIComponent(id)}`, {
         method: 'PUT',
@@ -109,7 +117,11 @@ export const orgPortalApi = {
     },
     get: (id: string, signal?: AbortSignal) => request<User>(`/api/v1/admin/users/${encodeURIComponent(id)}`, { signal }),
     create: (body: { username: string; displayName: string; deptId: string; roleIds: string[]; enabled: boolean }) =>
-      request<User>('/api/v1/admin/users', { method: 'POST', body: JSON.stringify(body) }),
+      request<User>('/api/v1/admin/users', {
+        method: 'POST',
+        headers: idempotent(),
+        body: JSON.stringify(body),
+      }),
     update: (id: string, body: { username?: string; displayName: string; deptId: string; roleIds?: string[]; enabled: boolean }, version: number) =>
       request<User>(`/api/v1/admin/users/${encodeURIComponent(id)}`, {
         method: 'PUT',
@@ -139,7 +151,11 @@ export const orgPortalApi = {
     list: (signal?: AbortSignal) => request<Role[]>('/api/v1/admin/roles', { signal }),
     get: (id: string, signal?: AbortSignal) => request<Role>(`/api/v1/admin/roles/${encodeURIComponent(id)}`, { signal }),
     create: (body: { key: string; name: string; enabled: boolean; permissionCodes: string[] }) =>
-      request<Role>('/api/v1/admin/roles', { method: 'POST', body: JSON.stringify(body) }),
+      request<Role>('/api/v1/admin/roles', {
+        method: 'POST',
+        headers: idempotent(),
+        body: JSON.stringify(body),
+      }),
     update: (id: string, body: { name: string; enabled: boolean; permissionCodes: string[] }, version: number) =>
       request<Role>(`/api/v1/admin/roles/${encodeURIComponent(id)}`, {
         method: 'PUT',

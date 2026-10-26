@@ -2,6 +2,7 @@ package local.ptmcp.admin.api;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+import local.ptmcp.persistence.org.IdempotencyRecorder;
 import local.ptmcp.persistence.org.OrgStore;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -24,9 +25,11 @@ import java.util.List;
 @RequestMapping("/api/v1/admin/roles")
 public class RoleAdminController {
     private final OrgStore orgStore;
+    private final IdempotencyRecorder idempotency;
 
-    public RoleAdminController(OrgStore orgStore) {
+    public RoleAdminController(OrgStore orgStore, IdempotencyRecorder idempotency) {
         this.orgStore = orgStore;
+        this.idempotency = idempotency;
     }
 
     public record RoleWrite(

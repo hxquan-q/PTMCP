@@ -206,6 +206,7 @@ class AdminApiTest {
                                 post("/api/v1/admin/departments")
                                         .header("X-Test-User-Id", ADMIN_ID)
                                         .header("X-Test-Platform-Admin", "true")
+                                        .header("Idempotency-Key", "dept-crud-" + UUID.randomUUID())
                                         .contentType("application/json")
                                         .content("{\"name\":\"集团\",\"enabled\":true}"))
                         .andExpect(status().isCreated())
@@ -281,6 +282,7 @@ class AdminApiTest {
                                 post("/api/v1/admin/roles")
                                         .header("X-Test-User-Id", ADMIN_ID)
                                         .header("X-Test-Platform-Admin", "true")
+                                        .header("Idempotency-Key", "role-" + UUID.randomUUID())
                                         .contentType("application/json")
                                         .content(
                                                 "{\"key\":\"analyst\",\"name\":\"分析员\","
@@ -296,6 +298,7 @@ class AdminApiTest {
                         post("/api/v1/admin/roles")
                                 .header("X-Test-User-Id", ADMIN_ID)
                                 .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", "role-dup-" + UUID.randomUUID())
                                 .contentType("application/json")
                                 .content(
                                         "{\"key\":\"analyst\",\"name\":\"重复\","
@@ -308,6 +311,9 @@ class AdminApiTest {
                                         post("/api/v1/admin/departments")
                                                 .header("X-Test-User-Id", ADMIN_ID)
                                                 .header("X-Test-Platform-Admin", "true")
+                                                .header(
+                                                        "Idempotency-Key",
+                                                        "dept-lc-" + UUID.randomUUID())
                                                 .contentType("application/json")
                                                 .content("{\"name\":\"部\",\"enabled\":true}"))
                                 .andExpect(status().isCreated())
@@ -367,6 +373,7 @@ class AdminApiTest {
                         post("/api/v1/admin/acl/grants")
                                 .header("X-Test-User-Id", ADMIN_ID)
                                 .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", "grant-esc-" + UUID.randomUUID())
                                 .contentType("application/json")
                                 .content(grantBody("USER", ADMIN_ID, datasourceId, "META", "ALLOW"))
                                 .header("If-Match", "0"))
@@ -386,6 +393,9 @@ class AdminApiTest {
                                 post("/api/v1/admin/acl/grants")
                                         .header("X-Test-User-Id", ADMIN_ID)
                                         .header("X-Test-Platform-Admin", "true")
+                                        .header(
+                                                "Idempotency-Key",
+                                                "grant-self-" + UUID.randomUUID())
                                         .contentType("application/json")
                                         .content(
                                                 grantBody(
@@ -703,6 +713,59 @@ class AdminApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].code").value("dir-1"));
+    }
+
+    @Test
+    void orgCreateEndpointsReplayWithSameIdempotencyKey() throws Exception {
+        String body = "{\"name\":\"幂等部门\",\"enabled\":true}";
+        MvcResult first =
+                mockMvc.perform(
+                                post("/api/v1/admin/departments")
+                                        .header("X-Test-User-Id", ADMIN_ID)
+                                        .header("X-Test-Platform-Admin", "true")
+                                        .header("Idempotency-Key", "org-idem-1")
+                                        .contentType("application/json")
+                                        .content(body))
+                        .andExpect(status().isCreated())
+                        .andReturn();
+
+        // Same key + same body replays the recorded creation instead of inserting a sibling.
+        mockMvc.perform(
+                        post("/api/v1/admin/departments")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", "org-idem-1")
+                                .contentType("application/json")
+                                .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Idempotent-Replay", "true"))
+                .andExpect(
+                        result -> {
+                            String original = first.getResponse().getContentAsString();
+                            if (!original.equals(result.getResponse().getContentAsString())) {
+                                throw new AssertionError("replayed department body differs");
+                            }
+                        });
+
+        // Missing key is now a hard 400 (the write path is contract-gated).
+        mockMvc.perform(
+                        post("/api/v1/admin/departments")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .contentType("application/json")
+                                .content(body))
+                .andExpect(status().isBadRequest());
+
+        try (Connection connection = connect();
+                PreparedStatement count =
+                        connection.prepareStatement(
+                                "SELECT COUNT(*) FROM sys_dept WHERE dept_name = ?")) {
+            count.setString(1, "幂等部门");
+            try (ResultSet result = count.executeQuery()) {
+                assertTrue(result.next());
+                assertEquals(1, result.getInt(1));
+            }
+        }
     }
 
     @Test
@@ -1095,6 +1158,7 @@ class AdminApiTest {
                         post("/api/v1/admin/acl/grants")
                                 .header("X-Test-User-Id", ADMIN_ID)
                                 .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", "grant-" + UUID.randomUUID())
                                 .contentType("application/json")
                                 .content(grantBody("USER", subject, datasourceId, "READ", "ALLOW")))
                 .andExpect(status().isCreated());
@@ -1932,6 +1996,7 @@ class AdminApiTest {
                                 post("/api/v1/admin/departments")
                                         .header("X-Test-User-Id", ADMIN_ID)
                                         .header("X-Test-Platform-Admin", "true")
+                                        .header("Idempotency-Key", "dept-" + UUID.randomUUID())
                                         .contentType("application/json")
                                         .content(
                                                 "{\"name\":\""
@@ -1951,6 +2016,7 @@ class AdminApiTest {
                                 post("/api/v1/admin/users")
                                         .header("X-Test-User-Id", ADMIN_ID)
                                         .header("X-Test-Platform-Admin", "true")
+                                        .header("Idempotency-Key", "user-" + UUID.randomUUID())
                                         .contentType("application/json")
                                         .content(
                                                 "{\"username\":\""

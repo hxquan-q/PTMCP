@@ -2,6 +2,10 @@ package local.ptmcp.admin.api;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+import local.ptmcp.admin.web.StrictJson;
+import local.ptmcp.common.error.DomainException;
+import local.ptmcp.common.error.ErrorCode;
+import local.ptmcp.persistence.org.IdempotencyRecorder;
 import local.ptmcp.persistence.org.OrgStore;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -24,9 +28,11 @@ import java.util.List;
 @RequestMapping("/api/v1/admin/departments")
 public class DepartmentAdminController {
     private final OrgStore orgStore;
+    private final IdempotencyRecorder idempotency;
 
-    public DepartmentAdminController(OrgStore orgStore) {
+    public DepartmentAdminController(OrgStore orgStore, IdempotencyRecorder idempotency) {
         this.orgStore = orgStore;
+        this.idempotency = idempotency;
     }
 
     public record DepartmentWrite(Long parentId, String name, boolean enabled) {}
@@ -41,15 +47,39 @@ public class DepartmentAdminController {
     }
 
     @PostMapping
-    public ResponseEntity<DepartmentRead> create(
-            @RequestBody DepartmentWrite write, HttpServletRequest request) {
+    public ResponseEntity<byte[]> create(
+            @RequestBody(required = false) byte[] body, HttpServletRequest request) {
         ManagementScope.requirePlatformAdmin(request);
-        DepartmentRead created =
-                toRead(
-                        orgStore.createDepartment(
-                                write.parentId(), write.name(), write.enabled(), actorId(request)));
-        return ResponseEntity.created(URI.create("/api/v1/admin/departments/" + created.id()))
-                .body(created);
+        DepartmentWrite write = StrictJson.parse(body, DepartmentWrite.class);
+        return IdempotentWrites.execute(
+                idempotency,
+                actorId(request),
+                "departments.create",
+                idempotencyKey(request),
+                body,
+                () -> {
+                    if (write.name() == null) {
+                        throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+                    }
+                    DepartmentRead created =
+                            toRead(
+                                    orgStore.createDepartment(
+                                            write.parentId(),
+                                            write.name(),
+                                            write.enabled(),
+                                            actorId(request)));
+                    return ResponseEntity.created(
+                                    URI.create("/api/v1/admin/departments/" + created.id()))
+                            .body(created);
+                });
+    }
+
+    private static String idempotencyKey(HttpServletRequest request) {
+        String key = request.getHeader("Idempotency-Key");
+        if (key == null || key.isBlank()) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
+        return key.trim();
     }
 
     @GetMapping("/{id}")
