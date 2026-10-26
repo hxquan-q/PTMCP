@@ -68,6 +68,8 @@ final class AuditPayloads {
         appendBase64OrNull(json, terminal.encryptedRaw());
         json.append(",\"keyId\":");
         appendString(json, terminal.keyId());
+        json.append(",\"encryptedFinal\":");
+        appendBase64OrNull(json, terminal.encryptedFinal());
         json.append('}');
         return payload(json);
     }

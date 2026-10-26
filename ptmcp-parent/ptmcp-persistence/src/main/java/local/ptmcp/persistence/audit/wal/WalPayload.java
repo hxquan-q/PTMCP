@@ -18,7 +18,14 @@ import java.util.UUID;
  * not SQL, not JSON and never a Java deserialization entry point.
  */
 public final class WalPayload {
-    public static final int SCHEMA_VERSION = 1;
+    /**
+     * Schema 2 adds the optional final-SQL ciphertext after every schema-1 field. The frame layer
+     * treats the payload as opaque, so this version lives (and is checked) inside the payload
+     * bytes; schema-1 frames from a pre-upgrade crash decode with {@code encryptedFinal == null}.
+     */
+    public static final int SCHEMA_VERSION = 2;
+
+    private static final int SCHEMA_VERSION_1 = 1;
 
     private WalPayload() {}
 
@@ -43,18 +50,23 @@ public final class WalPayload {
         out.putOptionalLong(terminal.platformId());
         out.putOptionalLong(terminal.datasourceId());
         out.putFixed(terminal.startedAt());
+        out.putOptionalBytes(terminal.encryptedFinal());
         return out.toArray();
     }
 
-    public static AuditTerminal decode(int schemaVersion, byte[] bytes) {
-        if (schemaVersion != SCHEMA_VERSION) {
-            throw new IllegalArgumentException("unsupported WAL payload schema " + schemaVersion);
+    /**
+     * Reads the schema version embedded in the payload bytes: schema 2 carries the final-SQL
+     * ciphertext, schema 1 frames (written before the field existed) decode with it absent. The
+     * caller-supplied schema version is the frame layer's; the payload version governs parsing.
+     */
+    public static AuditTerminal decode(int frameSchemaVersion, byte[] bytes) {
+        Reader versionReader = new Reader(bytes);
+        int payloadVersion = (int) versionReader.varint();
+        if (payloadVersion != SCHEMA_VERSION && payloadVersion != SCHEMA_VERSION_1) {
+            throw new IllegalArgumentException("unsupported WAL payload schema " + payloadVersion);
         }
         Reader in = new Reader(bytes);
-        int version = (int) in.varint();
-        if (version != SCHEMA_VERSION) {
-            throw new IllegalArgumentException("unsupported WAL payload schema " + version);
-        }
+        in.varint();
         UUID requestId = in.fixed();
         AuditTerminal.Result result = AuditTerminal.Result.values()[(int) in.varint()];
         AuditTerminal.Verdict verdict = AuditTerminal.Verdict.values()[(int) in.varint()];
@@ -72,6 +84,7 @@ public final class WalPayload {
         Long platformId = in.optionalLong();
         Long datasourceId = in.optionalLong();
         java.time.Instant startedAt = in.fixedInstant();
+        byte[] encryptedFinal = payloadVersion >= 2 ? in.optionalBytes() : null;
         return new AuditTerminal(
                 requestId,
                 result,
@@ -89,7 +102,8 @@ public final class WalPayload {
                 userId,
                 platformId,
                 datasourceId,
-                startedAt);
+                startedAt,
+                encryptedFinal);
     }
 
     public static byte[] sha256(byte[] bytes) {

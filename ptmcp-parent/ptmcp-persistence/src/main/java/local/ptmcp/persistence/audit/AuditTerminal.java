@@ -30,7 +30,48 @@ public record AuditTerminal(
         Long userId,
         Long platformId,
         Long datasourceId,
-        Instant startedAt) {
+        Instant startedAt,
+        byte[] encryptedFinal) {
+    /** Callers from before the final-SQL ciphertext existed; the final form stays absent. */
+    public AuditTerminal(
+            UUID requestId,
+            Result result,
+            Verdict verdict,
+            String errorCode,
+            Long durationMs,
+            Integer queueMs,
+            Integer rowsReturned,
+            boolean truncated,
+            String maskedSql,
+            byte[] sqlFingerprint,
+            byte[] encryptedRaw,
+            String keyId,
+            String tool,
+            Long userId,
+            Long platformId,
+            Long datasourceId,
+            Instant startedAt) {
+        this(
+                requestId,
+                result,
+                verdict,
+                errorCode,
+                durationMs,
+                queueMs,
+                rowsReturned,
+                truncated,
+                maskedSql,
+                sqlFingerprint,
+                encryptedRaw,
+                keyId,
+                tool,
+                userId,
+                platformId,
+                datasourceId,
+                startedAt,
+                null);
+    }
+
     public static final int SQL_FINGERPRINT_BYTES = 32;
     public static final int MAX_MASKED_SQL_CHARS = 1_048_576;
     public static final int MAX_ENCRYPTED_RAW_BYTES = 1_048_576;
@@ -74,8 +115,18 @@ public record AuditTerminal(
                 && (encryptedRaw.length == 0 || encryptedRaw.length > MAX_ENCRYPTED_RAW_BYTES)) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
+        if (encryptedFinal != null
+                && (encryptedFinal.length == 0
+                        || encryptedFinal.length > MAX_ENCRYPTED_RAW_BYTES)) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
+        // The final form is sealed with the same audit key as the raw form: one key id covers both.
+        if (encryptedFinal != null && keyId == null) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
         sqlFingerprint = sqlFingerprint == null ? null : sqlFingerprint.clone();
         encryptedRaw = encryptedRaw == null ? null : encryptedRaw.clone();
+        encryptedFinal = encryptedFinal == null ? null : encryptedFinal.clone();
     }
 
     @Override
@@ -86,6 +137,11 @@ public record AuditTerminal(
     @Override
     public byte[] encryptedRaw() {
         return encryptedRaw == null ? null : encryptedRaw.clone();
+    }
+
+    @Override
+    public byte[] encryptedFinal() {
+        return encryptedFinal == null ? null : encryptedFinal.clone();
     }
 
     public enum Result {

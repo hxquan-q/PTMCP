@@ -970,10 +970,16 @@ final class McpToolService {
             String tool,
             String rawSql,
             String finalSql) {
-        byte[] sealed = null;
+        byte[] sealedRaw = null;
+        byte[] sealedFinal = null;
         String keyId = null;
         if (auditSealer.enabled() && rawSql != null && !rawSql.isBlank()) {
-            sealed = auditSealer.seal(rawSql);
+            sealedRaw = auditSealer.seal(rawSql);
+            // The guard rewrite means the SQL that actually executed can differ from the raw
+            // text; sealing both keeps the raw/execution pair readable behind one reason gate.
+            if (finalSql != null && !finalSql.isBlank()) {
+                sealedFinal = auditSealer.seal(finalSql);
+            }
             keyId = auditSealer.keyId();
         }
         audit.terminal(
@@ -988,13 +994,14 @@ final class McpToolService {
                         truncated,
                         SqlLiteralMasker.mask(rawSql),
                         sqlFingerprint,
-                        sealed,
+                        sealedRaw,
                         keyId,
                         tool,
                         identity.userId(),
                         identity.platformId(),
                         datasourceId,
-                        startedAt));
+                        startedAt,
+                        sealedFinal));
     }
 
     private static AuditTerminal.Verdict verdictFor(Stage stage, ErrorCode code) {

@@ -46,9 +46,10 @@ public final class AuditRepository {
     private static final String INSERT_TERMINAL_LOG =
             "INSERT INTO audit_log "
                     + "(request_id, user_id, platform_id, tool, datasource_id, started_at, completed_at, "
-                    + "result, verdict, error_code, sql_masked, sql_fingerprint, sql_raw_cipher, key_id, "
+                    + "result, verdict, error_code, sql_masked, sql_fingerprint, sql_raw_cipher, "
+                    + "sql_final_cipher, key_id, "
                     + "duration_ms, queue_ms, rows_returned, truncated, create_time, terminal_hash) "
-                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
                     + "UTC_TIMESTAMP(6), ?)";
     private static final String UPDATE_TERMINAL_LOG =
             "UPDATE audit_log SET user_id = COALESCE(user_id, ?), "
@@ -59,6 +60,7 @@ public final class AuditRepository {
                     + "sql_masked = COALESCE(?, sql_masked), "
                     + "sql_fingerprint = COALESCE(?, sql_fingerprint), "
                     + "sql_raw_cipher = COALESCE(?, sql_raw_cipher), "
+                    + "sql_final_cipher = COALESCE(?, sql_final_cipher), "
                     + "key_id = COALESCE(?, key_id), terminal_hash = ? "
                     + "WHERE request_id = ? AND result = 'RUNNING'";
     private static final String SELECT_TERMINAL =
@@ -288,20 +290,21 @@ public final class AuditRepository {
             statement.setString(11, terminal.maskedSql());
             statement.setBytes(12, terminal.sqlFingerprint());
             statement.setBytes(13, terminal.encryptedRaw());
-            statement.setString(14, terminal.keyId());
-            setNullableLong(statement, 15, terminal.durationMs());
+            statement.setBytes(14, terminal.encryptedFinal());
+            statement.setString(15, terminal.keyId());
+            setNullableLong(statement, 16, terminal.durationMs());
             if (terminal.queueMs() == null) {
-                statement.setNull(16, java.sql.Types.INTEGER);
-            } else {
-                statement.setInt(16, terminal.queueMs());
-            }
-            if (terminal.rowsReturned() == null) {
                 statement.setNull(17, java.sql.Types.INTEGER);
             } else {
-                statement.setInt(17, terminal.rowsReturned());
+                statement.setInt(17, terminal.queueMs());
             }
-            statement.setBoolean(18, terminal.truncated());
-            statement.setBytes(19, payloadHash);
+            if (terminal.rowsReturned() == null) {
+                statement.setNull(18, java.sql.Types.INTEGER);
+            } else {
+                statement.setInt(18, terminal.rowsReturned());
+            }
+            statement.setBoolean(19, terminal.truncated());
+            statement.setBytes(20, payloadHash);
             inserted = statement.executeUpdate() == 1;
         } catch (SQLException error) {
             if (!AuditTransaction.duplicateKey(error)) {
@@ -344,9 +347,10 @@ public final class AuditRepository {
             statement.setString(12, terminal.maskedSql());
             statement.setBytes(13, terminal.sqlFingerprint());
             statement.setBytes(14, terminal.encryptedRaw());
-            statement.setString(15, terminal.keyId());
-            statement.setBytes(16, payloadHash);
-            statement.setString(17, terminal.requestId().toString());
+            statement.setBytes(15, terminal.encryptedFinal());
+            statement.setString(16, terminal.keyId());
+            statement.setBytes(17, payloadHash);
+            statement.setString(18, terminal.requestId().toString());
             updated = statement.executeUpdate();
         }
         TerminalState state = readTerminal(connection, terminal.requestId());

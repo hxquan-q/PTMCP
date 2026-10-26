@@ -355,25 +355,46 @@ class McpQueryFlowTest {
 
         byte[] rawKey = Base64.getDecoder().decode(AUDIT_KEY);
         byte[] sealed;
+        byte[] sealedFinal;
         String keyId;
         String masked;
         try (Connection meta = PRIMARY.getConnection();
                 PreparedStatement sqlStatement =
                         meta.prepareStatement(
-                                "SELECT sql_raw_cipher, key_id, sql_masked FROM audit_log"
-                                        + " WHERE request_id = ?")) {
+                                "SELECT sql_raw_cipher, sql_final_cipher, key_id, sql_masked"
+                                        + " FROM audit_log WHERE request_id = ?")) {
             sqlStatement.setString(1, requestId);
             try (ResultSet row = sqlStatement.executeQuery()) {
                 assertTrue(row.next(), "missing audit row for " + requestId);
                 sealed = row.getBytes(1);
-                keyId = row.getString(2);
-                masked = row.getString(3);
+                sealedFinal = row.getBytes(2);
+                keyId = row.getString(3);
+                masked = row.getString(4);
             }
         }
         // The masked form is plaintext-safe: literals gone, structure readable.
         assertNotNull(masked, "masked sql should accompany the sealed raw sql");
         assertFalse(masked.contains("1"), "numeric literal survived masking: " + masked);
         assertTrue(masked.contains("SELECT id FROM orders WHERE id = ?"), masked);
+        // The final form (post-rewrite SQL that actually reached JDBC) is sealed with the same
+        // audit key; decrypting it must produce the executed statement.
+        assertNotNull(sealedFinal, "final sql ciphertext missing");
+        javax.crypto.Cipher finalCipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+        finalCipher.init(
+                javax.crypto.Cipher.DECRYPT_MODE,
+                new javax.crypto.spec.SecretKeySpec(rawKey, "AES"),
+                new javax.crypto.spec.GCMParameterSpec(128, sealedFinal, 0, 12));
+        String finalRevealed =
+                new String(
+                        finalCipher.doFinal(sealedFinal, 12, sealedFinal.length - 12),
+                        java.nio.charset.StandardCharsets.UTF_8);
+        // The final SQL is the guard-rewritten statement that actually reached JDBC — schema
+        // qualified, alias renamed, safety LIMIT injected. Assert the rewrite fingerprints
+        // instead of the raw text.
+        assertTrue(finalRevealed.contains("synthetic_business.orders"), finalRevealed);
+        assertTrue(finalRevealed.contains("__ptmcp_r1"), finalRevealed);
+        assertTrue(finalRevealed.toUpperCase().contains("LIMIT"), finalRevealed);
+        assertFalse(finalRevealed.equals(sql), "final form must differ from the raw query");
         assertNotNull(sealed, "success terminal must carry the sealed raw SQL");
         assertTrue(sealed.length > 12 + 16, "ciphertext shorter than iv + tag");
         String expectedKeyId =

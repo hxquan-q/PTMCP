@@ -2,6 +2,7 @@ package local.ptmcp.persistence.audit.wal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -445,6 +446,58 @@ class TerminalWalReplayTest {
                 WalPayload.sha256("SELECT id FROM orders".getBytes(StandardCharsets.UTF_8)),
                 22,
                 startedAt);
+    }
+
+    @Test
+    void payloadRoundTripsFinalCiphertextAndReadsLegacyV1Frames() throws Exception {
+        byte[] raw = "sealed-raw".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] fin = "sealed-final".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        AuditTerminal withFinal =
+                new AuditTerminal(
+                        UUID.randomUUID(),
+                        AuditTerminal.Result.SUCCESS,
+                        AuditTerminal.Verdict.ALLOW,
+                        null,
+                        5L,
+                        null,
+                        null,
+                        false,
+                        "SELECT ?",
+                        null,
+                        raw,
+                        "local:audit",
+                        "execute_readonly_sql",
+                        7L,
+                        3L,
+                        1L,
+                        pastMinutes(1),
+                        fin);
+        byte[] encoded = WalPayload.encode(withFinal);
+        AuditTerminal decoded = WalPayload.decode(WalPayload.SCHEMA_VERSION, encoded);
+        assertEquals("local:audit", decoded.keyId());
+        assertEquals(
+                "sealed-raw",
+                new String(decoded.encryptedRaw(), java.nio.charset.StandardCharsets.UTF_8));
+        assertEquals(
+                "sealed-final",
+                new String(decoded.encryptedFinal(), java.nio.charset.StandardCharsets.UTF_8));
+
+        // Schema-1 frames (pre-upgrade crash) carry no final field; the version varint is the
+        // only difference — patch it back to 1 and decode must yield a null final form.
+        byte[] legacy = encoded.clone();
+        legacy[0] = 1;
+        AuditTerminal legacyDecoded = WalPayload.decode(WalPayload.SCHEMA_VERSION, legacy);
+        assertNull(legacyDecoded.encryptedFinal());
+        assertEquals(
+                "sealed-raw",
+                new String(legacyDecoded.encryptedRaw(), java.nio.charset.StandardCharsets.UTF_8));
+
+        // Unknown future schemas stay quarantined.
+        byte[] future = encoded.clone();
+        future[0] = 9;
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> WalPayload.decode(WalPayload.SCHEMA_VERSION, future));
     }
 
     private static AuditTerminal terminal(UUID requestId, Instant startedAt, String maskedSql) {
