@@ -102,6 +102,8 @@ frontendPreview`（仅预览模式放行）把真实模式全部禁用。每个�
   教训：写端点委派化必须换 AdminPrincipal.require；测试 body 数字 id 不能字符串 replace
   用户名；测试窗口禁写死日期；admin 会话验证源=sys_user_profile.password_hash（身份库
   sys_user.password 服务 OAuth）；bash 传 bcrypt 用文件 docker cp（$ 展开截断）。
+- **S9 gateway 审计密文写入**（210868f）：AuditSealer 同格式同派生+部署同钥配对；measure
+  扩 admin+gateway 双 reactor，tests_passing 476→726（gateway 测试纳入度量）。
 - **S1–S6 联调真实化全部完成**（提交 cc93bad→5e353c6）：
   S1 委派 CRUD+幂等+操作日志；S2 ACL effective 稳定分页；S3 平台 CRUD（proof_config 只写
   加密、security_version 乐观锁）；S4 平台 Scope 整组替换双版本自增；S5 客户端一次性
