@@ -45,6 +45,7 @@
     {"key": "SECURITY_STATE_UNAVAILABLE", "module": "authorization", "code": 140003},
     {"key": "DUPLICATE_GRANT", "module": "authorization", "code": 140004},
     {"key": "SELF_PRIVILEGE_ESCALATION", "module": "authorization", "code": 140005},
+    {"key": "SENSITIVE_REVEAL_LIMIT", "module": "authorization", "code": 140006},
     {"key": "SQL_SYNTAX_INVALID", "module": "guard", "code": 150001},
     {"key": "SQL_NOT_READONLY", "module": "guard", "code": 150002},
     {"key": "SQL_UNSUPPORTED", "module": "guard", "code": 150003},

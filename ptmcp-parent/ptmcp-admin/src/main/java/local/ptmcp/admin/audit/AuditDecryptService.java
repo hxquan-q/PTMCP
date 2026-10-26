@@ -27,6 +27,9 @@ public final class AuditDecryptService {
     private static final Set<String> FIELDS = Set.of("sqlRaw", "sqlFinal");
     private static final long REVEAL_SECONDS = 300;
 
+    /** ASVS 4.2.1: bounded plaintext reveal throughput per operator, sliding one-minute window. */
+    private static final int MAX_REVEALS_PER_MINUTE = 10;
+
     private final DataSource primary;
     private final AuditCipher cipher;
 
@@ -59,6 +62,7 @@ public final class AuditDecryptService {
         if (normalizedRequest.length() != 36) {
             throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
         }
+        requireRevealBudget(operatorId);
         try (Connection connection = primary.getConnection()) {
             connection.setAutoCommit(false);
             try {
@@ -109,6 +113,31 @@ public final class AuditDecryptService {
                 throw failure;
             } finally {
                 connection.setAutoCommit(true);
+            }
+        } catch (SQLException error) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+    }
+
+    /**
+     * Sliding-window throughput bound counted over the durable trail itself (every attempt lands in
+     * audit_sensitive_access, so the count IS the audit record — no separate state to drain or
+     * lose). A soft limit: a burst just over the line may slip through concurrent calls. Counts
+     * every attempt so failed reveals cannot be used to probe around the bound.
+     */
+    private void requireRevealBudget(long operatorId) {
+        try (Connection connection = primary.getConnection();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "SELECT COUNT(*) FROM audit_sensitive_access"
+                                        + " WHERE operator_id = ?"
+                                        + " AND create_time > UTC_TIMESTAMP(6) - INTERVAL 1 MINUTE")) {
+            statement.setQueryTimeout(5);
+            statement.setLong(1, operatorId);
+            try (ResultSet result = statement.executeQuery()) {
+                if (result.next() && result.getInt(1) >= MAX_REVEALS_PER_MINUTE) {
+                    throw new DomainException(ErrorCode.SENSITIVE_REVEAL_LIMIT);
+                }
             }
         } catch (SQLException error) {
             throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);

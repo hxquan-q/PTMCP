@@ -2454,6 +2454,42 @@ class AdminApiTest {
                                 .header("X-Test-Platform-Admin", "true"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
+
+        // ASVS 4.2.1: plaintext reveal throughput is bounded per operator (10 per minute). The
+        // first reveal above already holds one slot, so nine more pass and the eleventh overall
+        // call is refused.
+        for (int attempt = 0; attempt < 9; attempt++) {
+            mockMvc.perform(
+                            post("/api/v1/admin/audit/" + requestId + "/decrypt")
+                                    .header("X-Test-User-Id", ADMIN_ID)
+                                    .header("X-Test-Platform-Admin", "true")
+                                    .contentType("application/json")
+                                    .content(
+                                            "{\"reason\":\"频控边界验证：连续明文申请\""
+                                                    + ",\"fields\":[\"sqlRaw\"]}"))
+                    .andExpect(status().isOk());
+        }
+        mockMvc.perform(
+                        post("/api/v1/admin/audit/" + requestId + "/decrypt")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .contentType("application/json")
+                                .content(
+                                        "{\"reason\":\"频控边界验证：连续明文申请\""
+                                                + ",\"fields\":[\"sqlRaw\"]}"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("SENSITIVE_REVEAL_LIMIT"));
+
+        // A different operator still has their own budget.
+        mockMvc.perform(
+                        post("/api/v1/admin/audit/" + requestId + "/decrypt")
+                                .header("X-Test-User-Id", 2L)
+                                .header("X-Test-Platform-Admin", "true")
+                                .contentType("application/json")
+                                .content(
+                                        "{\"reason\":\"另一操作员的独立预算验证\""
+                                                + ",\"fields\":[\"sqlRaw\"]}"))
+                .andExpect(status().isOk());
     }
 
     @Test

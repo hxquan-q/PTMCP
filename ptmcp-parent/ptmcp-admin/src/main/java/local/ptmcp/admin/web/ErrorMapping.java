@@ -79,6 +79,7 @@ public final class ErrorMapping {
         put(map, ErrorCode.USER_CONCURRENCY_LIMIT, HttpStatus.TOO_MANY_REQUESTS, true);
         put(map, ErrorCode.DATASOURCE_CONCURRENCY_LIMIT, HttpStatus.TOO_MANY_REQUESTS, true);
         put(map, ErrorCode.GATEWAY_BUSY, HttpStatus.TOO_MANY_REQUESTS, true);
+        put(map, ErrorCode.SENSITIVE_REVEAL_LIMIT, HttpStatus.TOO_MANY_REQUESTS, true);
         put(map, ErrorCode.LOGIN_LOCKED, HttpStatus.TOO_MANY_REQUESTS, true);
         // Execution failures: the outcome must be looked up by requestId, never retried blindly.
         put(map, ErrorCode.QUERY_TIMEOUT, HttpStatus.INTERNAL_SERVER_ERROR, false);
