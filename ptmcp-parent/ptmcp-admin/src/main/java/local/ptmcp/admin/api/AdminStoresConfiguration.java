@@ -47,6 +47,7 @@ import javax.sql.DataSource;
 @ConditionalOnProperty("ptmcp.admin.datasource.url")
 public class AdminStoresConfiguration {
     @Bean(destroyMethod = "close")
+    @org.springframework.context.annotation.Primary
     public HikariDataSource adminDataSource(
             @Value("${ptmcp.admin.datasource.url}") String url,
             @Value("${ptmcp.admin.datasource.username}") String username,

@@ -6,7 +6,7 @@ import { useSessionStore } from '../../../stores/session';
 import { orgPortalApi, type Department, type Role, type User } from '../../../services/orgPortalApi';
 import { userChangePlan } from '../../../services/portalMutations';
 import { errorText, isAccessError, isConflict, usePortalTask } from '../../portalUtils';
-import { frontendPreview, controlPlaneAvailable, mutationNotice } from '../../../services/frontendMode';
+import { frontendPreview, mutationNotice, passwordApiReady } from '../../../services/frontendMode';
 import { request } from '../../../services/http';
 import { passwordError, userProfileError } from '../../../services/formValidation';
 import UserPasswordDialog from './UserPasswordDialog.vue';
@@ -216,7 +216,7 @@ function openPassword(id: string): void {
 }
 async function removeUser(id: string): Promise<void> {
   const row = users.value.find((item) => item.id === id);
-  if (!row || saving.value || !controlPlaneAvailable || !session.can('ptmcp:user:delete')) return;
+  if (!row || saving.value || !passwordApiReady || !session.can('ptmcp:user:delete')) return;
   saving.value = true;
   try {
     await ElMessageBox.confirm(`删除“${row.displayName}”将使其全部凭证失效。需先停用并处理关联依赖。`, '删除用户', { type: 'warning' });
@@ -365,7 +365,7 @@ onMounted(async () => {
               v-if="session.can('ptmcp:user:delete')"
               link
               type="danger"
-              :disabled="!controlPlaneAvailable || saving || row.enabled"
+              :disabled="!passwordApiReady || saving || row.enabled"
               @click="removeUser(String(row.id))"
               >删除</ElButton
             ></template

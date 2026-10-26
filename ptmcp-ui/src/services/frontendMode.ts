@@ -19,3 +19,5 @@ export const scopeApiReady = true;
 export const clientApiReady = true;
 /** /audit 列表/详情与 /audit/{id}/decrypt（AuditAdminController）。 */
 export const auditApiReady = true;
+/** PUT /users/{id}/password（IdentityPasswordController，安全 epoch + 授权族撤销）。 */
+export const passwordApiReady = true;

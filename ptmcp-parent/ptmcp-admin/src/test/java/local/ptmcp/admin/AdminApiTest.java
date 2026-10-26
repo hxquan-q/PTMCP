@@ -49,7 +49,10 @@ import java.util.UUID;
         properties = {
             "ptmcp.admin.test-principal=true",
             "ptmcp.admin.credential-key=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
-            "ptmcp.admin.audit-key=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+            "ptmcp.admin.audit-key=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+            "ptmcp.admin.identity-datasource.url=${ptmcp.admin.datasource.url}",
+            "ptmcp.admin.identity-datasource.username=${ptmcp.admin.datasource.username}",
+            "ptmcp.admin.identity-datasource.password=${ptmcp.admin.datasource.password}"
         })
 @AutoConfigureMockMvc
 class AdminApiTest {
@@ -1692,6 +1695,169 @@ class AdminApiTest {
                 assertTrue(result.getString(3).contains("sqlRaw"));
                 assertEquals("ALLOW", result.getString(4));
                 assertFalse(result.next());
+            }
+        }
+    }
+
+    @Test
+    void passwordResetRevokesFamiliesWritesHashAndLogs() throws Exception {
+        long deptId = createDepartment("密码重置部");
+        createUser("pwd-throwaway", "占位用户", deptId);
+        long target = createUser("pwd-target", "密码用户", deptId);
+
+        // The identity table is owned by the host store; tests create the dev-shaped row.
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            statement.execute(
+                    "CREATE TABLE IF NOT EXISTS sys_user ("
+                            + "user_id BIGINT NOT NULL AUTO_INCREMENT, user_name VARCHAR(30) NOT NULL,"
+                            + " nick_name VARCHAR(30) NOT NULL, password VARCHAR(100) NOT NULL,"
+                            + " status CHAR(1) NOT NULL, del_flag CHAR(1) NOT NULL DEFAULT '0',"
+                            + " PRIMARY KEY (user_id), UNIQUE KEY uk_sys_user_user_name (user_name))");
+            statement.execute(
+                    "INSERT INTO sys_user (user_id, user_name, nick_name, password, status, del_flag)"
+                            + " VALUES ("
+                            + target
+                            + ", 'pwd-target', '密码用户', '$2a$10$oldoldoldoldoldoldoldoldoldoldoldoldoldoldoldoldoldold',"
+                            + " '0', '0') ON DUPLICATE KEY UPDATE password = VALUES(password)");
+            // One ACTIVE refresh family so the revocation has a real target.
+            statement.execute(
+                    "INSERT INTO oauth2_registered_client (id, client_id, client_name,"
+                            + " client_authentication_methods, authorization_grant_types, scopes,"
+                            + " client_settings, token_settings, client_type, status,"
+                            + " registration_source, version, create_time, update_time, created_by,"
+                            + " updated_by) VALUES ('client-pwd', 'client-pwd', 'pwd client',"
+                            + " 'none', 'authorization_code', 'mcp:catalog', '{}', '{}', 'PUBLIC',"
+                            + " 'ACTIVE', 'ADMIN', 1, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), 1, 1)");
+            statement.execute(
+                    "INSERT INTO oauth2_authorization (id, registered_client_id, principal_name,"
+                            + " authorization_grant_type, status, create_time, update_time, created_by,"
+                            + " updated_by) VALUES ('auth-pwd', 'client-pwd', 'pwd-target',"
+                            + " 'authorization_code', 'ACTIVE', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), 1, 1)");
+            statement.execute(
+                    "INSERT INTO oauth_refresh_family (id, authorization_id, user_id,"
+                            + " registered_client_id, platform_id, status, auth_version,"
+                            + " absolute_expires_at, idle_expires_at, last_rotated_at, version,"
+                            + " create_time, update_time) VALUES ('fam-pwd', 'auth-pwd', "
+                            + target
+                            + ", 'client-pwd', NULL, 'ACTIVE', 1, UTC_TIMESTAMP(6) + INTERVAL 7 DAY,"
+                            + " UTC_TIMESTAMP(6) + INTERVAL 1 DAY, UTC_TIMESTAMP(6), 1,"
+                            + " UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))");
+        }
+
+        // Short reasons are rejected before any write.
+        mockMvc.perform(
+                        put("/api/v1/admin/users/" + target + "/password")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "1")
+                                .header("Idempotency-Key", "pwd-short")
+                                .contentType("application/json")
+                                .content("{\"newPassword\":\"short\",\"reason\":\"太短\"}"))
+                .andExpect(status().isBadRequest());
+
+        // Stale If-Match is a conflict, nothing written.
+        mockMvc.perform(
+                        put("/api/v1/admin/users/" + target + "/password")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "9")
+                                .header("Idempotency-Key", "pwd-stale")
+                                .contentType("application/json")
+                                .content(
+                                        "{\"newPassword\":\"correct-horse-battery\","
+                                                + "\"reason\":\"用户报告凭证泄露需要立即重置\"}"))
+                .andExpect(status().isConflict());
+
+        // Diagnostic: run the epoch machinery directly to isolate the failure.
+        try (Connection probeConnection = connect()) {
+            var receipt =
+                    new local.ptmcp.persistence.SecurityChangeTransaction(
+                                    new org.springframework.jdbc.datasource
+                                            .SingleConnectionDataSource(probeConnection, true))
+                            .execute(
+                                    new local.ptmcp.persistence.SecurityEvent(
+                                            java.util.UUID.randomUUID(),
+                                            local.ptmcp.persistence.SecurityEvent.Kind
+                                                    .USER_SECURITY_CHANGED,
+                                            new local.ptmcp.persistence.SecurityEvent.NumericId(
+                                                    target),
+                                            99),
+                                    connection -> {});
+            System.out.println("EPOCH-PROBE epoch=" + receipt.epoch());
+        } catch (RuntimeException probeError) {
+            System.out.println("EPOCH-PROBE-FAIL " + probeError);
+            probeError.printStackTrace();
+        }
+
+        mockMvc.perform(
+                        put("/api/v1/admin/users/" + target + "/password")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "1")
+                                .header("Idempotency-Key", "pwd-reset-1")
+                                .contentType("application/json")
+                                .content(
+                                        "{\"newPassword\":\"correct-horse-battery\","
+                                                + "\"reason\":\"用户报告凭证泄露需要立即重置\"}"))
+                .andExpect(status().isNoContent())
+                .andExpect(
+                        result -> {
+                            String epoch = result.getResponse().getHeader("X-Security-Epoch");
+                            if (epoch == null || Long.parseLong(epoch) < 1) {
+                                throw new AssertionError("missing security epoch: " + epoch);
+                            }
+                        });
+
+        // Identity store: a real bcrypt hash replaced the fake one; the plaintext is nowhere.
+        try (Connection connection = connect();
+                PreparedStatement hash =
+                        connection.prepareStatement(
+                                "SELECT password FROM sys_user WHERE user_id = ?")) {
+            hash.setLong(1, target);
+            try (ResultSet result = hash.executeQuery()) {
+                assertTrue(result.next());
+                String stored = result.getString(1);
+                assertTrue(stored.startsWith("$2"), "expected bcrypt hash: " + stored);
+                assertTrue(stored.length() >= 59);
+                if (stored.contains("correct-horse")) {
+                    throw new AssertionError("plaintext stored");
+                }
+            }
+        }
+
+        // Metadata side: family revoked, aggregate version bumped, one masked log row.
+        try (Connection connection = connect()) {
+            try (PreparedStatement family =
+                    connection.prepareStatement(
+                            "SELECT status FROM oauth_refresh_family WHERE id = 'fam-pwd'")) {
+                try (ResultSet result = family.executeQuery()) {
+                    assertTrue(result.next());
+                    assertEquals("REVOKED", result.getString(1));
+                }
+            }
+            try (PreparedStatement profile =
+                    connection.prepareStatement(
+                            "SELECT version FROM sys_user_profile WHERE user_id = ?")) {
+                profile.setLong(1, target);
+                try (ResultSet result = profile.executeQuery()) {
+                    assertTrue(result.next());
+                    assertEquals(2, result.getLong(1));
+                }
+            }
+            try (PreparedStatement log =
+                    connection.prepareStatement(
+                            "SELECT action, before_masked FROM admin_operation_log"
+                                    + " WHERE aggregate_type = 'USER' AND aggregate_id = ?"
+                                    + " AND action = 'USER_PASSWORD_RESET'")) {
+                log.setLong(1, target);
+                try (ResultSet result = log.executeQuery()) {
+                    assertTrue(result.next());
+                    String before = result.getString(2);
+                    if (before.contains("correct-horse")) {
+                        throw new AssertionError("log leaked plaintext");
+                    }
+                }
             }
         }
     }

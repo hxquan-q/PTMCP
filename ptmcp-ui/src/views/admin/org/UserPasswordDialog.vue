@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { request } from '../../../services/http';
-import { controlPlaneAvailable, mutationNotice } from '../../../services/frontendMode';
+import { mutationNotice, passwordApiReady } from '../../../services/frontendMode';
 import { passwordError } from '../../../services/formValidation';
 import { errorText, usePortalTask } from '../../portalUtils';
 import { ElMessage } from 'element-plus';
@@ -27,7 +27,7 @@ usePortalTask(() => {
 });
 watch(() => [props.modelValue, props.userId], clear, { flush: 'sync' });
 async function save(): Promise<void> {
-  if (saving.value || !controlPlaneAvailable) return;
+  if (saving.value || !passwordApiReady) return;
   error.value =
     passwordError(password.value) ??
     (password.value !== confirm.value
@@ -66,18 +66,18 @@ async function save(): Promise<void> {
     destroy-on-close
     :close-on-click-modal="false"
     @close="clear"
-    ><ElAlert
-      type="warning"
-      :closable="false"
-      :title="controlPlaneAvailable ? '该操作将使用户的会话、OAuth 和 PAT 凭证失效。' : '密码管理接口待接入，正常模式禁止提交。'"
-    /><ElForm label-position="top" class="password-form" :disabled="saving" @submit.prevent="save"
+    ><ElAlert type="warning" :closable="false" title="该操作将立即撤销用户的 OAuth 授权族并推进安全版本，旧凭证停止准入。" /><ElForm
+      label-position="top"
+      class="password-form"
+      :disabled="saving"
+      @submit.prevent="save"
       ><ElFormItem label="新密码" required><ElInput v-model="password" type="password" autocomplete="new-password" /></ElFormItem
       ><ElFormItem label="确认密码" required><ElInput v-model="confirm" type="password" autocomplete="new-password" /></ElFormItem
       ><ElFormItem label="重置理由（10～500字符）" required
         ><ElInput v-model="reason" type="textarea" maxlength="500" :rows="3" /></ElFormItem></ElForm
     ><ElAlert v-if="error" type="error" :title="error" :closable="false" /><template #footer
       ><ElButton @click="open = false">取消</ElButton
-      ><ElButton type="danger" :disabled="!controlPlaneAvailable" :loading="saving" @click="save">确认重置并使凭证失效</ElButton></template
+      ><ElButton type="danger" :disabled="!passwordApiReady" :loading="saving" @click="save">确认重置并使凭证失效</ElButton></template
     ></ElDialog
   >
 </template>
