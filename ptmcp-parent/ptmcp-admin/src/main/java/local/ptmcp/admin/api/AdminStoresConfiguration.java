@@ -23,6 +23,7 @@ import local.ptmcp.admin.session.AdminSessionService;
 import local.ptmcp.admin.session.SessionAuthFilter;
 import local.ptmcp.persistence.org.AclDirectory;
 import local.ptmcp.persistence.org.AclGrantStore;
+import local.ptmcp.persistence.org.DelegationScopeResolver;
 import local.ptmcp.persistence.org.DelegationStore;
 import local.ptmcp.persistence.org.IdempotencyRecorder;
 import local.ptmcp.persistence.org.OrgStore;
@@ -111,6 +112,11 @@ public class AdminStoresConfiguration {
     @Bean
     public DelegationStore delegationStore(DataSource dataSource) {
         return new DelegationStore(dataSource);
+    }
+
+    @Bean
+    public DelegationScopeResolver delegationScopeResolver(DataSource dataSource) {
+        return new DelegationScopeResolver(dataSource);
     }
 
     @Bean

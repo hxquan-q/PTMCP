@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import local.ptmcp.admin.web.StrictJson;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
+import local.ptmcp.persistence.org.DelegationScopeResolver;
 import local.ptmcp.persistence.org.IdempotencyRecorder;
 import local.ptmcp.persistence.org.OrgStore;
 
@@ -29,10 +30,15 @@ import java.util.List;
 public class DepartmentAdminController {
     private final OrgStore orgStore;
     private final IdempotencyRecorder idempotency;
+    private final DepartmentScopeGate scopeGate;
 
-    public DepartmentAdminController(OrgStore orgStore, IdempotencyRecorder idempotency) {
+    public DepartmentAdminController(
+            OrgStore orgStore,
+            IdempotencyRecorder idempotency,
+            DelegationScopeResolver scopeResolver) {
         this.orgStore = orgStore;
         this.idempotency = idempotency;
+        this.scopeGate = new DepartmentScopeGate(scopeResolver);
     }
 
     public record DepartmentWrite(Long parentId, String name, boolean enabled) {}
@@ -42,15 +48,17 @@ public class DepartmentAdminController {
 
     @GetMapping
     public List<DepartmentRead> list(HttpServletRequest request) {
-        ManagementScope.requirePlatformAdmin(request);
-        return orgStore.listDepartments().stream().map(DepartmentAdminController::toRead).toList();
+        // Platform admins see the whole tree; delegated admins their subtree (403 without one).
+        return scopeGate.visibleDepartments(request, orgStore.listDepartments()).stream()
+                .map(DepartmentAdminController::toRead)
+                .toList();
     }
 
     @PostMapping
     public ResponseEntity<byte[]> create(
             @RequestBody(required = false) byte[] body, HttpServletRequest request) {
-        ManagementScope.requirePlatformAdmin(request);
         DepartmentWrite write = StrictJson.parse(body, DepartmentWrite.class);
+        scopeGate.requireParentForCreate(request, write.parentId(), "ptmcp:department:create");
         return IdempotentWrites.execute(
                 idempotency,
                 actorId(request),
@@ -84,7 +92,7 @@ public class DepartmentAdminController {
 
     @GetMapping("/{id}")
     public DepartmentRead get(@PathVariable long id, HttpServletRequest request) {
-        ManagementScope.requirePlatformAdmin(request);
+        scopeGate.requireDepartmentAccess(request, id);
         return toRead(orgStore.getDepartment(id));
     }
 
@@ -92,7 +100,7 @@ public class DepartmentAdminController {
     public ResponseEntity<DepartmentRead> update(
             @PathVariable long id, @RequestBody DepartmentWrite write, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
-        ManagementScope.requirePlatformAdmin(request);
+        scopeGate.requireDepartmentAction(request, id, "ptmcp:department:update");
         DepartmentRead current = toRead(orgStore.getDepartment(id));
         DepartmentRead updated;
         if (write.parentId() == null
@@ -116,7 +124,7 @@ public class DepartmentAdminController {
     public ResponseEntity<DepartmentRead> delete(
             @PathVariable long id, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
-        ManagementScope.requirePlatformAdmin(request);
+        scopeGate.requireDepartmentAction(request, id, "ptmcp:department:delete");
         orgStore.deleteDepartment(id, expectedVersion, actorId(request));
         return ResponseEntity.noContent().build();
     }

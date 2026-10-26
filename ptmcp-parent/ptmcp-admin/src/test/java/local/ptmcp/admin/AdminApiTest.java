@@ -457,6 +457,242 @@ class AdminApiTest {
     }
 
     @Test
+    void delegatedAdminManagesOnlyTheirSubtree() throws Exception {
+        seedAdminDelegationCodes();
+        // The delegable set is the caller's own capability codes; add the department ones.
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            statement.execute(
+                    "INSERT INTO sys_role (role_key, role_name, status, del_flag, create_time,"
+                            + " update_time) VALUES ('dept-scope-admin', '部门作用域管理员', '0', '0',"
+                            + " NOW(6), NOW(6))",
+                    Statement.RETURN_GENERATED_KEYS);
+            long roleId;
+            try (var keys = statement.getGeneratedKeys()) {
+                keys.next();
+                roleId = keys.getLong(1);
+            }
+            for (String code : List.of("ptmcp:department:update", "ptmcp:department:delete")) {
+                statement.execute(
+                        "INSERT INTO sys_role_permission (role_id, permission_code, create_time,"
+                                + " update_time) VALUES ("
+                                + roleId
+                                + ", '"
+                                + code
+                                + "', NOW(6), NOW(6))");
+            }
+            statement.execute(
+                    "INSERT INTO sys_user_role (user_id, role_id, create_time, update_time)"
+                            + " VALUES ("
+                            + ADMIN_ID
+                            + ", "
+                            + roleId
+                            + ", NOW(6), NOW(6))");
+        }
+        // A datasource must exist for the delegation's resource pin.
+        long datasourceId = insertActiveDatasource();
+        long rootId = createDepartment("委派作用域根");
+        long childId = createDepartment("委派作用域子部");
+        // Move child under root via update; simpler: create with parentId through API.
+        long outsideId = createDepartment("委派作用域外部");
+
+        // Make child a real child of root (API create has no parentId field; move it).
+        long childVersion =
+                readLong(
+                        mockMvc.perform(
+                                        get("/api/v1/admin/departments/" + childId)
+                                                .header("X-Test-User-Id", ADMIN_ID)
+                                                .header("X-Test-Platform-Admin", "true"))
+                                .andExpect(status().isOk())
+                                .andReturn()
+                                .getResponse()
+                                .getContentAsString(),
+                        "version");
+        mockMvc.perform(
+                        put("/api/v1/admin/departments/" + childId)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", String.valueOf(childVersion))
+                                .contentType("application/json")
+                                .content(
+                                        "{\"parentId\":"
+                                                + rootId
+                                                + ",\"name\":\"委派作用域子部\",\"enabled\":true}"))
+                .andExpect(status().isOk());
+
+        // The delegated user sits inside the subtree and holds matching capability codes.
+        createUser("scope-throwaway", "占位用户", childId);
+        long delegate = createUser("delegated-admin", "受控管理员", childId);
+        mockMvc.perform(
+                        post("/api/v1/admin/roles")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", "scope-role-" + UUID.randomUUID())
+                                .contentType("application/json")
+                                .content(
+                                        "{\"key\":\"dept_admin\",\"name\":\"部门管理员\","
+                                                + "\"enabled\":true,"
+                                                + "\"permissionCodes\":[\"ptmcp:department:update\","
+                                                + "\"ptmcp:department:delete\"]}"))
+                .andExpect(status().isCreated());
+        // Grant the role via SQL (roles API list unused here); assign to delegate.
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            var roleKeys =
+                    statement.executeQuery(
+                            "SELECT role_id FROM sys_role WHERE role_key = 'dept_admin'");
+            assertTrue(roleKeys.next());
+            long roleId = roleKeys.getLong(1);
+            statement.execute(
+                    "INSERT INTO sys_user_role (user_id, role_id, create_time, update_time)"
+                            + " VALUES ("
+                            + delegate
+                            + ", "
+                            + roleId
+                            + ", NOW(6), NOW(6))");
+        }
+
+        // Delegate the subtree with matching actions.
+        mockMvc.perform(
+                        post("/api/v1/admin/delegations")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", "scope-delegation-1")
+                                .contentType("application/json")
+                                .content(
+                                        "{\"userId\":"
+                                                + delegate
+                                                + ",\"departmentRootId\":"
+                                                + rootId
+                                                + ",\"resourceType\":\"DATASOURCE\",\"resourceId\":"
+                                                + datasourceId
+                                                + ","
+                                                + "\"allowedActions\":[\"ptmcp:department:update\",\"ptmcp:department:delete\"]"
+                                                + ",\"validFrom\":\"2020-01-01T00:00:00Z\""
+                                                + ",\"validTo\":\"2030-01-01T00:00:00Z\"}"))
+                .andExpect(status().isCreated());
+
+        // List: delegated admin sees only root + child, not the outside department.
+        MvcResult listed =
+                mockMvc.perform(
+                                get("/api/v1/admin/departments")
+                                        .header("X-Test-User-Id", delegate)
+                                        .header("X-Test-Platform-Admin", "false"))
+                        .andExpect(status().isOk())
+                        .andReturn();
+        String listBody = listed.getResponse().getContentAsString();
+        if (!listBody.contains("委派作用域根") || !listBody.contains("委派作用域子部")) {
+            throw new AssertionError("subtree rows missing: " + listBody);
+        }
+        if (listBody.contains("委派作用域外部")) {
+            throw new AssertionError("outside department leaked into subtree view");
+        }
+
+        // Update inside the subtree succeeds; re-read the live version after the move.
+        long liveChildVersion =
+                readLong(
+                        mockMvc.perform(
+                                        get("/api/v1/admin/departments/" + childId)
+                                                .header("X-Test-User-Id", delegate)
+                                                .header("X-Test-Platform-Admin", "false"))
+                                .andExpect(status().isOk())
+                                .andReturn()
+                                .getResponse()
+                                .getContentAsString(),
+                        "version");
+        mockMvc.perform(
+                        put("/api/v1/admin/departments/" + childId)
+                                .header("X-Test-User-Id", delegate)
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("If-Match", String.valueOf(liveChildVersion))
+                                .contentType("application/json")
+                                .content(
+                                        "{\"parentId\":"
+                                                + rootId
+                                                + ",\"name\":\"委派作用域子部A\",\"enabled\":true}"))
+                // moveDepartment already bumped once (parent change), so If-Match is +1 and the
+                // rename lands at +2.
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("委派作用域子部A"));
+
+        // Update outside the subtree is denied.
+        mockMvc.perform(
+                        put("/api/v1/admin/departments/" + outsideId)
+                                .header("X-Test-User-Id", delegate)
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("If-Match", "1")
+                                .contentType("application/json")
+                                .content("{\"parentId\":null,\"name\":\"越权改名\",\"enabled\":true}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+
+        // Delete inside the subtree succeeds once its members have been moved out (the store
+        // refuses to delete a department that still has user profiles in it).
+        mockMvc.perform(
+                        put("/api/v1/admin/users/" + (delegate - 1) + "/department")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "1")
+                                .contentType("application/json")
+                                .content("{\"departmentId\":" + outsideId + "}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(
+                        put("/api/v1/admin/users/" + delegate + "/department")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "1")
+                                .contentType("application/json")
+                                .content("{\"departmentId\":" + outsideId + "}"))
+                .andExpect(status().isOk());
+        long deletableVersion =
+                readLong(
+                        mockMvc.perform(
+                                        get("/api/v1/admin/departments/" + childId)
+                                                .header("X-Test-User-Id", delegate)
+                                                .header("X-Test-Platform-Admin", "false"))
+                                .andExpect(status().isOk())
+                                .andReturn()
+                                .getResponse()
+                                .getContentAsString(),
+                        "version");
+        mockMvc.perform(
+                        delete("/api/v1/admin/departments/" + childId)
+                                .header("X-Test-User-Id", delegate)
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("If-Match", String.valueOf(deletableVersion)))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(
+                        delete("/api/v1/admin/departments/" + outsideId)
+                                .header("X-Test-User-Id", delegate)
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("If-Match", "1"))
+                .andExpect(status().isForbidden());
+
+        // Creating a root (no parent) stays platform-only.
+        mockMvc.perform(
+                        post("/api/v1/admin/departments")
+                                .header("X-Test-User-Id", delegate)
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("Idempotency-Key", "scope-root-" + UUID.randomUUID())
+                                .contentType("application/json")
+                                .content("{\"name\":\"越权根\",\"enabled\":true}"))
+                .andExpect(status().isForbidden());
+
+        // Platform admin is unaffected end to end.
+        mockMvc.perform(
+                        get("/api/v1/admin/departments")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
+                .andExpect(status().isOk())
+                .andExpect(
+                        result -> {
+                            if (!result.getResponse().getContentAsString().contains("委派作用域外部")) {
+                                throw new AssertionError("platform admin lost tree visibility");
+                            }
+                        });
+    }
+
+    @Test
     void adminAuditListAppliesFiltersCursorAndPlatformAdminScope() throws Exception {
         long platformId = insertPlatform("p-audit");
         long otherPlatformId = insertPlatform("p-audit-other");
