@@ -164,6 +164,18 @@ ensure_env() {
         [ "${PTMCP_ADMIN_DATASOURCE_PASSWORD:-}" = "$mysql_app" ] ||
             die "dev.env does not match config/dev/secrets/mysql-app.txt. Restore it or run: $0 reset --yes"
         [ -n "${PTMCP_ADMIN_CREDENTIALKEY:-}" ] || die "dev.env is missing PTMCP_ADMIN_CREDENTIALKEY"
+        # Newly introduced keys are appended to an existing dev.env so a restart picks them up
+        # without a full reset; secrets stay local.
+        if [ -z "${PTMCP_ADMIN_AUDITKEY:-}" ]; then
+            printf "PTMCP_ADMIN_AUDITKEY='%s'\n" "$(openssl rand -base64 32 | tr -d '\n')" >>"$ENV_FILE"
+        fi
+        if [ -z "${PTMCP_ADMIN_IDENTITY_DATASOURCE_URL:-}" ]; then
+            {
+                printf "PTMCP_ADMIN_IDENTITY_DATASOURCE_URL='%s'\n" "${PTMCP_ADMIN_DATASOURCE_URL}"
+                printf "PTMCP_ADMIN_IDENTITY_DATASOURCE_USERNAME='%s'\n" "${PTMCP_ADMIN_DATASOURCE_USERNAME}"
+                printf "PTMCP_ADMIN_IDENTITY_DATASOURCE_PASSWORD='%s'\n" "${PTMCP_ADMIN_DATASOURCE_PASSWORD}"
+            } >>"$ENV_FILE"
+        fi
         return 0
     fi
 
@@ -177,6 +189,7 @@ ensure_env() {
     admin_key="$(openssl rand -base64 32 | tr -d '\n')"
     gateway_key="$(openssl rand -base64 32 | tr -d '\n')"
     wal_key="$(openssl rand -base64 32 | tr -d '\n')"
+    audit_key="$(openssl rand -base64 32 | tr -d '\n')"
 
     cat >"$ENV_FILE" <<EOF
 # Generated local development configuration. Do not commit.
@@ -187,7 +200,11 @@ PTMCP_ADMIN_DATASOURCE_USERNAME='ptmcp_dev'
 PTMCP_ADMIN_DATASOURCE_PASSWORD='$mysql_app'
 PTMCP_ADMIN_COOKIESECURE='false'
 PTMCP_ADMIN_CREDENTIALKEY='$admin_key'
+PTMCP_ADMIN_AUDITKEY='$audit_key'
 PTMCP_ADMIN_DATASOURCE_ALLOWEDCIDRS='127.0.0.1/32,::1/128'
+PTMCP_ADMIN_IDENTITY_DATASOURCE_URL='jdbc:mysql://127.0.0.1:13306/ptmcp_dev?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8'
+PTMCP_ADMIN_IDENTITY_DATASOURCE_USERNAME='ptmcp_dev'
+PTMCP_ADMIN_IDENTITY_DATASOURCE_PASSWORD='$mysql_app'
 PTMCP_MCP_URL='http://127.0.0.1:8082/mcp'
 
 PTMCP_AUTHZ_DB_URL='jdbc:mysql://127.0.0.1:13306/ptmcp_dev?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8'

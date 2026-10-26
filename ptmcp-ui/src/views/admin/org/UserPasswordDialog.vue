@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue';
 import { request } from '../../../services/http';
 import { mutationNotice, passwordApiReady } from '../../../services/frontendMode';
 import { passwordError } from '../../../services/formValidation';
+import { newUuid } from '../../../services/uuid';
 import { errorText, usePortalTask } from '../../portalUtils';
 import { ElMessage } from 'element-plus';
 const props = defineProps<{ modelValue: boolean; userId: string; version: number; username: string }>();
@@ -41,7 +42,7 @@ async function save(): Promise<void> {
   try {
     await request(`/api/v1/admin/users/${encodeURIComponent(props.userId)}/password`, {
       method: 'PUT',
-      headers: { 'If-Match': `"${props.version}"` },
+      headers: { 'If-Match': `"${props.version}"`, 'Idempotency-Key': newUuid() },
       body: { newPassword: password.value, reason: reason.value.trim() },
     });
     if (own !== sequence) return;
