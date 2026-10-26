@@ -41,7 +41,7 @@ watch(
   () => {
     void load();
   },
-  { immediate: true }
+  { immediate: true },
 );
 </script>
 

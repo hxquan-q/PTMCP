@@ -9,7 +9,7 @@ import { errorText } from '../../portalUtils';
 const props = withDefaults(defineProps<{ editing?: boolean; initial?: Platform | null; submit?: (body: PlatformWrite) => Promise<void> }>(), {
   editing: false,
   initial: null,
-  submit: undefined
+  submit: undefined,
 });
 const form = reactive({ code: '', name: '', tier: '3', catalogMode: 'HIDE', proofMode: 'NONE', status: 'DISABLED' });
 const saving = ref(false);
@@ -19,7 +19,7 @@ watch(
   (value) => {
     if (value) Object.assign(form, { ...value, tier: String(value.tier) });
   },
-  { immediate: true }
+  { immediate: true },
 );
 const errors = ref<Record<string, string>>({});
 const message = ref('');
@@ -28,7 +28,7 @@ const proofHint = computed(() =>
     ? '由服务端登记证书指纹与 TLS 约束。'
     : form.proofMode === 'PROXY_SECRET'
       ? '由服务端登记代理网络约束与只写 secret。'
-      : '没有逐调用证明；Tier 1 不允许使用。'
+      : '没有逐调用证明；Tier 1 不允许使用。',
 );
 watch(form, () => {
   errors.value = {};
@@ -57,7 +57,7 @@ async function save(): Promise<void> {
       tier: Number(form.tier),
       catalogMode: form.catalogMode,
       proofMode: form.proofMode,
-      status: form.status
+      status: form.status,
     };
     if (form.proofMode === 'MTLS' && proof.certificateFingerprint) body.proofConfig = { certificateFingerprint: proof.certificateFingerprint };
     if (form.proofMode === 'PROXY_SECRET' && proof.secret) body.proofConfig = { proxyNetwork: proof.proxyNetwork, secret: proof.secret };

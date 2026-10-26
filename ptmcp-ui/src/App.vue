@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { RouterView } from 'vue-router';
+import { RouterView, useRoute, useRouter } from 'vue-router';
 import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import { onMounted, onUnmounted, ref, defineAsyncComponent } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
 import { frontendPreview } from './services/frontendMode';
 const PreviewToolbar =
   import.meta.env.DEV && import.meta.env.MODE === 'frontend-preview' ? defineAsyncComponent(() => import('./preview/PreviewToolbar.vue')) : null;
@@ -10,7 +9,7 @@ const previewKey = ref(0);
 const route = useRoute();
 const router = useRouter();
 function handleExpired(): void {
-  if (route.name !== 'login') void router.replace({ name: 'login', query: { returnTo: route.fullPath } });
+  if (route.name !== 'login') router.replace({ name: 'login', query: { returnTo: route.fullPath } }).catch(() => undefined);
 }
 onMounted(() => window.addEventListener('ptmcp:session-expired', handleExpired));
 onUnmounted(() => window.removeEventListener('ptmcp:session-expired', handleExpired));

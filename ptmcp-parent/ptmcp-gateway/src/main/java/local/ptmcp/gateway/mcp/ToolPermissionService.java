@@ -71,7 +71,7 @@ final class ToolPermissionService {
 
         /** True when a currently valid META-action DENY covers the object; hides it in DISCOVER. */
         boolean explicitMetaDeny(long objectId) {
-            for (AuthorizationReader.AclGrant grant : covering(objectId)) {
+            for (AuthorizationReader.AclGrant grant : matchingGrants(objectId)) {
                 if (grant.effect() == PermissionGrant.Effect.DENY
                         && grant.action() == PermissionGrant.Action.META
                         && !now.isBefore(grant.validFrom())
@@ -84,32 +84,32 @@ final class ToolPermissionService {
 
         private PermissionEvaluator.Decision evaluate(long objectId) {
             Forest.Node target = forest.object(objectId);
-            List<GrantRow> covering = new ArrayList<>();
-            for (AuthorizationReader.AclGrant grant : covering(objectId)) {
-                covering.add(forest.toGrantRow(grant));
+            List<GrantRow> grantRows = new ArrayList<>();
+            for (AuthorizationReader.AclGrant grant : matchingGrants(objectId)) {
+                grantRows.add(forest.toGrantRow(grant));
             }
             List<PermissionGrant> expanded =
                     GrantExpander.expand(
-                            covering, scope, forest.resourceNodes(), target.syntheticId());
+                            grantRows, scope, forest.resourceNodes(), target.syntheticId());
             boolean platformMeta = platformCovers(target, false);
             boolean platformRead = platformCovers(target, true);
             return PermissionEvaluator.evaluate(expanded, platformMeta, platformRead, now);
         }
 
-        private List<AuthorizationReader.AclGrant> covering(long objectId) {
+        private List<AuthorizationReader.AclGrant> matchingGrants(long objectId) {
             Forest.Node target = forest.object(objectId);
             List<Forest.Node> chain = forest.chain(target);
-            List<AuthorizationReader.AclGrant> covering = new ArrayList<>();
+            List<AuthorizationReader.AclGrant> matching = new ArrayList<>();
             for (AuthorizationReader.AclGrant grant : grants) {
                 if (forest.matchesChain(
                         grant.resourceType(),
                         grant.resourceId(),
                         grant.resourceGeneration(),
                         chain)) {
-                    covering.add(grant);
+                    matching.add(grant);
                 }
             }
-            return covering;
+            return matching;
         }
 
         /**

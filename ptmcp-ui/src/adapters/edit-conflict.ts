@@ -28,7 +28,7 @@ export function datasourceDifferences(base: DatasourceRead, latest: DatasourceRe
     username: '用户名',
     poolMax: '连接池上限',
     status: '状态',
-    tlsMode: 'TLS'
+    tlsMode: 'TLS',
   } as const;
   return (Object.keys(fields) as Array<keyof typeof fields>).flatMap((key) => difference(key, fields[key], base[key], latest[key], draft[key]));
 }
@@ -41,7 +41,7 @@ export function dictionaryDraft(value: MetadataDetail): DictionaryWrite {
     columns: value.columns.map((column) => {
       const annotation = value.dictionary.columns.find((item) => item.columnName.toLowerCase() === column.name.toLowerCase());
       return { columnName: column.name, title: annotation?.title ?? '', description: annotation?.description ?? '' };
-    })
+    }),
   };
 }
 
@@ -65,7 +65,7 @@ export function dictionaryDifferences(base: MetadataDetail, latest: MetadataDeta
     'databaseName',
     'schemaName',
     'objectName',
-    'objectType'
+    'objectType',
   ] as const) {
     const labels = {
       generation: '资源代次（只读）',
@@ -75,7 +75,7 @@ export function dictionaryDifferences(base: MetadataDetail, latest: MetadataDeta
       databaseName: '数据库名（只读）',
       schemaName: 'Schema（只读）',
       objectName: '对象名（只读）',
-      objectType: '对象类型（只读）'
+      objectType: '对象类型（只读）',
     };
     rows.push(...difference(key, labels[key], base[key], latest[key], base[key]));
   }
@@ -84,7 +84,7 @@ export function dictionaryDifferences(base: MetadataDetail, latest: MetadataDeta
     const previous = base.columns.find((column) => column.name === name);
     const current = latest.columns.find((column) => column.name === name);
     rows.push(
-      ...difference(`structure:${name}`, `${name} / 结构（只读）`, columnStructure(previous), columnStructure(current), columnStructure(previous))
+      ...difference(`structure:${name}`, `${name} / 结构（只读）`, columnStructure(previous), columnStructure(current), columnStructure(previous)),
     );
     for (const key of ['title', 'description'] as const) {
       const annotation = (value: DictionaryWrite) => value.columns.find((column) => column.columnName.toLowerCase() === name.toLowerCase())?.[key];
@@ -94,8 +94,8 @@ export function dictionaryDifferences(base: MetadataDetail, latest: MetadataDeta
           `${name} / ${key === 'title' ? '业务标题' : '业务说明'}`,
           annotation(before),
           annotation(after),
-          annotation(draft)
-        )
+          annotation(draft),
+        ),
       );
     }
   }
@@ -105,7 +105,7 @@ export function dictionaryDifferences(base: MetadataDetail, latest: MetadataDeta
 /** Keep removed annotations separately so adopting new structure never silently discards a draft. */
 export function rebaseDictionaryDraft(
   draft: DictionaryWrite,
-  latest: MetadataDetail
+  latest: MetadataDetail,
 ): { draft: DictionaryWrite; removed: DictionaryWrite['columns'] } {
   const server = dictionaryDraft(latest);
   const names = new Set(server.columns.map((column) => column.columnName.toLowerCase()));
@@ -117,11 +117,11 @@ export function rebaseDictionaryDraft(
       columns: server.columns.map((column) => {
         const local = draft.columns.find((item) => item.columnName.toLowerCase() === column.columnName.toLowerCase());
         return { ...(local ?? column), columnName: column.columnName };
-      })
+      }),
     },
     removed: draft.columns
       .filter((column) => !names.has(column.columnName.toLowerCase()) && (column.title.trim() || column.description.trim()))
-      .map((column) => ({ ...column }))
+      .map((column) => ({ ...column })),
   };
 }
 

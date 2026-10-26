@@ -3,8 +3,7 @@ import { onBeforeUnmount, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useSessionStore } from '../../stores/session';
-import { errorText, usePortalTask } from '../portalUtils';
-import { formatDate } from '../portalUtils';
+import { errorText, formatDate, usePortalTask } from '../portalUtils';
 import { passwordError } from '../../services/formValidation';
 
 const router = useRouter();

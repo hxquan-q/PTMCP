@@ -7,9 +7,9 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     return nextResolve(
       context.parentURL?.includes('/src/') && specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier) ? `${specifier}.ts` : specifier,
-      context
+      context,
     );
-  }
+  },
 });
 const { useCursorPage } = await import('../src/composables/useCursorPage.ts');
 hooks.deregister();
@@ -27,13 +27,13 @@ function mount(read) {
     createText: () => ({}),
     createComment: () => ({}),
     parentNode: () => null,
-    nextSibling: () => null
+    nextSibling: () => null,
   });
   const app = renderer.createApp({
     setup() {
       state = useCursorPage(read);
       return () => null;
-    }
+    },
   });
   app.mount({});
   return {
@@ -41,7 +41,7 @@ function mount(read) {
     close() {
       app.unmount();
       globalThis.window = prior;
-    }
+    },
   };
 }
 test('cursor stale restarts a read at page one without appending obsolete rows', async () => {

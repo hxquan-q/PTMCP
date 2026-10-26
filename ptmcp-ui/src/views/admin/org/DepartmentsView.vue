@@ -120,14 +120,14 @@ async function save(): Promise<void> {
       parentId: form.parentId || null,
       name: form.name.trim(),
       enabled: form.enabled,
-      ...(frontendPreview ? { orderNum: form.orderNum } : {})
+      ...(frontendPreview ? { orderNum: form.orderNum } : {}),
     };
     if (editing.value && body.parentId !== editing.value.parentId) {
       if (body.parentId && descendantIds(editing.value.id).has(body.parentId)) throw new Error('不能移动到当前部门或其子部门');
       await ElMessageBox.confirm(
         `将“${pathLabel(editing.value.id)}”移动到“${pathLabel(body.parentId)} / ${form.name}”。影响子树共 ${descendantIds(editing.value.id).size} 个部门，成员授权将重新计算。`,
         '确认移动部门',
-        { type: 'warning' }
+        { type: 'warning' },
       );
     }
     if (editing.value) await orgPortalApi.departments.update(editing.value.id, body, editing.value.version);
@@ -185,7 +185,7 @@ watch(
       departmentsTask.cancel();
       clearPage();
     }
-  }
+  },
 );
 onMounted(load);
 </script>

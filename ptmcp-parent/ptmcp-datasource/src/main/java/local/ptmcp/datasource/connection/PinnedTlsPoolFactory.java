@@ -24,6 +24,7 @@ public final class PinnedTlsPoolFactory implements PoolFactory {
         return switch (Objects.requireNonNull(key, "key").engine()) {
             case MYSQL -> mysql.create(key, credential, limits);
             case POSTGRESQL -> postgresql.create(key, credential, limits);
+            default -> throw new IllegalArgumentException("engine is not supported");
         };
     }
 }

@@ -35,8 +35,9 @@ import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -519,7 +520,9 @@ class SecurityStateTest {
             QuotaLimiter limiter, long userId, long datasourceId, int racers, boolean distinctUsers)
             throws Exception {
         CyclicBarrier barrier = new CyclicBarrier(racers);
-        ExecutorService pool = Executors.newFixedThreadPool(racers);
+        ExecutorService pool =
+                new ThreadPoolExecutor(
+                        racers, racers, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
         try {
             List<Callable<Integer>> tasks = new ArrayList<>();
             for (int i = 0; i < racers; i++) {

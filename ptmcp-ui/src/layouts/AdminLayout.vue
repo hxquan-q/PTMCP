@@ -16,7 +16,7 @@ const items: NavigationItem[] = [
   { label: '用户', to: '/admin/users', icon: UserIcon, permission: 'ptmcp:user:list', group: '组织与接入' },
   { label: '角色管理', to: '/admin/roles', icon: AvatarIcon, permission: 'ptmcp:role:list', group: '组织与接入' },
   { label: '平台与客户端', to: '/admin/platforms', icon: PlatformIcon, permission: 'ptmcp:platform:list', group: '组织与接入' },
-  { label: '审计记录', to: '/admin/audit', icon: DocumentIcon, permission: 'ptmcp:audit:list', group: '安全与追踪' }
+  { label: '审计记录', to: '/admin/audit', icon: DocumentIcon, permission: 'ptmcp:audit:list', group: '安全与追踪' },
 ];
 </script>
 <template><WorkspaceLayout mode="admin" title="控制面" subtitle="权限、资源与运行状态" :items="items" /></template>

@@ -65,10 +65,10 @@ async function load(append = false): Promise<void> {
           tool: filters.tool || undefined,
           result: filters.result || undefined,
           verdict: filters.verdict || undefined,
-          cursor: append ? (nextCursor.value ?? undefined) : undefined
+          cursor: append ? (nextCursor.value ?? undefined) : undefined,
         },
-        signal
-      )
+        signal,
+      ),
     );
     if (!page || ownVersion !== readVersion) return;
     items.value = append ? [...items.value, ...page.items] : page.items;
@@ -106,7 +106,7 @@ watch(
     hasLoaded.value = false;
     loadError.value = '';
   },
-  { flush: 'sync' }
+  { flush: 'sync' },
 );
 onMounted(() => {
   void load();

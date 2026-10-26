@@ -25,7 +25,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /** Real MySQL boundary tests. A missing Docker daemon is an error, never a skipped test. */
@@ -455,7 +456,9 @@ class SecuritySchemaMigrationTest {
         String id = UUID.randomUUID().toString();
         CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch start = new CountDownLatch(1);
-        try (var executor = Executors.newFixedThreadPool(2)) {
+        try (var executor =
+                new ThreadPoolExecutor(
+                        2, 2, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>())) {
             var first = executor.submit(() -> raceInsert(id, ready, start));
             var second = executor.submit(() -> raceInsert(id, ready, start));
             assertTrue(ready.await(10, TimeUnit.SECONDS));

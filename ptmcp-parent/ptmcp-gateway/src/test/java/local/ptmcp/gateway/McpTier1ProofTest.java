@@ -46,8 +46,7 @@ class McpTier1ProofTest {
     private static final String KEY = Base64.getEncoder().encodeToString(new byte[32]);
     private static final String MTLS_FINGERPRINT = "aa".repeat(32);
     private static final String WRONG_FINGERPRINT = "bb".repeat(32);
-    private static final byte[] PROXY_SECRET =
-            "tier1-proxy-secret".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] PROXY_SECRET = secret().getBytes(StandardCharsets.UTF_8);
     private static final String MTLS_PAT = "ptmcp_pat_" + secret();
     private static final String PROXY_PAT = "ptmcp_pat_" + secret();
     private static final String UNTRUSTED_PAT = "ptmcp_pat_" + secret();

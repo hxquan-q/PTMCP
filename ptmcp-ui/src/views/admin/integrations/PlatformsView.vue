@@ -1,8 +1,20 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
-import { ElAlert, ElButton, ElCard, ElDialog, ElInput, ElOption, ElSelect, ElTable, ElTableColumn, ElTag } from 'element-plus';
+import {
+  ElAlert,
+  ElButton,
+  ElCard,
+  ElDialog,
+  ElInput,
+  ElMessage,
+  ElMessageBox,
+  ElOption,
+  ElSelect,
+  ElTable,
+  ElTableColumn,
+  ElTag,
+} from 'element-plus';
 import PageHeader from '../../../components/common/PageHeader.vue';
 import PageState from '../../../components/common/PageState.vue';
 import { localOnlyReason } from './adminSurface';
@@ -18,7 +30,7 @@ const dialogVisible = ref(false);
 const session = useSessionStore();
 const router = useRouter();
 const { rows, cursor, loading, error, loaded, reset, load, retry } = useCursorPage((cursor, signal) =>
-  controlPlane.platforms.list({ ...filter, cursor }, signal)
+  controlPlane.platforms.list({ ...filter, cursor }, signal),
 );
 const removing = ref(false);
 async function save(body: PlatformWrite): Promise<void> {
@@ -50,7 +62,7 @@ onMounted(() => {
   if (controlPlaneAvailable) void load();
 });
 const filterText = computed(() =>
-  [filter.keyword, filter.tier, filter.status].filter(Boolean).length ? '筛选条件已准备，接口接入后将按服务端游标查询。' : '平台目录尚未连接。'
+  [filter.keyword, filter.tier, filter.status].filter(Boolean).length ? '筛选条件已准备，接口接入后将按服务端游标查询。' : '平台目录尚未连接。',
 );
 function clearPreview(): void {
   dialogVisible.value = false;

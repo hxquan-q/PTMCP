@@ -12,14 +12,14 @@ async function mount(name, props) {
   const imports = {
     vue: import.meta.resolve('vue'),
     'element-plus': url(
-      'export const ElAlert={},ElButton={},ElForm={},ElFormItem={},ElInput={},ElOption={},ElSelect={},ElCheckbox={},ElCheckboxGroup={};'
+      'export const ElAlert={},ElButton={},ElForm={},ElFormItem={},ElInput={},ElOption={},ElSelect={},ElCheckbox={},ElCheckboxGroup={};',
     ),
     './adminSurface': new URL('../src/views/admin/integrations/adminSurface.ts', import.meta.url).href,
     '../../../services/frontendMode': url('export const controlPlaneAvailable=true;'),
-    '../../portalUtils': url('export const errorText=e=>e.message;')
+    '../../portalUtils': url('export const errorText=e=>e.message;'),
   };
   const script = stripTypeScriptTypes(code, { mode: 'transform' }).replace(/from\s+(['"])([^'"]+)\1/g, (s, q, p) =>
-    imports[p] ? `from ${JSON.stringify(imports[p])}` : s
+    imports[p] ? `from ${JSON.stringify(imports[p])}` : s,
   );
   const component = (await import(url(script))).default;
   const renderer = createRenderer({
@@ -32,7 +32,7 @@ async function mount(name, props) {
     createText: () => ({}),
     createComment: () => ({}),
     parentNode: () => null,
-    nextSibling: () => null
+    nextSibling: () => null,
   });
   const app = renderer.createApp({ ...component, render: () => null }, props);
   app.mount({});
@@ -53,11 +53,11 @@ test('platform edit emits only write DTO fields and retains the original code', 
       tier: 3,
       catalogMode: 'HIDE',
       proofMode: 'NONE',
-      status: 'DISABLED'
+      status: 'DISABLED',
     },
     submit: async (value) => {
       body = value;
-    }
+    },
   });
   try {
     await page.state.save();
@@ -86,11 +86,11 @@ test('client edit emits write fields without identities or read-only secret stat
       redirectUris: ['https://example.test/callback'],
       allowedScopes: ['mcp:catalog'],
       jwksUri: '',
-      status: 'ACTIVE'
+      status: 'ACTIVE',
     },
     submit: async (value) => {
       body = value;
-    }
+    },
   });
   try {
     await page.state.save();

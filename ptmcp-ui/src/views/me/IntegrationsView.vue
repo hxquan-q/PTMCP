@@ -27,13 +27,13 @@ const clientTypes = [
   { label: 'WorkBuddy', value: 'WORKBUDDY' },
   { label: 'Cursor', value: 'CURSOR' },
   { label: 'Claude Code', value: 'CLAUDE_CODE' },
-  { label: 'VS Code', value: 'VSCODE' }
+  { label: 'VS Code', value: 'VSCODE' },
 ];
 
 async function loadPlatforms(append = false): Promise<void> {
   try {
     const page = await platformTask.run((signal) =>
-      mePortalApi.accessContext.platforms(append ? (nextPlatformCursor.value ?? undefined) : undefined, signal)
+      mePortalApi.accessContext.platforms(append ? (nextPlatformCursor.value ?? undefined) : undefined, signal),
     );
     if (!page) return;
     platforms.value = append ? [...platforms.value, ...page.items] : page.items;

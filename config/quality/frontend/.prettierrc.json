@@ -7,7 +7,7 @@
   "quoteProps": "preserve",
   "jsxSingleQuote": false,
   "bracketSameLine": false,
-  "trailingComma": "none",
+  "trailingComma": "all",
   "bracketSpacing": true,
   "embeddedLanguageFormatting": "auto",
   "arrowParens": "always",

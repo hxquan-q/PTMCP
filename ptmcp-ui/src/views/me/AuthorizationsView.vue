@@ -39,7 +39,7 @@ async function revoke(item: AuthorizationView): Promise<void> {
   revoking.value = true;
   try {
     await ElMessageBox.confirm(`将撤销“${item.clientName}”的整组授权，所有使用该授权族的客户端会话都将受影响。`, '撤销 OAuth 授权', {
-      type: 'warning'
+      type: 'warning',
     });
     if (!active) return;
     await mePortalApi.authorizations.revoke(item.id);

@@ -68,10 +68,17 @@ class SessionApiTest {
     private static final MySQLContainer MYSQL = startMysql();
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final ZoneOffset UTC = ZoneOffset.UTC;
-    private static final String PASSWORD = "CorrectHorse123!";
-    private static final String NEW_PASSWORD = "AnotherHorse456!";
+    private static final String PASSWORD = syntheticSecret();
+    private static final String NEW_PASSWORD = syntheticSecret();
+    private static final String WRONG_PASSWORD = "wrong-" + syntheticSecret();
     private static final long ALICE = 1001L;
     private static final long BOB = 1002L;
+
+    private static String syntheticSecret() {
+        byte[] bytes = new byte[32];
+        new SecureRandom().nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
 
     private static MySQLContainer startMysql() {
         byte[] secret = new byte[32];
@@ -334,7 +341,7 @@ class SessionApiTest {
         String token = json(csrf).get("csrfToken").asString();
         Cookie cookie = new Cookie(AdminSessionService.PRESESSION_COOKIE, presession);
         String unknown = "{\"username\":\"ghost\",\"password\":\"" + PASSWORD + "\"}";
-        String wrong = "{\"username\":\"alice\",\"password\":\"WrongPassword123!\"}";
+        String wrong = "{\"username\":\"alice\",\"password\":\"" + WRONG_PASSWORD + "\"}";
 
         mockMvc.perform(
                         post("/api/v1/session/login")

@@ -7,7 +7,7 @@ import { useCursorPage } from '../../../composables/useCursorPage';
 const props = withDefaults(defineProps<{ userId: string; platformId: string; datasourceId: string; ready?: boolean }>(), { ready: true });
 const session = useSessionStore();
 const { rows, cursor, loading, error, loaded, reset, load, retry } = useCursorPage((cursor, signal) =>
-  controlPlane.effective({ userId: props.userId, platformId: props.platformId, datasourceId: props.datasourceId, cursor }, signal)
+  controlPlane.effective({ userId: props.userId, platformId: props.platformId, datasourceId: props.datasourceId, cursor }, signal),
 );
 watch(() => [props.userId, props.platformId, props.datasourceId, props.ready], reset, { flush: 'sync' });
 </script>

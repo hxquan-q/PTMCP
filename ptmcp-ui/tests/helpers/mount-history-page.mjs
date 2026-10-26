@@ -19,11 +19,11 @@ export async function mountHistoryPage(list) {
     'vue-router': dataUrl('export const useRouter=()=>({push(){}});'),
     'element-plus': dataUrl('export const ElMessage={warning(){}};'),
     '../../services/mePortalApi': dataUrl(`${prefix} export const mePortalApi={history:{list:(...args)=>f.list(...args)}};`),
-    '../portalUtils': dataUrl(stripTypeScriptTypes(utils, { mode: 'transform' }))
+    '../portalUtils': dataUrl(stripTypeScriptTypes(utils, { mode: 'transform' })),
   };
   const { descriptor } = parse(await readFile(new URL('../../src/views/me/HistoryView.vue', import.meta.url), 'utf8'));
   const script = compileScript(descriptor, { id: key }).content.replace(/from\s+(['"])([^'"]+)\1/g, (statement, _quote, specifier) =>
-    urls[specifier] ? `from ${JSON.stringify(urls[specifier])}` : statement
+    urls[specifier] ? `from ${JSON.stringify(urls[specifier])}` : statement,
   );
   const component = (await import(dataUrl(stripTypeScriptTypes(script, { mode: 'transform' })))).default;
   const priorWindow = globalThis.window;
@@ -38,7 +38,7 @@ export async function mountHistoryPage(list) {
     createText: () => ({}),
     createComment: () => ({}),
     parentNode: () => null,
-    nextSibling: () => null
+    nextSibling: () => null,
   });
   const app = renderer.createApp({ ...component, render: () => null });
   app.mount({});
@@ -49,6 +49,6 @@ export async function mountHistoryPage(list) {
       app.unmount();
       globalThis.window = priorWindow;
       delete globalThis[key];
-    }
+    },
   };
 }

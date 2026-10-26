@@ -54,7 +54,7 @@ const {
   openEdit,
   save,
   revoke,
-  runPreview
+  runPreview,
 } = useAccessWorkspace();
 const resourceLabels = { DATASOURCE: '数据源', NAMESPACE: '命名空间', OBJECT: '对象' };
 function date(value: string | null) {

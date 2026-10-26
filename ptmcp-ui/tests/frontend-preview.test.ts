@@ -17,7 +17,7 @@ test('frontend preview is isolated, versioned and never returns a persisted secr
   const client = await read(`/api/v1/admin/platforms/${id}/clients`, 'POST', {
     name: '演示客户端',
     type: 'CONFIDENTIAL',
-    authMethods: ['client_secret_basic']
+    authMethods: ['client_secret_basic'],
   });
   assert.ok(client.data.clientSecret);
   const detail = await read(`/api/v1/admin/clients/${client.data.client.id}`);
@@ -55,7 +55,7 @@ test('preview job and dictionary writes follow the actual frontend DTO and ETag 
   const response = await server('/api/v1/admin/metadata/objects/1/dictionary', {
     method: 'PUT',
     body: { title: '合成新标题', description: '合成说明', columns: [] },
-    headers: { 'If-Match': '"1"' }
+    headers: { 'If-Match': '"1"' },
   });
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('ETag'), '"2"');
@@ -65,6 +65,6 @@ test('preview job and dictionary writes follow the actual frontend DTO and ETag 
   assert.equal(
     (await server('/api/v1/admin/metadata/objects/1/dictionary', { method: 'PUT', body: { title: 'overwritten' }, headers: { 'If-Match': '"1"' } }))
       .status,
-    412
+    412,
   );
 });

@@ -15,7 +15,9 @@ import java.time.ZoneOffset;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Connectivity probes and schema syncs. TEST runs the built-in probe inline and records a terminal
@@ -45,7 +47,12 @@ public final class DatasourceJobService implements AutoCloseable {
         this.connections = Objects.requireNonNull(connections, "connections");
         this.admin = Objects.requireNonNull(admin, "admin");
         this.executor =
-                Executors.newSingleThreadExecutor(
+                new ThreadPoolExecutor(
+                        1,
+                        1,
+                        0L,
+                        TimeUnit.MILLISECONDS,
+                        new LinkedBlockingQueue<>(),
                         runnable -> {
                             Thread thread = new Thread(runnable, "ptmcp-admin-schema-sync");
                             thread.setDaemon(true);

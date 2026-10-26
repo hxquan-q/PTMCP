@@ -34,7 +34,7 @@ function grantIds(row: Grant): Grant {
     subjectId: String(row.subjectId),
     resourceId: String(row.resourceId),
     resourceGeneration: String(row.resourceGeneration),
-    version: String(row.version)
+    version: String(row.version),
   };
 }
 export async function listGrants(subjectType: SubjectType, subjectId: string, signal?: AbortSignal): Promise<Grant[]> {
@@ -52,7 +52,7 @@ export async function saveGrant(body: GrantWrite, key: string, editing?: Grant):
   const { data } = await request<Grant>(editing ? `/api/v1/admin/acl/grants/${encodeURIComponent(editing.id)}` : '/api/v1/admin/acl/grants', {
     method: editing ? 'PUT' : 'POST',
     body,
-    headers
+    headers,
   });
   return grantIds(data);
 }
@@ -64,15 +64,15 @@ export async function previewAccess(
   platformId: string,
   resourceIds: string[],
   at?: string,
-  options: RequestOptions = {}
+  options: RequestOptions = {},
 ): Promise<Preview> {
   const { data } = await request<Preview>('/api/v1/admin/acl/preview', {
     ...options,
     method: 'POST',
-    body: { subjectUserId, platformId, resourceIds, ...(at ? { at } : {}) }
+    body: { subjectUserId, platformId, resourceIds, ...(at ? { at } : {}) },
   });
   return {
     ...data,
-    decisions: data.decisions.map((item) => ({ ...item, resourceId: String(item.resourceId), sourceGrantIds: item.sourceGrantIds.map(String) }))
+    decisions: data.decisions.map((item) => ({ ...item, resourceId: String(item.resourceId), sourceGrantIds: item.sourceGrantIds.map(String) })),
   };
 }

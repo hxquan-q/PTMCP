@@ -16,13 +16,13 @@ const grant = {
   validTo: null,
   reason: 'Synthetic rule',
   version: '1',
-  status: 'ACTIVE'
+  status: 'ACTIVE',
 };
 const resource = (id) => ({ key: `OBJECT:${id}`, id, label: `Object ${id}`, type: 'OBJECT', generation: '1' });
 const decision = {
   decisions: [{ resourceId: '1', meta: true, read: true, sourceGrantIds: ['10'] }],
   evaluatedAt: '2026-10-25T00:00:00Z',
-  nextBoundaryAt: null
+  nextBoundaryAt: null,
 };
 async function selectContext(page) {
   page.state.subjectId.value = '5';
@@ -55,7 +55,7 @@ test('a conflict invalidates a pending preview and preserves the edit draft', as
     previewAccess: () => preview.promise,
     saveGrant: async () => {
       throw new AccessError(409);
-    }
+    },
   });
   try {
     await selectContext(page);
@@ -80,7 +80,7 @@ test('late conflict details cannot repopulate the workspace after session invali
     getGrant: () => (++reads === 1 ? Promise.resolve(grant) : detail.promise),
     saveGrant: async () => {
       throw new AccessError(412);
-    }
+    },
   });
   try {
     await selectContext(page);
@@ -111,7 +111,7 @@ test('revocation conflict clears previews and refreshes the changed rule without
     revokeGrantApi: async () => {
       deletes += 1;
       throw new AccessError(409);
-    }
+    },
   });
   try {
     await selectContext(page);
@@ -225,7 +225,7 @@ test('an uncertain write clears the former preview and blocks recalculation unti
     previewAccess: async () => {
       previews += 1;
       return decision;
-    }
+    },
   });
   try {
     await selectContext(page);

@@ -6,8 +6,8 @@ export function splitLines(value: string): string[] {
       value
         .split(/\r?\n/u)
         .map((item) => item.trim())
-        .filter(Boolean)
-    )
+        .filter(Boolean),
+    ),
   ];
 }
 

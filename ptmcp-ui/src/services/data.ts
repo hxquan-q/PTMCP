@@ -53,7 +53,7 @@ export async function dataRequest<T>(path: string, options: DataRequestOptions =
         code: cause.code,
         requestId: cause.requestId ?? undefined,
         retryable: cause.retryable,
-        details: cause.details
+        details: cause.details,
       });
     }
     throw cause;
@@ -202,7 +202,7 @@ export async function listDatasources(
     cursor?: string | null;
     pageSize?: number;
     signal?: AbortSignal;
-  } = {}
+  } = {},
 ): Promise<ApiResult<DatasourcePage>> {
   const query = new URLSearchParams();
   if (params.keyword) query.set('keyword', params.keyword);
@@ -233,7 +233,7 @@ export function testDatasource(id: string, draft?: DatasourceWrite, idempotencyK
   return adaptedRequest(
     `/api/v1/admin/datasources/${encodeURIComponent(id)}/test`,
     { method: 'POST', body: draft ? { draft } : undefined, idempotencyKey },
-    adaptJob
+    adaptJob,
   );
 }
 
@@ -241,7 +241,7 @@ export function syncDatasource(id: string, idempotencyKey?: string): Promise<Api
   return adaptedRequest(
     `/api/v1/admin/datasources/${encodeURIComponent(id)}/sync`,
     { method: 'POST', body: { mode: 'FULL' }, idempotencyKey },
-    adaptJob
+    adaptJob,
   );
 }
 
@@ -274,6 +274,6 @@ export function updateDictionary(id: string, body: DictionaryWrite, etag: string
   return adaptedRequest(
     `/api/v1/admin/metadata/objects/${encodeURIComponent(id)}/dictionary`,
     { method: 'PUT', body, etag, idempotencyKey },
-    adaptMetadataDetail
+    adaptMetadataDetail,
   );
 }

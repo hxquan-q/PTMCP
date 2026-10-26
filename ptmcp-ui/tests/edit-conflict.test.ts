@@ -5,7 +5,7 @@ import {
   dictionaryDifferences,
   dictionaryDraft,
   isVersionConflict,
-  rebaseDictionaryDraft
+  rebaseDictionaryDraft,
 } from '../src/adapters/edit-conflict.ts';
 import type { DatasourceRead, MetadataDetail } from '../src/services/data.ts';
 
@@ -26,7 +26,7 @@ const source: DatasourceRead = {
   activeSnapshotId: null,
   lastSyncAt: null,
   credentialConfigured: true,
-  health: 'UNKNOWN'
+  health: 'UNKNOWN',
 };
 const detail: MetadataDetail = {
   id: '31',
@@ -52,16 +52,16 @@ const detail: MetadataDetail = {
       maxLength: null,
       comment: null,
       primaryKey: true,
-      foreignKey: null
-    }
+      foreignKey: null,
+    },
   ],
   dictionary: {
     title: 'Original title',
     description: null,
     ownerUserId: '9223372036854775807',
     version: '1',
-    columns: [{ columnName: 'old', title: 'Original column', description: null }]
-  }
+    columns: [{ columnName: 'old', title: 'Original column', description: null }],
+  },
 };
 
 test('source comparison separates server and draft changes and never retains a credential', () => {
@@ -70,11 +70,11 @@ test('source comparison separates server and draft changes and never retains a c
   const rows = datasourceDifferences(source, latest, draft);
   assert.deepEqual(
     rows.map((row) => row.key),
-    ['name', 'host', 'poolMax']
+    ['name', 'host', 'poolMax'],
   );
   assert.deepEqual(
     rows.find((row) => row.key === 'host'),
-    { key: 'host', label: '主机', base: 'old.invalid', latest: 'new.invalid', draft: 'old.invalid', serverChanged: true, draftChanged: false }
+    { key: 'host', label: '主机', base: 'old.invalid', latest: 'new.invalid', draft: 'old.invalid', serverChanged: true, draftChanged: false },
   );
   assert.equal(rows.find((row) => row.key === 'poolMax')?.draftChanged, true);
   assert.equal(JSON.stringify(rows).includes('synthetic-secret'), false);
@@ -85,7 +85,7 @@ test('dictionary differences include structure, server annotations and local edi
     ...detail,
     snapshotVersion: '2',
     columns: [{ ...detail.columns[0]!, databaseType: 'bigint' }],
-    dictionary: { ...detail.dictionary, title: 'Server title', ownerUserId: null, version: '2' }
+    dictionary: { ...detail.dictionary, title: 'Server title', ownerUserId: null, version: '2' },
   };
   const draft = { ...dictionaryDraft(detail), title: 'Draft title' };
   const rows = dictionaryDifferences(detail, latest, draft);
@@ -103,7 +103,7 @@ test('adopting latest structure keeps editable drafts and preserves removed anno
   const latest = {
     ...detail,
     columns: [{ ...detail.columns[0]!, name: 'new' }],
-    dictionary: { ...detail.dictionary, columns: [{ columnName: 'new', title: 'Server column', description: null }] }
+    dictionary: { ...detail.dictionary, columns: [{ columnName: 'new', title: 'Server column', description: null }] },
   };
   const result = rebaseDictionaryDraft(draft, latest);
   assert.equal(result.draft.title, 'Draft title');

@@ -70,7 +70,7 @@ onBeforeUnmount(() => {
 async function loadPlatforms(append = false): Promise<void> {
   try {
     const page = await platformTask.run((signal) =>
-      mePortalApi.accessContext.platforms(append ? (platformCursor.value ?? undefined) : undefined, signal)
+      mePortalApi.accessContext.platforms(append ? (platformCursor.value ?? undefined) : undefined, signal),
     );
     if (page) {
       platforms.value = append ? [...platforms.value, ...page.items] : page.items;
@@ -86,7 +86,7 @@ async function load(append = false): Promise<void> {
   loadError.value = '';
   try {
     const page = await tokenTask.run((signal) =>
-      mePortalApi.tokens.list(status.value || undefined, append ? (nextCursor.value ?? undefined) : undefined, signal)
+      mePortalApi.tokens.list(status.value || undefined, append ? (nextCursor.value ?? undefined) : undefined, signal),
     );
     if (!page) return;
     tokens.value = append ? [...tokens.value, ...page.items] : page.items;
@@ -116,7 +116,7 @@ async function create(): Promise<void> {
       name: form.name.trim(),
       platformId: form.platformId,
       scopes: [...form.scopes],
-      expiresAt: form.expiresAt.toISOString()
+      expiresAt: form.expiresAt.toISOString(),
     });
     if (!createIntent.accepts(intent)) return;
     dialogVisible.value = false;

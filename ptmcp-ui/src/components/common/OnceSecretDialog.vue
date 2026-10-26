@@ -7,7 +7,7 @@ const visible = computed({
   get: () => !!props.modelValue,
   set: (value) => {
     if (!value) emit('update:modelValue', '');
-  }
+  },
 });
 async function copy(): Promise<void> {
   try {

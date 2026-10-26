@@ -6,7 +6,7 @@ import type {
   MetadataDetail,
   MetadataDictionary,
   MetadataItem,
-  MetadataPage
+  MetadataPage,
 } from '../services/data';
 
 type WireIdentifiers<T, Keys extends keyof T> = { [Key in keyof T]: Key extends Keys ? T[Key] | number : T[Key] };
@@ -38,7 +38,7 @@ export function adaptDatasource(dto: DatasourceDto): DatasourceRead {
     version: dto.version === undefined ? undefined : identifier(dto.version),
     configVersion: identifier(dto.configVersion),
     resourceVersion: identifier(dto.resourceVersion),
-    activeSnapshotId: nullableIdentifier(dto.activeSnapshotId)
+    activeSnapshotId: nullableIdentifier(dto.activeSnapshotId),
   };
 }
 
@@ -61,7 +61,7 @@ export function adaptMetadataItem(dto: MetadataItemDto): MetadataItem {
     namespaceId: identifier(dto.namespaceId),
     generation: identifier(dto.generation),
     snapshotId: identifier(dto.snapshotId),
-    snapshotVersion: identifier(dto.snapshotVersion)
+    snapshotVersion: identifier(dto.snapshotVersion),
   };
 }
 
@@ -73,6 +73,6 @@ export function adaptMetadataDetail(dto: MetadataDetailDto): MetadataDetail {
   return {
     ...dto,
     ...adaptMetadataItem(dto),
-    dictionary: { ...dto.dictionary, ownerUserId: nullableIdentifier(dto.dictionary.ownerUserId), version: identifier(dto.dictionary.version) }
+    dictionary: { ...dto.dictionary, ownerUserId: nullableIdentifier(dto.dictionary.ownerUserId), version: identifier(dto.dictionary.version) },
   };
 }

@@ -10,7 +10,7 @@ import {
   testDatasource,
   updateDatasource,
   type DatasourceRead,
-  type DatasourceWrite
+  type DatasourceWrite,
 } from '../../../services/data';
 import { useSessionStore } from '../../../stores/session';
 import { datasourceDifferences, isVersionConflict } from '../../../adapters/edit-conflict';
@@ -43,23 +43,23 @@ let deleteKey = crypto.randomUUID();
 const rules: FormRules<DatasourceWrite> = {
   name: [
     { required: true, message: '请输入名称', trigger: 'blur' },
-    { max: 128, message: '名称最多128字符', trigger: 'blur' }
+    { max: 128, message: '名称最多128字符', trigger: 'blur' },
   ],
   host: [
     { required: true, message: '请输入主机', trigger: 'blur' },
-    { max: 253, message: '主机最多253字符', trigger: 'blur' }
+    { max: 253, message: '主机最多253字符', trigger: 'blur' },
   ],
   databaseName: [
     { required: true, message: '请输入数据库名', trigger: 'blur' },
-    { max: 128, message: '数据库名最多128字符', trigger: 'blur' }
+    { max: 128, message: '数据库名最多128字符', trigger: 'blur' },
   ],
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
-    { max: 128, message: '用户名最多128字符', trigger: 'blur' }
+    { max: 128, message: '用户名最多128字符', trigger: 'blur' },
   ],
   credential: [{ max: 1024, message: '连接凭据最多1024字符', trigger: 'blur' }],
   port: [{ required: true, type: 'number', min: 1, max: 65535, message: '端口必须为1～65535', trigger: 'change' }],
-  poolMax: [{ required: true, type: 'number', min: 1, max: 8, message: '连接池上限必须为1～8', trigger: 'change' }]
+  poolMax: [{ required: true, type: 'number', min: 1, max: 8, message: '连接池上限必须为1～8', trigger: 'change' }],
 };
 function emptyForm(): DatasourceWrite {
   return {
@@ -73,7 +73,7 @@ function emptyForm(): DatasourceWrite {
     credential: '',
     tlsMode: 'VERIFY_FULL',
     poolMax: 4,
-    status: 'DRAFT'
+    status: 'DRAFT',
   };
 }
 function formatDate(value: string | null | undefined): string {
@@ -161,7 +161,7 @@ function copyForm(value: DatasourceRead): void {
     credential: '',
     tlsMode: 'VERIFY_FULL',
     poolMax: value.poolMax,
-    status: value.status
+    status: value.status,
   });
 }
 function aborted(value: unknown): boolean {
@@ -217,7 +217,7 @@ async function save(): Promise<void> {
         await ElMessageBox.confirm('停用后此数据源将不能继续用于查询或同步，相关授权的实际访问也会受影响。', '确认停用数据源', {
           type: 'warning',
           confirmButtonText: '停用并保存',
-          cancelButtonText: '取消'
+          cancelButtonText: '取消',
         });
       } catch {
         return;
@@ -294,7 +294,7 @@ async function removeDatasource(): Promise<void> {
     await ElMessageBox.confirm('删除后将无法继续使用此数据源。若仍有活动授权，服务端会拒绝删除。', '确认删除数据源', {
       type: 'warning',
       confirmButtonText: '删除',
-      cancelButtonText: '取消'
+      cancelButtonText: '取消',
     });
   } catch {
     if (active && current === generation) actionLoading.value = false;
@@ -333,7 +333,7 @@ watch(
       testKey = crypto.randomUUID();
     }
   },
-  { deep: true }
+  { deep: true },
 );
 watch(id, () => {
   clearSensitive();

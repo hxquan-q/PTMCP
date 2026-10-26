@@ -7,7 +7,7 @@ withDefaults(
     actionLabel?: string;
     headingTag?: 'h1' | 'h2';
   }>(),
-  { kind: 'empty', title: undefined, description: undefined, actionLabel: undefined, headingTag: 'h2' }
+  { kind: 'empty', title: undefined, description: undefined, actionLabel: undefined, headingTag: 'h2' },
 );
 const emit = defineEmits<{ action: [] }>();
 </script>

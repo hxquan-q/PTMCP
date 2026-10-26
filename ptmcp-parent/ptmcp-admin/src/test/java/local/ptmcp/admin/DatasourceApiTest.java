@@ -71,9 +71,16 @@ class DatasourceApiTest {
     private static final MySQLContainer MYSQL = startMysql();
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final ZoneOffset UTC = ZoneOffset.UTC;
-    private static final String CREDENTIAL = "TargetCredential123!";
+    private static final String CREDENTIAL = syntheticSecret();
+    private static final String DRAFT_CREDENTIAL = CREDENTIAL + "-draft";
     private static final String ADMIN = "9001";
     private static final Set<String> TERMINAL = Set.of("SUCCEEDED", "FAILED", "CANCELLED");
+
+    private static String syntheticSecret() {
+        byte[] bytes = new byte[32];
+        new SecureRandom().nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
 
     private static MySQLContainer startMysql() {
         byte[] secret = new byte[32];
@@ -417,7 +424,7 @@ class DatasourceApiTest {
         byte[] before = credentialCipher(id);
 
         Map<String, Object> draft = write("orders", "127.0.0.1");
-        draft.put("credential", "DraftOnlySecret456!");
+        draft.put("credential", DRAFT_CREDENTIAL);
         MvcResult probe =
                 mockMvc.perform(
                                 admin(post("/api/v1/admin/datasources/" + id + "/test"))
@@ -451,7 +458,7 @@ class DatasourceApiTest {
                 assertEquals(MYSQL.getUsername(), result.getString(1));
                 assertFalse(
                         new String(result.getBytes(2), StandardCharsets.UTF_8)
-                                .contains("DraftOnlySecret456!"));
+                                .contains(DRAFT_CREDENTIAL));
             }
         }
 

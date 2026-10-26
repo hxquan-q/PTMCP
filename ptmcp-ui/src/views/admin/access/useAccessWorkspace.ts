@@ -12,7 +12,7 @@ import {
   type GrantWrite,
   type Preview,
   type ResourceType,
-  type SubjectType
+  type SubjectType,
 } from '../../../services/access';
 import { getDatasource, getMetadata, listDatasources, listMetadata, type DatasourceRead, type MetadataItem } from '../../../services/data';
 import { orgPortalApi } from '../../../services/orgPortalApi';
@@ -75,7 +75,7 @@ export function useAccessWorkspace() {
     includeDescendants: false,
     from: new Date() as Date | null,
     to: null as Date | null,
-    reason: ''
+    reason: '',
   });
   const draftTarget = ref<ResourceSelection | null>(null);
   const pendingDelete = ref('');
@@ -106,14 +106,14 @@ export function useAccessWorkspace() {
           label: [item.databaseName, item.schemaName].filter(Boolean).join(' / '),
           type: 'NAMESPACE',
           generation: null,
-          children: []
+          children: [],
         });
       groups.get(key)?.children?.push({
         key: `OBJECT:${item.id}`,
         id: String(item.id),
         label: item.objectName,
         type: 'OBJECT',
-        generation: String(item.generation)
+        generation: String(item.generation),
       });
     }
     // Datasource identities are never reused; the current grant protocol uses generation 1.
@@ -129,7 +129,7 @@ export function useAccessWorkspace() {
             label: item.databaseName,
             type: 'GROUP',
             generation: null,
-            children: []
+            children: [],
           });
         const namespace = groups.get(String(item.namespaceId));
         const catalog = catalogs.get(item.databaseName);
@@ -148,7 +148,7 @@ export function useAccessWorkspace() {
       draft.includeDescendants !== editing.value.includeDescendants ||
       draft.from?.getTime() !== new Date(editing.value.validFrom).getTime() ||
       (draft.to?.getTime() ?? null) !== (editing.value.validTo ? new Date(editing.value.validTo).getTime() : null) ||
-      draft.reason !== editing.value.reason
+      draft.reason !== editing.value.reason,
   );
 
   function clearPreview() {
@@ -224,7 +224,7 @@ export function useAccessWorkspace() {
         datasourceId: sourceId.value,
         pageSize: 100,
         cursor: append ? resourceCursor.value : null,
-        signal: resourceRequest.signal
+        signal: resourceRequest.signal,
       });
       if (!active || generation !== resourceGeneration) return;
       resourceItems.value = append ? [...resourceItems.value, ...result.data.items] : result.data.items;
@@ -306,7 +306,7 @@ export function useAccessWorkspace() {
         id: current.resourceId,
         label: resourceItems.value.find((item) => item.id === current.resourceId)?.objectName ?? current.resourceId,
         type: current.resourceType,
-        generation: current.resourceGeneration
+        generation: current.resourceGeneration,
       };
       Object.assign(draft, {
         action: current.action,
@@ -314,7 +314,7 @@ export function useAccessWorkspace() {
         includeDescendants: current.includeDescendants,
         from: new Date(current.validFrom),
         to: current.validTo ? new Date(current.validTo) : null,
-        reason: current.reason
+        reason: current.reason,
       });
       intentKey = idempotencyKey();
       formError.value = '';
@@ -353,7 +353,7 @@ export function useAccessWorkspace() {
       await ElMessageBox.confirm(
         `${subjectName.value} → ${target.label}：${draft.effect === 'DENY' ? '拒绝' : '允许'} ${draft.action}，${draft.includeDescendants ? '含当前和未来子级' : '仅此资源'}。有效期（台北）：${previousValidity ? `原 ${previousValidity}；改为 ` : ''}${validity}。新查询最大 5 秒生效，在途调用尽力取消。`,
         editing.value ? '确认修改规则' : '确认创建规则',
-        { confirmButtonText: '确认提交', cancelButtonText: '继续编辑', type: draft.effect === 'DENY' ? 'warning' : 'info' }
+        { confirmButtonText: '确认提交', cancelButtonText: '继续编辑', type: draft.effect === 'DENY' ? 'warning' : 'info' },
       );
     } catch {
       saving.value = false;
@@ -377,7 +377,7 @@ export function useAccessWorkspace() {
       includeDescendants: draft.includeDescendants,
       validFrom: draft.from.toISOString(),
       validTo: draft.to?.toISOString() ?? null,
-      reason: draft.reason.trim()
+      reason: draft.reason.trim(),
     };
     try {
       await saveGrant(body, intentKey, edit ?? undefined);
@@ -427,7 +427,7 @@ export function useAccessWorkspace() {
       await ElMessageBox.confirm(`撤销规则 ${row.id}：${row.effect} ${row.action}。后续新查询最大 5 秒生效，在途调用尽力取消。`, '撤销授权规则', {
         type: 'warning',
         confirmButtonText: '撤销规则',
-        cancelButtonText: '取消'
+        cancelButtonText: '取消',
       });
     } catch {
       pendingDelete.value = '';
@@ -483,7 +483,7 @@ export function useAccessWorkspace() {
         platformId.value,
         [encodePreviewResource(resource.type, resource.id)],
         previewAt.value?.toISOString(),
-        { signal: previewRequest.signal }
+        { signal: previewRequest.signal },
       );
       if (active && generation === previewGeneration) {
         preview.value = result;
@@ -494,7 +494,7 @@ export function useAccessWorkspace() {
               clearPreview();
               previewError.value = '已到达规则时间边界，请重新计算当前权限。';
             },
-            Math.max(0, Math.min(wait, 2147483647))
+            Math.max(0, Math.min(wait, 2147483647)),
           );
         }
       }
@@ -532,7 +532,7 @@ export function useAccessWorkspace() {
     (visible) => {
       if (!visible) editGeneration += 1;
     },
-    { flush: 'sync' }
+    { flush: 'sync' },
   );
   function clearWorkspace() {
     active = false;
@@ -564,7 +564,7 @@ export function useAccessWorkspace() {
       session.can('ptmcp:role:list') ? orgPortalApi.roles.list() : Promise.resolve([]),
       session.can('ptmcp:department:list') ? orgPortalApi.departments.list() : Promise.resolve([]),
       loadSources(),
-      canPreview.value ? loadPlatforms() : Promise.resolve()
+      canPreview.value ? loadPlatforms() : Promise.resolve(),
     ]);
     if (!active) return;
     const [users, roles, depts] = results;
@@ -632,6 +632,6 @@ export function useAccessWorkspace() {
     openEdit,
     save,
     revoke,
-    runPreview
+    runPreview,
   };
 }
