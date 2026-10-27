@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { stripTypeScriptTypes } from 'node:module';
+import { registerHooks, stripTypeScriptTypes } from 'node:module';
 import { createRenderer, nextTick, reactive } from 'vue';
 import { compileScript, parse } from 'vue/compiler-sfc';
 
@@ -37,8 +37,17 @@ interface PageState {
 }
 const dataUrl = (code: string): string => `data:text/javascript,${encodeURIComponent(code)}`;
 
+/** Allow extensionless relative imports (match app resolution) when loading real modules in tests. */
+export function resolveSourceExtensions<C>(specifier: string, context: C, next: (specifier: string, context: C) => unknown): unknown {
+  return next(
+    context.parentURL?.includes('/src/') && specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier) ? `${specifier}.ts` : specifier,
+    context,
+  );
+}
+
 /** Run the actual SFC setup and lifecycle with a Vue host renderer; no browser or DOM claims. */
 export async function mountDataPage(path: string, api: Api) {
+  const hooks = registerHooks({ resolve: (specifier: string, context, next) => resolveSourceExtensions(specifier, context, next) });
   const key = `__ptmcpPageFixture${++fixtureId}`;
   const navigations: unknown[] = [];
   const route = reactive({ params: { id: '12', objectId: '31' }, query: { datasourceId: '12' } });
@@ -83,6 +92,7 @@ export async function mountDataPage(path: string, api: Api) {
     '../../../services/uuid': new URL('../../src/services/uuid.ts', import.meta.url).href,
     '../../../stores/session': dataUrl(`${prefix} export const useSessionStore=()=>f.session;`),
     '../../../adapters/edit-conflict': new URL('../../src/adapters/edit-conflict.ts', import.meta.url).href,
+    '../../../composables/useCursorPage': new URL('../../src/composables/useCursorPage.ts', import.meta.url).href,
     '../../../components/common/CursorFooter.vue': dataUrl('export default {};'),
     '../../../components/common/PageHeader.vue': dataUrl('export default {};'),
     '../../../components/data/VersionConflictPanel.vue': dataUrl('export default {};'),
@@ -94,6 +104,7 @@ export async function mountDataPage(path: string, api: Api) {
     urls[specifier] ? `from ${JSON.stringify(urls[specifier])}` : statement,
   );
   const component = (await import(dataUrl(stripTypeScriptTypes(code, { mode: 'transform' })))).default;
+  hooks.deregister();
   const priorWindow = globals.window;
   globals.window = new EventTarget();
   const renderer = createRenderer({

@@ -13,7 +13,7 @@ export async function mountHistoryPage(list) {
   const prefix = `const f=globalThis[${JSON.stringify(key)}];`;
   const utils = (await readFile(new URL('../../src/views/portalUtils.ts', import.meta.url), 'utf8'))
     .replace("'vue'", JSON.stringify(import.meta.resolve('vue')))
-    .replace("'../services/portalRequest'", JSON.stringify(new URL('../../src/services/portalRequest.ts', import.meta.url).href));
+    .replace(/'\.\.\/services\/portalRequest(\.ts)?'/, JSON.stringify(new URL('../../src/services/portalRequest.ts', import.meta.url).href));
   const urls = {
     '../../components/common/CursorFooter.vue': dataUrl('export default {};'),
     '../../components/common/PageHeader.vue': dataUrl('export default {};'),

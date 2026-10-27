@@ -97,7 +97,7 @@ test('metadata source selection can append the next cursor page', async () => {
   try {
     page.state.moreSources();
     await flushPage();
-    assert.deepEqual(cursors, [null, 'source-page-2']);
+    assert.deepEqual(cursors, [undefined, 'source-page-2']);
     assert.deepEqual(
       page.state.datasources.map((item) => (item as { id: string }).id),
       ['12', '13'],
@@ -121,7 +121,7 @@ test('stale metadata cursors restart at the first page without replaying a write
   try {
     page.state.nextPage();
     await flushPage();
-    assert.deepEqual(cursors, [null, 'stale-next', null]);
+    assert.deepEqual(cursors, [undefined, 'stale-next', undefined]);
     assert.deepEqual(page.state.rows, [{ id: 'current-object' }]);
   } finally {
     page.close();

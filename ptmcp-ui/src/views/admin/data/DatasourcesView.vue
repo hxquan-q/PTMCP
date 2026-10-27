@@ -6,26 +6,45 @@ import { useRouter } from 'vue-router';
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
 import { createDatasource, DataRequestError, listDatasources, type DatasourceRead, type DatasourceWrite } from '../../../services/data';
 import { newUuid } from '../../../services/uuid';
+import { useCursorPage } from '../../../composables/useCursorPage';
 import { useSessionStore } from '../../../stores/session';
 
 const router = useRouter();
 const session = useSessionStore();
-const loading = ref(false);
 const submitting = ref(false);
-const error = ref('');
 const createError = ref('');
-const requestId = ref<string | undefined>();
-const rows = ref<DatasourceRead[]>([]);
-const nextCursor = ref<string | null>(null);
 const dialogVisible = ref(false);
 const formRef = ref<FormInstance>();
 const filters = reactive({ keyword: '', engine: '', status: '' });
 const form = reactive<DatasourceWrite>(emptyForm());
 const createKey = ref(newUuid());
-let listController: AbortController | null = null;
-let generation = 0;
 let createGeneration = 0;
 let active = true;
+function toPageError(cause: unknown): Error {
+  if (cause instanceof DataRequestError) {
+    const error = new Error(`${cause.message}${cause.code ? `（${cause.code}）` : ''}`);
+    return Object.assign(error, { requestId: cause.requestId, code: cause.code, status: cause.status });
+  }
+  return cause instanceof Error ? cause : new Error('请求失败，请稍后重试');
+}
+const {
+  rows,
+  cursor: nextCursor,
+  loading,
+  loaded,
+  error,
+  requestId,
+  reset: resetList,
+  load: loadPage,
+} = useCursorPage<DatasourceRead>(async (cursor, signal) => {
+  if (!session.can('ptmcp:datasource:list')) return { items: [], nextCursor: null };
+  try {
+    const result = await listDatasources({ ...filters, cursor, pageSize: 20, signal });
+    return { items: result.data.items ?? [], nextCursor: result.data.nextCursor ?? null };
+  } catch (cause) {
+    throw toPageError(cause);
+  }
+});
 
 const rules: FormRules<DatasourceWrite> = {
   code: [
@@ -74,53 +93,17 @@ function formatDate(value: string | null | undefined): string {
   return value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
 }
 function requestErrorMessage(value: unknown): string {
-  if (value instanceof DataRequestError) {
-    requestId.value = value.requestId;
-    return `${value.message}${value.code ? `（${value.code}）` : ''}`;
-  }
   return value instanceof Error ? value.message : '请求失败，请稍后重试';
 }
-function aborted(value: unknown): boolean {
-  return value instanceof DOMException && value.name === 'AbortError';
-}
-async function load(cursor: string | null = null): Promise<void> {
-  if (!session.can('ptmcp:datasource:list')) {
-    rows.value = [];
-    return;
-  }
-  listController?.abort();
-  const requestGeneration = ++generation;
-  listController = new AbortController();
-  loading.value = true;
-  error.value = '';
-  requestId.value = undefined;
-  try {
-    const result = await listDatasources({ ...filters, cursor, pageSize: 20, signal: listController.signal });
-    if (!active || requestGeneration !== generation) return;
-    rows.value = result.data.items ?? [];
-    nextCursor.value = result.data.nextCursor ?? null;
-  } catch (cause) {
-    if (!active || requestGeneration !== generation || aborted(cause)) return;
-    error.value = requestErrorMessage(cause);
-    if (cause instanceof DataRequestError && cause.code === 'CURSOR_STALE' && cursor) {
-      nextCursor.value = null;
-      await load();
-      return;
-    }
-    if (cause instanceof DataRequestError && [401, 403, 404].includes(cause.status)) {
-      rows.value = [];
-      nextCursor.value = null;
-    }
-  } finally {
-    if (active && requestGeneration === generation) loading.value = false;
-  }
+async function load(): Promise<void> {
+  await loadPage();
 }
 function applyFilters(): void {
-  nextCursor.value = null;
+  resetList();
   void load();
 }
 function nextPage(): void {
-  if (nextCursor.value && !loading.value) void load(nextCursor.value);
+  if (nextCursor.value && !loading.value) void loadPage(true);
 }
 function clearCredential(): void {
   form.credential = '';
@@ -128,12 +111,8 @@ function clearCredential(): void {
 function clearSensitive(): void {
   Object.assign(form, emptyForm());
   dialogVisible.value = false;
-  rows.value = [];
-  listController?.abort();
-  generation += 1;
   createGeneration += 1;
-  nextCursor.value = null;
-  loading.value = false;
+  resetList();
   submitting.value = false;
 }
 function resetForm(): void {
@@ -291,7 +270,7 @@ onBeforeUnmount(() => {
           </PageState>
         </template>
       </ElTable>
-      <CursorFooter :count="rows.length" :has-more="!!nextCursor" :loading="loading" @more="nextPage" />
+      <CursorFooter v-if="loaded || rows.length" :count="rows.length" :has-more="!!nextCursor" :loading="loading" @more="nextPage" />
     </ElCard>
 
     <ElDialog

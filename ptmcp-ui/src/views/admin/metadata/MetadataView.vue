@@ -1,36 +1,25 @@
 <script setup lang="ts">
 import CursorFooter from '../../../components/common/CursorFooter.vue';
 import PageHeader from '../../../components/common/PageHeader.vue';
-import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { DataRequestError, listDatasources, listMetadata, type DatasourceRead, type MetadataItem } from '../../../services/data';
+import { useCursorPage } from '../../../composables/useCursorPage';
 import { useSessionStore } from '../../../stores/session';
 const route = useRoute();
 const router = useRouter();
 const session = useSessionStore();
-const datasources = ref<DatasourceRead[]>([]);
 const datasourceId = ref(String(route.query.datasourceId ?? ''));
-const rows = ref<MetadataItem[]>([]);
-const nextCursor = ref<string | null>(null);
-const loading = ref(false);
-const sourceLoading = ref(false);
-const sourceNextCursor = ref<string | null>(null);
 const awaitingSnapshot = ref(false);
-const error = ref('');
-const requestId = ref<string>();
-const sourceError = ref('');
+const sourceDenied = computed(() => !session.can('ptmcp:datasource:list'));
 const filters = reactive({ namespaceId: '', keyword: '', kind: '' });
-let sourceController: AbortController | null = null;
-let listController: AbortController | null = null;
-let generation = 0;
-let sourceGeneration = 0;
 let active = true;
-function errorMessage(value: unknown): string {
-  if (value instanceof DataRequestError) {
-    requestId.value = value.requestId;
-    return `${value.message}${value.code ? `（${value.code}）` : ''}`;
+function toPageError(cause: unknown): Error {
+  if (cause instanceof DataRequestError) {
+    const error = new Error(`${cause.message}${cause.code ? `（${cause.code}）` : ''}`);
+    return Object.assign(error, { requestId: cause.requestId, code: cause.code, status: cause.status });
   }
-  return value instanceof Error ? value.message : '请求失败，请稍后重试';
+  return cause instanceof Error ? cause : new Error('请求失败，请稍后重试');
 }
 function sourceLabel(source: DatasourceRead): string {
   return `${source.name} · ${source.engine}`;
@@ -41,63 +30,33 @@ function formatObject(item: MetadataItem): string {
 function kindType(kind: string): 'success' | 'info' {
   return kind === 'TABLE' ? 'success' : 'info';
 }
-function aborted(value: unknown): boolean {
-  return value instanceof DOMException && value.name === 'AbortError';
-}
-async function loadSources(cursor: string | null = null): Promise<void> {
-  sourceController?.abort();
-  const current = ++sourceGeneration;
-  if (!session.can('ptmcp:datasource:list')) {
-    datasources.value = [];
-    sourceNextCursor.value = null;
-    sourceLoading.value = false;
-    sourceError.value = '你没有数据源列表权限。请通过可访问对象入口进入元数据。';
-    return;
-  }
-  sourceController = new AbortController();
-  sourceLoading.value = true;
-  sourceError.value = '';
+const {
+  rows: datasources,
+  cursor: sourceNextCursor,
+  loading: sourceLoading,
+  error: sourceFailure,
+  requestId: sourceRequestId,
+  reset: resetSources,
+  load: loadSourcePage,
+} = useCursorPage<DatasourceRead>(async (cursor, signal) => {
+  if (!session.can('ptmcp:datasource:list')) return { items: [], nextCursor: null };
   try {
-    const result = await listDatasources({ cursor, pageSize: 100, signal: sourceController.signal });
-    if (!active || current !== sourceGeneration) return;
-    const prior = cursor ? datasources.value : [];
-    const knownIds = new Set(prior.map((source) => source.id));
-    datasources.value = [...prior, ...result.data.items.filter((source) => !knownIds.has(source.id))];
-    sourceNextCursor.value = result.data.nextCursor;
-    if (!datasourceId.value && datasources.value.length) datasourceId.value = datasources.value[0].id;
+    const result = await listDatasources({ cursor, pageSize: 100, signal });
+    return { items: result.data.items ?? [], nextCursor: result.data.nextCursor ?? null };
   } catch (cause) {
-    if (!active || current !== sourceGeneration || aborted(cause)) return;
-    if (cause instanceof DataRequestError && cause.code === 'CURSOR_STALE' && cursor) {
-      sourceNextCursor.value = null;
-      await loadSources();
-      return;
-    }
-    sourceError.value = errorMessage(cause);
-    if (cause instanceof DataRequestError && [401, 403, 404].includes(cause.status)) {
-      datasources.value = [];
-      sourceNextCursor.value = null;
-    }
-  } finally {
-    if (active && current === sourceGeneration) sourceLoading.value = false;
+    throw toPageError(cause);
   }
-}
-function moreSources(): void {
-  if (sourceNextCursor.value && !sourceLoading.value) void loadSources(sourceNextCursor.value);
-}
-async function load(cursor: string | null = null): Promise<void> {
-  listController?.abort();
-  const current = ++generation;
-  listController = new AbortController();
-  awaitingSnapshot.value = false;
-  error.value = '';
-  requestId.value = undefined;
-  if (!datasourceId.value || !session.can('ptmcp:metadata:list')) {
-    rows.value = [];
-    nextCursor.value = null;
-    loading.value = false;
-    return;
-  }
-  loading.value = true;
+});
+const {
+  rows,
+  cursor: nextCursor,
+  loading,
+  error,
+  requestId,
+  reset: resetList,
+  load: loadListPage,
+} = useCursorPage<MetadataItem>(async (cursor, signal) => {
+  if (!datasourceId.value || !session.can('ptmcp:metadata:list')) return { items: [], nextCursor: null };
   try {
     const result = await listMetadata({
       datasourceId: datasourceId.value,
@@ -106,62 +65,44 @@ async function load(cursor: string | null = null): Promise<void> {
       kind: filters.kind || undefined,
       cursor,
       pageSize: 20,
-      signal: listController.signal,
+      signal,
     });
-    if (!active || current !== generation) return;
-    rows.value = result.data.items ?? [];
-    nextCursor.value = result.data.nextCursor ?? null;
+    return { items: result.data.items ?? [], nextCursor: result.data.nextCursor ?? null };
   } catch (cause) {
-    if (!active || current !== generation || aborted(cause)) return;
-    if (cause instanceof DataRequestError && cause.code === 'CURSOR_STALE' && cursor) {
-      nextCursor.value = null;
-      await load();
-      return;
-    }
-    if (cause instanceof DataRequestError && cause.code === 'SCHEMA_STALE') {
-      rows.value = [];
-      nextCursor.value = null;
-      awaitingSnapshot.value = true;
-      requestId.value = cause.requestId;
-      return;
-    }
-    error.value = errorMessage(cause);
-    if (cause instanceof DataRequestError && [401, 403, 404, 503].includes(cause.status)) {
-      rows.value = [];
-      nextCursor.value = null;
-    }
-  } finally {
-    if (active && current === generation) loading.value = false;
+    if (cause instanceof DataRequestError && cause.code === 'SCHEMA_STALE') awaitingSnapshot.value = true;
+    throw toPageError(cause);
   }
+});
+async function loadSources(append = false): Promise<void> {
+  await loadSourcePage(append);
+  if (!datasourceId.value && datasources.value.length) datasourceId.value = datasources.value[0].id;
+}
+function moreSources(): void {
+  if (sourceNextCursor.value && !sourceLoading.value) void loadSources(true);
+}
+async function load(): Promise<void> {
+  awaitingSnapshot.value = false;
+  await loadListPage();
 }
 function selectSource(): void {
   filters.namespaceId = '';
-  nextCursor.value = null;
-  rows.value = [];
+  resetList();
   void router.replace({ query: { ...route.query, datasourceId: datasourceId.value || undefined } });
   void load();
 }
 function applyFilters(): void {
-  nextCursor.value = null;
+  resetList();
   void load();
 }
 function nextPage(): void {
-  if (nextCursor.value && !loading.value) void load(nextCursor.value);
+  if (nextCursor.value && !loading.value) void loadListPage(true);
 }
 function openDetail(row: MetadataItem): void {
   if (session.can('ptmcp:metadata:read')) void router.push(`/admin/metadata/${row.id}`);
 }
 function clearSensitive(): void {
-  sourceController?.abort();
-  listController?.abort();
-  generation += 1;
-  sourceGeneration += 1;
-  rows.value = [];
-  datasources.value = [];
-  nextCursor.value = null;
-  sourceNextCursor.value = null;
-  loading.value = false;
-  sourceLoading.value = false;
+  resetSources();
+  resetList();
   awaitingSnapshot.value = false;
 }
 watch(
@@ -171,17 +112,15 @@ watch(
     if (selected !== datasourceId.value) {
       datasourceId.value = selected;
       filters.namespaceId = '';
-      nextCursor.value = null;
-      rows.value = [];
+      resetList();
       void load();
     }
   },
 );
 onMounted(async () => {
   window.addEventListener('ptmcp:sensitive-clear', clearSensitive);
-  const current = sourceGeneration + 1;
   await loadSources();
-  if (active && current === sourceGeneration) await load();
+  if (active && datasourceId.value) await load();
 });
 onBeforeUnmount(() => {
   active = false;
@@ -193,7 +132,18 @@ onBeforeUnmount(() => {
 <template>
   <section class="page-shell" aria-labelledby="metadata-title">
     <PageHeader title-id="metadata-title" title="元数据与业务字典" description="查看已发布快照中的物理结构，并维护纯文本业务说明。" />
-    <ElAlert v-if="sourceError" type="error" :closable="false" show-icon class="state-alert">{{ sourceError }}</ElAlert>
+    <ElAlert v-if="sourceDenied" type="warning" :closable="false" show-icon class="state-alert"
+      >你没有数据源列表权限。请通过可访问对象入口进入元数据。</ElAlert
+    >
+    <PageState
+      v-else-if="sourceFailure"
+      kind="error"
+      title="数据源目录读取失败"
+      :description="sourceFailure"
+      :request-id="sourceRequestId"
+      action-label="重试数据源目录"
+      @action="loadSources()"
+    />
     <ElCard class="filter-card ptmcp-filter-bar" shadow="never">
       <ElForm :inline="true">
         <ElFormItem label="数据源"
@@ -223,7 +173,7 @@ onBeforeUnmount(() => {
       <ElButton link type="primary" @click="applyFilters">重新读取</ElButton>
     </ElAlert>
     <PageState
-      v-if="error"
+      v-if="error && !awaitingSnapshot"
       kind="error"
       title="元数据读取失败"
       :description="error"

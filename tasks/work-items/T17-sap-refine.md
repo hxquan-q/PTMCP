@@ -55,8 +55,10 @@ Updated: 2026-10-27
 - 字典级联：平台/数据源/命名空间/对象全部改用 useCursorPage，逐级 loading 文案（#loading 插槽）、独立错误/请求ID/重试，切换上级同步清空下级及游标。窄屏筛选改纵向全宽。回归覆盖迟到响应不覆盖新目录、错误重试、会话清空。
 - 接入引导：四客户端 + 通用为可访问单选卡片（图标 aria-hidden），模板凭证占位符（含后端 <PAT_OR_OAUTH_ACCESS_TOKEN>）高亮并提供创建 PAT 链接；平台加载增加 loading/错误/编号处理。回归覆盖切换丢弃旧模板、复制仅文本、清空后提示消失。
 - 浏览器：慢速预览下字典 1440/390 级联 loading 文案、选项、无重试误报通过；接入页卡片选择、占位符高亮、PAT 链接通过；0console/pageerror。截图发现窄屏选择器被裁剪（flex 未换行）并修复；另发现此前一次标记编辑残留属性导致原始文本泄漏，已修复并复验。记录 `.local/run/sap-refine-portal.jsonl`，截图同目录。完整实验待执行。
+- 公共分页迁移：Datasources/Metadata 列表及元数据源目录全部改用 useCursorPage/usePortalTask，删除两页手写 AbortController/generation；保留权限为空、SCHEMA_STALE 待同步告警（错误区隐藏避免重复）、401/403/404 清空行、创建对话框幂等与敏感清理语义；CURSOR_STALE 回首页由共享组合函数承担（已有回归）。数据管理现有 SFC 生命周期测试全部通过。
+- 迁移浏览器：1440/390 两页正常/慢速加载、源切换、底栏计数通过，0console/pageerror，截图 `.playwright-mcp/sap-refine/cursor-*.png`，记录 `.local/run/sap-refine-cursor.jsonl`。
 - 浏览器验证、截图、完整 CI 尚未运行，保持 NOT_RUN。
 
 ## 交接
 
-当前焦点：权限切片b64777c已推送、756项通过。审计速览已通过定向与浏览器检查，待完整实验。字典级联/接入引导、公共分页迁移、剩余布局/错误接线/字段契约，以及完整CI与正常模式18组证据仍待实施。全部目标仍在进行，未宣称完成或人工接受。后续逐项更新上表证据；明确阻塞才暂停目标。
+当前焦点：字典/接入 1ab5cd7 已推送、761 项通过。Datasources/Metadata 公共游标迁移已通过定向与浏览器检查，待完整实验；组织字段分组、独立页头部对齐、business-coverage 同步与完整 CI/18 组证据仍待实施。全部目标仍在进行，未宣称完成或人工接受。后续逐项更新上表证据；明确阻塞才暂停目标。
