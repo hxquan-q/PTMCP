@@ -6,10 +6,12 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { useSessionStore } from '../../../stores/session';
 import { orgPortalApi, type Role } from '../../../services/orgPortalApi';
 import { errorText, isAccessError, isConflict, usePortalTask } from '../../portalUtils';
+import { roleWriteGate } from '../integrations/adminSurface';
 
 const roles = ref<Role[]>([]);
 const session = useSessionStore();
 const route = useRoute();
+const roleGate = computed(() => roleWriteGate(session));
 const loading = ref(false);
 const loadError = ref('');
 const dialogVisible = ref(false);
@@ -72,7 +74,7 @@ async function load(): Promise<void> {
 }
 async function save(): Promise<void> {
   if (saving.value || conflictDetected.value) return;
-  if (!session.can(editing.value ? 'ptmcp:role:update' : 'ptmcp:role:create')) return;
+  if (!roleGate.value.canWrite || !session.can(editing.value ? 'ptmcp:role:update' : 'ptmcp:role:create')) return;
   if (!form.name.trim() || form.name.trim().length > 30 || !form.key.trim() || form.key.trim().length > 100) {
     ElMessage.warning('角色 key 需 1～100 个字符，名称需 1～30 个字符');
     return;
@@ -119,7 +121,7 @@ async function refreshConflict(): Promise<void> {
   }
 }
 async function remove(role: Role): Promise<void> {
-  if (!session.can('ptmcp:role:delete')) return;
+  if (!roleGate.value.canWrite || !session.can('ptmcp:role:delete')) return;
   try {
     await ElMessageBox.confirm(`确定删除“${role.name}”吗？仍被用户或 ACL 使用的角色会被服务端拒绝。`, '删除角色', { type: 'warning' });
     await orgPortalApi.roles.remove(role.id, role.version);
@@ -171,8 +173,11 @@ onMounted(async () => {
 <template>
   <section class="portal-page" aria-labelledby="roles-title">
     <PageHeader title-id="roles-title" title="角色" description="角色只管理功能码；数据权限在授权矩阵中单独维护。">
-      <template #actions><ElButton v-if="session.can('ptmcp:role:create')" type="primary" @click="openCreate">新建角色</ElButton></template>
+      <template #actions
+        ><ElButton v-if="roleGate.canWrite && session.can('ptmcp:role:create')" type="primary" @click="openCreate">新建角色</ElButton></template
+      >
     </PageHeader>
+    <ElAlert v-if="roleGate.hint" type="info" :closable="false" :title="roleGate.hint" class="mb-4" />
     <p class="page-description">成员数量与委派部门信息当前暂不可用。</p>
     <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError"
       ><template #default><ElButton link type="danger" @click="load">重新加载</ElButton></template></ElAlert
@@ -200,8 +205,10 @@ onMounted(async () => {
           ><template #default="{ row }">{{ row.managedDepartmentIds?.join('、') ?? '服务端未提供' }}</template></ElTableColumn
         ><ElTableColumn label="操作" fixed="right" width="130"
           ><template #default="{ row }"
-            ><ElButton v-if="session.can('ptmcp:role:update')" link type="primary" @click="openEdit(row as Role)">编辑</ElButton
-            ><ElButton v-if="session.can('ptmcp:role:delete')" link type="danger" @click="remove(row as Role)">删除</ElButton></template
+            ><ElButton v-if="roleGate.canWrite && session.can('ptmcp:role:update')" link type="primary" @click="openEdit(row as Role)">编辑</ElButton
+            ><ElButton v-if="roleGate.canWrite && session.can('ptmcp:role:delete')" link type="danger" @click="remove(row as Role)"
+              >删除</ElButton
+            ></template
           ></ElTableColumn
         >
       </ElTable>

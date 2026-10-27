@@ -89,3 +89,21 @@ export function delegationSubmitError(reason: unknown, fallback: (error: unknown
     return '已存在生效中的同范围委派（DUPLICATE_GRANT）。请调整范围、期限，或先撤销旧委派后再创建。';
   return fallback(reason);
 }
+
+/**
+ * 角色跨管理范围共享（RoleAdminController 写端点 requirePlatformAdmin）：
+ * 委派管理员即使持 ptmcp:role:* 功能码（T16 可委派动作含 role 域），UI 也必须只读并解释，
+ * 否则按钮可点而服务端必 403（page-spec P-07）。
+ */
+export function roleWriteGate(session: { can: (code: string) => boolean; platformAdmin: boolean }): {
+  canWrite: boolean;
+  hint: string | null;
+} {
+  const canWrite =
+    session.platformAdmin && (session.can('ptmcp:role:update') || session.can('ptmcp:role:delete') || session.can('ptmcp:role:create'));
+  return {
+    canWrite,
+    hint:
+      session.platformAdmin || !session.can('ptmcp:role:list') ? null : '角色跨管理范围共享，仅平台管理员可修改；你可查看角色并将其分配给所辖用户。',
+  };
+}

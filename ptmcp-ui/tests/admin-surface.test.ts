@@ -49,3 +49,17 @@ test('委派提交失败区分 DUPLICATE_GRANT 与通用冲突，未识别错误
   assert.equal(delegationSubmitError({ code: 'VERSION_CONFLICT', status: 409, message: '服务端资源已变化' }, fallback), 'fallback:服务端资源已变化');
   assert.equal(delegationSubmitError(new Error('x'), fallback), 'fallback:x');
 });
+
+test('跨范围共享角色写门控：委派管理员持功能码仍只读并给出解释', async () => {
+  const { roleWriteGate } = await import('../src/views/admin/integrations/adminSurface.ts');
+  const delegated = { can: (c) => c === 'ptmcp:role:update' || c === 'ptmcp:role:list', platformAdmin: false };
+  const g1 = roleWriteGate(delegated);
+  assert.equal(g1.canWrite, false);
+  assert.match(g1.hint, /仅平台管理员可修改/);
+  const platform = { can: () => true, platformAdmin: true };
+  const g2 = roleWriteGate(platform);
+  assert.equal(g2.canWrite, true);
+  assert.equal(g2.hint, null);
+  const noCatalog = { can: () => false, platformAdmin: false };
+  assert.equal(roleWriteGate(noCatalog).hint, null);
+});
