@@ -12,8 +12,9 @@ const hooks = registerHooks({
   },
 });
 const { useCursorPage } = await import('../src/composables/useCursorPage.ts');
+const { useRecordPreview } = await import('../src/composables/useRecordPreview.ts');
 hooks.deregister();
-function mount(read) {
+function mount(read, createState = useCursorPage) {
   const prior = globalThis.window;
   globalThis.window = new EventTarget();
   let state;
@@ -31,7 +32,7 @@ function mount(read) {
   });
   const app = renderer.createApp({
     setup() {
-      state = useCursorPage(read);
+      state = createState(read);
       return () => null;
     },
   });
@@ -44,6 +45,57 @@ function mount(read) {
     },
   };
 }
+test('速览快速切换取消旧读取，迟到失败不能清空新记录或加载状态', async () => {
+  const old = deferred();
+  const current = deferred();
+  const signals = [];
+  const page = mount((id, signal) => {
+    signals.push(signal);
+    return id === 'old' ? old.promise : current.promise;
+  }, useRecordPreview);
+  try {
+    const first = page.state.select('old');
+    const second = page.state.select('current');
+    assert.equal(signals[0].aborted, true);
+    old.reject(new Error('old failure'));
+    await first;
+    assert.equal(page.state.loading.value, true);
+    assert.equal(page.state.error.value, '');
+    current.resolve({ requestId: 'current', sqlMasked: 'synthetic ?' });
+    await second;
+    assert.equal(page.state.selectedId.value, 'current');
+    assert.equal(page.state.item.value.requestId, 'current');
+  } finally {
+    page.close();
+  }
+});
+
+test('速览失效清除已选ID及详情，错误重试只读取当前记录', async () => {
+  const pending = deferred();
+  let calls = 0;
+  const page = mount(async () => {
+    calls++;
+    if (calls === 1) throw Object.assign(new Error('unavailable'), { requestId: 'fixture-read' });
+    return pending.promise;
+  }, useRecordPreview);
+  try {
+    await page.state.select('record-1');
+    assert.equal(page.state.item.value, null);
+    assert.equal(page.state.requestId.value, 'fixture-read');
+    const retry = page.state.retry();
+    assert.equal(page.state.requestId.value, null);
+    globalThis.window.dispatchEvent(new Event('ptmcp:sensitive-clear'));
+    pending.resolve({ requestId: 'record-1' });
+    await retry;
+    assert.equal(page.state.selectedId.value, '');
+    assert.equal(page.state.item.value, null);
+    assert.equal(page.state.loading.value, false);
+    assert.equal(page.state.error.value, '');
+  } finally {
+    page.close();
+  }
+});
+
 test('cursor stale restarts a read at page one without appending obsolete rows', async () => {
   const calls = [];
   const page = mount(async (cursor) => {

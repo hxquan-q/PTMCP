@@ -122,6 +122,8 @@ Scope页：GET/PUT /platforms/{id}/scopes，资源树项resourceType/resourceId/
 
 GET /audit筛选from/to≤31天、userId/platformId/datasourceId/tool/result/verdict/errorCode；列表列时间、员工、平台、工具、目标、脱敏SQL摘要、result/verdict/error、耗时、行数、requestId。数据源选项仅来自其受控审计范围；不能把权限DENY计为系统故障。
 
+列表提供右侧排障速览；有 audit:read 时可点击行或键盘操作速览按钮，查看阶段耗时、错误说明与脱敏 SQL，上一条/下一条保持当前筛选和游标。切换筛选、失权或离页清空旧速览；异步响应只更新当前选中记录。完整详情与解密仍走独立详情页，速览不请求原 SQL。
+
 GET /audit/{requestId}详情：调用上下文、可见对象、使用版本、sqlMasked/指纹、各阶段耗时、预算/截断、错误和持久结局；START遗留为UNKNOWN并解释不确定。无原始结果集，无sqlRaw/sqlFinal默认字段。
 
 解密弹窗说明敏感性，reason 10～500字符，fields选择sqlRaw/sqlFinal，POST /audit/{requestId}/decrypt；显示expiresAt，关闭/过期/离开立即清空。无权限不显示按钮，直接请求仍拒绝；请求失败不尝试从日志取明文。详情404可能为保留期外，按统一提示不泄露其他范围记录。当前不设计批量导出或持久下载原SQL。

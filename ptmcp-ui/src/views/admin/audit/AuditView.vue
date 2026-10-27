@@ -23,6 +23,8 @@ import { validateDateRange } from '../integrations/adminSurface';
 import { controlPlane, type Platform } from '../../../services/controlPlane';
 import { auditApiReady, frontendPreview } from '../../../services/frontendMode';
 import { listDatasources, type DatasourceRead } from '../../../services/data';
+import { useRecordPreview } from '../../../composables/useRecordPreview';
+import { queryErrorText } from '../../../services/queryErrorText';
 import { useCursorPage } from '../../../composables/useCursorPage';
 import { errorText, formatDate, usePortalTask } from '../../portalUtils';
 import { useSessionStore } from '../../../stores/session';
@@ -45,6 +47,29 @@ const directoryTask = usePortalTask(() => {
 const { rows, cursor, loading, error, requestId, loaded, reset, load, retry } = useCursorPage((cursor, signal) =>
   controlPlane.audit.list({ ...filters, from: from.value?.toISOString(), to: to.value?.toISOString(), cursor }, signal),
 );
+const {
+  selectedId: quickId,
+  item: quickItem,
+  loading: quickLoading,
+  error: quickError,
+  requestId: quickRequestId,
+  clear: clearQuick,
+  select: selectQuick,
+  retry: retryQuick,
+} = useRecordPreview(controlPlane.audit.get);
+const quickIndex = computed(() => rows.value.findIndex((row) => row.requestId === quickId.value));
+function showQuick(row: unknown): void {
+  if (!row || typeof row !== 'object' || !('requestId' in row) || typeof row.requestId !== 'string') return;
+  if (!session.can('ptmcp:audit:read') || (quickLoading.value && quickId.value === row.requestId)) return;
+  void selectQuick(row.requestId);
+}
+function stepQuick(offset: number): void {
+  const row = rows.value[quickIndex.value + offset];
+  if (row) showQuick(row);
+}
+watch(rows, () => {
+  if (quickId.value && !rows.value.some((row) => row.requestId === quickId.value)) clearQuick();
+});
 async function query(): Promise<void> {
   validateFilters();
   if (!from.value || !to.value || dateRange.value || !auditReady) return;
@@ -68,6 +93,7 @@ watch(
   [filters, from, to],
   () => {
     reset();
+    clearQuick();
     validation.value = '';
   },
   { flush: 'sync' },
@@ -149,53 +175,102 @@ function clearFilters(): void {
         ><ElButton type="primary" :disabled="!auditReady || !!dateRange" :loading="loading" @click="query">查询审计</ElButton>
       </div>
     </ElCard>
-    <ElCard class="table-card ptmcp-table-section" shadow="never">
-      <div class="section-heading">
-        <div>
-          <h2>调用记录</h2>
-          <p>列表应由服务端按审计范围过滤后返回；前端不先拉全量再筛选。</p>
+    <div class="audit-workspace" :class="{ 'has-preview': session.can('ptmcp:audit:read') }">
+      <ElCard class="table-card ptmcp-table-section" shadow="never">
+        <div class="section-heading">
+          <div>
+            <h2>调用记录</h2>
+            <p>列表应由服务端按审计范围过滤后返回；前端不先拉全量再筛选。</p>
+          </div>
+          <ElTag v-if="frontendPreview || !auditReady" type="info" effect="plain">{{ frontendPreview ? '合成数据预览' : '审计服务未就绪' }}</ElTag>
+          <span v-else>已加载 {{ rows.length }} 条</span>
         </div>
-        <ElTag v-if="frontendPreview || !auditReady" type="info" effect="plain">{{ frontendPreview ? '合成数据预览' : '审计服务未就绪' }}</ElTag>
-        <span v-else>已加载 {{ rows.length }} 条</span>
-      </div>
-      <PageState v-if="error" kind="error" title="审计读取失败" :description="error" :request-id="requestId" action-label="重试" @action="retry" />
-      <ElSkeleton v-if="loading && !rows.length" :rows="6" animated />
-      <ElTable v-else-if="!error || rows.length" :data="rows" class="empty-table" aria-label="调用记录">
-        <ElTableColumn label="时间（台北）" min-width="170"
-          ><template #default="{ row }">{{ formatDate(row.startedAt) }}</template></ElTableColumn
+        <PageState v-if="error" kind="error" title="审计读取失败" :description="error" :request-id="requestId" action-label="重试" @action="retry" />
+        <ElSkeleton v-if="loading && !rows.length" :rows="6" animated />
+        <ElTable
+          v-else-if="!error || rows.length"
+          :data="rows"
+          class="empty-table"
+          aria-label="调用记录"
+          row-key="requestId"
+          highlight-current-row
+          :current-row-key="quickId"
+          @row-click="showQuick"
         >
-        <ElTableColumn prop="userId" label="员工" min-width="130" />
-        <ElTableColumn prop="platformId" label="平台" min-width="130" />
-        <ElTableColumn prop="tool" label="工具" min-width="130" />
-        <ElTableColumn prop="datasourceId" label="数据源" min-width="180" />
-        <ElTableColumn prop="sqlMasked" label="脱敏 SQL 摘要" min-width="210" />
-        <ElTableColumn label="结果" min-width="120"
-          ><template #default="{ row }"><StatusBadge domain="execution" :value="row.result" /></template
-        ></ElTableColumn>
-        <ElTableColumn label="判定" min-width="120"
-          ><template #default="{ row }"><StatusBadge domain="verdict" :value="row.verdict" /></template
-        ></ElTableColumn>
-        <ElTableColumn prop="errorCode" label="错误码" min-width="170" />
-        <ElTableColumn prop="durationMs" label="耗时(ms)" width="100" />
-        <ElTableColumn prop="rowsReturned" label="行数" width="100" />
-        <ElTableColumn prop="requestId" label="Request ID" min-width="230" />
-        <ElTableColumn label="详情" width="90"
-          ><template #default="{ row }"
-            ><ElButton
-              v-if="session.can('ptmcp:audit:read')"
-              link
-              type="primary"
-              @click="router.push(`/admin/audit/${encodeURIComponent(String(row.requestId))}`)"
-              >查看</ElButton
-            ></template
-          ></ElTableColumn
-        >
-        <template #empty
-          ><PageState :title="loaded ? '当前条件下没有审计记录' : '审计记录尚未读取'" description="可调整时间和筛选条件；未读取不代表没有记录。"
-        /></template>
-      </ElTable>
-      <CursorFooter v-if="loaded || rows.length" :count="rows.length" :has-more="!!cursor" :loading="loading" @more="load(true)" />
-    </ElCard>
+          <ElTableColumn label="时间（台北）" min-width="170"
+            ><template #default="{ row }">{{ formatDate(row.startedAt) }}</template></ElTableColumn
+          >
+          <ElTableColumn prop="userId" label="员工" min-width="130" />
+          <ElTableColumn prop="platformId" label="平台" min-width="130" />
+          <ElTableColumn prop="tool" label="工具" min-width="130" />
+          <ElTableColumn prop="datasourceId" label="数据源" min-width="180" />
+          <ElTableColumn prop="sqlMasked" label="脱敏 SQL 摘要" min-width="210" />
+          <ElTableColumn label="结果" min-width="120"
+            ><template #default="{ row }"><StatusBadge domain="execution" :value="row.result" /></template
+          ></ElTableColumn>
+          <ElTableColumn label="判定" min-width="120"
+            ><template #default="{ row }"><StatusBadge domain="verdict" :value="row.verdict" /></template
+          ></ElTableColumn>
+          <ElTableColumn prop="errorCode" label="错误码" min-width="170" />
+          <ElTableColumn prop="durationMs" label="耗时(ms)" width="100" />
+          <ElTableColumn prop="rowsReturned" label="行数" width="100" />
+          <ElTableColumn prop="requestId" label="Request ID" min-width="230" />
+          <ElTableColumn label="详情" width="90"
+            ><template #default="{ row }"
+              ><ElButton v-if="session.can('ptmcp:audit:read')" link type="primary" @click.stop="showQuick(row)">速览</ElButton></template
+            ></ElTableColumn
+          >
+          <template #empty
+            ><PageState :title="loaded ? '当前条件下没有审计记录' : '审计记录尚未读取'" description="可调整时间和筛选条件；未读取不代表没有记录。"
+          /></template>
+        </ElTable>
+        <CursorFooter v-if="loaded || rows.length" :count="rows.length" :has-more="!!cursor" :loading="loading" @more="load(true)" />
+      </ElCard>
+      <aside v-if="session.can('ptmcp:audit:read')" class="audit-preview" aria-label="审计排障速览" :aria-busy="quickLoading">
+        <div class="section-heading">
+          <h2>排障速览</h2>
+          <ElButton v-if="quickId" text @click="clearQuick">关闭速览</ElButton>
+        </div>
+        <div v-if="quickId" class="preview-navigation">
+          <ElButton :disabled="quickIndex <= 0" @click="stepQuick(-1)">上一条</ElButton
+          ><ElButton :disabled="quickIndex < 0 || quickIndex >= rows.length - 1" @click="stepQuick(1)">下一条</ElButton>
+        </div>
+        <PageState
+          v-if="quickError"
+          kind="error"
+          title="速览读取失败"
+          :description="quickError"
+          :request-id="quickRequestId"
+          action-label="重试速览"
+          @action="retryQuick"
+        />
+        <ElSkeleton v-else-if="quickLoading" :rows="6" animated />
+        <template v-else-if="quickItem">
+          <p class="preview-request">{{ quickItem.requestId }}</p>
+          <div class="preview-status">
+            <StatusBadge domain="execution" :value="quickItem.result" /><StatusBadge domain="verdict" :value="quickItem.verdict" />
+          </div>
+          <ElDescriptions :column="1" border>
+            <ElDescriptionsItem label="开始时间（台北）">{{ formatDate(quickItem.startedAt) }}</ElDescriptionsItem>
+            <ElDescriptionsItem label="总耗时">{{ quickItem.durationMs ?? '未提供' }} ms</ElDescriptionsItem>
+            <ElDescriptionsItem label="排队">{{ quickItem.queueMs ?? '未提供' }} ms</ElDescriptionsItem>
+            <ElDescriptionsItem label="数据库">{{ quickItem.dbMs ?? '未提供' }} ms</ElDescriptionsItem>
+            <ElDescriptionsItem label="错误码">{{ quickItem.errorCode ?? '无' }}</ElDescriptionsItem>
+          </ElDescriptions>
+          <p v-if="queryErrorText(quickItem.errorCode)" class="preview-guidance">{{ queryErrorText(quickItem.errorCode) }}</p>
+          <p v-if="quickItem.verdict === 'DENY'" class="preview-guidance">权限拒绝不代表系统故障。核对平台 Scope、用户授权和 DENY 规则。</p>
+          <p v-if="quickItem.result === 'UNKNOWN' || quickItem.result === 'START'" class="preview-guidance">
+            执行结局不确定，不能认定未执行或直接重试。
+          </p>
+          <h3>脱敏 SQL</h3>
+          <pre class="preview-sql">{{ quickItem.sqlMasked || '服务端未提供脱敏摘要' }}</pre>
+          <ElButton type="primary" @click="router.push(`/admin/audit/${encodeURIComponent(quickItem.requestId)}`)">{{
+            session.can('ptmcp:audit:decrypt') ? '完整详情 / 申请解密' : '完整详情'
+          }}</ElButton>
+        </template>
+        <PageState v-else title="选择调用记录" description="点击列表行或速览按钮，在此连续排查；筛选和游标保持不变。" />
+      </aside>
+    </div>
     <ElCard class="legend-card" shadow="never">
       <h2>字段说明</h2>
       <div class="legend-grid">
@@ -208,6 +283,53 @@ function clearFilters(): void {
 </template>
 
 <style scoped>
+.audit-workspace {
+  display: grid;
+  min-width: 0;
+  gap: 20px;
+}
+.audit-workspace.has-preview {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+}
+.table-card,
+.audit-preview {
+  min-width: 0;
+}
+.audit-preview {
+  padding: 20px;
+  background: var(--ptmcp-chrome);
+}
+.preview-navigation,
+.preview-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+.preview-request,
+.preview-guidance,
+.preview-sql {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.preview-guidance {
+  color: var(--ptmcp-text-muted);
+}
+.preview-sql {
+  white-space: pre-wrap;
+  padding: 12px;
+  background: var(--ptmcp-canvas);
+}
+.audit-preview h3 {
+  font-size: 14px;
+  margin-top: 20px;
+}
+@media (max-width: 1100px) {
+  .audit-workspace.has-preview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .admin-page {
   display: grid;
   gap: 16px;
