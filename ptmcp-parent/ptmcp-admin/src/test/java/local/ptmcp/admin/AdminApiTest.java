@@ -2750,11 +2750,13 @@ class AdminApiTest {
             }
             try (PreparedStatement profile =
                     connection.prepareStatement(
-                            "SELECT version FROM sys_user_profile WHERE user_id = ?")) {
+                            "SELECT version, password_hash FROM sys_user_profile WHERE user_id = ?")) {
                 profile.setLong(1, target);
                 try (ResultSet result = profile.executeQuery()) {
                     assertTrue(result.next());
                     assertEquals(2, result.getLong(1));
+                    // The console login source shares the same bcrypt hash.
+                    assertTrue(result.getString(2).startsWith("$2"), "profile hash missing");
                 }
             }
             try (PreparedStatement session =

@@ -71,11 +71,12 @@ public final class IdentityPasswordService {
                             try (PreparedStatement statement =
                                     statement(
                                             connection,
-                                            "UPDATE sys_user_profile SET version = version + 1,"
-                                                    + " update_time = UTC_TIMESTAMP(6)"
+                                            "UPDATE sys_user_profile SET password_hash = ?,"
+                                                    + " version = version + 1, update_time = UTC_TIMESTAMP(6)"
                                                     + " WHERE user_id = ? AND version = ?")) {
-                                statement.setLong(1, userId);
-                                statement.setLong(2, expectedVersion);
+                                statement.setString(1, hash);
+                                statement.setLong(2, userId);
+                                statement.setLong(3, expectedVersion);
                                 bumped = statement.executeUpdate();
                             }
                             if (bumped != 1) {
