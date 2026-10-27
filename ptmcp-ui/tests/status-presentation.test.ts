@@ -36,3 +36,10 @@ test('新状态和空值保守展示，保留原码供排障且不继承对象�
   assert.equal(statusPresentation('execution', undefined).tone, 'info');
   assert.equal(statusPresentation('execution', 'toString').label, '未知状态（toString）');
 });
+
+test('PAT状态映射为中文语义标签，未知状态保留原码', () => {
+  assert.equal(statusPresentation('pat', 'ACTIVE').label, '活跃');
+  assert.equal(statusPresentation('pat', 'REVOKED').label, '已撤销');
+  assert.equal(statusPresentation('pat', 'EXPIRED').tone, 'warning');
+  assert.match(statusPresentation('pat', 'FUTURE').label, /未知状态（FUTURE）/);
+});

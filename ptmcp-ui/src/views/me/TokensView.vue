@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import CursorFooter from '../../components/common/CursorFooter.vue';
 import PageHeader from '../../components/common/PageHeader.vue';
+import StatusBadge from '../../components/common/StatusBadge.vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { mePortalApi, type PlatformItem, type TokenView } from '../../services/mePortalApi';
@@ -193,9 +194,7 @@ onMounted(async () => {
         ><ElTableColumn label="最近使用" min-width="170"
           ><template #default="{ row }">{{ formatDate(row.lastUsedAt) }}</template></ElTableColumn
         ><ElTableColumn label="状态" width="100"
-          ><template #default="{ row }"
-            ><ElTag :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ row.status }}</ElTag></template
-          ></ElTableColumn
+          ><template #default="{ row }"><StatusBadge domain="pat" :value="row.status" /></template></ElTableColumn
         ><ElTableColumn label="操作" width="100"
           ><template #default="{ row }"
             ><ElButton v-if="row.status === 'ACTIVE'" link type="danger" @click="revoke(row as TokenView)">撤销</ElButton></template
