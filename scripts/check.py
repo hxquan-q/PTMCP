@@ -29,7 +29,9 @@ def main() -> int:
         if result.returncode:
             return result.returncode
     if args.all_projects:
-        probes = [sys.executable, '-B', str(ROOT / 'scripts/check_backend_quality.py')]
+        # 探针仓库一次性空缓存，首次 validate 需全量拉取插件；默认 180s 在冷环境必然超时
+        # （两次实测：冷镜像下载 >180s，断言未动）。放宽的是门禁工具等待，不是检查本身。
+        probes = [sys.executable, '-B', str(ROOT / 'scripts/check_backend_quality.py'), '--timeout', '900']
         if args.maven_cache_seed:
             probes.extend(['--seed-repository', args.maven_cache_seed])
         commands = (
