@@ -163,6 +163,7 @@ Updated: 2026-10-26
 - 键盘走查收尾（2026-10-28，真实模式）：补齐剩余 18 页组——12 页焦点指示器抽样（共 145 控件 0 缺失）+ 6 页无条件对话框（部门/用户/角色/委派/平台/PAT）：焦点入内 ✓、Esc 关闭 ✓、焦点回归触发按钮 ✓；全部 0 pageerror（SUMMARY_BAD:[]）。与前批核心页合计覆盖全部页面组。脚本 `.local/run/kbd-sweep-rest.py`。
 - 预览回归捕获与修复（2026-10-28）：roleWriteGate 依赖 platformAdmin，预览合成会话此前无该字段（store 默认 false）→ 预览模式角色新建/编辑/删除被隐藏，破坏“预览可检查完整表单”（P-05/06/07 口径）。修复：预览 me 响应补 platformAdmin:true；回归断言预览会话 platformAdmin 与门控放行。预览复验 create=1/edit=2/hint=0（截图 preview-roles-restored）。
 - 预览全站扫屏复跑（2026-10-28，收尾回归护栏）：25 入口 × 1440/390（50 次导航）零横向溢出、零 console/pageerror——确认本会话全部改动（门控/徽章/规范化/platformAdmin）未破坏预览模式。BAD:[]。
+- 操作日志真实数据核验（2026-10-28）：admin/operations 20 行，首行为本会话 `PLATFORM_DELETE 平台:67`（P-09 清理留痕）；“查看”展开 beforeMasked/afterMasked JSON 明细正常渲染（含 code/name/tier/status）；0 pageerror（截图 real-operations）。管理面变更轨迹（不可删）与本会话真实写操作一致。
 - P-02/P-03 首批（2026-10-28，真实模式，Dev-Linux 后端）：列表 200；创建 DRAFT 源 201 → 详情凭据只显“已配置”、密文全程不渲染；内联改名保存成功（版本化 PUT）；测试连接 202 → 跳转任务页 GET 200 且目标库不存在时任务呈 FAILED 终态（截图 `real-p02-job-failed.png`，未宣称部分同步可用）；删除 → 列表回跳，已删详情 404 呈 `RESOURCE_NOT_FOUND` 恢复态（截图 `real-p02-deleted-404.png`）。0 pageerror。验收脚本 `.local/run/real-p02-datasource.py`（自建自删，隔离 dev 库，凭据零输出）；API 诊断另证 create 201/detail 200（响应仅 `credentialConfigured`，无 `credential` 键）/delete 200/get-after-delete 404。残留 qa-p2-* 已清理。
 
 仓库/分支：`C:/Users/xquan/Desktop/Datachat-mcp`，`xquan/feat-backend`。仅本地提交/集成，无推送、发布或生产操作。`.local` 隔离配置/工具、浏览器截图与测试日志已保留（根目录日志移入 `.local/evidence-logs/`）；`DESIGN.md`、`PRODUCT.md`、`docs/frontend/design/`、`.impeccable/` 与 T17 工作项纳入设计/文档提交，不进入前端业务代码提交。凭证文件仅本地 0600，不入仓。
