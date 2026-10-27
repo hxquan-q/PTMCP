@@ -156,9 +156,10 @@ Updated: 2026-10-26
 - P-14 首批（2026-10-28，真实模式）：创建 PAT 201（Tier3 平台/Scope/期限）→ 一次性明文弹窗（53 字符，唯一一次提示）→ Escape 关闭后明文清除 → 列表仅前缀；撤销 DELETE 200 → 状态“已撤销”。顺带修复：PAT 状态列原裸英文码 → StatusBadge 新增 pat 域（活跃/已撤销/已过期，回归覆盖）。0 pageerror；截图 real-p14-*。
 - P-12/P-16 首批（2026-10-28，真实模式）：字典三级级联（走查平台→走查合成库→synthetic 命名空间）→ me/dictionary 200 → orders 行“可读取=是”；个人历史 me/history 200（本人 33 行 WAL）；跨用户 requestId 借用审计行 → 详情 404 统一拒绝（他人记录不泄露）。0 pageerror；截图 real-p12-*/real-p16-*。P-15 授权列表无 OAuth 授权数据（空态符合）。
 - P-02 反例收尾（2026-10-28，真实模式）：REFERENCES_EXIST——ACTIVE 源 + 其上 ACL 授权 → UI 删除 DELETE **409** 且提示依赖需先处理（截图 real-p02-references-exist）；撤授权后删除 200。POSTGRESQL 引擎——创建 201（engine=POSTGRESQL 详情正确渲染）；测试连接跳任务页呈 FAILED 终态（PG 端口关闭，驱动层错误，截图 real-p02-pg-job）；删除 200。双引擎 CRUD 形状与依赖反例均实证。调试残留 qa-p2* 3 源 2 授权已清零。
+- EP 弹层疑点关闭（2026-10-28 定量复现）：隔离场景 Escape 关闭 ElDialog 后 0/50/120/250/400/700ms 触发 ElMessageBox.confirm，6/6 全部可见（z-index 正确压过已隐藏 dialog overlay）；无持续不可见弹窗。此前全流程脚本“点击被吞”为自动化时序（链式弹层转换窗口内的 actionability 竞态），脚本级重试已完全缓解，非产品缺陷。证据：本轮 evaluate 输出 + ep-repro.png。
 - P-02/P-03 首批（2026-10-28，真实模式，Dev-Linux 后端）：列表 200；创建 DRAFT 源 201 → 详情凭据只显“已配置”、密文全程不渲染；内联改名保存成功（版本化 PUT）；测试连接 202 → 跳转任务页 GET 200 且目标库不存在时任务呈 FAILED 终态（截图 `real-p02-job-failed.png`，未宣称部分同步可用）；删除 → 列表回跳，已删详情 404 呈 `RESOURCE_NOT_FOUND` 恢复态（截图 `real-p02-deleted-404.png`）。0 pageerror。验收脚本 `.local/run/real-p02-datasource.py`（自建自删，隔离 dev 库，凭据零输出）；API 诊断另证 create 201/detail 200（响应仅 `credentialConfigured`，无 `credential` 键）/delete 200/get-after-delete 404。残留 qa-p2-* 已清理。
 
 仓库/分支：`C:/Users/xquan/Desktop/Datachat-mcp`，`xquan/feat-backend`。仅本地提交/集成，无推送、发布或生产操作。`.local` 隔离配置/工具、浏览器截图与测试日志已保留（根目录日志移入 `.local/evidence-logs/`）；`DESIGN.md`、`PRODUCT.md`、`docs/frontend/design/`、`.impeccable/` 与 T17 工作项纳入设计/文档提交，不进入前端业务代码提交。凭证文件仅本地 0600，不入仓。
 
-下一步：以[业务覆盖矩阵](../../docs/frontend/business-coverage.md)逐项补后端端点和网络证据，再做完整业务验收；用户未回复不视为接受。
+下一步：剩余为各页键盘走查与人工接受（用户未回复不视为接受）；P-17 AS 流程属后端域；真实模式核心网络证据已覆盖 14/18 组（见上方各条）。
 
