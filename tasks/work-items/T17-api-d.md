@@ -234,3 +234,8 @@ MCP 三工具真实栈覆盖（走查记录）：list_databases_and_tables（cat
 success）；get_table_schema（catalog PAT → TOKEN_INVALID——scope 分层第二维度：看结构需
 mcp:schema 级授权）；execute_readonly_sql（前轮已验）。三工具在真实栈+TLS 执行段全部验证，
 scope 最小化三层（catalog/schema/query）边界实证。
+
+多租户平台隔离 E2E（走查实证）：平台 A（id=1, e2e-platform）PAT 查 datasource 1 →
+success；平台 B（id=2 激活）PAT 查同 datasource → denied / TABLE_NOT_AUTHORIZED——平台
+scope ceiling 跨租户硬拒绝。顺带实证 S7 双存储：admin 重置 204 → 用户新密码登录成功
+（上轮 400 真因=测试脚本缺 Idempotency-Key 头，端点契约要求，非产品缺陷）。
