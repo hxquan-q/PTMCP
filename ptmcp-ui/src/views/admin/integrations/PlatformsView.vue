@@ -17,10 +17,11 @@ import {
 } from 'element-plus';
 import PageHeader from '../../../components/common/PageHeader.vue';
 import PageState from '../../../components/common/PageState.vue';
+import StatusBadge from '../../../components/common/StatusBadge.vue';
 import { useSessionStore } from '../../../stores/session';
 import PlatformBasicsForm from './PlatformBasicsForm.vue';
 import { controlPlane, type PlatformWrite } from '../../../services/controlPlane';
-import { mutationNotice, platformApiReady } from '../../../services/frontendMode';
+import { frontendPreview, mutationNotice, platformApiReady } from '../../../services/frontendMode';
 import { useCursorPage } from '../../../composables/useCursorPage';
 import { errorText, isConflict } from '../../portalUtils';
 
@@ -63,7 +64,7 @@ onMounted(() => {
   if (platformReady) void load();
 });
 const filterText = computed(() =>
-  [filter.keyword, filter.tier, filter.status].filter(Boolean).length ? '筛选条件已准备，接口接入后将按服务端游标查询。' : '平台目录尚未连接。',
+  [filter.keyword, filter.tier, filter.status].filter(Boolean).length ? '已设置筛选条件，点击查询更新平台目录。' : '平台服务未就绪，请稍后重试。',
 );
 function clearPreview(): void {
   dialogVisible.value = false;
@@ -106,7 +107,8 @@ onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearP
           <h2>平台目录</h2>
           <p>平台、Scope 和客户端应由后端授权接口返回。</p>
         </div>
-        <ElTag effect="plain" type="info">{{ platformReady ? '已接入' : '未连接' }}</ElTag>
+        <ElTag v-if="frontendPreview || !platformReady" effect="plain" type="info">{{ frontendPreview ? '合成数据预览' : '平台服务未就绪' }}</ElTag>
+        <span v-else>已加载 {{ rows.length }} 条</span>
       </div>
       <ElAlert v-if="error" type="error" :title="error" :closable="false"><ElButton @click="retry">重试</ElButton></ElAlert>
       <ElSkeleton v-if="loading && !rows.length" :rows="5" animated />
@@ -118,7 +120,9 @@ onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearP
         <ElTableColumn label="逐调用证明" min-width="130"
           ><template #default="{ row }">{{ row.proofMode }} · {{ row.proofConfigured ? '已配置' : '未配置' }}</template></ElTableColumn
         >
-        <ElTableColumn prop="status" label="状态" width="100" />
+        <ElTableColumn label="状态" min-width="100"
+          ><template #default="{ row }"><StatusBadge domain="lifecycle" :value="row.status" /></template
+        ></ElTableColumn>
         <ElTableColumn label="操作" min-width="150"
           ><template #default="{ row }"
             ><ElButton

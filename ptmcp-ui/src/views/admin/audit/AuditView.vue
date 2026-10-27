@@ -17,9 +17,10 @@ import {
 } from 'element-plus';
 import PageHeader from '../../../components/common/PageHeader.vue';
 import PageState from '../../../components/common/PageState.vue';
+import StatusBadge from '../../../components/common/StatusBadge.vue';
 import { validateDateRange } from '../integrations/adminSurface';
 import { controlPlane, type Platform } from '../../../services/controlPlane';
-import { auditApiReady } from '../../../services/frontendMode';
+import { auditApiReady, frontendPreview } from '../../../services/frontendMode';
 import { listDatasources, type DatasourceRead } from '../../../services/data';
 import { useCursorPage } from '../../../composables/useCursorPage';
 import { errorText, formatDate, usePortalTask } from '../../portalUtils';
@@ -82,12 +83,10 @@ const dateRange = computed(() => {
   if ((start !== undefined && !Number.isFinite(start)) || (end !== undefined && !Number.isFinite(end))) return '日期格式无效。';
   return validateDateRange(from.value?.toISOString() ?? '', to.value?.toISOString() ?? '');
 });
-const filterSummary = computed(() =>
-  Object.values(filters).filter(Boolean).length ? '筛选条件已准备，查询接口接入后才会发送。' : '未设置筛选条件。',
-);
+const filterSummary = computed(() => (Object.values(filters).filter(Boolean).length ? '已设置筛选条件，点击查询更新记录。' : '未设置额外筛选条件。'));
 function validateFilters(): void {
   validation.value =
-    !from.value || !to.value ? '请选择开始和结束时间，单次查询不超过31天。' : (dateRange.value ?? '筛选校验完成。审计服务尚未接入，查询暂不可用。');
+    !from.value || !to.value ? '请选择开始和结束时间，单次查询不超过31天。' : (dateRange.value ?? '筛选校验通过，点击查询读取审计记录。');
 }
 function clearFilters(): void {
   Object.keys(filters).forEach((key) => {
@@ -109,7 +108,7 @@ function clearFilters(): void {
       <div class="filter-heading">
         <div>
           <h2>查询范围</h2>
-          <p>日期范围最多31天，按浏览器本地时区编辑；接入后以 UTC 传输、Asia/Taipei 展示。</p>
+          <p>日期范围最多31天，按浏览器本地时区编辑；以 UTC 传输、Asia/Taipei 展示。</p>
         </div>
         <span>{{ filterSummary }}</span>
       </div>
@@ -155,7 +154,8 @@ function clearFilters(): void {
           <h2>调用记录</h2>
           <p>列表应由服务端按审计范围过滤后返回；前端不先拉全量再筛选。</p>
         </div>
-        <ElTag type="info" effect="plain">{{ auditReady ? '已接入' : '未连接' }}</ElTag>
+        <ElTag v-if="frontendPreview || !auditReady" type="info" effect="plain">{{ frontendPreview ? '合成数据预览' : '审计服务未就绪' }}</ElTag>
+        <span v-else>已加载 {{ rows.length }} 条</span>
       </div>
       <ElAlert v-if="error" :title="error" type="error" :closable="false"><ElButton @click="retry">重试</ElButton></ElAlert>
       <ElSkeleton v-if="loading && !rows.length" :rows="6" animated />
@@ -168,8 +168,12 @@ function clearFilters(): void {
         <ElTableColumn prop="tool" label="工具" min-width="130" />
         <ElTableColumn prop="datasourceId" label="数据源" min-width="180" />
         <ElTableColumn prop="sqlMasked" label="脱敏 SQL 摘要" min-width="210" />
-        <ElTableColumn prop="result" label="结果" width="100" />
-        <ElTableColumn prop="verdict" label="判定" width="100" />
+        <ElTableColumn label="结果" min-width="120"
+          ><template #default="{ row }"><StatusBadge domain="execution" :value="row.result" /></template
+        ></ElTableColumn>
+        <ElTableColumn label="判定" min-width="120"
+          ><template #default="{ row }"><StatusBadge domain="verdict" :value="row.verdict" /></template
+        ></ElTableColumn>
         <ElTableColumn prop="errorCode" label="错误码" min-width="170" />
         <ElTableColumn prop="durationMs" label="耗时(ms)" width="100" />
         <ElTableColumn prop="rowsReturned" label="行数" width="100" />
@@ -196,7 +200,7 @@ function clearFilters(): void {
       <div class="legend-grid">
         <div><strong>脱敏 SQL 摘要</strong><span>只展示服务端返回的摘要，不允许在筛选框输入原 SQL。</span></div>
         <div><strong>UNKNOWN</strong><span>启动记录缺少终态时保留未知结论，不推断为失败。</span></div>
-        <div><strong>解密</strong><span>需要独立解密权限及理由，明文只限时展示；正常模式在接口未接入时禁用。</span></div>
+        <div><strong>解密</strong><span>需要独立解密权限及理由，明文只限时展示，关闭或离开详情立即清除。</span></div>
       </div>
     </ElCard>
   </div>
