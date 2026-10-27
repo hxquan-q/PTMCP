@@ -130,7 +130,8 @@ const personalRoutes: RouteRecordRaw[] = [
 ];
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  // Vite 默认 BASE_URL 为 '/'；空基座避免 vue-router 将 '/' 拼接成 '//'（R0003）。
+  history: createWebHistory(import.meta.env.BASE_URL === '/' ? undefined : import.meta.env.BASE_URL),
   routes: [
     ...(import.meta.env.DEV && import.meta.env.MODE === 'frontend-preview'
       ? [
@@ -160,20 +161,28 @@ function safeReturnTo(path: string): string {
     : '/';
 }
 
+function firstAuthorizedPath(): string {
+  const first = adminRoutes.find(
+    (route) => !route.path.includes(':') && typeof route.meta?.permission === 'string' && useSessionStore().can(route.meta.permission),
+  );
+  return first ? `/admin/${first.path}` : '/me/dictionary';
+}
+
 router.beforeEach(async (to) => {
   if (to.name === 'forbidden' || to.name === 'not-found') return true;
   const session = useSessionStore();
   await session.init();
   if (to.name === 'login') {
-    if (session.isAuthenticated) return safeReturnTo(typeof to.query.returnTo === 'string' ? to.query.returnTo : '/');
+    if (session.isAuthenticated) {
+      const returnTo = typeof to.query.returnTo === 'string' ? safeReturnTo(to.query.returnTo) : firstAuthorizedPath();
+      return returnTo;
+    }
     return true;
   }
   if (!session.isAuthenticated) return { name: 'login', query: { returnTo: safeReturnTo(to.fullPath) } };
   if (to.name === 'home') {
-    const first = adminRoutes.find(
-      (route) => !route.path.includes(':') && typeof route.meta?.permission === 'string' && session.can(route.meta.permission),
-    );
-    return first ? `/admin/${first.path}` : '/me/dictionary';
+    // v5 对守卫返回字符串路径在根入口场景会解析出 '//'（R0003），改用定位对象。
+    return { path: firstAuthorizedPath() };
   }
   const permission = to.meta.permission;
   if (typeof permission === 'string' && !session.can(permission)) return { name: 'forbidden' };

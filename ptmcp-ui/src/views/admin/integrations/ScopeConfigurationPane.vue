@@ -6,6 +6,7 @@ import { listDatasources, listMetadata, type DatasourceRead } from '../../../ser
 import { mutationNotice, scopeApiReady } from '../../../services/frontendMode';
 import { useSessionStore } from '../../../stores/session';
 import { errorText, isConflict, usePortalTask } from '../../portalUtils';
+import { scopeChanges, scopeChangeText, scopeKey, scopeRuleText } from './scopeDiff';
 const props = withDefaults(defineProps<{ platformId?: string }>(), { platformId: '' });
 const session = useSessionStore();
 /** 平台 Scope 后端已实现（T17-api 切片）；预览模式继续用合成数据。 */
@@ -33,16 +34,8 @@ const task = usePortalTask(() => {
   sources.value = [];
 });
 const directoryTask = usePortalTask();
-const key = (row: ScopeRule): string => `${row.resourceType}:${row.resourceId}:${row.action}`;
-const changes = computed(() => {
-  const before = new Map((current.value?.items ?? []).map((row) => [key(row), JSON.stringify(row)]));
-  const after = new Map(draft.value.map((row) => [key(row), JSON.stringify(row)]));
-  return {
-    added: draft.value.filter((row) => !before.has(key(row))),
-    removed: (current.value?.items ?? []).filter((row) => !after.has(key(row))),
-    modified: draft.value.filter((row) => before.has(key(row)) && before.get(key(row)) !== JSON.stringify(row)),
-  };
-});
+const key = scopeKey;
+const changes = computed(() => scopeChanges(current.value?.items ?? [], draft.value));
 const dirty = computed(() => Object.values(changes.value).some((items) => items.length));
 async function load(keepDraft = false): Promise<void> {
   if (!scopeReady) return;
@@ -109,17 +102,16 @@ async function loadObjects(more = false): Promise<void> {
   }
 }
 function ruleText(row: ScopeRule): string {
-  const descendants = row.includeDescendants ? '（含子树）' : '';
-  return `${row.resourceType}:${row.resourceId}@${row.resourceGeneration} · ${row.action}${descendants}`;
+  return scopeRuleText(row);
 }
-function diffList(label: string, rows: ScopeRule[]) {
+function diffList(label: string, rows: Array<ScopeRule | { before: ScopeRule; after: ScopeRule }>) {
   if (!rows.length) return h('p', { class: 'scope-diff-none' }, `${label}：无`);
   return h('div', null, [
     h('p', { class: 'scope-diff-title' }, `${label} ${rows.length} 条：`),
     h(
       'ul',
       { class: 'scope-diff-list' },
-      rows.map((row) => h('li', null, ruleText(row))),
+      rows.map((row) => h('li', null, 'before' in row ? `${scopeRuleText(row.before)} → ${scopeChangeText(row)}` : ruleText(row))),
     ),
   ]);
 }
