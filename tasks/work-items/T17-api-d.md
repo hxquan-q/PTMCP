@@ -206,3 +206,7 @@ S7 双存储缺口修复（d909c29）：管理员重置的元库事务补写 sys
 me/history DENY 行可读化（b1439ff）：queryErrorText 前端映射模块（对齐网关
 McpErrorCatalog 文案）+详情页错误码行追加可读括注。浏览器验证：真实 DENY 行
 （SQL_NOT_READONLY）详情页显示「仅允许只读查询语句」+原始码同显+字面值不泄露。
+
+me/history 列表 DENY 行可读化（0d5c631）：列表加「原因」列（queryErrorText 可读文本，
+DENY 行红色高亮）——此前列表无错误码列，用户须点进详情才知道被拒原因。浏览器验证：DENY
+行显示「仅允许只读查询语句」。教训：视图新增 import 必须同步 mount helper 的 urls 映射。
