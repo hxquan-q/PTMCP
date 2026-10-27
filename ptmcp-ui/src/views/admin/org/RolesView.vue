@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '../../../components/common/PageHeader.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -169,14 +170,10 @@ onMounted(async () => {
 
 <template>
   <section class="portal-page" aria-labelledby="roles-title">
-    <div class="page-heading">
-      <div>
-        <h1 id="roles-title">角色</h1>
-        <p class="page-description">角色只管理功能码；数据权限在授权矩阵中单独维护。</p>
-        <p class="page-description">成员数量与委派部门信息当前暂不可用。</p>
-      </div>
-      <ElButton v-if="session.can('ptmcp:role:create')" type="primary" @click="openCreate">新建角色</ElButton>
-    </div>
+    <PageHeader title-id="roles-title" title="角色" description="角色只管理功能码；数据权限在授权矩阵中单独维护。">
+      <template #actions><ElButton v-if="session.can('ptmcp:role:create')" type="primary" @click="openCreate">新建角色</ElButton></template>
+    </PageHeader>
+    <p class="page-description">成员数量与委派部门信息当前暂不可用。</p>
     <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError"
       ><template #default><ElButton link type="danger" @click="load">重新加载</ElButton></template></ElAlert
     >
@@ -249,18 +246,6 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.page-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-h1 {
-  margin: 0;
-  color: var(--ptmcp-heading);
-  font-size: 28px;
-}
 .page-description,
 .muted,
 .helper {
@@ -288,11 +273,5 @@ h1 {
 }
 .mb-4 {
   margin-bottom: 16px;
-}
-@media (max-width: 640px) {
-  .page-heading {
-    align-items: flex-start;
-    flex-direction: column;
-  }
 }
 </style>

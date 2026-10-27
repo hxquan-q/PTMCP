@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '../../components/common/PageHeader.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
@@ -116,12 +117,7 @@ onMounted(() => {
 
 <template>
   <section class="portal-page" aria-labelledby="history-title">
-    <div class="page-heading">
-      <div>
-        <h1 id="history-title">我的查询历史</h1>
-        <p class="page-description">仅显示本人脱敏记录。原始 SQL、结果集和下载能力不会在个人门户展示。</p>
-      </div>
-    </div>
+    <PageHeader title-id="history-title" title="我的查询历史" description="仅显示本人脱敏记录。原始 SQL、结果集和下载能力不会在个人门户展示。" />
     <ElCard shadow="never" class="portal-card">
       <ElForm class="filters" label-position="top" @submit.prevent="load()">
         <ElFormItem label="开始时间（本机时区）"><ElDatePicker v-model="filters.from" type="datetime" /></ElFormItem
@@ -186,19 +182,6 @@ onMounted(() => {
 <style scoped>
 .deny-reason {
   color: var(--el-color-danger);
-}
-.page-heading {
-  margin-bottom: 24px;
-}
-h1 {
-  margin: 0;
-  color: var(--ptmcp-heading);
-  font-size: 28px;
-}
-.page-description {
-  margin: 8px 0 0;
-  color: var(--ptmcp-muted);
-  font-size: 14px;
 }
 .portal-card {
   border-color: var(--ptmcp-border);

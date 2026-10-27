@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '../../components/common/PageHeader.vue';
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -57,12 +58,7 @@ onMounted(load);
 
 <template>
   <section class="portal-page" aria-labelledby="authorizations-title">
-    <div class="page-heading">
-      <div>
-        <h1 id="authorizations-title">我的授权</h1>
-        <p class="page-description">查看和撤销外部客户端的 OAuth 授权。退出控制台不会自动撤销这些授权。</p>
-      </div>
-    </div>
+    <PageHeader title-id="authorizations-title" title="我的授权" description="查看和撤销外部客户端的 OAuth 授权。退出控制台不会自动撤销这些授权。" />
     <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError"
       ><ElButton @click="load()">重新读取授权</ElButton></ElAlert
     ><ElCard shadow="never" class="portal-card"
@@ -96,19 +92,6 @@ onMounted(load);
 </template>
 
 <style scoped>
-.page-heading {
-  margin-bottom: 24px;
-}
-h1 {
-  margin: 0;
-  color: var(--ptmcp-heading);
-  font-size: 28px;
-}
-.page-description {
-  margin: 8px 0 0;
-  color: var(--ptmcp-muted);
-  font-size: 14px;
-}
 .portal-card {
   border-color: var(--ptmcp-border);
 }

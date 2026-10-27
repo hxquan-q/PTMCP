@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '../../components/common/PageHeader.vue';
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { mePortalApi, type ObjectDetail } from '../../services/mePortalApi';
@@ -51,16 +52,15 @@ watch(
       ><template #default><ElButton link type="danger" @click="load">重试</ElButton></template></ElAlert
     >
     <template v-else-if="detail">
-      <div class="page-heading">
-        <div>
-          <h1 id="detail-title">{{ detail.tableName }}</h1>
-          <p class="page-description">
-            {{ detail.objectType }} · {{ [detail.databaseName, detail.schemaName].filter(Boolean).join(' / ') }} · 快照
-            {{ detail.snapshotVersion }}
-          </p>
-        </div>
-        <ElTag :type="detail.authorized ? 'success' : 'warning'">{{ detail.authorized ? '可读取' : '仅目录可见' }}</ElTag>
-      </div>
+      <PageHeader
+        title-id="detail-title"
+        :title="detail.tableName"
+        :description="`${detail.objectType} · ${[detail.databaseName, detail.schemaName].filter(Boolean).join(' / ')} · 快照 ${detail.snapshotVersion}`"
+      >
+        <template #status
+          ><ElTag :type="detail.authorized ? 'success' : 'warning'">{{ detail.authorized ? '可读取' : '仅目录可见' }}</ElTag></template
+        >
+      </PageHeader>
       <ElAlert v-if="!detail.authorized" type="warning" :closable="false" title="当前对象没有 READ 权限，列结构不会展示。" class="mb-4" />
       <ElCard shadow="never" class="portal-card"
         ><template #header><span>业务说明</span></template>
@@ -97,28 +97,15 @@ watch(
 .back {
   margin-bottom: 18px;
 }
-.page-heading,
 .card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
 }
-.page-heading {
-  margin-bottom: 24px;
-}
-h1 {
-  margin: 0;
-  color: var(--ptmcp-heading);
-  font-size: 28px;
-}
-.page-description,
 .muted {
   color: var(--ptmcp-muted);
   font-size: 14px;
-}
-.page-description {
-  margin: 8px 0 0;
 }
 .portal-card {
   margin-bottom: 16px;

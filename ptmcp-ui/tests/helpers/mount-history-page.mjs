@@ -15,6 +15,7 @@ export async function mountHistoryPage(list) {
     .replace("'vue'", JSON.stringify(import.meta.resolve('vue')))
     .replace("'../services/portalRequest'", JSON.stringify(new URL('../../src/services/portalRequest.ts', import.meta.url).href));
   const urls = {
+    '../../components/common/PageHeader.vue': dataUrl('export default {};'),
     vue: import.meta.resolve('vue'),
     'vue-router': dataUrl('export const useRouter=()=>({push(){}});'),
     'element-plus': dataUrl('export const ElMessage={warning(){}};'),

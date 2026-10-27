@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '../../components/common/PageHeader.vue';
 import { onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
@@ -170,12 +171,11 @@ onMounted(() => {
 
 <template>
   <section class="portal-page" aria-labelledby="dictionary-title">
-    <div class="page-heading">
-      <div>
-        <h1 id="dictionary-title">我的数据字典</h1>
-        <p class="page-description">目录只展示你在当前平台范围内可发现的对象，读取详情仍由服务端再次鉴权。</p>
-      </div>
-    </div>
+    <PageHeader
+      title-id="dictionary-title"
+      title="我的数据字典"
+      description="目录只展示你在当前平台范围内可发现的对象，读取详情仍由服务端再次鉴权。"
+    />
     <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError" />
     <ElCard shadow="never" class="portal-card context-card"
       ><div class="filters">
@@ -246,21 +246,9 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.page-heading {
-  margin-bottom: 24px;
-}
-h1 {
-  margin: 0;
-  color: var(--ptmcp-heading);
-  font-size: 28px;
-}
-.page-description,
 .subtext {
   color: var(--ptmcp-muted);
   font-size: 14px;
-}
-.page-description {
-  margin: 8px 0 0;
 }
 .portal-card {
   margin-bottom: 16px;

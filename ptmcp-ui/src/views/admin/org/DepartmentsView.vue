@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '../../../components/common/PageHeader.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useSessionStore } from '../../../stores/session';
@@ -192,14 +193,10 @@ onMounted(load);
 
 <template>
   <section class="portal-page" aria-labelledby="departments-title">
-    <div class="page-heading">
-      <div>
-        <h1 id="departments-title">部门</h1>
-        <p class="page-description">维护部门树和管理范围。移动部门由服务端重算祖先关系。</p>
-        <p v-if="!frontendPreview" class="page-description">部门排序保存接口待接入；子部门数量按当前已读取树计算。</p>
-      </div>
-      <ElButton v-if="session.can('ptmcp:department:create')" type="primary" @click="openCreate">新建部门</ElButton>
-    </div>
+    <PageHeader title-id="departments-title" title="部门" description="维护部门树和管理范围。移动部门由服务端重算祖先关系。">
+      <template #actions><ElButton v-if="session.can('ptmcp:department:create')" type="primary" @click="openCreate">新建部门</ElButton></template>
+    </PageHeader>
+    <p v-if="!frontendPreview" class="page-description">部门排序保存接口待接入；子部门数量按当前已读取树计算。</p>
 
     <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError">
       <template #default><ElButton link type="danger" @click="load">重新加载</ElButton></template>
@@ -279,21 +276,12 @@ onMounted(load);
 .department-detail {
   margin-top: 24px;
 }
-.page-heading,
 .card-header,
 .tree-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-}
-.page-heading {
-  margin-bottom: 24px;
-}
-h1 {
-  margin: 0;
-  color: var(--ptmcp-heading);
-  font-size: 28px;
 }
 .page-description,
 .muted {

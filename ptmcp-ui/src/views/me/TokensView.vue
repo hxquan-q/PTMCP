@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '../../components/common/PageHeader.vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { mePortalApi, type PlatformItem, type TokenView } from '../../services/mePortalApi';
@@ -162,13 +163,9 @@ onMounted(async () => {
 
 <template>
   <section class="portal-page" aria-labelledby="tokens-title">
-    <div class="page-heading">
-      <div>
-        <h1 id="tokens-title">我的 PAT</h1>
-        <p class="page-description">PAT 明文只在创建响应中出现一次，关闭提示后无法找回。</p>
-      </div>
-      <ElButton type="primary" @click="openCreate">创建 PAT</ElButton>
-    </div>
+    <PageHeader title-id="tokens-title" title="我的 PAT" description="PAT 明文只在创建响应中出现一次，关闭提示后无法找回。">
+      <template #actions><ElButton type="primary" @click="openCreate">创建 PAT</ElButton></template>
+    </PageHeader>
     <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError" />
     <ElCard shadow="never" class="portal-card"
       ><div class="filters">
@@ -250,25 +247,9 @@ onMounted(async () => {
   line-height: 1.6;
   margin: 4px 0 0;
 }
-.page-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-h1 {
-  margin: 0;
-  color: var(--ptmcp-heading);
-  font-size: 28px;
-}
-.page-description,
 .muted {
   color: var(--ptmcp-muted);
   font-size: 14px;
-}
-.page-description {
-  margin: 8px 0 0;
 }
 .portal-card {
   border-color: var(--ptmcp-border);
@@ -304,11 +285,5 @@ h1 {
 }
 .mb-4 {
   margin-bottom: 16px;
-}
-@media (max-width: 640px) {
-  .page-heading {
-    align-items: flex-start;
-    flex-direction: column;
-  }
 }
 </style>

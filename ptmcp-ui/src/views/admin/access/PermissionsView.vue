@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '../../../components/common/PageHeader.vue';
 import { useAccessWorkspace } from './useAccessWorkspace';
 import type { Grant } from '../../../services/access';
 import EffectiveAccessPane from './EffectiveAccessPane.vue';
@@ -65,19 +66,17 @@ function date(value: string | null) {
 
 <template>
   <section class="access-page" aria-labelledby="access-title">
-    <header class="access-heading">
-      <div>
-        <h1 id="access-title">权限矩阵</h1>
-        <p>选择主体与资源，管理规则并计算平台范围内的有效权限。</p>
-      </div>
-      <ElButton
-        v-if="canCreate"
-        type="primary"
-        :disabled="!subjectId || !selectedResource?.generation || !!resourceError || saving"
-        @click="openCreate"
-        >新增规则</ElButton
-      >
-    </header>
+    <PageHeader title-id="access-title" title="权限矩阵" description="选择主体与资源，管理规则并计算平台范围内的有效权限。">
+      <template #actions>
+        <ElButton
+          v-if="canCreate"
+          type="primary"
+          :disabled="!subjectId || !selectedResource?.generation || !!resourceError || saving"
+          @click="openCreate"
+          >新增规则</ElButton
+        >
+      </template>
+    </PageHeader>
     <ElAlert v-if="lookupError" :title="lookupError" type="warning" :closable="false" show-icon />
     <ElAlert v-if="pageError" :title="pageError" type="error" :closable="false" show-icon />
     <div class="access-workspace">
@@ -329,27 +328,16 @@ function date(value: string | null) {
   max-width: 1600px;
   margin: 0 auto;
 }
-.access-heading,
 .panel-heading {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 20px;
 }
-.access-heading {
-  margin-bottom: 24px;
-}
-h1 {
-  font-size: 28px;
-  margin: 0;
-  color: var(--ptmcp-heading);
-  letter-spacing: -0.03em;
-}
 h2 {
   font-size: 15px;
   margin: 0 0 14px;
 }
-.access-heading p,
 .panel-heading p {
   color: var(--ptmcp-muted);
   font-size: 13px;
@@ -486,10 +474,6 @@ h2 {
 @media (max-width: 760px) {
   .access-workspace {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .access-heading {
-    align-items: flex-start;
-    flex-direction: column;
   }
   .preview-form,
   .form-grid {

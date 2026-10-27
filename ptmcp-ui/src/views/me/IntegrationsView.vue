@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '../../components/common/PageHeader.vue';
 import { onMounted, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { mePortalApi, type PlatformItem, type McpConfig } from '../../services/mePortalApi';
@@ -82,12 +83,7 @@ onMounted(() => {
 
 <template>
   <section class="portal-page" aria-labelledby="integrations-title">
-    <div class="page-heading">
-      <div>
-        <h1 id="integrations-title">MCP 接入配置</h1>
-        <p class="page-description">模板只提供人工配置步骤，不会自动连接客户端或执行查询。</p>
-      </div>
-    </div>
+    <PageHeader title-id="integrations-title" title="MCP 接入配置" description="模板只提供人工配置步骤，不会自动连接客户端或执行查询。" />
     <ElAlert v-if="error" type="error" :closable="false" :title="error" class="mb-4"
       ><ElButton @click="platforms.length ? loadConfig() : loadPlatforms()">重新读取</ElButton></ElAlert
     >
@@ -142,21 +138,9 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.page-heading {
-  margin-bottom: 24px;
-}
-h1 {
-  margin: 0;
-  color: var(--ptmcp-heading);
-  font-size: 28px;
-}
-.page-description,
 .muted {
   color: var(--ptmcp-muted);
   font-size: 14px;
-}
-.page-description {
-  margin: 8px 0 0;
 }
 .portal-card {
   margin-bottom: 16px;

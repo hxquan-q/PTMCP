@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '../../components/common/PageHeader.vue';
 import { onBeforeUnmount, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
@@ -53,12 +54,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="portal-page" aria-labelledby="security-title">
-    <div class="page-heading">
-      <div>
-        <h1 id="security-title">安全设置</h1>
-        <p class="page-description">修改密码后，当前账号的其他会话、PAT 和授权会按服务端规则失效。</p>
-      </div>
-    </div>
+    <PageHeader title-id="security-title" title="安全设置" description="修改密码后，当前账号的其他会话、PAT 和授权会按服务端规则失效。" />
     <ElCard shadow="never" class="portal-card account-summary"
       ><template #header>当前账号</template
       ><ElDescriptions :column="1" border
@@ -85,19 +81,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.page-heading {
-  margin-bottom: 24px;
-}
-h1 {
-  margin: 0;
-  color: var(--ptmcp-heading);
-  font-size: 28px;
-}
-.page-description {
-  margin: 8px 0 0;
-  color: var(--ptmcp-muted);
-  font-size: 14px;
-}
 .portal-card {
   max-width: 680px;
   border-color: var(--ptmcp-border);

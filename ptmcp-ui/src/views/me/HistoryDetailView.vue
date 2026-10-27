@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '../../components/common/PageHeader.vue';
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { mePortalApi, type AuditDetail } from '../../services/mePortalApi';
@@ -53,13 +54,11 @@ watch(
     ><ElSkeleton v-if="loading" :rows="8" animated /><ElAlert v-else-if="error" type="error" :closable="false" :title="error"
       ><template #default><ElButton link type="danger" @click="load">重试</ElButton></template></ElAlert
     ><template v-else-if="item"
-      ><div class="page-heading">
-        <div>
-          <h1 id="history-detail-title">{{ item.requestId }}</h1>
-          <p class="page-description">{{ formatDate(item.startedAt) }} · {{ item.tool }}</p>
-        </div>
-        <ElTag :type="item.result === 'SUCCESS' ? 'success' : 'warning'">{{ item.result }}</ElTag>
-      </div>
+      ><PageHeader title-id="history-detail-title" :title="item.requestId" :description="`${formatDate(item.startedAt)} · ${item.tool}`">
+        <template #status
+          ><ElTag :type="item.result === 'SUCCESS' ? 'success' : 'warning'">{{ item.result }}</ElTag></template
+        >
+      </PageHeader>
       <ElCard shadow="never" class="portal-card"
         ><div class="metrics">
           <div>
@@ -106,23 +105,6 @@ watch(
 .back {
   margin-bottom: 18px;
 }
-.page-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-h1 {
-  margin: 0;
-  color: var(--ptmcp-heading);
-  font-size: 28px;
-}
-.page-description {
-  margin: 8px 0 0;
-  color: var(--ptmcp-muted);
-  font-size: 14px;
-}
 .portal-card {
   margin-bottom: 16px;
   border-color: var(--ptmcp-border);
@@ -156,10 +138,6 @@ h2 {
 @media (max-width: 640px) {
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .page-heading {
-    align-items: flex-start;
-    flex-direction: column;
   }
 }
 </style>

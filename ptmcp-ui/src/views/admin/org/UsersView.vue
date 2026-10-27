@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '../../../components/common/PageHeader.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -321,13 +322,9 @@ onMounted(async () => {
 
 <template>
   <section class="portal-page" aria-labelledby="users-title">
-    <div class="page-heading">
-      <div>
-        <h1 id="users-title">用户</h1>
-        <p class="page-description">管理用户状态、部门归属和角色。每项变更都携带资源版本。</p>
-      </div>
-      <ElButton v-if="session.can('ptmcp:user:create')" type="primary" @click="openCreate">新建用户</ElButton>
-    </div>
+    <PageHeader title-id="users-title" title="用户" description="管理用户状态、部门归属和角色。每项变更都携带资源版本。">
+      <template #actions><ElButton v-if="session.can('ptmcp:user:create')" type="primary" @click="openCreate">新建用户</ElButton></template>
+    </PageHeader>
     <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError"
       ><template #default><ElButton link type="danger" @click="load">重新加载</ElButton></template></ElAlert
     >
@@ -458,30 +455,16 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.page-heading,
 .filters,
 .form-grid {
   display: flex;
   align-items: center;
   gap: 16px;
 }
-.page-heading {
-  justify-content: space-between;
-  margin-bottom: 24px;
-}
-h1 {
-  margin: 0;
-  color: var(--ptmcp-heading);
-  font-size: 28px;
-}
-.page-description,
 .muted,
 .helper {
   color: var(--ptmcp-muted);
   font-size: 14px;
-}
-.page-description {
-  margin: 8px 0 0;
 }
 .portal-card {
   border-color: var(--ptmcp-border);
@@ -511,10 +494,6 @@ h1 {
   margin-bottom: 16px;
 }
 @media (max-width: 640px) {
-  .page-heading {
-    align-items: flex-start;
-    flex-direction: column;
-  }
   .filters .el-input,
   .filters .el-select {
     width: 100%;
