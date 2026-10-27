@@ -38,3 +38,14 @@ test('allows only the approved client scope vocabulary', () => {
   assert.match(validateAllowedScopes([]) ?? '', /至少选择/);
   assert.match(validateAllowedScopes(['mcp:admin']), /白名单/);
 });
+
+test('委派提交失败区分 DUPLICATE_GRANT 与通用冲突，未识别错误透传', async () => {
+  const { delegationSubmitError } = await import('../src/views/admin/integrations/adminSurface.ts');
+  const fallback = (error: unknown): string => `fallback:${String((error as { message?: string }).message ?? error)}`;
+  const duplicate = delegationSubmitError({ code: 'DUPLICATE_GRANT', status: 409, message: '服务端资源已变化' }, fallback);
+  assert.match(duplicate, /DUPLICATE_GRANT/);
+  assert.match(duplicate, /撤销旧委派/);
+  assert.doesNotMatch(duplicate, /合并/);
+  assert.equal(delegationSubmitError({ code: 'VERSION_CONFLICT', status: 409, message: '服务端资源已变化' }, fallback), 'fallback:服务端资源已变化');
+  assert.equal(delegationSubmitError(new Error('x'), fallback), 'fallback:x');
+});

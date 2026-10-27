@@ -1,4 +1,5 @@
 import { request, type RequestOptions } from './http';
+import { normalizeOrgResponse } from './portalIds';
 import { newUuid } from './uuid';
 import {
   auditApiReady,
@@ -159,8 +160,13 @@ export const controlPlane = {
   },
   delegations: {
     list: (filters: Record<string, string | undefined>, signal?: AbortSignal) =>
-      controlRequest<Page<Delegation>>(`/delegations${queryString(filters)}`, { signal }, delegationReady),
-    create: (body: DelegationWrite) => controlRequest<Delegation>('/delegations', create(body), delegationReady),
+      controlRequest<Page<Delegation>>(`/delegations${queryString(filters)}`, { signal }, delegationReady).then(
+        (page) => normalizeOrgResponse('/api/v1/admin/delegations', page) as Page<Delegation>,
+      ),
+    create: (body: DelegationWrite) =>
+      controlRequest<Delegation>('/delegations', create(body), delegationReady).then(
+        (row) => normalizeOrgResponse('/api/v1/admin/delegations', row) as Delegation,
+      ),
     revoke: (row: Delegation) =>
       controlRequest(`/delegations/${encodeURIComponent(row.id)}`, { method: 'DELETE', headers: versioned(row.version) }, delegationReady),
   },

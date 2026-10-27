@@ -90,3 +90,22 @@ test('department parent candidates exclude descendants at every depth', () => {
   assert.deepEqual([...departmentDescendants(departments, 'a')].sort(), ['a', 'b', 'c']);
   assert.equal(departmentDescendants(departments, 'b').has('a'), false);
 });
+
+test('委派响应标识规范化：数字id/版本转字符串，撤销查找不再静默失配', async () => {
+  const { normalizeOrgResponse } = await import('../src/services/portalIds.ts');
+  const page = normalizeOrgResponse('/api/v1/admin/delegations', {
+    items: [
+      { id: 2, userId: 7, departmentRootId: 1, resourceType: 'DATASOURCE', resourceId: 1, resourceGeneration: 3, version: 1, status: 'ACTIVE' },
+    ],
+    nextCursor: null,
+  });
+  const row = page.items[0];
+  assert.equal(row.id, '2');
+  assert.equal(row.userId, '7');
+  assert.equal(row.version, '1');
+  assert.ok(page.items.some((item) => String(item.id) === String('2')));
+  const single = normalizeOrgResponse('/api/v1/admin/delegations', { id: 9, userId: 2, departmentRootId: 1, resourceId: 1, version: 4 });
+  assert.equal(single.id, '9');
+  assert.equal(single.version, '4');
+  assert.equal(row.resourceType, 'DATASOURCE');
+});

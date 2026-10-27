@@ -66,6 +66,7 @@ test('normal mode: delegation domain reaches the network while unimplemented dom
     './http': httpStub,
     './uuid': dataUrl('export const newUuid = () => "fixed-uuid";'),
     './frontendMode': new URL('../src/services/frontendMode.ts', import.meta.url).href,
+    './portalIds': new URL('../src/services/portalIds.ts', import.meta.url).href,
     './mePortalApi': dataUrl(
       ['export interface AuditSummary { requestId: string }', 'export interface AuditDetail extends AuditSummary {}'].join('\n'),
     ),

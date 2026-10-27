@@ -12,7 +12,7 @@ import { orgPortalApi, type User, type Department } from '../../../services/orgP
 import { listDatasources, listMetadata } from '../../../services/data';
 import { useCursorPage } from '../../../composables/useCursorPage';
 import { errorText, formatDate, usePortalTask } from '../../portalUtils';
-import { validateRequired, validateWindow } from './adminSurface';
+import { delegationSubmitError, validateRequired, validateWindow } from './adminSurface';
 const session = useSessionStore();
 /** 委派后端已实现（T17-api 切片）；预览模式继续用合成数据走完整交互。 */
 const delegationReady = delegationApiReady || controlPlaneAvailable;
@@ -140,7 +140,7 @@ async function submit(): Promise<void> {
     ElMessage.success(mutationNotice);
     await load();
   } catch (reason) {
-    if (reason !== 'cancel' && reason !== 'close' && own === editorVersion) validation.value = errorText(reason);
+    if (reason !== 'cancel' && reason !== 'close' && own === editorVersion) validation.value = delegationSubmitError(reason, errorText);
   } finally {
     saving.value = false;
   }

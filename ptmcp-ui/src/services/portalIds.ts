@@ -18,9 +18,11 @@ export function normalizeOrgResponse(path: string, value: unknown): unknown {
       ? ['id', 'deptId']
       : path.startsWith('/api/v1/admin/roles')
         ? ['id']
-        : path.startsWith('/api/v1/admin/acl/grants')
-          ? ['id', 'subjectId', 'resourceId', 'resourceGeneration']
-          : [];
+        : path.startsWith('/api/v1/admin/delegations')
+          ? ['id', 'userId', 'departmentRootId', 'resourceId', 'resourceGeneration', 'version']
+          : path.startsWith('/api/v1/admin/acl/grants')
+            ? ['id', 'subjectId', 'resourceId', 'resourceGeneration']
+            : [];
   const normalize = (item: unknown): unknown => {
     const source = record(item);
     if (!source) return item;
@@ -29,6 +31,11 @@ export function normalizeOrgResponse(path: string, value: unknown): unknown {
     return result;
   };
   if (Array.isArray(value)) return value.map(normalize);
+  if (path.startsWith('/api/v1/admin/delegations')) {
+    const page = record(value);
+    if (page && Array.isArray(page.items)) return { ...page, items: page.items.map(normalize) };
+    return normalize(value);
+  }
   if (path.startsWith('/api/v1/admin/acl/preview')) {
     const response = record(value);
     if (!response || !Array.isArray(response.decisions)) return value;

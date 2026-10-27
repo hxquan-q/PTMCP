@@ -79,3 +79,13 @@ export function validateAllowedScopes(scopes: string[]): string | null {
 export function localOnlyReason(resource: string): string {
   return `${resource}管理服务尚未接入。记录暂不可读取，提交暂不可用；可预览页面字段和本地校验。`;
 }
+
+/**
+ * 委派提交失败的用户可读原因。DUPLICATE_GRANT（409）是"同范围生效中委派已存在"，
+ * 不是版本冲突；沿用通用 409 文案会误导管理员去"合并版本"。未识别错误原样透传。
+ */
+export function delegationSubmitError(reason: unknown, fallback: (error: unknown) => string): string {
+  if (reason && typeof reason === 'object' && 'code' in reason && (reason as { code?: unknown }).code === 'DUPLICATE_GRANT')
+    return '已存在生效中的同范围委派（DUPLICATE_GRANT）。请调整范围、期限，或先撤销旧委派后再创建。';
+  return fallback(reason);
+}
