@@ -94,3 +94,14 @@ test('用户删除入口与后端端点存在性一致：真实模式禁用，�
   // 防回归：passwordApiReady（S7）不得顺带解锁删除（UserAdminController 无 DELETE）。
   assert.equal(passwordApiReady, true);
 });
+
+test('预览合成会话声明 platformAdmin，跨范围角色写门控不隐藏预览交互', async () => {
+  const server = createPreviewServer();
+  const raw = await (await server('/api/v1/session/me', {})).json();
+  const me = raw.data ?? raw;
+  assert.equal(me.platformAdmin, true);
+  const { roleWriteGate } = await import('../src/views/admin/integrations/adminSurface.ts');
+  const gate = roleWriteGate({ can: () => true, platformAdmin: me.platformAdmin });
+  assert.equal(gate.canWrite, true);
+  assert.equal(gate.hint, null);
+});

@@ -380,6 +380,7 @@ export function createPreviewServer() {
         department: { id: '1', name: '演示总部' },
         roles: [{ id: '1', name: '演示管理员' }],
         permissions,
+        platformAdmin: true,
         managedScopes: ['PREVIEW_ONLY'],
         expiresAt: '2099-01-01T00:00:00Z',
       });
