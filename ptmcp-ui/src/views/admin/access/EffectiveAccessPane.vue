@@ -29,10 +29,21 @@ watch(() => [props.userId, props.platformId, props.datasourceId, props.ready], r
         label="资源 ID"
         min-width="130" /><ElTableColumn label="META / READ" min-width="160"
         ><template #default="{ row }">{{ row.meta ? '允许' : '拒绝' }} / {{ row.read ? '允许' : '拒绝' }}</template></ElTableColumn
-      ><ElTableColumn prop="sourceGrantIds" label="来源规则" min-width="150" /><ElTableColumn
-        prop="reasonCodes"
-        label="原因码"
-        min-width="170" /><template #empty>
+      ><ElTableColumn label="来源规则" min-width="150"
+        ><template #default="{ row }"
+          ><ul v-if="row.sourceGrantIds?.length" class="evidence-items">
+            <li v-for="id in row.sourceGrantIds" :key="id">{{ id }}</li>
+          </ul>
+          <span v-else>无来源规则</span></template
+        ></ElTableColumn
+      ><ElTableColumn label="原因码" min-width="170"
+        ><template #default="{ row }"
+          ><ul v-if="row.reasonCodes?.length" class="evidence-items">
+            <li v-for="code in row.reasonCodes" :key="code">{{ code }}</li>
+          </ul>
+          <span v-else>未提供</span></template
+        ></ElTableColumn
+      ><template #empty>
         <PageState
           title="当前条件下有效权限为零"
           description="主体暂无命中授权或平台范围未覆盖该数据源；授予 META/READ 后重读即可看到变化。" /></template></ElTable
@@ -40,6 +51,11 @@ watch(() => [props.userId, props.platformId, props.datasourceId, props.ready], r
   </section>
 </template>
 <style scoped>
+.evidence-items {
+  margin: 0;
+  padding-left: 18px;
+  overflow-wrap: anywhere;
+}
 .effective-pane {
   margin-top: 24px;
   padding: 22px;

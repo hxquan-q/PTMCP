@@ -276,6 +276,7 @@ export function createPreviewServer() {
       version: '1',
     },
   };
+  const sensitiveAccess: Record<string, Row[]> = {};
   let serial = 100;
   let signedIn = true;
   const response = (data: unknown, status = 200) =>
@@ -434,6 +435,10 @@ export function createPreviewServer() {
       }
       return response(scope[id] ?? current);
     }
+    if (resource === 'audit' && action === 'sensitive-access' && method === 'GET') {
+      if (!tables.audit.some((row) => row.requestId === id)) return fail(404, 'NOT_FOUND');
+      return response(sensitiveAccess[id] ?? []);
+    }
     if (resource === 'audit' && action === 'decrypt') {
       if (!tables.audit.some((row) => row.requestId === id)) return fail(404, 'NOT_FOUND');
       if (
@@ -444,6 +449,13 @@ export function createPreviewServer() {
         body.fields.some((field) => !['sqlRaw', 'sqlFinal'].includes(String(field)))
       )
         return fail(400, 'INVALID_REQUEST');
+      (sensitiveAccess[id] ??= []).push({
+        id: String(++serial),
+        operatorId: '1',
+        reason: body.reason,
+        fields: body.fields,
+        createdAt: new Date().toISOString(),
+      });
       return response({
         ...Object.fromEntries(
           (body.fields as string[]).map((field) => [field, 'SELECT id FROM synthetic_orders WHERE id = 42 /* synthetic preview only */']),

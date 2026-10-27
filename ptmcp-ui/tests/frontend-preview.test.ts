@@ -45,6 +45,23 @@ test('preview respects abort and keeps masked audit separate from temporary plai
   assert.ok(revealed.expiresAt);
 });
 
+test('预览明文访问记录返回数组、仅记录元数据，实例之间隔离', async () => {
+  const server = createPreviewServer();
+  const path = '/api/v1/admin/audit/preview-request-1';
+  assert.deepEqual(await (await server(`${path}/sensitive-access`)).json(), []);
+  await server(`${path}/decrypt`, { method: 'POST', body: { reason: '前端合成数据交互验证说明', fields: ['sqlRaw'] } });
+  const trail = await (await server(`${path}/sensitive-access`)).json();
+  assert.equal(trail.length, 1);
+  assert.deepEqual(trail[0].fields, ['sqlRaw']);
+  assert.equal(trail[0].reason, '前端合成数据交互验证说明');
+  assert.equal(trail[0].sqlRaw, undefined);
+  assert.equal(trail[0].sqlFinal, undefined);
+  assert.ok(trail[0].operatorId);
+  assert.ok(trail[0].createdAt);
+  assert.deepEqual(await (await createPreviewServer()(`${path}/sensitive-access`)).json(), []);
+  assert.equal((await server('/api/v1/admin/audit/missing/sensitive-access')).status, 404);
+});
+
 test('preview job and dictionary writes follow the actual frontend DTO and ETag contracts', async () => {
   const server = createPreviewServer();
   const job = await (await server('/api/v1/admin/datasources/1/test', { method: 'POST' })).json();

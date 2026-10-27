@@ -2,6 +2,8 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import PageHeader from '../../../components/common/PageHeader.vue';
+import EvidenceFields from '../../../components/common/EvidenceFields.vue';
+import StatusBadge from '../../../components/common/StatusBadge.vue';
 import { useSessionStore } from '../../../stores/session';
 import { controlPlane, type AdminAuditDetail } from '../../../services/controlPlane';
 import { auditApiReady } from '../../../services/frontendMode';
@@ -50,15 +52,6 @@ const guidance = computed(() =>
         ? '结果被截断，请收窄条件或使用聚合。'
         : '使用 requestId 关联排查，时间均按 Asia/Taipei 展示。',
 );
-watch(
-  requestId,
-  () => {
-    void load();
-    void loadTrail();
-  },
-  { immediate: true, flush: 'sync' },
-);
-
 const trail = ref<{ id: string; operatorId: string; reason: string; fields: string[]; createdAt: string }[]>([]);
 const trailLoading = ref(false);
 const trailError = ref('');
@@ -77,6 +70,14 @@ async function loadTrail(): Promise<void> {
     if (own === trailSequence) trailLoading.value = false;
   }
 }
+watch(
+  requestId,
+  () => {
+    void load();
+    void loadTrail();
+  },
+  { immediate: true, flush: 'sync' },
+);
 </script>
 <template>
   <div class="admin-page">
@@ -94,12 +95,12 @@ async function loadTrail(): Promise<void> {
       <ElCard shadow="never"
         ><div class="heading">
           <h2>{{ item.requestId }}</h2>
-          <ElTag :type="item.result === 'SUCCESS' ? 'success' : 'warning'">{{ item.result }}</ElTag>
+          <StatusBadge domain="execution" :value="item.result" />
         </div>
         <ElDescriptions :column="1" border class="descriptions"
           ><ElDescriptionsItem label="员工 / 平台 / 数据源"
             >{{ item.userId }} / {{ item.platformId ?? '—' }} / {{ item.datasourceId ?? '—' }}</ElDescriptionsItem
-          ><ElDescriptionsItem label="工具 / 判定">{{ item.tool }} / {{ item.verdict }}</ElDescriptionsItem
+          ><ElDescriptionsItem label="工具 / 判定">{{ item.tool }} / <StatusBadge domain="verdict" :value="item.verdict" /></ElDescriptionsItem
           ><ElDescriptionsItem label="开始时间（台北）">{{ formatDate(item.startedAt) }}</ElDescriptionsItem
           ><ElDescriptionsItem label="完成时间（台北）">{{ formatDate(item.completedAt) }}</ElDescriptionsItem
           ><ElDescriptionsItem label="错误码">{{ item.errorCode ?? '—' }}</ElDescriptionsItem></ElDescriptions
@@ -119,9 +120,9 @@ async function loadTrail(): Promise<void> {
           ><ElDescriptionsItem label="截断">{{ item.truncated ? '是' : '否' }}</ElDescriptionsItem></ElDescriptions
         >
         <h3>可见对象</h3>
-        <pre>{{ JSON.stringify(item.resourceRefs, null, 2) }}</pre>
+        <EvidenceFields :value="item.resourceRefs" />
         <h3>使用版本</h3>
-        <pre>{{ JSON.stringify(item.versions, null, 2) }}</pre>
+        <EvidenceFields :value="item.versions" />
       </ElCard>
       <ElCard v-if="session.can('ptmcp:audit:decrypt')" shadow="never">
         <div class="section-heading">

@@ -32,7 +32,11 @@ Updated: 2026-10-27
 
 ## 结果与证据
 
-- 首步状态映射定向回归：首次运行 2 PASS/1 FAIL，未知状态 `toString` 误命中原型；改为 Object.hasOwn，仅识别自身定义状态。修复后及完整门禁待运行。
+- 首步已通过 `.auto/measure.sh`：744 项（前端 78、后端 666），0 失败；自动 `pnpm check` 与 `python scripts/check.py` 通过。提交 204b697 已推送当前分支。
+- 首步状态映射定向回归：首次运行 2 PASS/1 FAIL，未知状态 `toString` 误命中原型；改为 Object.hasOwn，仅识别自身定义状态。
+- 第二步：EvidenceFields 用语义化 dl/ol 递归展示对象、数组、标量与空值，保留未知键；权限预览与审计详情替换裸 JSON。有效资源的来源/原因逐项列表展示。
+- Playwright Chromium 首轮发现审计详情立即 watcher 在 trailSequence 初始化前运行，修复初始化顺序，新增真实 SFC setup 回归。随后发现预览 sensitive-access 被通用详情路由吞掉、返回对象导致 rows.map 失败；补独立预览访问记录数组及实例隔离回归，仅含合成元数据，不存 SQL 明文。
+- 浏览器证据：`.playwright-mcp/sap-refine/` 四页 1440px 截图；首步中文徽章/合成预览标记可见，审计结构化对象 ID/安全版本可见。最终态重验待运行。
 - 自审：展示层分离启停、连接健康、授权判定与执行结局；DENY 使用警示而非系统故障色，UNKNOWN 不推断失败，未知码保留原文，装饰图标 aria-hidden。未改网络/会话/鉴权。
 - 浏览器验证、截图、完整 CI 尚未运行，保持 NOT_RUN。
 

@@ -2,6 +2,7 @@
 import { useAccessWorkspace } from './useAccessWorkspace';
 import type { Grant } from '../../../services/access';
 import EffectiveAccessPane from './EffectiveAccessPane.vue';
+import EvidenceFields from '../../../components/common/EvidenceFields.vue';
 
 const {
   canList,
@@ -255,7 +256,10 @@ function date(value: string | null) {
             <p class="help-text">
               计算于 {{ date(preview.evaluatedAt) }}<span v-if="preview.nextBoundaryAt"> · 下一时间边界 {{ date(preview.nextBoundaryAt) }}</span>
             </p>
-            <pre v-if="preview.versions" class="help-text">使用版本：{{ JSON.stringify(preview.versions, null, 2) }}</pre>
+            <section v-if="preview.versions" class="version-evidence" aria-label="使用版本">
+              <h3>使用版本</h3>
+              <EvidenceFields :value="preview.versions" />
+            </section>
             <p v-else class="help-text">当前预览接口尚未返回完整版本证据，待后端补齐。</p>
           </div>
         </section>
