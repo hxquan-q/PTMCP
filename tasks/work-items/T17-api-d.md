@@ -223,3 +223,9 @@ org 变更操作日志（702895f）：OrgStore.writeOperationLog 共享 helper�
 UUID request_id，masked payload 调用方构造）+updateUser 事务内写 USER_UPDATE 轨迹。显式
 用例（改名后 USER_UPDATE 行 after 含新名）。教训：改 persistence 后测试跑旧类（target
 过期）——两次失败假象同根因，必须 install。departments/roles 接线为下一切片。
+
+departments/roles 操作日志接线（02cb5b6）：OrgStore 全部 mutation（部门
+CREATE/UPDATE/MOVE/DELETE、角色 CREATE/UPDATE/DELETE、用户 CREATE）事务内写
+admin_operation_log——DEPARTMENT_MOVE 用 descendantsMoved 计数 payload（树调整语义）。
+persistence+admin 61/61。org 全部 mutation 的审计轨迹闭环，OperationsView 可读全部新
+action。
