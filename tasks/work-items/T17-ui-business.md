@@ -143,6 +143,8 @@ Updated: 2026-10-26
 - 连续失败触发 `LOGIN_LOCKED` → 429 + 明确锁定提示，验证通过（截图 `real-p01-locked.png`）；等待锁窗口（10 分钟）后正确密码 → 200，会话轮换：`PTMCP_ADMIN_SESSION`（HttpOnly）写入、`PRESESSION` 清除、`me` 200、真实数据源列表 200。
 - 退出 → `logout` 200 回登录页；localStorage/sessionStorage 零凭证键；全程 0 pageerror。证据：`.local/run/real-p01-login.py` 输出与 `.playwright-mcp/sap-refine/real-p01-*.png`。
 - P-01 剩余：改密后全凭证撤销流、离页清密细节、锁定倒计时等待提示；仍按规格第20节逐项补齐。
+- P-06 首批（2026-10-28，真实模式）：列表 200；新建用户（UserWrite 五字段）→ 启用行；编辑改名 PUT 200；待后端扩展字段（邮箱/电话/备注/初始密码）真实模式禁用且分组可见。密码重置（S7）：无身份账号用户 → 404 `资源不存在或当前不可见`（档案≠账号边界，截图）；admin（有身份行）→ PUT 204，新密码立即可登录控制台（跨库身份写闭环），再重置回原密码并验证原凭据恢复；全程凭据零输出。残留 qa-p6-* 已停用。
+- 待查观察：登录后用户页 `admin/departments`/`admin/roles` 各出现一次 401（会话轮换竞态候选，目录下拉可能空）；后端无用户 DELETE 端点与前端按钮边界一致性待确认。
 - P-02/P-03 首批（2026-10-28，真实模式，Dev-Linux 后端）：列表 200；创建 DRAFT 源 201 → 详情凭据只显“已配置”、密文全程不渲染；内联改名保存成功（版本化 PUT）；测试连接 202 → 跳转任务页 GET 200 且目标库不存在时任务呈 FAILED 终态（截图 `real-p02-job-failed.png`，未宣称部分同步可用）；删除 → 列表回跳，已删详情 404 呈 `RESOURCE_NOT_FOUND` 恢复态（截图 `real-p02-deleted-404.png`）。0 pageerror。验收脚本 `.local/run/real-p02-datasource.py`（自建自删，隔离 dev 库，凭据零输出）；API 诊断另证 create 201/detail 200（响应仅 `credentialConfigured`，无 `credential` 键）/delete 200/get-after-delete 404。残留 qa-p2-* 已清理。
 
 仓库/分支：`C:/Users/xquan/Desktop/Datachat-mcp`，`xquan/feat-backend`。仅本地提交/集成，无推送、发布或生产操作。`.local` 隔离配置/工具、浏览器截图与测试日志已保留（根目录日志移入 `.local/evidence-logs/`）；`DESIGN.md`、`PRODUCT.md`、`docs/frontend/design/`、`.impeccable/` 与 T17 工作项纳入设计/文档提交，不进入前端业务代码提交。凭证文件仅本地 0600，不入仓。
