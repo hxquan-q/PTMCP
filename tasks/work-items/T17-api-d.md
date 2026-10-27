@@ -229,3 +229,8 @@ CREATE/UPDATE/MOVE/DELETE、角色 CREATE/UPDATE/DELETE、用户 CREATE）事务
 admin_operation_log——DEPARTMENT_MOVE 用 descendantsMoved 计数 payload（树调整语义）。
 persistence+admin 61/61。org 全部 mutation 的审计轨迹闭环，OperationsView 可读全部新
 action。
+
+MCP 三工具真实栈覆盖（走查记录）：list_databases_and_tables（catalog-only PAT 授权内
+success）；get_table_schema（catalog PAT → TOKEN_INVALID——scope 分层第二维度：看结构需
+mcp:schema 级授权）；execute_readonly_sql（前轮已验）。三工具在真实栈+TLS 执行段全部验证，
+scope 最小化三层（catalog/schema/query）边界实证。
