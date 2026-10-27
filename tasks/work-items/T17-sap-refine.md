@@ -30,6 +30,13 @@ Updated: 2026-10-27
 
 每片运行 `.auto/measure.sh`（契约与后端测试）及自动 `.auto/checks.sh`（pnpm check、仓库检查）。最终还需 `pnpm --dir ptmcp-ui test:contracts`、项目环境 `python scripts/check.py --all`，真实浏览器检查 18 组页面正常/预览、桌面/窄屏、键盘及错误路径，记录截图/日志。测试数字不替代 UI 验收；新增测试仅防真实回归。
 
+## 结果与证据（更新于本轮末尾）
+
+- 全站走查：29 个预览入口 × 1440/390 共 58 次导航，页面横向溢出 0；专用导航序列（404→/、/→login 等）重复 9 次无 console/pageerror。历史上发现并修复：用户 fieldset 残留闭合标签、模板属性残留泄漏原始文本、预览 slow 场景下窄屏选择器被裁剪。
+- 路由：已登录访问 /login 由返回 '/'（占位视图）改为首个有权限入口；home 分支改返回定位对象。偶发 vue-router v5 开发期诊断 R0003（Location "//"）仅在预览模式长序列导航中出现，隔离复现 9 次全部干净；已记录，未在生产构建路径（prod 剔除诊断）。
+- 完整 CI：`python scripts/check.py` PASS；`bash .auto/measure.sh` 连续多轮 PASS（后端 666 + 前端 95，0 失败）。`python scripts/check.py --all` 两次在内部 Maven `validate` 180 秒工具超时处失败（timeout 由质量脚本自设，非测试/构建失败；期间无并发占用），本轮未取得 --all 绿色证据，按口径记为 NOT_VERIFIED，不得以此宣称完整 CI 通过。
+- 18 组页面的规格级完成定义（逐页网络证据、409、键盘、人工接受）仍待按 [T17-ui-business](T17-ui-business.md) 口径补齐；本轮工程收敛不替代业务验收。
+
 ## 结果与证据
 
 - 首步已通过 `.auto/measure.sh`：744 项（前端 78、后端 666），0 失败；自动 `pnpm check` 与 `python scripts/check.py` 通过。提交 204b697 已推送当前分支。

@@ -94,7 +94,7 @@ PAT 创建成功只在一次性弹窗内存中展示完整值；关闭、路由�
 
 个人门户用 `GET /api/v1/me/access-context` 按 `level=PLATFORM/DATASOURCE/NAMESPACE` 逐级初始化选项；DATASOURCE需platformId，NAMESPACE需platformId+datasourceId，各层均支持pageSize/cursor，返回 `data={items,nextCursor,evaluatedAt,versions}`。item由type区分：PLATFORM含id/name/tier/catalogMode，DATASOURCE含id/name/engine，NAMESPACE含id/databaseName/schemaName/displayName。不能调用管理全局列表；上下文按平台Scope/目录语义过滤、不含列，权限或版本变化后重新读取。选择上级变化要清空下级选择及游标，PG databaseName只是命名空间属性/展示分组，不产生CATALOG授权级。
 
-列表默认游标分页，读取 `data.items/nextCursor`。没有 total 时显示“已加载 N 条”，不伪造总页数；筛选、排序、平台或数据源改变即清空 cursor。只允许后端白名单排序字段；发新请求时取消过时请求，并通过请求代次避免旧响应覆盖新筛选。
+列表默认游标分页，读取 `data.items/nextCursor`。没有 total 时显示“已加载 N 条”，不伪造总页数；统一由 `CursorFooter` 呈现计数、加载更多与忙碌锁，无后续游标不显示翻页控件。筛选、排序、平台或数据源改变即清空 cursor。只允许后端白名单排序字段；发新请求时取消过时请求，并通过请求代次避免旧响应覆盖新筛选；游标过期（CURSOR_STALE）统一由 `useCursorPage` 回到首批。
 
 写操作带资源版本/`If-Match`，409 展示“服务端已变化”，保留非敏感编辑草稿并加载差异，用户合并后再提交。不能自动用最新 ETag 覆盖他人变更。PAT、密码、secret 草稿不跨页恢复。
 
@@ -145,6 +145,8 @@ POST 创建/启动任务/撤销/解密按契约发送随机 `Idempotency-Key`，
 ## 9. 可访问性、响应式与安全
 
 目标为核心流程符合 WCAG 2.2 AA：完整键盘访问、可见焦点、输入标签、表格标题和正确语义；错误不只靠颜色表达；正文对比度至少4.5:1，大字3:1。模态框锁定焦点、关闭后回到触发按钮，Esc 不无提示丢弃敏感一次性值。权限树提供展开、选中和半选的可读状态。
+
+空/错状态统一使用 `PageState`（SAP 令牌圆标、role=status、可选重试与主操作）；错误带 `requestId` 时提供一键复制（用户明确触发，失败提示手动复制），复制反馈随上下文切换作废。首批读取失败不重复渲染空表；分页失败保留已有行与游标。字典四层级联选择独立 loading 文案、切换上级清空下级与游标、失败可逐级重试。
 
 1280px 桌面宽度完成全部主流程。窄屏改为主体/资源分步，表格可横向滚动且保留关键身份列，不让固定宽度弹窗越界。异步 loading 使用 aria-busy，任务状态变化适度 aria-live，避免频繁读屏。尊重 reduced-motion，不以动画表达唯一状态。
 
