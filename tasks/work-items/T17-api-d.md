@@ -194,3 +194,7 @@ AC-02 浏览器验证（走查记录）：受控管理员（delegate-walker）�
 SessionUser 接口/store computed/NavigationItem.platformAdminOnly+WorkspaceLayout 过滤——
 受控管理员不再看到点击即 403 的操作日志入口。双 context 浏览器验证：admin
 platformAdmin=True+导航可见；delegate False+导航隐藏+直接访问 403。
+
+UsersView 角色赋权针对性提示（AC-02 UX，ed73bf9）：setRoles 步骤单独 try-catch——
+MANAGEMENT_SCOPE_DENIED 映射针对性文案（所选角色包含委派范围外功能码，联系平台管理员）
+并中止后续步骤；浏览器验证提示正确呈现。
