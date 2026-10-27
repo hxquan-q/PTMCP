@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { mePortalApi, type AuditSummary } from '../../services/mePortalApi';
+import { queryErrorText } from '../../services/queryErrorText';
 import { errorText, formatDate, isAccessError, usePortalTask } from '../portalUtils';
 
 const router = useRouter();
@@ -152,8 +153,14 @@ onMounted(() => {
               ><code>{{ row.sqlMasked || '—' }}</code></template
             ></ElTableColumn
           ><ElTableColumn prop="result" label="结果" width="110" /><ElTableColumn prop="verdict" label="判定" width="120" /><ElTableColumn
-            label="行数"
-            width="90"
+            label="原因"
+            min-width="180"
+            show-overflow-tooltip
+            ><template #default="{ row }"
+              ><span v-if="row.errorCode" :class="{ 'deny-reason': row.verdict === 'DENY' }">{{ queryErrorText(row.errorCode) }}</span
+              ><span v-else>—</span></template
+            ></ElTableColumn
+          ><ElTableColumn label="行数" width="90"
             ><template #default="{ row }"
               >{{ row.rowsReturned ?? '—' }}<ElTag v-if="row.truncated" size="small" type="warning" class="truncated">已截断</ElTag></template
             ></ElTableColumn
@@ -177,6 +184,9 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.deny-reason {
+  color: var(--el-color-danger);
+}
 .page-heading {
   margin-bottom: 24px;
 }

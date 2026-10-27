@@ -19,6 +19,7 @@ export async function mountHistoryPage(list) {
     'vue-router': dataUrl('export const useRouter=()=>({push(){}});'),
     'element-plus': dataUrl('export const ElMessage={warning(){}};'),
     '../../services/mePortalApi': dataUrl(`${prefix} export const mePortalApi={history:{list:(...args)=>f.list(...args)}};`),
+    '../../services/queryErrorText': dataUrl('export const queryErrorText=(code)=>code;'),
     '../portalUtils': dataUrl(stripTypeScriptTypes(utils, { mode: 'transform' })),
   };
   const { descriptor } = parse(await readFile(new URL('../../src/views/me/HistoryView.vue', import.meta.url), 'utf8'));
