@@ -1171,15 +1171,44 @@ class AdminApiTest {
                 assertTrue(after.contains("轨迹用户改"), "after payload missing new name");
             }
         }
+    }
+
+    @Test
+    void departmentUpdateWritesOperationsTrail() throws Exception {
+        long deptId = createDepartment("改名前部");
+        int version =
+                (int)
+                        readLong(
+                                mockMvc.perform(
+                                                get("/api/v1/admin/departments/" + deptId)
+                                                        .header("X-Test-User-Id", ADMIN_ID)
+                                                        .header("X-Test-Platform-Admin", "true"))
+                                        .andExpect(status().isOk())
+                                        .andReturn()
+                                        .getResponse()
+                                        .getContentAsString(),
+                                "version");
+
+        mockMvc.perform(
+                        put("/api/v1/admin/departments/" + deptId)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", String.valueOf(version))
+                                .contentType("application/json")
+                                .content("{\"name\":\"改名后部\",\"enabled\":true}"))
+                .andExpect(status().isOk());
+
         try (Connection connection = connect();
-                PreparedStatement dump =
+                PreparedStatement log =
                         connection.prepareStatement(
-                                "SELECT action, aggregate_id FROM admin_operation_log ORDER BY id")) {
-            try (ResultSet result = dump.executeQuery()) {
-                while (result.next()) {
-                    System.out.println(
-                            "TRAIL-DUMP " + result.getString(1) + " " + result.getLong(2));
-                }
+                                "SELECT after_masked FROM admin_operation_log"
+                                        + " WHERE aggregate_type = 'DEPARTMENT'"
+                                        + " AND aggregate_id = ? AND action = 'DEPARTMENT_UPDATE'")) {
+            log.setLong(1, deptId);
+            try (ResultSet result = log.executeQuery()) {
+                assertTrue(result.next(), "DEPARTMENT_UPDATE trail row missing");
+                String after = result.getString(1);
+                assertTrue(after.contains("改名后部"), "after payload missing new name");
             }
         }
     }

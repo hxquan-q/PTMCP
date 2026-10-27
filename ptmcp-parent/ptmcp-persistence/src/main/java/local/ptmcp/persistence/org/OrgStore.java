@@ -126,22 +126,40 @@ public final class OrgStore {
         OrgSql.requireActor(actorId);
         requireVersion(expectedVersion);
         try (Connection connection = OrgSql.configure(primary)) {
-            try (PreparedStatement statement =
-                    OrgSql.statement(
-                            connection,
-                            "UPDATE sys_dept SET dept_name = ?, status = ?, version = version + 1,"
-                                    + " update_time = ? WHERE dept_id = ? AND version = ?"
-                                    + " AND del_flag = '0'")) {
-                statement.setString(1, name);
-                statement.setString(2, enabled ? "0" : "1");
-                statement.setObject(3, OrgSql.nowUtc());
-                statement.setLong(4, id);
-                statement.setLong(5, expectedVersion);
-                if (statement.executeUpdate() != 1) {
-                    throw conflictOrMissing(connection, id);
+            connection.setAutoCommit(false);
+            try {
+                try (PreparedStatement statement =
+                        OrgSql.statement(
+                                connection,
+                                "UPDATE sys_dept SET dept_name = ?, status = ?, version = version + 1,"
+                                        + " update_time = ? WHERE dept_id = ? AND version = ?"
+                                        + " AND del_flag = '0'")) {
+                    statement.setString(1, name);
+                    statement.setString(2, enabled ? "0" : "1");
+                    statement.setObject(3, OrgSql.nowUtc());
+                    statement.setLong(4, id);
+                    statement.setLong(5, expectedVersion);
+                    if (statement.executeUpdate() != 1) {
+                        throw conflictOrMissing(connection, id);
+                    }
                 }
+                writeOperationLog(
+                        connection,
+                        actorId,
+                        "DEPARTMENT_UPDATE",
+                        "DEPARTMENT",
+                        id,
+                        "{\"name\":\"" + name + "\",\"enabled\":" + enabled + "}");
+                connection.commit();
+                return getDepartment(id);
+            } catch (SQLException | RuntimeException failure) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackError) {
+                    failure.addSuppressed(rollbackError);
+                }
+                throw failure;
             }
-            return getDepartment(id);
         } catch (SQLException error) {
             throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }

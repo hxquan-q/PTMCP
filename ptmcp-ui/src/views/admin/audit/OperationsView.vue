@@ -6,6 +6,7 @@ import { controlPlane } from '../../../services/controlPlane';
 import { auditApiReady } from '../../../services/frontendMode';
 import { useCursorPage } from '../../../composables/useCursorPage';
 import { formatDate } from '../../portalUtils';
+import { OPERATION_AGGREGATE_TYPES, operationActionText, operationAggregateText } from '../../../services/operationLabels';
 
 const ready = auditApiReady;
 const filter = reactive({ action: '', aggregateType: '', actorId: '' });
@@ -50,10 +51,7 @@ onMounted(() => {
         </ElFormItem>
         <ElFormItem label="聚合类型">
           <ElSelect v-model="filter.aggregateType" clearable placeholder="全部类型">
-            <ElOption label="委派" value="ADMIN_DELEGATION" />
-            <ElOption label="平台" value="PLATFORM" />
-            <ElOption label="客户端" value="OAUTH_CLIENT" />
-            <ElOption label="用户" value="USER" />
+            <ElOption v-for="type in OPERATION_AGGREGATE_TYPES" :key="type" :label="operationAggregateText(type)" :value="type" />
           </ElSelect>
         </ElFormItem>
         <ElFormItem label="操作者 ID">
@@ -76,9 +74,13 @@ onMounted(() => {
         <ElTableColumn prop="occurredAt" label="时间" min-width="170"
           ><template #default="{ row }">{{ formatDate(row.occurredAt) }}</template></ElTableColumn
         >
-        <ElTableColumn prop="action" label="动作" min-width="180" />
+        <ElTableColumn prop="action" label="动作" min-width="180"
+          ><template #default="{ row }"
+            ><ElTag size="small" type="info">{{ operationActionText(row.action) }}</ElTag> <span class="action-code">{{ row.action }}</span></template
+          ></ElTableColumn
+        >
         <ElTableColumn label="聚合" min-width="200"
-          ><template #default="{ row }">{{ row.aggregateType }}:{{ row.aggregateId }}</template></ElTableColumn
+          ><template #default="{ row }">{{ operationAggregateText(row.aggregateType) }}:{{ row.aggregateId }}</template></ElTableColumn
         >
         <ElTableColumn prop="actorId" label="操作者" width="100" />
         <ElTableColumn label="变更内容" min-width="120"
@@ -115,6 +117,12 @@ onMounted(() => {
   margin: 0;
   flex: 1 1 200px;
   min-width: 0;
+}
+.action-code {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--ptmcp-ink-muted, #6b7280);
+  overflow-wrap: anywhere;
 }
 .payload {
   white-space: pre-wrap;
