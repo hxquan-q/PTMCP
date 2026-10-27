@@ -202,3 +202,7 @@ MANAGEMENT_SCOPE_DENIED 映射针对性文案（所选角色包含委派范围�
 S7 双存储缺口修复（d909c29）：管理员重置的元库事务补写 sys_user_profile.password_hash
 （admin 会话验证源），与身份库 sys_user.password（OAuth 端）同步——修复用户无法用新密码
 登录 admin 门户的缺口（dev E2E 实证 401）。AdminApiTest 新增 profile hash 断言。
+
+me/history DENY 行可读化（b1439ff）：queryErrorText 前端映射模块（对齐网关
+McpErrorCatalog 文案）+详情页错误码行追加可读括注。浏览器验证：真实 DENY 行
+（SQL_NOT_READONLY）详情页显示「仅允许只读查询语句」+原始码同显+字面值不泄露。
