@@ -198,3 +198,7 @@ platformAdmin=True+导航可见；delegate False+导航隐藏+直接访问 403�
 UsersView 角色赋权针对性提示（AC-02 UX，ed73bf9）：setRoles 步骤单独 try-catch——
 MANAGEMENT_SCOPE_DENIED 映射针对性文案（所选角色包含委派范围外功能码，联系平台管理员）
 并中止后续步骤；浏览器验证提示正确呈现。
+
+S7 双存储缺口修复（d909c29）：管理员重置的元库事务补写 sys_user_profile.password_hash
+（admin 会话验证源），与身份库 sys_user.password（OAuth 端）同步——修复用户无法用新密码
+登录 admin 门户的缺口（dev E2E 实证 401）。AdminApiTest 新增 profile hash 断言。
