@@ -57,8 +57,10 @@ Updated: 2026-10-27
 - 浏览器：慢速预览下字典 1440/390 级联 loading 文案、选项、无重试误报通过；接入页卡片选择、占位符高亮、PAT 链接通过；0console/pageerror。截图发现窄屏选择器被裁剪（flex 未换行）并修复；另发现此前一次标记编辑残留属性导致原始文本泄漏，已修复并复验。记录 `.local/run/sap-refine-portal.jsonl`，截图同目录。完整实验待执行。
 - 公共分页迁移：Datasources/Metadata 列表及元数据源目录全部改用 useCursorPage/usePortalTask，删除两页手写 AbortController/generation；保留权限为空、SCHEMA_STALE 待同步告警（错误区隐藏避免重复）、401/403/404 清空行、创建对话框幂等与敏感清理语义；CURSOR_STALE 回首页由共享组合函数承担（已有回归）。数据管理现有 SFC 生命周期测试全部通过。
 - 迁移浏览器：1440/390 两页正常/慢速加载、源切换、底栏计数通过，0console/pageerror，截图 `.playwright-mcp/sap-refine/cursor-*.png`，记录 `.local/run/sap-refine-cursor.jsonl`。
+- 字段边界：Users 创建/编辑表单用 fieldset 分组“组织档案字段”（接口支持）与“待后端扩展字段（仅前端预览可编辑）”，说明 UserWrite DTO 范围；部门/角色页保留待接入说明。预览工作台/AS 预览 h1 对齐 30px/600。
+- 边界浏览器：1440/390 用户对话框分组、预览态邮箱可编辑、预览页标题字号通过；0console/pageerror；截图已读取确认 AS 页 30px。记录 `.local/run/sap-refine-boundary.jsonl`，截图同目录。中途一次 fieldset 编辑残留闭合标签导致构建失败，已修复后全绿。
 - 浏览器验证、截图、完整 CI 尚未运行，保持 NOT_RUN。
 
 ## 交接
 
-当前焦点：字典/接入 1ab5cd7 已推送、761 项通过。Datasources/Metadata 公共游标迁移已通过定向与浏览器检查，待完整实验；组织字段分组、独立页头部对齐、business-coverage 同步与完整 CI/18 组证据仍待实施。全部目标仍在进行，未宣称完成或人工接受。后续逐项更新上表证据；明确阻塞才暂停目标。
+当前焦点：游标迁移 49161cb 已推送、761 项通过。字段分组与预览页标题已通过定向及浏览器检查，待完整实验；business-coverage/规格同步与完整 CI/18 组证据仍待实施。全部目标仍在进行，未宣称完成或人工接受。后续逐项更新上表证据；明确阻塞才暂停目标。

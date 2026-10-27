@@ -78,7 +78,8 @@ const groups = [
   padding: 84px 24px 60px;
 }
 .preview-pages h1 {
-  font-size: 28px;
+  font-size: 30px;
+  font-weight: 600;
   margin: 0 0 12px;
   color: var(--ptmcp-heading);
 }

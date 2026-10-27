@@ -426,17 +426,20 @@ onMounted(async () => {
         <ElFormItem label="状态"
           ><ElSwitch v-model="form.enabled" :disabled="!session.can('ptmcp:user:status')" active-text="启用" inactive-text="停用"
         /></ElFormItem>
-        <ElFormItem label="邮箱（最多50字符）"
-          ><ElInput v-model="profile.email" :disabled="!frontendPreview" maxlength="50" type="email"
-        /></ElFormItem>
-        <ElFormItem label="电话（最多11字符）"><ElInput v-model="profile.phoneNumber" :disabled="!frontendPreview" maxlength="11" /></ElFormItem>
-        <ElFormItem label="备注（最多500字符）"
-          ><ElInput v-model="profile.remark" :disabled="!frontendPreview" type="textarea" maxlength="500" :rows="3"
-        /></ElFormItem>
-        <ElFormItem v-if="!editing" label="初始密码（12～64字符 / UTF-8≤72字节）" :required="frontendPreview"
-          ><ElInput v-model="profile.initialPassword" type="password" autocomplete="new-password" :disabled="!frontendPreview"
-        /></ElFormItem>
-        <p v-if="!frontendPreview" class="helper">邮箱、电话、备注及初始密码接口字段待接入；当前只保存已支持的组织档案。</p>
+        <fieldset class="field-group field-group--preview">
+          <legend>待后端扩展字段（仅前端预览可编辑）</legend>
+          <p class="helper">邮箱、电话、备注及初始密码暂不在 UserWrite DTO 中；正常模式下只读，预览中编辑不会提交为真实账号能力。</p>
+          <ElFormItem label="邮箱（最多50字符）"
+            ><ElInput v-model="profile.email" :disabled="!frontendPreview" maxlength="50" type="email"
+          /></ElFormItem>
+          <ElFormItem label="电话（最多11字符）"><ElInput v-model="profile.phoneNumber" :disabled="!frontendPreview" maxlength="11" /></ElFormItem>
+          <ElFormItem label="备注（最多500字符）"
+            ><ElInput v-model="profile.remark" :disabled="!frontendPreview" type="textarea" maxlength="500" :rows="3"
+          /></ElFormItem>
+          <ElFormItem v-if="!editing" label="初始密码（12～64字符 / UTF-8≤72字节）" :required="frontendPreview"
+            ><ElInput v-model="profile.initialPassword" type="password" autocomplete="new-password" :disabled="!frontendPreview"
+          /></ElFormItem>
+        </fieldset>
       </ElForm>
       <template #footer
         ><ElButton @click="dialogVisible = false">取消</ElButton
@@ -455,6 +458,22 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.field-group {
+  margin: 16px 0 0;
+  padding: 16px;
+  border: 1px solid var(--ptmcp-border);
+  border-radius: 4px;
+}
+.field-group--preview {
+  border-style: dashed;
+  background: var(--ptmcp-chrome);
+}
+.field-group legend {
+  padding: 0 6px;
+  color: var(--ptmcp-text);
+  font-size: 13px;
+  font-weight: 600;
+}
 .filters,
 .form-grid {
   display: flex;

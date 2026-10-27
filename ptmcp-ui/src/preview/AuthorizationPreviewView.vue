@@ -62,7 +62,8 @@ function decide(allowed: boolean): void {
   padding: 96px 20px 60px;
 }
 h1 {
-  font-size: 24px;
+  font-size: 30px;
+  font-weight: 600;
   margin: 0 0 20px;
   color: var(--ptmcp-heading);
 }
