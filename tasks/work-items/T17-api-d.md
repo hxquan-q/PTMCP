@@ -189,3 +189,8 @@ AC-02 浏览器验证（走查记录）：受控管理员（delegate-walker）�
 越权角色（携 ptmcp:audit:decrypt 码）保存→403 拒绝消息正确呈现（『没有执行此操作的权限』）
 ——AC-02 UI 侧核心断言通过。narrow 角色赋权 200 由 AdminApiTest 覆盖；浏览器多选下拉二次
 选择时序留待完善（脚本问题非产品缺陷）。截图 e2e-ac02-broad-denied.png。
+
+操作日志导航平台管理员一致性修复（cf19b4a）：MeView +platformAdmin（session 既有值）+
+SessionUser 接口/store computed/NavigationItem.platformAdminOnly+WorkspaceLayout 过滤——
+受控管理员不再看到点击即 403 的操作日志入口。双 context 浏览器验证：admin
+platformAdmin=True+导航可见；delegate False+导航隐藏+直接访问 403。
