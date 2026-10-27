@@ -210,3 +210,7 @@ McpErrorCatalog 文案）+详情页错误码行追加可读括注。浏览器验
 me/history 列表 DENY 行可读化（0d5c631）：列表加「原因」列（queryErrorText 可读文本，
 DENY 行红色高亮）——此前列表无错误码列，用户须点进详情才知道被拒原因。浏览器验证：DENY
 行显示「仅允许只读查询语句」。教训：视图新增 import 必须同步 mount helper 的 urls 映射。
+
+PAT scope 边界 E2E（走查记录）：受控管理员 catalog-only PAT 查询→TOKEN_INVALID（缺
+mcp:query 授权范围）；full-scope PAT 查询 200 success——scope 最小化边界在真实栈（gateway
+启用+TLS 执行段）验证。注：python cookiejar 会话多步间失效会映射 400 假阳性，curl 实证为准。
