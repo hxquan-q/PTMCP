@@ -109,3 +109,18 @@ test('委派响应标识规范化：数字id/版本转字符串，撤销查找�
   assert.equal(single.version, '4');
   assert.equal(row.resourceType, 'DATASOURCE');
 });
+
+test('平台与客户端响应标识规范化：数字id/版本转字符串，删除查找不再失配', async () => {
+  const { normalizeOrgResponse } = await import('../src/services/portalIds.ts');
+  const platforms = normalizeOrgResponse('/api/v1/admin/platforms', {
+    items: [{ id: 12, code: 'p', version: 3, scopeVersion: 1, securityVersion: 2 }],
+    nextCursor: null,
+  });
+  assert.equal(platforms.items[0].id, '12');
+  assert.equal(platforms.items[0].version, '3');
+  const clients = normalizeOrgResponse('/api/v1/admin/clients', [{ id: 7, platformId: 12, clientId: 'c', version: 1 }]);
+  assert.equal(clients[0].id, '7');
+  assert.equal(clients[0].platformId, '12');
+  assert.equal(clients[0].clientId, 'c');
+  assert.ok([clients[0]].some((item) => String(item.id) === String('7')));
+});

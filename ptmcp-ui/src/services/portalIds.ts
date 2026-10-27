@@ -18,11 +18,15 @@ export function normalizeOrgResponse(path: string, value: unknown): unknown {
       ? ['id', 'deptId']
       : path.startsWith('/api/v1/admin/roles')
         ? ['id']
-        : path.startsWith('/api/v1/admin/delegations')
-          ? ['id', 'userId', 'departmentRootId', 'resourceId', 'resourceGeneration', 'version']
-          : path.startsWith('/api/v1/admin/acl/grants')
-            ? ['id', 'subjectId', 'resourceId', 'resourceGeneration']
-            : [];
+        : path.startsWith('/api/v1/admin/clients')
+          ? ['id', 'platformId', 'version']
+          : path.startsWith('/api/v1/admin/platforms')
+            ? ['id', 'version', 'scopeVersion', 'securityVersion']
+            : path.startsWith('/api/v1/admin/delegations')
+              ? ['id', 'userId', 'departmentRootId', 'resourceId', 'resourceGeneration', 'version']
+              : path.startsWith('/api/v1/admin/acl/grants')
+                ? ['id', 'subjectId', 'resourceId', 'resourceGeneration']
+                : [];
   const normalize = (item: unknown): unknown => {
     const source = record(item);
     if (!source) return item;
@@ -31,7 +35,7 @@ export function normalizeOrgResponse(path: string, value: unknown): unknown {
     return result;
   };
   if (Array.isArray(value)) return value.map(normalize);
-  if (path.startsWith('/api/v1/admin/delegations')) {
+  if (path.startsWith('/api/v1/admin/delegations') || path.startsWith('/api/v1/admin/platforms')) {
     const page = record(value);
     if (page && Array.isArray(page.items)) return { ...page, items: page.items.map(normalize) };
     return normalize(value);

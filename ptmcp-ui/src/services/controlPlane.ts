@@ -118,7 +118,9 @@ export const controlPlane = {
     >(`/acl/effective${queryString(filters)}`, { signal }, effectiveReady),
   platforms: {
     list: (filters: Record<string, string | undefined>, signal?: AbortSignal) =>
-      controlRequest<Page<Platform>>(`/platforms${queryString({ ...filters, pageSize: '20' })}`, { signal }, platformReady),
+      controlRequest<Page<Platform>>(`/platforms${queryString({ ...filters, pageSize: '20' })}`, { signal }, platformReady).then(
+        (page) => normalizeOrgResponse('/api/v1/admin/platforms', page) as Page<Platform>,
+      ),
     get: (id: string, signal?: AbortSignal) => controlRequest<Platform>(`/platforms/${encodeURIComponent(id)}`, { signal }, platformReady),
     save: (body: PlatformWrite, row?: Platform) =>
       row
