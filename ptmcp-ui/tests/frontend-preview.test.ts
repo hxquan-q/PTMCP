@@ -85,3 +85,12 @@ test('preview job and dictionary writes follow the actual frontend DTO and ETag 
     412,
   );
 });
+
+test('用户删除入口与后端端点存在性一致：真实模式禁用，预览才可交互', async () => {
+  const { frontendPreview, userDeleteApiReady, passwordApiReady } = await import('../src/services/frontendMode.ts');
+  // Node 环境无 import.meta.env DEV 标记 → 真实模式语义。
+  assert.equal(frontendPreview, false);
+  assert.equal(userDeleteApiReady, false);
+  // 防回归：passwordApiReady（S7）不得顺带解锁删除（UserAdminController 无 DELETE）。
+  assert.equal(passwordApiReady, true);
+});

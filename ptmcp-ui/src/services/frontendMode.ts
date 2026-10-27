@@ -21,3 +21,9 @@ export const clientApiReady = true;
 export const auditApiReady = true;
 /** PUT /users/{id}/password（IdentityPasswordController，安全 epoch + 授权族撤销）。 */
 export const passwordApiReady = true;
+/**
+ * DELETE /api/v1/admin/users/{id} 后端未实现（UserAdminController 无 DELETE；S7 的
+ * passwordApiReady 不能顺带解锁删除）。真实模式删除入口保持禁用，预览可检查交互；
+ * 后续落地方点时把本旗改为 true 并同步契约。
+ */
+export const userDeleteApiReady = frontendPreview;
