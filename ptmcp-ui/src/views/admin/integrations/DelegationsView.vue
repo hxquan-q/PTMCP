@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import CursorFooter from '../../../components/common/CursorFooter.vue';
 import PageHeader from '../../../components/common/PageHeader.vue';
 import PageState from '../../../components/common/PageState.vue';
+import StatusBadge from '../../../components/common/StatusBadge.vue';
 import { useSessionStore } from '../../../stores/session';
 import { controlPlane } from '../../../services/controlPlane';
 import { controlPlaneAvailable, delegationApiReady, mutationNotice } from '../../../services/frontendMode';
@@ -39,12 +40,6 @@ const draft = reactive({
 let alive = true;
 let editorVersion = 0;
 const actionOptions = computed(() => session.user?.permissions.filter((code) => /^ptmcp:(user|department|role|acl):/u.test(code)) ?? []);
-function statusLabel(status: string): string {
-  return { ACTIVE: '生效中', EXPIRED: '已到期', REVOKED: '已撤销' }[status] ?? status;
-}
-function statusType(status: string): 'success' | 'warning' | 'info' {
-  return status === 'ACTIVE' ? 'success' : status === 'EXPIRED' ? 'warning' : 'info';
-}
 function clear(): void {
   editorVersion++;
   dialogVisible.value = false;
@@ -231,9 +226,7 @@ onMounted(() => {
         ><ElTableColumn prop="allowedActions" label="动作" min-width="200" /><ElTableColumn label="有效期（台北）" min-width="260"
           ><template #default="{ row }">{{ formatDate(row.validFrom) }} 至 {{ formatDate(row.validTo) }}</template></ElTableColumn
         ><ElTableColumn prop="status" label="状态" width="100"
-          ><template #default="{ row }"
-            ><ElTag :type="statusType(row.status)" effect="light">{{ statusLabel(row.status) }}</ElTag></template
-          ></ElTableColumn
+          ><template #default="{ row }"><StatusBadge domain="delegation" :value="row.status" /></template></ElTableColumn
         ><ElTableColumn prop="version" label="版本" width="80" /><ElTableColumn label="操作" width="90"
           ><template #default="{ row }"
             ><ElButton

@@ -1,4 +1,4 @@
-export type StatusDomain = 'lifecycle' | 'connection' | 'verdict' | 'execution';
+export type StatusDomain = 'lifecycle' | 'delegation' | 'connection' | 'verdict' | 'execution';
 export type StatusTone = 'success' | 'danger' | 'warning' | 'info';
 export interface StatusPresentation {
   label: string;
@@ -11,6 +11,11 @@ const statuses: Record<StatusDomain, Record<string, StatusPresentation>> = {
     ACTIVE: { label: '启用', tone: 'success', icon: 'check' },
     DISABLED: { label: '停用', tone: 'info', icon: 'close' },
     DRAFT: { label: '草稿', tone: 'info', icon: 'clock' },
+  },
+  delegation: {
+    ACTIVE: { label: '生效中', tone: 'success', icon: 'check' },
+    EXPIRED: { label: '已到期', tone: 'warning', icon: 'clock' },
+    REVOKED: { label: '已撤销', tone: 'info', icon: 'close' },
   },
   connection: {
     HEALTHY: { label: '连接正常', tone: 'success', icon: 'check' },

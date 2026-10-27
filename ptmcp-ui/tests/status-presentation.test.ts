@@ -20,6 +20,16 @@ test('启停与连接状态使用独立语义，不能把启用误报连接正�
   assert.match(statusPresentation('connection', 'ACTIVE').label, /未知状态/);
 });
 
+test('委派生命周期区分到期与撤销，到期为警示色且不复用启停文案', () => {
+  const expired = statusPresentation('delegation', 'EXPIRED');
+  assert.equal(expired.label, '已到期');
+  assert.equal(expired.tone, 'warning');
+  assert.equal(statusPresentation('delegation', 'REVOKED').label, '已撤销');
+  assert.equal(statusPresentation('delegation', 'ACTIVE').label, '生效中');
+  assert.notEqual(expired.label, statusPresentation('lifecycle', 'DISABLED').label);
+  assert.notEqual(statusPresentation('delegation', 'ACTIVE').label, statusPresentation('lifecycle', 'ACTIVE').label);
+});
+
 test('新状态和空值保守展示，保留原码供排障且不继承对象原型', () => {
   assert.deepEqual(statusPresentation('execution', 'FUTURE'), { label: '未知状态（FUTURE）', tone: 'info', icon: 'question' });
   assert.equal(statusPresentation('execution', null).label, '未提供');
