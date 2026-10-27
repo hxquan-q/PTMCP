@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { mePortalApi, type AuditDetail } from '../../services/mePortalApi';
 import { errorText, formatDate, usePortalTask } from '../portalUtils';
+import { queryErrorText } from '../../services/queryErrorText';
 
 const route = useRoute();
 const router = useRouter();
@@ -13,6 +14,7 @@ const requestId = computed(() => (typeof route.params.requestId === 'string' ? r
 const detailTask = usePortalTask(() => {
   item.value = null;
 });
+const readableError = computed(() => queryErrorText(item.value?.errorCode));
 const guidance = computed(() => {
   if (!item.value) return '';
   if (item.value.result === 'UNKNOWN' || item.value.result === 'START' || item.value.errorCode?.includes('TIMEOUT'))
@@ -76,7 +78,9 @@ watch(
       ><ElCard shadow="never" class="portal-card"
         ><template #header>脱敏请求摘要</template>
         <pre class="plain-text">{{ item.sqlMasked || '服务端未提供摘要' }}</pre>
-        <p v-if="item.errorCode" class="error-text">错误码：{{ item.errorCode }}</p>
+        <p v-if="item.errorCode" class="error-text">
+          错误码：{{ item.errorCode }}<span v-if="readableError">（{{ readableError }}）</span>
+        </p>
         <ElAlert type="info" :closable="false" :title="guidance" />
         <p class="page-description">个人门户不提供原始 SQL 解密、结果集下载或自动重试。</p></ElCard
       ><ElCard shadow="never" class="portal-card"
