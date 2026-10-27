@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CursorFooter from '../../components/common/CursorFooter.vue';
 import PageHeader from '../../components/common/PageHeader.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
@@ -118,8 +119,9 @@ onMounted(() => {
 <template>
   <section class="portal-page" aria-labelledby="history-title">
     <PageHeader title-id="history-title" title="我的查询历史" description="仅显示本人脱敏记录。原始 SQL、结果集和下载能力不会在个人门户展示。" />
-    <ElCard shadow="never" class="portal-card">
-      <ElForm class="filters" label-position="top" @submit.prevent="load()">
+    <ElCard shadow="never" class="portal-card ptmcp-table-section">
+      <h2 class="ptmcp-section-title">查询记录</h2>
+      <ElForm class="filters ptmcp-filter-bar" label-position="top" @submit.prevent="load()">
         <ElFormItem label="开始时间（本机时区）"><ElDatePicker v-model="filters.from" type="datetime" /></ElFormItem
         ><ElFormItem label="结束时间（本机时区）"><ElDatePicker v-model="filters.to" type="datetime" /></ElFormItem
         ><ElFormItem label="工具"><ElInput v-model="filters.tool" clearable placeholder="可选" /></ElFormItem
@@ -172,10 +174,8 @@ onMounted(() => {
             ></ElTableColumn
           ></ElTable
         >
-        <div v-if="nextCursor && !loadError" class="load-more"><ElButton :loading="loading" @click="load(true)">加载更多</ElButton></div>
-        <p v-else-if="items.length && !loadError" class="time-note">已显示所选条件下的全部 {{ items.length }} 条记录</p>
-      </div></ElCard
-    >
+        <CursorFooter v-if="!loadError" :count="items.length" :has-more="!!nextCursor" :loading="loading" @more="load(true)" /></div
+    ></ElCard>
   </section>
 </template>
 
@@ -214,10 +214,6 @@ onMounted(() => {
 }
 .truncated {
   margin-left: 4px;
-}
-.load-more {
-  padding-top: 16px;
-  text-align: center;
 }
 .mb-4 {
   margin-bottom: 16px;

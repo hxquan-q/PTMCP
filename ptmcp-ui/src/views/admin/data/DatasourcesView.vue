@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CursorFooter from '../../../components/common/CursorFooter.vue';
 import PageHeader from '../../../components/common/PageHeader.vue';
 import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
@@ -221,7 +222,7 @@ onBeforeUnmount(() => {
       >
     </ElAlert>
 
-    <ElCard class="filter-card" shadow="never">
+    <ElCard class="filter-card ptmcp-filter-bar" shadow="never">
       <ElForm :inline="true" @submit.prevent="applyFilters">
         <ElFormItem label="关键词">
           <ElInput v-model="filters.keyword" clearable placeholder="名称或编码" @keyup.enter="applyFilters" />
@@ -243,7 +244,8 @@ onBeforeUnmount(() => {
       </ElForm>
     </ElCard>
 
-    <ElCard class="table-card" shadow="never" :body-style="{ padding: '0' }">
+    <ElCard class="table-card ptmcp-table-section" shadow="never" :body-style="{ padding: '0' }">
+      <h2 class="ptmcp-section-title">数据源列表</h2>
       <ElTable v-loading="loading" :data="rows" row-key="id" table-layout="auto" empty-text="">
         <ElTableColumn prop="name" label="数据源" min-width="210">
           <template #default="scope">
@@ -293,10 +295,7 @@ onBeforeUnmount(() => {
           </ElEmpty>
         </template>
       </ElTable>
-      <div class="table-footer">
-        <span>已加载 {{ rows.length }} 条</span>
-        <ElButton :disabled="!nextCursor || loading" @click="nextPage">加载下一页</ElButton>
-      </div>
+      <CursorFooter :count="rows.length" :has-more="!!nextCursor" :loading="loading" @more="nextPage" />
     </ElCard>
 
     <ElDialog
@@ -359,15 +358,6 @@ onBeforeUnmount(() => {
 .table-card {
   border-color: var(--ptmcp-border);
   overflow: hidden;
-}
-.table-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 13px 16px;
-  color: var(--ptmcp-text-muted);
-  font-size: 13px;
-  border-top: 1px solid var(--ptmcp-border);
 }
 .link-button {
   display: inline-flex;

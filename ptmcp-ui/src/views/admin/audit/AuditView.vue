@@ -15,6 +15,7 @@ import {
   ElTableColumn,
   ElTag,
 } from 'element-plus';
+import CursorFooter from '../../../components/common/CursorFooter.vue';
 import PageHeader from '../../../components/common/PageHeader.vue';
 import PageState from '../../../components/common/PageState.vue';
 import StatusBadge from '../../../components/common/StatusBadge.vue';
@@ -104,7 +105,7 @@ function clearFilters(): void {
     <ElAlert v-if="directoryError" type="error" :closable="false" :title="directoryError"
       ><ElButton @click="loadDirectories">重试加载选项</ElButton></ElAlert
     >
-    <ElCard class="filter-card" shadow="never">
+    <ElCard class="filter-card ptmcp-filter-bar" shadow="never">
       <div class="filter-heading">
         <div>
           <h2>查询范围</h2>
@@ -148,7 +149,7 @@ function clearFilters(): void {
         ><ElButton type="primary" :disabled="!auditReady || !!dateRange" :loading="loading" @click="query">查询审计</ElButton>
       </div>
     </ElCard>
-    <ElCard class="table-card" shadow="never">
+    <ElCard class="table-card ptmcp-table-section" shadow="never">
       <div class="section-heading">
         <div>
           <h2>调用记录</h2>
@@ -193,7 +194,7 @@ function clearFilters(): void {
           ><PageState :title="loaded ? '当前条件下没有审计记录' : '审计记录尚未读取'" description="可调整时间和筛选条件；未读取不代表没有记录。"
         /></template>
       </ElTable>
-      <ElButton v-if="cursor" :loading="loading" @click="load(true)">加载更多</ElButton>
+      <CursorFooter :count="rows.length" :has-more="!!cursor" :loading="loading" @more="load(true)" />
     </ElCard>
     <ElCard class="legend-card" shadow="never">
       <h2>字段说明</h2>

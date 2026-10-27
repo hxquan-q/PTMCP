@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CursorFooter from '../../components/common/CursorFooter.vue';
 import PageHeader from '../../components/common/PageHeader.vue';
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -61,8 +62,9 @@ onMounted(load);
     <PageHeader title-id="authorizations-title" title="我的授权" description="查看和撤销外部客户端的 OAuth 授权。退出控制台不会自动撤销这些授权。" />
     <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError"
       ><ElButton @click="load()">重新读取授权</ElButton></ElAlert
-    ><ElCard shadow="never" class="portal-card"
-      ><ElSkeleton v-if="loading" :rows="6" animated /><ElEmpty v-else-if="!items.length && !loadError" description="尚无 OAuth 授权"
+    ><ElCard shadow="never" class="portal-card ptmcp-table-section"
+      ><h2 class="ptmcp-section-title">OAuth 授权</h2>
+      <ElSkeleton v-if="loading" :rows="6" animated /><ElEmpty v-else-if="!items.length && !loadError" description="尚无 OAuth 授权"
         ><ElButton type="primary" plain @click="router.push('/me/integrations')">查看接入说明</ElButton></ElEmpty
       ><ElTable v-else-if="items.length" :data="items" stripe row-key="id" aria-label="OAuth 授权列表"
         ><ElTableColumn prop="clientName" label="客户端" min-width="180" /><ElTableColumn
@@ -86,18 +88,14 @@ onMounted(load);
           ></ElTableColumn
         ></ElTable
       >
-      <div v-if="nextCursor" class="load-more"><ElButton link type="primary" @click="load(true)">加载更多</ElButton></div></ElCard
-    >
+      <CursorFooter :count="items.length" :has-more="!!nextCursor" :loading="loading" @more="load(true)"
+    /></ElCard>
   </section>
 </template>
 
 <style scoped>
 .portal-card {
   border-color: var(--ptmcp-border);
-}
-.load-more {
-  padding-top: 16px;
-  text-align: center;
 }
 .mb-4 {
   margin-bottom: 16px;

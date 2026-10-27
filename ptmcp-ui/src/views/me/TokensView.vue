@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CursorFooter from '../../components/common/CursorFooter.vue';
 import PageHeader from '../../components/common/PageHeader.vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -167,8 +168,9 @@ onMounted(async () => {
       <template #actions><ElButton type="primary" @click="openCreate">创建 PAT</ElButton></template>
     </PageHeader>
     <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError" />
-    <ElCard shadow="never" class="portal-card"
-      ><div class="filters">
+    <ElCard shadow="never" class="portal-card ptmcp-table-section"
+      ><h2 class="ptmcp-section-title">个人访问令牌</h2>
+      <div class="filters ptmcp-filter-bar">
         <ElSelect v-model="status" clearable placeholder="全部状态" @change="load(false)"
           ><ElOption label="活跃" value="ACTIVE" /><ElOption label="已撤销" value="REVOKED" /><ElOption label="已过期" value="EXPIRED"
         /></ElSelect>
@@ -200,8 +202,8 @@ onMounted(async () => {
           ></ElTableColumn
         ></ElTable
       >
-      <div v-if="nextCursor" class="load-more"><ElButton link type="primary" @click="load(true)">加载更多</ElButton></div></ElCard
-    >
+      <CursorFooter :count="tokens.length" :has-more="!!nextCursor" :loading="loading" @more="load(true)"
+    /></ElCard>
     <ElDialog v-model="dialogVisible" title="创建 PAT" :before-close="closeCreate" width="min(520px, calc(100vw - 32px))"
       ><ElForm label-position="top" :disabled="saving"
         ><ElFormItem label="名称" required
@@ -261,10 +263,6 @@ onMounted(async () => {
 }
 .scope-tag {
   margin-right: 4px;
-}
-.load-more {
-  padding-top: 16px;
-  text-align: center;
 }
 .wide {
   width: 100%;

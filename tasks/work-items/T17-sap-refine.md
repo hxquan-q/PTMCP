@@ -43,8 +43,10 @@ Updated: 2026-10-27
 - 布局首步：PageHeader 支持 titleId/before/status/actions，标题统一30px/600，无动作不生成空容器；五页数据源列表/详情、任务、元数据列表/详情迁移，删除重复标题和外层padding及父级覆盖。两项真实组件渲染测试保护标题关联、转义和插槽信息保全。pnpm check通过；Playwright 5页×1440/390检查标题字号/字重/ID及横向溢出均通过，console/pageerror 0，记录 `.local/run/sap-refine-headers.jsonl`，截图同目录。
 - 布局第二步：组织三页、权限页、个人门户八页共12个视图迁移公共头部，保留说明/动作/状态/aria-labelledby；清除重复 heading/h1/说明CSS。新增证据组件实际渲染回归覆盖嵌套未知字段、大整数ID、HTML转义、null/0/false/空集合和原型键。
 - 布局第二步定向验证：pnpm test:contracts、pnpm check通过；12页×1440/390 Chromium检查标题30px/600/ID、无页面横向溢出及console/pageerror 0，记录 `.local/run/sap-refine-headers-portal.jsonl`，截图同目录。全量实验待运行。
+- 布局第三步：新增 CursorFooter，首批10列表采用已加载计数/后续游标按钮/忙碌锁；数据源与元数据删除重复底栏CSS。新增显式 ptmcp-filter-bar/ptmcp-table-section（chrome、方角无四周边框、统一label与表格顶底线），补列表标题。运行组件渲染回归保护游标计数与按钮状态，不伪造total。pnpm check与契约测试通过。
+- 第三步浏览器：10页×1440/390通过chrome背景/0圆角/计数/无横向溢出与0console/pageerror检查；首次发现scoped边框圆角覆盖公共样式，使用显式el-card类限定修复后重验。记录 `.local/run/sap-refine-filters.jsonl`，截图同目录；已实际读取数据源桌面截图。
 - 浏览器验证、截图、完整 CI 尚未运行，保持 NOT_RUN。
 
 ## 交接
 
-当前焦点：切片1已实现并通过工程门禁与浏览器专项；布局首步91aa542已推送、748项通过。布局第二步12页已迁移并通过定向检查，待完整实验；统一筛选/表格、独立登录/授权与错误页标题检查仍待执行。全部目标仍在进行，未宣称完成或人工接受。后续逐项更新上表证据；明确阻塞才暂停目标。
+当前焦点：布局第二步26c4173已推送、750项通过；第三步公共筛选/表格/底栏首批10列表已通过定向检查，待完整实验。其余组织列表/平台客户端/权限有效资源和独立登录/授权/错误页统一仍待执行。全部目标仍在进行，未宣称完成或人工接受。后续逐项更新上表证据；明确阻塞才暂停目标。

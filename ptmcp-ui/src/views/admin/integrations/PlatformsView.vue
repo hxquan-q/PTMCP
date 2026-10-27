@@ -15,6 +15,7 @@ import {
   ElTableColumn,
   ElTag,
 } from 'element-plus';
+import CursorFooter from '../../../components/common/CursorFooter.vue';
 import PageHeader from '../../../components/common/PageHeader.vue';
 import PageState from '../../../components/common/PageState.vue';
 import StatusBadge from '../../../components/common/StatusBadge.vue';
@@ -80,7 +81,7 @@ onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearP
         ><ElButton v-if="session.can('ptmcp:platform:create')" type="primary" @click="dialogVisible = true">新建平台</ElButton></template
       >
     </PageHeader>
-    <ElCard class="filter-card" shadow="never">
+    <ElCard class="filter-card ptmcp-filter-bar" shadow="never">
       <div class="filter-row">
         <ElInput v-model="filter.keyword" clearable placeholder="平台名称或 code" aria-label="平台名称或 code" />
         <ElSelect v-model="filter.tier" clearable placeholder="全部 Tier" aria-label="平台 Tier"
@@ -101,7 +102,7 @@ onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearP
         </div>
       </div>
     </ElCard>
-    <ElCard class="table-card" shadow="never">
+    <ElCard class="table-card ptmcp-table-section" shadow="never">
       <div class="section-heading">
         <div>
           <h2>平台目录</h2>
@@ -147,7 +148,7 @@ onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearP
             :description="platformReady ? '可调整筛选、查询或创建平台。' : filterText"
         /></template>
       </ElTable>
-      <ElButton v-if="cursor" :loading="loading" @click="load(true)">加载更多</ElButton>
+      <CursorFooter :count="rows.length" :has-more="!!cursor" :loading="loading" @more="load(true)" />
     </ElCard>
     <ElCard class="guide-card" shadow="never">
       <h2>配置原则</h2>

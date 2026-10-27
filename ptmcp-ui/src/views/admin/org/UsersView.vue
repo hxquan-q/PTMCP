@@ -329,7 +329,7 @@ onMounted(async () => {
       ><template #default><ElButton link type="danger" @click="load">重新加载</ElButton></template></ElAlert
     >
     <ElCard shadow="never" class="portal-card">
-      <div class="filters" role="search">
+      <div class="filters ptmcp-filter-bar" role="search">
         <ElInput v-model="keyword" clearable placeholder="搜索用户名或显示名称" aria-label="搜索用户名或显示名称" @keyup.enter="load" />
         <ElSelect v-model="departmentFilter" clearable placeholder="全部部门" aria-label="部门筛选" @change="load"
           ><ElOption v-for="item in departments" :key="item.id" :label="item.name" :value="item.id"

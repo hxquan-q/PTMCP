@@ -387,6 +387,61 @@ button:focus-visible,
   padding: 6px;
   font-size: 20px;
 }
+:root .el-card.ptmcp-filter-bar,
+:root .ptmcp-filter-bar:not(.el-card) {
+  background: var(--ptmcp-chrome);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.ptmcp-filter-bar > .el-card__body {
+  padding: 20px;
+}
+.ptmcp-filter-bar:not(.el-card) {
+  padding: 20px;
+}
+.ptmcp-filter-bar .el-form--inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px;
+}
+.ptmcp-filter-bar .el-form--inline .el-form-item {
+  flex: 1 1 160px;
+  margin-right: 0;
+}
+.ptmcp-section-title {
+  margin: 0 0 20px;
+  color: var(--ptmcp-heading);
+  font-size: 16px;
+  font-weight: 600;
+}
+.ptmcp-filter-bar .el-form-item {
+  flex-direction: column;
+  align-items: stretch;
+  margin-bottom: 0;
+}
+.ptmcp-filter-bar .el-form-item__label {
+  justify-content: flex-start;
+  float: none;
+  width: auto;
+  height: auto;
+  padding: 0 0 8px;
+  line-height: 1.5;
+}
+.ptmcp-filter-bar .el-form-item__content {
+  min-width: 0;
+  margin-left: 0;
+}
+:root .el-card.ptmcp-table-section {
+  border-width: 1px 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.ptmcp-table-section > .el-card__body {
+  padding-inline: 0;
+}
+
 .workspace-content {
   max-width: 1440px;
   margin: 0 auto;

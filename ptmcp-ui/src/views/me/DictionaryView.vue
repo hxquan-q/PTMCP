@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CursorFooter from '../../components/common/CursorFooter.vue';
 import PageHeader from '../../components/common/PageHeader.vue';
 import { onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
@@ -177,7 +178,7 @@ onMounted(() => {
       description="目录只展示你在当前平台范围内可发现的对象，读取详情仍由服务端再次鉴权。"
     />
     <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError" />
-    <ElCard shadow="never" class="portal-card context-card"
+    <ElCard shadow="never" class="portal-card context-card ptmcp-filter-bar"
       ><div class="filters">
         <ElFormItem label="平台"
           ><ElSelect v-model="platformId" :loading="loadingContext" placeholder="选择平台" class="select"
@@ -204,8 +205,9 @@ onMounted(() => {
         >
       </div></ElCard
     >
-    <ElCard shadow="never" class="portal-card">
-      <div class="filters second">
+    <ElCard shadow="never" class="portal-card ptmcp-table-section">
+      <h2 class="ptmcp-section-title">可见对象</h2>
+      <div class="filters second ptmcp-filter-bar">
         <ElInput v-model="keyword" placeholder="搜索表名或业务说明" clearable class="keyword" @keyup.enter="loadObjects()" /><ElButton
           type="primary"
           plain
@@ -240,7 +242,7 @@ onMounted(() => {
           ></ElTableColumn
         ></ElTable
       >
-      <div v-if="nextCursor" class="load-more"><ElButton link type="primary" @click="loadObjects(true)">加载更多</ElButton></div>
+      <CursorFooter :count="objects.length" :has-more="!!nextCursor" :loading="loading" @more="loadObjects(true)" />
     </ElCard>
   </section>
 </template>
@@ -287,10 +289,6 @@ onMounted(() => {
   display: block;
   margin-top: 4px;
   font-size: 12px;
-}
-.load-more {
-  padding-top: 16px;
-  text-align: center;
 }
 .mb-4 {
   margin-bottom: 16px;

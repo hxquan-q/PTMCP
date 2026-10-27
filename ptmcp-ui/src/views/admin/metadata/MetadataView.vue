@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CursorFooter from '../../../components/common/CursorFooter.vue';
 import PageHeader from '../../../components/common/PageHeader.vue';
 import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -193,7 +194,7 @@ onBeforeUnmount(() => {
   <section class="page-shell" aria-labelledby="metadata-title">
     <PageHeader title-id="metadata-title" title="元数据与业务字典" description="查看已发布快照中的物理结构，并维护纯文本业务说明。" />
     <ElAlert v-if="sourceError" type="error" :closable="false" show-icon class="state-alert">{{ sourceError }}</ElAlert>
-    <ElCard class="filter-card" shadow="never">
+    <ElCard class="filter-card ptmcp-filter-bar" shadow="never">
       <ElForm :inline="true">
         <ElFormItem label="数据源"
           ><ElSelect v-model="datasourceId" filterable :loading="sourceLoading" placeholder="先选择数据源" @change="selectSource"
@@ -226,7 +227,8 @@ onBeforeUnmount(() => {
         >{{ error }}<span v-if="requestId">（请求 ID：{{ requestId }}）</span></span
       ></ElAlert
     >
-    <ElCard shadow="never" class="table-card" :body-style="{ padding: '0' }">
+    <ElCard shadow="never" class="table-card ptmcp-table-section" :body-style="{ padding: '0' }">
+      <h2 class="ptmcp-section-title">元数据对象</h2>
       <ElTable v-loading="loading" :data="rows" row-key="id" empty-text="">
         <ElTableColumn label="对象" min-width="270"
           ><template #default="scope"
@@ -267,10 +269,7 @@ onBeforeUnmount(() => {
             "
         /></template>
       </ElTable>
-      <div class="table-footer">
-        <span>{{ datasourceId ? `已加载 ${rows.length} 条` : '尚未选择数据源' }}</span
-        ><ElButton :disabled="!nextCursor || loading" @click="nextPage">加载下一页</ElButton>
-      </div>
+      <CursorFooter v-if="datasourceId" :count="rows.length" :has-more="!!nextCursor" :loading="loading" @more="nextPage" />
     </ElCard>
     <p class="privacy-note">结构与数据库注释为只读数据；保存业务字典不会执行 DDL。没有活动快照时会显示待同步状态。</p>
   </section>
@@ -298,15 +297,6 @@ onBeforeUnmount(() => {
 .table-card {
   border-color: var(--ptmcp-border);
   overflow: hidden;
-}
-.table-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 13px 16px;
-  color: var(--ptmcp-text-muted);
-  font-size: 13px;
-  border-top: 1px solid var(--ptmcp-border);
 }
 .link-button {
   display: inline-flex;

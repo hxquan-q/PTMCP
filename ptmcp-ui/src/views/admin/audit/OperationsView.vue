@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch, onMounted } from 'vue';
+import CursorFooter from '../../../components/common/CursorFooter.vue';
 import PageHeader from '../../../components/common/PageHeader.vue';
 import PageState from '../../../components/common/PageState.vue';
 import { controlPlane } from '../../../services/controlPlane';
@@ -44,7 +45,7 @@ onMounted(() => {
 <template>
   <div class="admin-page">
     <PageHeader title="操作日志" description="管理面变更轨迹：委派、平台、客户端与身份操作。留痕不可删除。" />
-    <ElCard shadow="never">
+    <ElCard shadow="never" class="ptmcp-filter-bar">
       <ElForm class="filters" label-position="top" @submit.prevent="load()">
         <ElFormItem label="动作">
           <ElInput v-model="filter.action" clearable placeholder="如 DELEGATION_CREATE" />
@@ -67,7 +68,8 @@ onMounted(() => {
         >
       </ElForm>
     </ElCard>
-    <ElCard shadow="never">
+    <ElCard shadow="never" class="ptmcp-table-section">
+      <h2 class="ptmcp-section-title">管理操作日志</h2>
       <ElAlert v-if="error" type="error" :title="error" :closable="false"><ElButton @click="retry">重试</ElButton></ElAlert>
       <ElSkeleton v-if="loading" :rows="6" animated />
       <ElTable v-else :data="rows" aria-label="管理操作日志">
@@ -92,7 +94,7 @@ onMounted(() => {
           ><PageState :title="loaded ? '没有符合条件的操作日志' : '操作日志尚未读取'" description="可调整条件查询；留痕由管理操作自动写入。"
         /></template>
       </ElTable>
-      <ElButton v-if="cursor" :loading="loading" @click="load(true)">加载更多</ElButton>
+      <CursorFooter :count="rows.length" :has-more="!!cursor" :loading="loading" @more="load(true)" />
     </ElCard>
     <ElCard v-if="expanded !== null" shadow="never">
       <template #header><span>变更内容明细</span></template>

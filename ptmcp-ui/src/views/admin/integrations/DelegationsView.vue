@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import CursorFooter from '../../../components/common/CursorFooter.vue';
 import PageHeader from '../../../components/common/PageHeader.vue';
 import PageState from '../../../components/common/PageState.vue';
 import { useSessionStore } from '../../../stores/session';
@@ -186,7 +187,7 @@ onMounted(() => {
     <ElAlert v-if="directoryError" type="error" :title="directoryError" :closable="false"
       ><ElButton @click="loadDirectories">重新加载目录</ElButton></ElAlert
     >
-    <ElCard shadow="never"
+    <ElCard shadow="never" class="ptmcp-filter-bar"
       ><ElForm class="filters" label-position="top" @submit.prevent="load()"
         ><ElFormItem label="管理员"><ElInput v-model="filter.userId" clearable placeholder="管理员 ID" /></ElFormItem
         ><ElFormItem label="状态"
@@ -209,8 +210,9 @@ onMounted(() => {
         ></ElForm
       ></ElCard
     >
-    <ElCard shadow="never"
-      ><ElAlert v-if="error" :title="error" type="error" :closable="false"><ElButton @click="retry">重试</ElButton></ElAlert
+    <ElCard shadow="never" class="ptmcp-table-section"
+      ><h2 class="ptmcp-section-title">委派记录</h2>
+      <ElAlert v-if="error" :title="error" type="error" :closable="false"><ElButton @click="retry">重试</ElButton></ElAlert
       ><ElSkeleton v-if="loading" :rows="5" animated /><ElTable v-else :data="rows" aria-label="委派记录"
         ><ElTableColumn prop="userId" label="管理员" min-width="120" /><ElTableColumn
           prop="departmentRootId"
@@ -238,8 +240,8 @@ onMounted(() => {
           ><PageState
             :title="loaded ? '没有符合条件的委派' : '委派尚未读取'"
             description="可调整条件或新建委派；未读取不代表没有委派。" /></template></ElTable
-      ><ElButton v-if="cursor" :loading="loading" @click="load(true)">加载更多</ElButton></ElCard
-    >
+      ><CursorFooter :count="rows.length" :has-more="!!cursor" :loading="loading" @more="load(true)"
+    /></ElCard>
     <ElAlert
       type="info"
       :closable="false"
