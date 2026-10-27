@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '../../../components/common/PageHeader.vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus';
@@ -353,26 +354,28 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="page-shell" aria-labelledby="detail-title">
-    <div class="page-heading">
-      <div>
-        <ElButton link class="back-link" @click="router.push('/admin/datasources')">← 返回数据源</ElButton>
-        <h1 id="detail-title">{{ datasource?.name || '数据源详情' }}</h1>
-        <p class="subtitle">{{ datasource?.code || '加载中…' }}</p>
-      </div>
-      <div v-if="datasource" class="heading-actions">
-        <ElButton v-if="session.can('ptmcp:datasource:test')" :loading="actionLoading" :disabled="saving || conflictRequired" @click="testConnection"
-          >测试连接</ElButton
-        >
-        <ElButton
-          v-if="session.can('ptmcp:datasource:sync')"
-          type="primary"
-          :loading="actionLoading"
-          :disabled="datasource.status !== 'ACTIVE' || saving || conflictRequired"
-          @click="syncMetadata"
-          >同步元数据</ElButton
-        >
-      </div>
-    </div>
+    <PageHeader title-id="detail-title" :title="datasource?.name || '数据源详情'" :description="datasource?.code || '加载中…'">
+      <template #before><ElButton link class="back-link" @click="router.push('/admin/datasources')">← 返回数据源</ElButton></template>
+      <template #actions>
+        <div v-if="datasource" class="heading-actions">
+          <ElButton
+            v-if="session.can('ptmcp:datasource:test')"
+            :loading="actionLoading"
+            :disabled="saving || conflictRequired"
+            @click="testConnection"
+            >测试连接</ElButton
+          >
+          <ElButton
+            v-if="session.can('ptmcp:datasource:sync')"
+            type="primary"
+            :loading="actionLoading"
+            :disabled="datasource.status !== 'ACTIVE' || saving || conflictRequired"
+            @click="syncMetadata"
+            >同步元数据</ElButton
+          >
+        </div>
+      </template>
+    </PageHeader>
 
     <ElAlert v-if="error" type="error" show-icon :closable="false" class="state-alert"
       ><span
@@ -490,30 +493,9 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.page-shell {
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 26px clamp(16px, 3vw, 40px) 44px;
-}
-.page-heading {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  align-items: flex-end;
-  margin-bottom: 20px;
-}
 .back-link {
   margin-bottom: 16px;
   padding: 0;
-  color: var(--ptmcp-text-muted);
-}
-h1 {
-  margin: 0;
-  color: var(--ptmcp-heading);
-  font-size: clamp(26px, 3vw, 34px);
-}
-.subtitle {
-  margin: 7px 0 0;
   color: var(--ptmcp-text-muted);
 }
 .heading-actions {
@@ -591,10 +573,6 @@ dd {
   overflow-wrap: anywhere;
 }
 @media (max-width: 760px) {
-  .page-heading {
-    align-items: flex-start;
-    flex-direction: column;
-  }
   .heading-actions {
     width: 100%;
   }

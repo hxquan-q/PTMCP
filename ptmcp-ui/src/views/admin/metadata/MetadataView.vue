@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '../../../components/common/PageHeader.vue';
 import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { DataRequestError, listDatasources, listMetadata, type DatasourceRead, type MetadataItem } from '../../../services/data';
@@ -190,12 +191,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="page-shell" aria-labelledby="metadata-title">
-    <div class="page-heading">
-      <div>
-        <h1 id="metadata-title">元数据与业务字典</h1>
-        <p class="subtitle">查看已发布快照中的物理结构，并维护纯文本业务说明。</p>
-      </div>
-    </div>
+    <PageHeader title-id="metadata-title" title="元数据与业务字典" description="查看已发布快照中的物理结构，并维护纯文本业务说明。" />
     <ElAlert v-if="sourceError" type="error" :closable="false" show-icon class="state-alert">{{ sourceError }}</ElAlert>
     <ElCard class="filter-card" shadow="never">
       <ElForm :inline="true">
@@ -281,23 +277,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.page-shell {
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 28px clamp(16px, 3vw, 40px) 44px;
-}
-.page-heading {
-  margin-bottom: 24px;
-}
-h1 {
-  margin: 0;
-  color: var(--ptmcp-heading);
-  font-size: clamp(26px, 3vw, 34px);
-}
-.subtitle {
-  margin: 8px 0 0;
-  color: var(--ptmcp-text-muted);
-}
 .filter-card {
   margin-bottom: 16px;
   border-color: var(--ptmcp-border);
@@ -359,9 +338,6 @@ h1 {
   font-size: 12px;
 }
 @media (max-width: 680px) {
-  .page-shell {
-    padding-inline: 12px;
-  }
   .filter-card :deep(.el-form) {
     display: grid;
     grid-template-columns: 1fr;

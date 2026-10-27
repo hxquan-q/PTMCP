@@ -1,13 +1,17 @@
 <script setup lang="ts">
-withDefaults(defineProps<{ title: string; description?: string }>(), { description: undefined });
+withDefaults(defineProps<{ title: string; description?: string; titleId?: string }>(), { description: undefined, titleId: undefined });
 </script>
 <template>
   <header class="page-header">
-    <div>
-      <h1>{{ title }}</h1>
+    <div class="page-header__main">
+      <slot name="before" />
+      <div class="page-header__title">
+        <h1 :id="titleId">{{ title }}</h1>
+        <slot name="status" />
+      </div>
       <p v-if="description">{{ description }}</p>
     </div>
-    <div class="page-header__actions"><slot name="actions" /></div>
+    <div v-if="$slots.actions" class="page-header__actions"><slot name="actions" /></div>
   </header>
 </template>
 <style scoped>
@@ -16,14 +20,24 @@ withDefaults(defineProps<{ title: string; description?: string }>(), { descripti
   align-items: flex-start;
   justify-content: space-between;
   gap: 20px;
-  margin-bottom: 22px;
+  margin-bottom: 24px;
+}
+.page-header__main {
+  min-width: 0;
+}
+.page-header__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
 }
 .page-header h1 {
   margin: 0;
   color: var(--ptmcp-heading);
-  font-size: 24px;
+  font-size: 30px;
+  font-weight: 600;
   line-height: 1.2;
-  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
 }
 .page-header p {
   margin: 8px 0 0;

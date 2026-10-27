@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '../../../components/common/PageHeader.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { DataRequestError, getJob, type JobView } from '../../../services/data';
@@ -101,16 +102,20 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="page-shell" aria-labelledby="job-title">
-    <div class="page-heading">
-      <div>
-        <ElButton v-if="session.can('ptmcp:datasource:read') || session.can('ptmcp:datasource:list')" link class="back-link" @click="openDatasource"
+    <PageHeader
+      title-id="job-title"
+      :title="job?.type === 'SYNC' ? '元数据同步' : job?.type === 'TEST' ? '连接测试' : '任务详情'"
+      :description="`任务 ID ${id}`"
+    >
+      <template #before
+        ><ElButton v-if="session.can('ptmcp:datasource:read') || session.can('ptmcp:datasource:list')" link class="back-link" @click="openDatasource"
           >← 返回数据源</ElButton
-        >
-        <h1 id="job-title">{{ job?.type === 'SYNC' ? '元数据同步' : job?.type === 'TEST' ? '连接测试' : '任务详情' }}</h1>
-        <p class="subtitle">任务 ID {{ id }}</p>
-      </div>
-      <ElTag v-if="job" :type="stateType(job.state)" size="large" effect="light">{{ stateLabel(job.state) }}</ElTag>
-    </div>
+        ></template
+      >
+      <template #status
+        ><ElTag v-if="job" :type="stateType(job.state)" size="large" effect="light">{{ stateLabel(job.state) }}</ElTag></template
+      >
+    </PageHeader>
     <ElAlert v-if="error" type="error" show-icon :closable="false" class="state-alert"
       ><span
         >{{ error }}<span v-if="requestId">（请求 ID：{{ requestId }}）</span></span
@@ -190,30 +195,9 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.page-shell {
-  max-width: 980px;
-  margin: 0 auto;
-  padding: 26px clamp(16px, 3vw, 40px) 44px;
-}
-.page-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 16px;
-  margin-bottom: 22px;
-}
 .back-link {
   margin-bottom: 14px;
   padding: 0;
-  color: var(--ptmcp-text-muted);
-}
-h1 {
-  margin: 0;
-  color: var(--ptmcp-heading);
-  font-size: clamp(26px, 3vw, 34px);
-}
-.subtitle {
-  margin: 7px 0 0;
   color: var(--ptmcp-text-muted);
 }
 .state-alert {
@@ -319,10 +303,6 @@ dd {
   margin-top: 20px;
 }
 @media (max-width: 680px) {
-  .page-heading {
-    align-items: flex-start;
-    flex-direction: column;
-  }
   .facts {
     grid-template-columns: repeat(2, 1fr);
   }

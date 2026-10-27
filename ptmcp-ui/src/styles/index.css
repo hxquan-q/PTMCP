@@ -398,9 +398,6 @@ button:focus-visible,
 .workspace-session-error {
   margin-bottom: 16px;
 }
-.workspace-content > .page-shell {
-  padding: 0;
-}
 .workspace-scrim {
   display: none;
 }

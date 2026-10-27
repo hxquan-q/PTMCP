@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '../../../components/common/PageHeader.vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
@@ -235,16 +236,18 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="page-shell" aria-labelledby="metadata-detail-title">
-    <div class="page-heading">
-      <div>
-        <ElButton link class="back-link" @click="router.back()">← 返回元数据</ElButton>
-        <h1 id="metadata-detail-title">{{ detail?.objectName || '对象详情' }}</h1>
-        <p class="subtitle">
-          {{ detail ? `${detail.databaseName}${detail.schemaName ? ` · ${detail.schemaName}` : ''} · ${detail.objectType}` : '加载中…' }}
-        </p>
-      </div>
-      <ElTag v-if="detail" :type="detail.objectType === 'TABLE' ? 'success' : 'info'">{{ detail.objectType === 'TABLE' ? '表' : '视图' }}</ElTag>
-    </div>
+    <PageHeader
+      title-id="metadata-detail-title"
+      :title="detail?.objectName || '对象详情'"
+      :description="detail ? `${detail.databaseName}${detail.schemaName ? ` · ${detail.schemaName}` : ''} · ${detail.objectType}` : '加载中…'"
+    >
+      <template #before><ElButton link class="back-link" @click="router.back()">← 返回元数据</ElButton></template>
+      <template #status
+        ><ElTag v-if="detail" :type="detail.objectType === 'TABLE' ? 'success' : 'info'">{{
+          detail.objectType === 'TABLE' ? '表' : '视图'
+        }}</ElTag></template
+      >
+    </PageHeader>
     <ElAlert v-if="error" type="error" show-icon :closable="false" class="state-alert"
       ><span
         >{{ error }}<span v-if="requestId">（请求 ID：{{ requestId }}）</span></span
@@ -376,31 +379,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.page-shell {
-  max-width: 1240px;
-  margin: 0 auto;
-  padding: 26px clamp(16px, 3vw, 40px) 44px;
-}
-.page-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 18px;
-  margin-bottom: 22px;
-}
 .back-link {
   display: block;
   margin-bottom: 14px;
   padding: 0;
-  color: var(--ptmcp-text-muted);
-}
-h1 {
-  margin: 0;
-  color: var(--ptmcp-heading);
-  font-size: clamp(26px, 3vw, 34px);
-}
-.subtitle {
-  margin: 7px 0 0;
   color: var(--ptmcp-text-muted);
 }
 .state-alert {
@@ -503,10 +485,6 @@ dd {
   margin-top: 12px;
 }
 @media (max-width: 760px) {
-  .page-heading {
-    align-items: flex-start;
-    flex-direction: column;
-  }
   .facts {
     grid-template-columns: repeat(2, 1fr);
   }

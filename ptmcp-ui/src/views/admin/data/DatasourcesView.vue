@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '../../../components/common/PageHeader.vue';
 import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
@@ -206,15 +207,13 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="page-shell" aria-labelledby="datasource-title">
-    <div class="page-heading">
-      <div>
-        <h1 id="datasource-title">数据源</h1>
-        <p class="subtitle">管理受控数据连接、健康状态和元数据同步。</p>
-      </div>
-      <ElButton v-if="session.can('ptmcp:datasource:create')" type="primary" @click="openCreate">
-        <IconEpPlus class="button-icon" aria-hidden="true" /> 新建数据源
-      </ElButton>
-    </div>
+    <PageHeader title-id="datasource-title" title="数据源" description="管理受控数据连接、健康状态和元数据同步。">
+      <template #actions>
+        <ElButton v-if="session.can('ptmcp:datasource:create')" type="primary" @click="openCreate">
+          <IconEpPlus class="button-icon" aria-hidden="true" /> 新建数据源
+        </ElButton>
+      </template>
+    </PageHeader>
 
     <ElAlert v-if="error" type="error" :closable="false" show-icon class="state-alert">
       <span
@@ -343,28 +342,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.page-shell {
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 28px clamp(16px, 3vw, 40px) 44px;
-}
-.page-heading {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  align-items: flex-start;
-  margin-bottom: 24px;
-}
-h1 {
-  margin: 0;
-  color: var(--ptmcp-heading);
-  font-size: clamp(26px, 3vw, 34px);
-  letter-spacing: -0.02em;
-}
-.subtitle {
-  margin: 8px 0 0;
-  color: var(--ptmcp-text-muted);
-}
 .button-icon {
   margin-right: 5px;
 }
@@ -449,14 +426,8 @@ h1 {
   .filter-card :deep(.el-select) {
     width: 100%;
   }
-  .page-heading {
-    flex-direction: column;
-  }
   .form-grid {
     grid-template-columns: 1fr;
-  }
-  .page-shell {
-    padding-inline: 12px;
   }
 }
 </style>

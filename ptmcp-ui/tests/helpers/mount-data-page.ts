@@ -83,6 +83,7 @@ export async function mountDataPage(path: string, api: Api) {
     '../../../services/uuid': new URL('../../src/services/uuid.ts', import.meta.url).href,
     '../../../stores/session': dataUrl(`${prefix} export const useSessionStore=()=>f.session;`),
     '../../../adapters/edit-conflict': new URL('../../src/adapters/edit-conflict.ts', import.meta.url).href,
+    '../../../components/common/PageHeader.vue': dataUrl('export default {};'),
     '../../../components/data/VersionConflictPanel.vue': dataUrl('export default {};'),
   };
   const file = new URL(`../../src/views/${path}`, import.meta.url);
