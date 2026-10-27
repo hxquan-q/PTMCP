@@ -8,6 +8,7 @@ export function useCursorPage<T>(read: (cursor: string | undefined, signal: Abor
   const cursor = ref<string | null>(null);
   const loading = ref(false);
   const error = ref('');
+  const requestId = ref<string | null>(null);
   const loaded = ref(false);
   let sequence = 0;
   let retryAppend = false;
@@ -20,6 +21,7 @@ export function useCursorPage<T>(read: (cursor: string | undefined, signal: Abor
     loading.value = false;
     loaded.value = false;
     error.value = '';
+    requestId.value = null;
   }
   async function load(append = false): Promise<void> {
     if (loading.value || (append && !cursor.value)) return;
@@ -27,6 +29,7 @@ export function useCursorPage<T>(read: (cursor: string | undefined, signal: Abor
     retryAppend = append;
     loading.value = true;
     error.value = '';
+    requestId.value = null;
     if (!append) {
       cursor.value = null;
     }
@@ -48,10 +51,11 @@ export function useCursorPage<T>(read: (cursor: string | undefined, signal: Abor
         cursor.value = null;
         retryAppend = false;
       }
-      error.value = errorText(reason);
+      error.value = errorText(reason, false);
+      if (reason && typeof reason === 'object' && 'requestId' in reason && typeof reason.requestId === 'string') requestId.value = reason.requestId;
     } finally {
       if (own === sequence) loading.value = false;
     }
   }
-  return { rows, cursor, loading, error, loaded, reset, load, retry: () => load(retryAppend) };
+  return { rows, cursor, loading, error, requestId, loaded, reset, load, retry: () => load(retryAppend) };
 }

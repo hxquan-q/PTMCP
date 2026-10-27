@@ -103,7 +103,7 @@ onMounted(() => {
         ></ElFormItem></div
     ></ElCard>
     <ElCard shadow="never" class="portal-card"
-      ><ElSkeleton v-if="loading" :rows="8" animated /><ElEmpty v-else-if="!config" description="选择平台后加载配置" /><template v-else
+      ><ElSkeleton v-if="loading" :rows="8" animated /><PageState v-else-if="!config" description="选择平台后加载配置" /><template v-else
         ><div class="status-row">
           <div>
             <span class="label">传输</span><strong>{{ config.transport }}</strong>

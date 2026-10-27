@@ -116,12 +116,15 @@ onBeforeUnmount(() => {
         ><ElTag v-if="job" :type="stateType(job.state)" size="large" effect="light">{{ stateLabel(job.state) }}</ElTag></template
       >
     </PageHeader>
-    <ElAlert v-if="error" type="error" show-icon :closable="false" class="state-alert"
-      ><span
-        >{{ error }}<span v-if="requestId">（请求 ID：{{ requestId }}）</span></span
-      ></ElAlert
-    >
-    <ElButton v-if="error && !loading" class="retry-button" @click="load(true)">重新读取任务状态</ElButton>
+    <PageState
+      v-if="error"
+      kind="error"
+      title="任务读取失败"
+      :description="error"
+      :request-id="requestId"
+      action-label="重新读取任务状态"
+      @action="load(true)"
+    />
     <ElSkeleton v-if="loading" :rows="7" animated />
     <template v-else-if="job">
       <ElCard shadow="never" class="progress-card">
@@ -188,8 +191,8 @@ onBeforeUnmount(() => {
         >
       </div>
     </template>
-    <ElEmpty v-else :description="error ? '暂时无法读取任务状态，请按错误原因重试' : '任务不存在或你已失去访问权限'"
-      ><ElButton v-if="session.can('ptmcp:datasource:list')" type="primary" @click="openDatasource">返回数据源</ElButton></ElEmpty
+    <PageState v-else :description="error ? '暂时无法读取任务状态，请按错误原因重试' : '任务不存在或你已失去访问权限'"
+      ><ElButton v-if="session.can('ptmcp:datasource:list')" type="primary" @click="openDatasource">返回数据源</ElButton></PageState
     >
   </section>
 </template>
@@ -238,9 +241,6 @@ onBeforeUnmount(() => {
   overflow: hidden;
   border-radius: 4px;
   background: var(--ptmcp-bg-neutral);
-}
-.retry-button {
-  margin-bottom: 16px;
 }
 .indeterminate span {
   display: block;

@@ -1,15 +1,40 @@
 <script setup lang="ts">
-withDefaults(
+import { onBeforeUnmount, ref, watch } from 'vue';
+const props = withDefaults(
   defineProps<{
     kind?: 'loading' | 'empty' | 'error' | 'forbidden' | 'not-found';
     title?: string;
     description?: string;
     actionLabel?: string;
     headingTag?: 'h1' | 'h2';
+    requestId?: string | null;
   }>(),
-  { kind: 'empty', title: undefined, description: undefined, actionLabel: undefined, headingTag: 'h2' },
+  { kind: 'empty', title: undefined, description: undefined, actionLabel: undefined, headingTag: 'h2', requestId: null },
 );
 const emit = defineEmits<{ action: [] }>();
+const copying = ref(false);
+const copyFeedback = ref('');
+let copySequence = 0;
+function clearCopy(): void {
+  copySequence++;
+  copying.value = false;
+  copyFeedback.value = '';
+}
+watch(() => props.requestId, clearCopy, { flush: 'sync' });
+onBeforeUnmount(clearCopy);
+async function copyRequestId(): Promise<void> {
+  if (!props.requestId || copying.value) return;
+  const own = ++copySequence;
+  copying.value = true;
+  try {
+    await navigator.clipboard.writeText(props.requestId);
+    if (own === copySequence) copyFeedback.value = '请求 ID 已复制';
+  } catch {
+    if (own === copySequence) copyFeedback.value = '复制失败，请手动选中请求 ID 复制';
+  } finally {
+    if (own === copySequence) copying.value = false;
+  }
+}
 </script>
 
 <template>
@@ -49,11 +74,28 @@ const emit = defineEmits<{ action: [] }>();
                 : '请稍后重试；如果问题持续，请联系平台管理员。')
       }}
     </p>
+    <div v-if="requestId" class="page-state__request">
+      <span
+        >请求 ID：<code>{{ requestId }}</code></span
+      >
+      <ElButton :loading="copying" :disabled="copying" @click="copyRequestId">复制请求 ID</ElButton>
+      <span v-if="copyFeedback">{{ copyFeedback }}</span>
+    </div>
     <ElButton v-if="actionLabel" type="primary" @click="emit('action')">{{ actionLabel }}</ElButton>
+    <slot />
   </section>
 </template>
 
 <style scoped>
+.page-state__request {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 12px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
 .page-state {
   display: grid;
   justify-items: center;
@@ -105,6 +147,11 @@ const emit = defineEmits<{ action: [] }>();
   border-top-color: var(--ptmcp-blue);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-state__spinner {
+    animation: none;
+  }
 }
 @keyframes spin {
   to {

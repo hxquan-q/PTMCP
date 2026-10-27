@@ -175,8 +175,8 @@ onMounted(async () => {
           ><ElOption label="活跃" value="ACTIVE" /><ElOption label="已撤销" value="REVOKED" /><ElOption label="已过期" value="EXPIRED"
         /></ElSelect>
       </div>
-      <ElSkeleton v-if="loading" :rows="6" animated /><ElEmpty v-else-if="!tokens.length" description="尚无 PAT，可创建一个用于 MCP 接入"
-        ><ElButton type="primary" plain @click="openCreate">创建 PAT</ElButton></ElEmpty
+      <ElSkeleton v-if="loading" :rows="6" animated /><PageState v-else-if="!tokens.length" description="尚无 PAT，可创建一个用于 MCP 接入"
+        ><ElButton type="primary" plain @click="openCreate">创建 PAT</ElButton></PageState
       ><ElTable v-else :data="tokens" stripe row-key="id" aria-label="PAT 列表"
         ><ElTableColumn prop="name" label="名称" min-width="160" /><ElTableColumn label="前缀" width="150"
           ><template #default="{ row }"

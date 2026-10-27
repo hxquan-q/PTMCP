@@ -16,7 +16,7 @@ const session = useSessionStore();
 /** 委派后端已实现（T17-api 切片）；预览模式继续用合成数据走完整交互。 */
 const delegationReady = delegationApiReady || controlPlaneAvailable;
 const filter = reactive({ userId: '', status: '', resourceType: '' });
-const { rows, cursor, loading, error, loaded, reset, load, retry } = useCursorPage((cursor, signal) =>
+const { rows, cursor, loading, error, requestId, loaded, reset, load, retry } = useCursorPage((cursor, signal) =>
   controlPlane.delegations.list({ ...filter, cursor }, signal),
 );
 const dialogVisible = ref(false);
@@ -212,8 +212,17 @@ onMounted(() => {
     >
     <ElCard shadow="never" class="ptmcp-table-section"
       ><h2 class="ptmcp-section-title">委派记录</h2>
-      <ElAlert v-if="error" :title="error" type="error" :closable="false"><ElButton @click="retry">重试</ElButton></ElAlert
-      ><ElSkeleton v-if="loading" :rows="5" animated /><ElTable v-else :data="rows" aria-label="委派记录"
+      <PageState
+        v-if="error"
+        kind="error"
+        title="委派读取失败"
+        :description="error"
+        :request-id="requestId"
+        action-label="重试"
+        @action="retry" /><ElSkeleton v-if="loading" :rows="5" animated /><ElTable
+        v-else-if="!error || rows.length"
+        :data="rows"
+        aria-label="委派记录"
         ><ElTableColumn prop="userId" label="管理员" min-width="120" /><ElTableColumn
           prop="departmentRootId"
           label="部门根"
@@ -240,7 +249,7 @@ onMounted(() => {
           ><PageState
             :title="loaded ? '没有符合条件的委派' : '委派尚未读取'"
             description="可调整条件或新建委派；未读取不代表没有委派。" /></template></ElTable
-      ><CursorFooter :count="rows.length" :has-more="!!cursor" :loading="loading" @more="load(true)"
+      ><CursorFooter v-if="loaded || rows.length" :count="rows.length" :has-more="!!cursor" :loading="loading" @more="load(true)"
     /></ElCard>
     <ElAlert
       type="info"

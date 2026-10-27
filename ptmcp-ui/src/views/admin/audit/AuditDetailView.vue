@@ -143,7 +143,7 @@ watch(
         <p v-if="!trailLoading && !trail.length" class="helper">尚无明文访问记录。</p>
       </ElCard>
     </template>
-    <ElEmpty v-else-if="!error" description="审计详情尚未读取，路由 ID 不代表记录已存在。" />
+    <PageState v-else-if="!error" description="审计详情尚未读取，路由 ID 不代表记录已存在。" />
     <AuditDecryptDialog
       v-if="session.can('ptmcp:audit:decrypt') && item"
       :key="requestId"

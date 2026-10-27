@@ -45,8 +45,10 @@ Updated: 2026-10-27
 - 布局第二步定向验证：pnpm test:contracts、pnpm check通过；12页×1440/390 Chromium检查标题30px/600/ID、无页面横向溢出及console/pageerror 0，记录 `.local/run/sap-refine-headers-portal.jsonl`，截图同目录。全量实验待运行。
 - 布局第三步：新增 CursorFooter，首批10列表采用已加载计数/后续游标按钮/忙碌锁；数据源与元数据删除重复底栏CSS。新增显式 ptmcp-filter-bar/ptmcp-table-section（chrome、方角无四周边框、统一label与表格顶底线），补列表标题。运行组件渲染回归保护游标计数与按钮状态，不伪造total。pnpm check与契约测试通过。
 - 第三步浏览器：10页×1440/390通过chrome背景/0圆角/计数/无横向溢出与0console/pageerror检查；首次发现scoped边框圆角覆盖公共样式，使用显式el-card类限定修复后重验。记录 `.local/run/sap-refine-filters.jsonl`，截图同目录；已实际读取数据源桌面截图。
+- 状态收敛：全src的ElEmpty已替换PageState，新增默认插槽保留空态操作；PageState支持requestId显式复制、失败提示、并发锁和上下文/离页迟到反馈作废，尊重reduced-motion。useCursorPage单独返回当前requestId，重试/重置清理；errorText可选择不重复拼接编号。五个公共游标页及五个数据管理页接入错误恢复与编号复制。预览响应增加独立合成请求编号，不改变资源ID。
+- 状态验证：实际SFC回归覆盖剪贴板失败/重复点击/切换ID迟到反馈；游标回归覆盖编号清理。pnpm check与契约测试通过。Playwright 4错误列表×2宽度验证真实剪贴板复制，6空列表×2宽度验证PageState与空态操作保留；0console/pageerror。读取窄屏截图发现重复错误/空表与重复编号，修正首批失败不渲染空表、编号只展示一次，再以断言复验通过。记录 `.local/run/sap-refine-state.jsonl`，截图同目录。完整实验待执行。
 - 浏览器验证、截图、完整 CI 尚未运行，保持 NOT_RUN。
 
 ## 交接
 
-当前焦点：布局第二步26c4173已推送、750项通过；第三步公共筛选/表格/底栏首批10列表已通过定向检查，待完整实验。其余组织列表/平台客户端/权限有效资源和独立登录/授权/错误页统一仍待执行。全部目标仍在进行，未宣称完成或人工接受。后续逐项更新上表证据；明确阻塞才暂停目标。
+当前焦点：第三步557dc05已推送、752项通过。空/错误态与requestId公共能力已通过定向及浏览器检查，待完整实验；门户/组织等其余错误上下文、余下列表布局和独立登录/授权/错误页仍待统一。全部目标仍在进行，未宣称完成或人工接受。后续逐项更新上表证据；明确阻塞才暂停目标。

@@ -216,7 +216,7 @@ onMounted(() => {
           >查询</ElButton
         >
       </div>
-      <ElSkeleton v-if="loading" :rows="6" animated /><ElEmpty v-else-if="!datasourceId" description="先选择平台和数据源" /><ElEmpty
+      <ElSkeleton v-if="loading" :rows="6" animated /><PageState v-else-if="!datasourceId" description="先选择平台和数据源" /><PageState
         v-else-if="!objects.length"
         description="当前筛选没有可见对象"
       /><ElTable v-else :data="objects" stripe row-key="objectId" aria-label="个人数据字典"

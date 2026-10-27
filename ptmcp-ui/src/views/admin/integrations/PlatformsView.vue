@@ -1,20 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import {
-  ElAlert,
-  ElButton,
-  ElCard,
-  ElDialog,
-  ElInput,
-  ElMessage,
-  ElMessageBox,
-  ElOption,
-  ElSelect,
-  ElTable,
-  ElTableColumn,
-  ElTag,
-} from 'element-plus';
+import { ElButton, ElCard, ElDialog, ElInput, ElMessage, ElMessageBox, ElOption, ElSelect, ElTable, ElTableColumn, ElTag } from 'element-plus';
 import CursorFooter from '../../../components/common/CursorFooter.vue';
 import PageHeader from '../../../components/common/PageHeader.vue';
 import PageState from '../../../components/common/PageState.vue';
@@ -32,7 +19,7 @@ const session = useSessionStore();
 /** 平台 CRUD 后端已实现（T17-api 切片）；预览模式继续用合成数据。 */
 const platformReady = platformApiReady;
 const router = useRouter();
-const { rows, cursor, loading, error, loaded, reset, load, retry } = useCursorPage((cursor, signal) =>
+const { rows, cursor, loading, error, requestId, loaded, reset, load, retry } = useCursorPage((cursor, signal) =>
   controlPlane.platforms.list({ ...filter, cursor }, signal),
 );
 const removing = ref(false);
@@ -111,9 +98,9 @@ onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearP
         <ElTag v-if="frontendPreview || !platformReady" effect="plain" type="info">{{ frontendPreview ? '合成数据预览' : '平台服务未就绪' }}</ElTag>
         <span v-else>已加载 {{ rows.length }} 条</span>
       </div>
-      <ElAlert v-if="error" type="error" :title="error" :closable="false"><ElButton @click="retry">重试</ElButton></ElAlert>
+      <PageState v-if="error" kind="error" title="平台读取失败" :description="error" :request-id="requestId" action-label="重试" @action="retry" />
       <ElSkeleton v-if="loading && !rows.length" :rows="5" animated />
-      <ElTable v-else :data="rows" class="empty-table" aria-label="平台目录">
+      <ElTable v-else-if="!error || rows.length" :data="rows" class="empty-table" aria-label="平台目录">
         <ElTableColumn prop="code" label="Code" min-width="150" />
         <ElTableColumn prop="name" label="名称" min-width="170" />
         <ElTableColumn prop="tier" label="Tier" width="90" />
@@ -148,7 +135,7 @@ onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearP
             :description="platformReady ? '可调整筛选、查询或创建平台。' : filterText"
         /></template>
       </ElTable>
-      <CursorFooter :count="rows.length" :has-more="!!cursor" :loading="loading" @more="load(true)" />
+      <CursorFooter v-if="loaded || rows.length" :count="rows.length" :has-more="!!cursor" :loading="loading" @more="load(true)" />
     </ElCard>
     <ElCard class="guide-card" shadow="never">
       <h2>配置原则</h2>

@@ -61,6 +61,29 @@ test('cursor stale restarts a read at page one without appending obsolete rows',
     page.close();
   }
 });
+test('错误请求ID随当前失败显示，重试/重置/失效响应不能留下旧排障编号', async () => {
+  let fails = true;
+  const page = mount(async () => {
+    if (fails) throw Object.assign(new Error('fixture unavailable'), { requestId: 'fixture-request-1' });
+    return { items: ['current'], nextCursor: null };
+  });
+  try {
+    await page.state.load();
+    assert.equal(page.state.requestId.value, 'fixture-request-1');
+    assert.equal(page.state.error.value, 'fixture unavailable');
+    fails = false;
+    await page.state.retry();
+    assert.equal(page.state.requestId.value, null);
+    assert.equal(page.state.error.value, '');
+    fails = true;
+    await page.state.load();
+    page.state.reset();
+    assert.equal(page.state.requestId.value, null);
+  } finally {
+    page.close();
+  }
+});
+
 test('reset cannot let a late request clear the new loading state or restore rows', async () => {
   const old = deferred();
   const current = deferred();

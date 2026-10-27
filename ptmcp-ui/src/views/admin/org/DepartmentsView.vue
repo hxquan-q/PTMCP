@@ -209,7 +209,7 @@ onMounted(load);
         </div>
       </template>
       <ElSkeleton v-if="loading" :rows="5" animated />
-      <ElEmpty v-else-if="!departments.length" description="尚未创建部门" />
+      <PageState v-else-if="!departments.length" description="尚未创建部门" />
       <ElTree v-else :data="treeData" node-key="id" default-expand-all aria-label="部门树" @node-click="selected = $event">
         <template #default="{ data }">
           <div class="tree-row">

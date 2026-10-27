@@ -337,7 +337,7 @@ onMounted(async () => {
         <ElButton type="primary" plain @click="load">筛选</ElButton>
       </div>
       <ElSkeleton v-if="loading" :rows="5" animated />
-      <ElEmpty v-else-if="!users.length" description="没有符合条件的用户" />
+      <PageState v-else-if="!users.length" description="没有符合条件的用户" />
       <ElTable v-else :data="users" stripe row-key="id" aria-label="用户列表">
         <ElTableColumn prop="username" label="用户名" min-width="160" />
         <ElTableColumn prop="displayName" label="显示名称" min-width="140" />

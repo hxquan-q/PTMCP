@@ -27,7 +27,7 @@ interface OperationsRowView {
   afterMasked: string | null;
   occurredAt: string;
 }
-const { rows, cursor, loading, error, loaded, reset, load, retry } = useCursorPage<OperationsRowView>((cursor, signal) =>
+const { rows, cursor, loading, error, requestId, loaded, reset, load, retry } = useCursorPage<OperationsRowView>((cursor, signal) =>
   controlPlane.audit.operations.list({ ...cleaned.value, cursor }, signal),
 );
 const expanded = ref<string | null>(null);
@@ -70,9 +70,17 @@ onMounted(() => {
     </ElCard>
     <ElCard shadow="never" class="ptmcp-table-section">
       <h2 class="ptmcp-section-title">管理操作日志</h2>
-      <ElAlert v-if="error" type="error" :title="error" :closable="false"><ElButton @click="retry">重试</ElButton></ElAlert>
+      <PageState
+        v-if="error"
+        kind="error"
+        title="操作日志读取失败"
+        :description="error"
+        :request-id="requestId"
+        action-label="重试"
+        @action="retry"
+      />
       <ElSkeleton v-if="loading" :rows="6" animated />
-      <ElTable v-else :data="rows" aria-label="管理操作日志">
+      <ElTable v-else-if="!error || rows.length" :data="rows" aria-label="管理操作日志">
         <ElTableColumn prop="occurredAt" label="时间" min-width="170"
           ><template #default="{ row }">{{ formatDate(row.occurredAt) }}</template></ElTableColumn
         >
@@ -94,7 +102,7 @@ onMounted(() => {
           ><PageState :title="loaded ? '没有符合条件的操作日志' : '操作日志尚未读取'" description="可调整条件查询；留痕由管理操作自动写入。"
         /></template>
       </ElTable>
-      <CursorFooter :count="rows.length" :has-more="!!cursor" :loading="loading" @more="load(true)" />
+      <CursorFooter v-if="loaded || rows.length" :count="rows.length" :has-more="!!cursor" :loading="loading" @more="load(true)" />
     </ElCard>
     <ElCard v-if="expanded !== null" shadow="never">
       <template #header><span>变更内容明细</span></template>

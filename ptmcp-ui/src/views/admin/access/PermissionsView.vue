@@ -144,9 +144,9 @@ function date(value: string | null) {
             <ElButton v-if="canList" :disabled="!subjectId" :loading="loading" @click="loadGrants">刷新</ElButton>
           </header>
           <ElSkeleton v-if="loading && !grants.length" :rows="5" animated />
-          <ElEmpty v-else-if="!canList" description="缺少授权规则列表权限，可使用下方已获授权的预览功能。" />
-          <ElEmpty v-else-if="!subjectId" description="尚未选择授权主体" />
-          <ElEmpty v-else-if="!grants.length && !pageError" description="此主体尚无直接授权规则" />
+          <PageState v-else-if="!canList" description="缺少授权规则列表权限，可使用下方已获授权的预览功能。" />
+          <PageState v-else-if="!subjectId" description="尚未选择授权主体" />
+          <PageState v-else-if="!grants.length && !pageError" description="此主体尚无直接授权规则" />
           <ElTable v-else :data="grants" row-key="id" table-layout="auto" aria-label="主体授权规则">
             <ElTableColumn label="资源" min-width="150"
               ><template #default="{ row }"

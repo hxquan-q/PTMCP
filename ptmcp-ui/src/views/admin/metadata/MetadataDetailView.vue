@@ -248,11 +248,15 @@ onBeforeUnmount(() => {
         }}</ElTag></template
       >
     </PageHeader>
-    <ElAlert v-if="error" type="error" show-icon :closable="false" class="state-alert"
-      ><span
-        >{{ error }}<span v-if="requestId">（请求 ID：{{ requestId }}）</span></span
-      ></ElAlert
-    >
+    <PageState
+      v-if="error"
+      kind="error"
+      title="元数据操作失败"
+      :description="error"
+      :request-id="requestId"
+      :action-label="detail ? undefined : '重新读取'"
+      @action="load()"
+    />
     <VersionConflictPanel
       v-if="conflictRequired || conflict"
       :rows="conflictRows"
@@ -372,8 +376,8 @@ onBeforeUnmount(() => {
         ></ElCard
       >
     </template>
-    <ElEmpty v-else description="对象不存在、快照已失效或你已失去访问权限"
-      ><ElButton type="primary" @click="router.push('/admin/metadata')">返回元数据</ElButton></ElEmpty
+    <PageState v-else description="对象不存在、快照已失效或你已失去访问权限"
+      ><ElButton type="primary" @click="router.push('/admin/metadata')">返回元数据</ElButton></PageState
     >
   </section>
 </template>

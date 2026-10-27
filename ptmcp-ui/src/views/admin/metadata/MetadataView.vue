@@ -222,11 +222,15 @@ onBeforeUnmount(() => {
       >
       <ElButton link type="primary" @click="applyFilters">重新读取</ElButton>
     </ElAlert>
-    <ElAlert v-if="error" type="error" :closable="false" show-icon class="state-alert"
-      ><span
-        >{{ error }}<span v-if="requestId">（请求 ID：{{ requestId }}）</span></span
-      ></ElAlert
-    >
+    <PageState
+      v-if="error"
+      kind="error"
+      title="元数据读取失败"
+      :description="error"
+      :request-id="requestId"
+      action-label="重新读取"
+      @action="applyFilters"
+    />
     <ElCard shadow="never" class="table-card ptmcp-table-section" :body-style="{ padding: '0' }">
       <h2 class="ptmcp-section-title">元数据对象</h2>
       <ElTable v-loading="loading" :data="rows" row-key="id" empty-text="">
@@ -255,7 +259,7 @@ onBeforeUnmount(() => {
           ></ElTableColumn
         >
         <template #empty
-          ><ElEmpty
+          ><PageState
             :description="
               !datasourceId
                 ? '选择数据源后查看元数据'

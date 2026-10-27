@@ -20,11 +20,11 @@ export function usePortalTask(clear: () => void = () => undefined): {
   return { cancel: () => task.cancel(), run: <T>(work: (signal: AbortSignal) => Promise<T>) => task.run(work) };
 }
 
-export function errorText(error: unknown): string {
+export function errorText(error: unknown, includeRequestId = true): string {
   if (error && typeof error === 'object' && 'message' in error) {
     const message = String((error as { message: unknown }).message);
     const requestId = (error as ApiError).requestId;
-    return requestId ? `${message}（requestId: ${requestId}）` : message;
+    return requestId && includeRequestId ? `${message}（requestId: ${requestId}）` : message;
   }
   return '请求失败，请稍后重试';
 }

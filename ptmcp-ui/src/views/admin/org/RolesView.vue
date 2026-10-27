@@ -179,7 +179,7 @@ onMounted(async () => {
     >
     <ElCard shadow="never" class="portal-card">
       <ElSkeleton v-if="loading" :rows="5" animated />
-      <ElEmpty v-else-if="!roles.length" description="尚未创建角色" />
+      <PageState v-else-if="!roles.length" description="尚未创建角色" />
       <ElTable v-else :data="roles" stripe row-key="id" aria-label="角色列表">
         <ElTableColumn prop="key" label="Key" min-width="180" /><ElTableColumn prop="name" label="名称" min-width="160" /><ElTableColumn
           label="状态"

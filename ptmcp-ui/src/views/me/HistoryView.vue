@@ -138,7 +138,7 @@ onMounted(() => {
         <ElButton :disabled="loading" @click="retry">{{ failedAppend ? '重试加载更多' : '重试查询' }}</ElButton>
       </ElAlert>
       <div :aria-busy="loading" aria-live="polite">
-        <ElSkeleton v-if="loading && !items.length" :rows="6" animated /><ElEmpty
+        <ElSkeleton v-if="loading && !items.length" :rows="6" animated /><PageState
           v-else-if="!items.length && !loadError"
           :description="emptyText"
         /><ElTable v-else-if="items.length" :data="items" stripe row-key="requestId" aria-label="我的查询历史"

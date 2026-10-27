@@ -377,11 +377,15 @@ onBeforeUnmount(() => {
       </template>
     </PageHeader>
 
-    <ElAlert v-if="error" type="error" show-icon :closable="false" class="state-alert"
-      ><span
-        >{{ error }}<span v-if="requestId">（请求 ID：{{ requestId }}）</span></span
-      ></ElAlert
-    >
+    <PageState
+      v-if="error"
+      kind="error"
+      title="数据源操作失败"
+      :description="error"
+      :request-id="requestId"
+      :action-label="datasource ? undefined : '重新读取'"
+      @action="load()"
+    />
     <VersionConflictPanel
       v-if="conflictRequired || conflict"
       :rows="conflictRows"
@@ -486,8 +490,8 @@ onBeforeUnmount(() => {
         </dl>
       </ElCard>
     </template>
-    <ElEmpty v-else description="数据源不存在或你已失去访问权限"
-      ><ElButton type="primary" @click="router.push('/admin/datasources')">返回列表</ElButton></ElEmpty
+    <PageState v-else description="数据源不存在或你已失去访问权限"
+      ><ElButton type="primary" @click="router.push('/admin/datasources')">返回列表</ElButton></PageState
     >
   </section>
 </template>

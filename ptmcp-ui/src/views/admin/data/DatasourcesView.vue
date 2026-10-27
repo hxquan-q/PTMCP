@@ -216,11 +216,15 @@ onBeforeUnmount(() => {
       </template>
     </PageHeader>
 
-    <ElAlert v-if="error" type="error" :closable="false" show-icon class="state-alert">
-      <span
-        >{{ error }}<span v-if="requestId">（请求 ID：{{ requestId }}）</span></span
-      >
-    </ElAlert>
+    <PageState
+      v-if="error"
+      kind="error"
+      title="数据源读取失败"
+      :description="error"
+      :request-id="requestId"
+      action-label="重新读取"
+      @action="load()"
+    />
 
     <ElCard class="filter-card ptmcp-filter-bar" shadow="never">
       <ElForm :inline="true" @submit.prevent="applyFilters">
@@ -290,9 +294,9 @@ onBeforeUnmount(() => {
           </template>
         </ElTableColumn>
         <template #empty>
-          <ElEmpty :description="loading ? '正在加载数据源…' : '暂无符合条件的数据源'">
+          <PageState :description="loading ? '正在加载数据源…' : '暂无符合条件的数据源'">
             <ElButton v-if="!loading && session.can('ptmcp:datasource:create')" type="primary" @click="openCreate">新建数据源</ElButton>
-          </ElEmpty>
+          </PageState>
         </template>
       </ElTable>
       <CursorFooter :count="rows.length" :has-more="!!nextCursor" :loading="loading" @more="nextPage" />

@@ -42,7 +42,7 @@ const directoryTask = usePortalTask(() => {
   platforms.value = [];
   sources.value = [];
 });
-const { rows, cursor, loading, error, loaded, reset, load, retry } = useCursorPage((cursor, signal) =>
+const { rows, cursor, loading, error, requestId, loaded, reset, load, retry } = useCursorPage((cursor, signal) =>
   controlPlane.audit.list({ ...filters, from: from.value?.toISOString(), to: to.value?.toISOString(), cursor }, signal),
 );
 async function query(): Promise<void> {
@@ -158,9 +158,9 @@ function clearFilters(): void {
         <ElTag v-if="frontendPreview || !auditReady" type="info" effect="plain">{{ frontendPreview ? '合成数据预览' : '审计服务未就绪' }}</ElTag>
         <span v-else>已加载 {{ rows.length }} 条</span>
       </div>
-      <ElAlert v-if="error" :title="error" type="error" :closable="false"><ElButton @click="retry">重试</ElButton></ElAlert>
+      <PageState v-if="error" kind="error" title="审计读取失败" :description="error" :request-id="requestId" action-label="重试" @action="retry" />
       <ElSkeleton v-if="loading && !rows.length" :rows="6" animated />
-      <ElTable v-else :data="rows" class="empty-table" aria-label="调用记录">
+      <ElTable v-else-if="!error || rows.length" :data="rows" class="empty-table" aria-label="调用记录">
         <ElTableColumn label="时间（台北）" min-width="170"
           ><template #default="{ row }">{{ formatDate(row.startedAt) }}</template></ElTableColumn
         >
@@ -194,7 +194,7 @@ function clearFilters(): void {
           ><PageState :title="loaded ? '当前条件下没有审计记录' : '审计记录尚未读取'" description="可调整时间和筛选条件；未读取不代表没有记录。"
         /></template>
       </ElTable>
-      <CursorFooter :count="rows.length" :has-more="!!cursor" :loading="loading" @more="load(true)" />
+      <CursorFooter v-if="loaded || rows.length" :count="rows.length" :has-more="!!cursor" :loading="loading" @more="load(true)" />
     </ElCard>
     <ElCard class="legend-card" shadow="never">
       <h2>字段说明</h2>

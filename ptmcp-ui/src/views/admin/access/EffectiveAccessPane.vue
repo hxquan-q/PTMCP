@@ -9,7 +9,7 @@ const props = withDefaults(defineProps<{ userId: string; platformId: string; dat
 const session = useSessionStore();
 /** 当前有效资源端点已实现（T17-api 切片）；预览模式继续用合成判定。 */
 const effectiveReady = effectiveApiReady || controlPlaneAvailable;
-const { rows, cursor, loading, error, loaded, reset, load, retry } = useCursorPage((cursor, signal) =>
+const { rows, cursor, loading, error, requestId, loaded, reset, load, retry } = useCursorPage((cursor, signal) =>
   controlPlane.effective({ userId: props.userId, platformId: props.platformId, datasourceId: props.datasourceId, cursor }, signal),
 );
 watch(() => [props.userId, props.platformId, props.datasourceId, props.ready], reset, { flush: 'sync' });
@@ -22,8 +22,15 @@ watch(() => [props.userId, props.platformId, props.datasourceId, props.ready], r
       META），NO_EFFECTIVE_GRANT 表示无命中授权，UNKNOWN_RESOURCE 表示资源不在当前目录。
     </p>
     <ElButton :disabled="!effectiveReady || !userId || !platformId || !ready" :loading="loading" @click="load()">读取当前有效资源</ElButton
-    ><ElAlert v-if="error" :title="error" type="error" :closable="false"><ElButton @click="retry">重试</ElButton></ElAlert
-    ><ElSkeleton v-if="loading" :rows="4" animated /><ElTable v-else-if="loaded" :data="rows" aria-label="当前有效资源"
+    ><PageState
+      v-if="error"
+      kind="error"
+      title="有效资源读取失败"
+      :description="error"
+      :request-id="requestId"
+      action-label="重试"
+      @action="retry"
+    /><ElSkeleton v-if="loading" :rows="4" animated /><ElTable v-else-if="loaded" :data="rows" aria-label="当前有效资源"
       ><ElTableColumn prop="resourceType" label="资源类型" min-width="130" /><ElTableColumn
         prop="resourceId"
         label="资源 ID"

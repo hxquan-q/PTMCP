@@ -64,8 +64,8 @@ onMounted(load);
       ><ElButton @click="load()">重新读取授权</ElButton></ElAlert
     ><ElCard shadow="never" class="portal-card ptmcp-table-section"
       ><h2 class="ptmcp-section-title">OAuth 授权</h2>
-      <ElSkeleton v-if="loading" :rows="6" animated /><ElEmpty v-else-if="!items.length && !loadError" description="尚无 OAuth 授权"
-        ><ElButton type="primary" plain @click="router.push('/me/integrations')">查看接入说明</ElButton></ElEmpty
+      <ElSkeleton v-if="loading" :rows="6" animated /><PageState v-else-if="!items.length && !loadError" description="尚无 OAuth 授权"
+        ><ElButton type="primary" plain @click="router.push('/me/integrations')">查看接入说明</ElButton></PageState
       ><ElTable v-else-if="items.length" :data="items" stripe row-key="id" aria-label="OAuth 授权列表"
         ><ElTableColumn prop="clientName" label="客户端" min-width="180" /><ElTableColumn
           prop="platformId"

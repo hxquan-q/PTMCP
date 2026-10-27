@@ -279,6 +279,7 @@ export function createPreviewServer() {
   const sensitiveAccess: Record<string, Row[]> = {};
   let serial = 100;
   let signedIn = true;
+  let responseSequence = 0;
   const response = (data: unknown, status = 200) =>
     new Response(JSON.stringify(data), {
       status,
@@ -286,6 +287,7 @@ export function createPreviewServer() {
         'Content-Type': 'application/json',
         'Cache-Control': 'no-store',
         'X-PTMCP-Preview': 'synthetic',
+        'X-Request-Id': `preview-response-${++responseSequence}`,
         ETag: `"${String((data as Row | null)?.version ?? ((data as Row | null)?.dictionary as Row | undefined)?.version ?? '1')}"`,
       },
     });
