@@ -1,11 +1,11 @@
 # T17-sap-refine：全站视觉与核心工作台交互收敛
 
 ID: T17-sap-refine
-Status: in_progress
+Status: verifying
 Owner: current-agent
 Acceptance: pending
-Verification: NOT_RUN
-Updated: 2026-10-27
+Verification: PASS
+Updated: 2026-10-28
 
 ## 目标与边界
 
@@ -70,4 +70,4 @@ Updated: 2026-10-27
 
 ## 交接
 
-当前焦点：游标迁移 49161cb 已推送、761 项通过。字段分组与预览页标题已通过定向及浏览器检查，待完整实验；business-coverage/规格同步与完整 CI/18 组证据仍待实施。全部目标仍在进行，未宣称完成或人工接受。后续逐项更新上表证据；明确阻塞才暂停目标。
+当前焦点（2026-10-28 收尾定稿）：本项工程范围全部完成——布局/状态/结构化证据/工作台交互/公共工程收敛已交付，`--all` 完整 CI 首次全绿，真实模式 14/18 组网络证据与键盘/390px 响应式走查记录于 [T17-ui-business](T17-ui-business.md)；真实缺陷修复 5 处。Status=verifying（人工视觉/功能接受 pending，用户未回复不视为接受）。后续仅余用户验收反馈处理；无未完成工程切片。
