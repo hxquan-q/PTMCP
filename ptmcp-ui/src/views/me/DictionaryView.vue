@@ -3,168 +3,127 @@ import CursorFooter from '../../components/common/CursorFooter.vue';
 import PageHeader from '../../components/common/PageHeader.vue';
 import { onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
-import { mePortalApi, type DatasourceItem, type NamespaceItem, type ObjectSummary, type PlatformItem } from '../../services/mePortalApi';
-import { errorText, usePortalTask } from '../portalUtils';
+import { mePortalApi } from '../../services/mePortalApi';
+import { useCursorPage } from '../../composables/useCursorPage';
+import { usePortalTask } from '../portalUtils';
 
 const router = useRouter();
-const platforms = ref<PlatformItem[]>([]);
-const datasources = ref<DatasourceItem[]>([]);
-const namespaces = ref<NamespaceItem[]>([]);
-const objects = ref<ObjectSummary[]>([]);
 const platformId = ref('');
 const datasourceId = ref('');
 const namespaceId = ref('');
 const keyword = ref('');
 const databaseName = ref('');
 const schemaName = ref('');
-const loading = ref(false);
-const loadingContext = ref(false);
-const loadError = ref('');
-const nextCursor = ref<string | null>(null);
-const namespaceCursor = ref<string | null>(null);
-const platformCursor = ref<string | null>(null);
-const datasourceCursor = ref<string | null>(null);
-const platformTask = usePortalTask(() => {
-  platforms.value = [];
+const {
+  rows: platforms,
+  cursor: platformCursor,
+  loading: loadingPlatforms,
+  error: platformError,
+  requestId: platformRequestId,
+  load: loadPlatformPage,
+  retry: retryPlatforms,
+} = useCursorPage((cursor, signal) => mePortalApi.accessContext.platforms(cursor, signal));
+const {
+  rows: datasources,
+  cursor: datasourceCursor,
+  loading: loadingDatasources,
+  error: datasourceError,
+  requestId: datasourceRequestId,
+  reset: resetDatasources,
+  load: loadDatasourcePage,
+  retry: retryDatasources,
+} = useCursorPage((cursor, signal) => mePortalApi.accessContext.datasources(platformId.value, cursor, signal));
+const {
+  rows: namespaces,
+  cursor: namespaceCursor,
+  loading: loadingNamespaces,
+  error: namespaceError,
+  requestId: namespaceRequestId,
+  reset: resetNamespaces,
+  load: loadNamespacePage,
+  retry: retryNamespaces,
+} = useCursorPage((cursor, signal) => mePortalApi.accessContext.namespaces(platformId.value, datasourceId.value, cursor, signal));
+const {
+  rows: objects,
+  cursor: nextCursor,
+  loading,
+  loaded: objectsLoaded,
+  error: loadError,
+  requestId: objectRequestId,
+  reset: clearObjects,
+  load: loadObjectPage,
+  retry: retryObjects,
+} = useCursorPage((cursor, signal) =>
+  mePortalApi.dictionary.list(
+    {
+      platformId: platformId.value,
+      datasourceId: datasourceId.value,
+      databaseName: databaseName.value || undefined,
+      schemaName: schemaName.value || undefined,
+      keyword: keyword.value.trim() || undefined,
+      cursor,
+    },
+    signal,
+  ),
+);
+usePortalTask(() => {
   platformId.value = '';
-  platformCursor.value = null;
-});
-const datasourceTask = usePortalTask(() => {
-  datasources.value = [];
   datasourceId.value = '';
-  datasourceCursor.value = null;
-});
-const namespaceTask = usePortalTask(() => {
-  namespaces.value = [];
   namespaceId.value = '';
-  namespaceCursor.value = null;
 });
-const objectTask = usePortalTask(() => {
-  objects.value = [];
-  nextCursor.value = null;
-});
-
-function clearObjects(): void {
-  objectTask.cancel();
-  objects.value = [];
-  nextCursor.value = null;
-  loading.value = false;
-}
 
 async function loadPlatforms(append = false): Promise<void> {
-  loadingContext.value = true;
-  try {
-    const page = await platformTask.run((signal) =>
-      mePortalApi.accessContext.platforms(append ? (platformCursor.value ?? undefined) : undefined, signal),
-    );
-    if (!page) return;
-    platforms.value = append ? [...platforms.value, ...page.items] : page.items;
-    platformCursor.value = page.nextCursor;
-    if (!platformId.value && page.items[0]) platformId.value = page.items[0].id;
-  } catch (error) {
-    loadError.value = errorText(error);
-  } finally {
-    loadingContext.value = false;
-  }
+  await loadPlatformPage(append);
+  if (!platformId.value && platforms.value[0]) platformId.value = platforms.value[0].id;
 }
 async function loadDatasources(append = false): Promise<void> {
-  if (!append) {
-    datasourceTask.cancel();
-    namespaceTask.cancel();
-    clearObjects();
-    datasources.value = [];
-    namespaces.value = [];
-    datasourceId.value = '';
-    namespaceId.value = '';
-    datasourceCursor.value = null;
-    namespaceCursor.value = null;
-    databaseName.value = '';
-    schemaName.value = '';
-  }
-  if (!platformId.value) return;
-  try {
-    const page = await datasourceTask.run((signal) =>
-      mePortalApi.accessContext.datasources(platformId.value, append ? (datasourceCursor.value ?? undefined) : undefined, signal),
-    );
-    if (!page) return;
-    datasources.value = append ? [...datasources.value, ...page.items] : page.items;
-    datasourceCursor.value = page.nextCursor;
-  } catch (error) {
-    ElMessage.error(errorText(error));
-  }
+  if (platformId.value) await loadDatasourcePage(append);
 }
 async function loadNamespaces(append = false): Promise<void> {
-  if (!append) {
-    namespaceTask.cancel();
-    clearObjects();
-    namespaces.value = [];
-    namespaceId.value = '';
-    namespaceCursor.value = null;
-    databaseName.value = '';
-    schemaName.value = '';
-  }
-  if (!platformId.value || !datasourceId.value) return;
-  try {
-    const page = await namespaceTask.run((signal) =>
-      mePortalApi.accessContext.namespaces(platformId.value, datasourceId.value, append ? (namespaceCursor.value ?? undefined) : undefined, signal),
-    );
-    if (!page) return;
-    namespaces.value = append ? [...namespaces.value, ...page.items] : page.items;
-    namespaceCursor.value = page.nextCursor;
-  } catch (error) {
-    ElMessage.error(errorText(error));
-  }
+  if (platformId.value && datasourceId.value) await loadNamespacePage(append);
 }
 async function loadObjects(append = false): Promise<void> {
-  if (!append) {
-    nextCursor.value = null;
-    objects.value = [];
-  }
-  if (!platformId.value || !datasourceId.value) {
-    objects.value = [];
-    return;
-  }
-  loading.value = true;
-  loadError.value = '';
-  try {
-    const page = await objectTask.run((signal) =>
-      mePortalApi.dictionary.list(
-        {
-          platformId: platformId.value,
-          datasourceId: datasourceId.value,
-          databaseName: databaseName.value || undefined,
-          schemaName: schemaName.value || undefined,
-          keyword: keyword.value.trim() || undefined,
-          cursor: append ? (nextCursor.value ?? undefined) : undefined,
-        },
-        signal,
-      ),
-    );
-    if (!page) return;
-    objects.value = append ? [...objects.value, ...page.items] : page.items;
-    nextCursor.value = page.nextCursor;
-  } catch (error) {
-    loadError.value = errorText(error);
-    if (!append) objects.value = [];
-  } finally {
-    loading.value = false;
-  }
+  if (platformId.value && datasourceId.value) await loadObjectPage(append);
 }
-watch(platformId, () => {
-  void loadDatasources();
-});
-watch(datasourceId, () => {
-  void loadNamespaces();
-  void loadObjects();
-});
-watch(namespaceId, (value) => {
-  const item = namespaces.value.find((entry) => entry.id === value);
-  databaseName.value = item?.databaseName ?? '';
-  schemaName.value = item?.schemaName ?? '';
-  void loadObjects();
-});
-watch(keyword, clearObjects);
+watch(
+  platformId,
+  () => {
+    resetDatasources();
+    resetNamespaces();
+    clearObjects();
+    datasourceId.value = '';
+    namespaceId.value = '';
+    databaseName.value = '';
+    schemaName.value = '';
+    void loadDatasources();
+  },
+  { flush: 'sync' },
+);
+watch(
+  datasourceId,
+  () => {
+    resetNamespaces();
+    clearObjects();
+    namespaceId.value = '';
+    databaseName.value = '';
+    schemaName.value = '';
+    void loadNamespaces();
+    void loadObjects();
+  },
+  { flush: 'sync' },
+);
+watch(
+  namespaceId,
+  (value) => {
+    const item = namespaces.value.find((entry) => entry.id === value);
+    databaseName.value = item?.databaseName ?? '';
+    schemaName.value = item?.schemaName ?? '';
+    clearObjects();
+    void loadObjects();
+  },
+  { flush: 'sync' },
+);
+watch(keyword, clearObjects, { flush: 'sync' });
 onMounted(() => {
   void loadPlatforms();
 });
@@ -177,11 +136,47 @@ onMounted(() => {
       title="我的数据字典"
       description="目录只展示你在当前平台范围内可发现的对象，读取详情仍由服务端再次鉴权。"
     />
-    <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError" />
+    <PageState
+      v-if="platformError"
+      kind="error"
+      title="平台目录读取失败"
+      :description="platformError"
+      :request-id="platformRequestId"
+      action-label="重试平台目录"
+      @action="retryPlatforms"
+    />
+    <PageState
+      v-if="datasourceError"
+      kind="error"
+      title="数据源目录读取失败"
+      :description="datasourceError"
+      :request-id="datasourceRequestId"
+      action-label="重试数据源目录"
+      @action="retryDatasources"
+    />
+    <PageState
+      v-if="namespaceError"
+      kind="error"
+      title="命名空间读取失败"
+      :description="namespaceError"
+      :request-id="namespaceRequestId"
+      action-label="重试命名空间"
+      @action="retryNamespaces"
+    />
+    <PageState
+      v-if="loadError"
+      kind="error"
+      title="字典读取失败"
+      :description="loadError"
+      :request-id="objectRequestId"
+      action-label="重试字典"
+      @action="retryObjects"
+    />
     <ElCard shadow="never" class="portal-card context-card ptmcp-filter-bar"
       ><div class="filters">
         <ElFormItem label="平台"
-          ><ElSelect v-model="platformId" :loading="loadingContext" placeholder="选择平台" class="select"
+          ><ElSelect v-model="platformId" :loading="loadingPlatforms" placeholder="选择平台" class="select"
+            ><template #loading><span class="cascade-loading">正在读取平台目录…</span></template
             ><ElOption v-for="item in platforms" :key="item.id" :label="`${item.name} · Tier ${item.tier}`" :value="item.id" /><template
               v-if="platformCursor"
               #footer
@@ -189,7 +184,8 @@ onMounted(() => {
             ></ElSelect
           ></ElFormItem
         ><ElFormItem label="数据源"
-          ><ElSelect v-model="datasourceId" :disabled="!platformId" placeholder="选择数据源" class="select"
+          ><ElSelect v-model="datasourceId" :loading="loadingDatasources" :disabled="!platformId" placeholder="选择数据源"
+            ><template #loading><span class="cascade-loading">正在读取数据源目录…</span></template
             ><ElOption v-for="item in datasources" :key="item.id" :label="`${item.name} · ${item.engine}`" :value="item.id" /><template
               v-if="datasourceCursor"
               #footer
@@ -197,7 +193,8 @@ onMounted(() => {
             ></ElSelect
           ></ElFormItem
         ><ElFormItem label="命名空间"
-          ><ElSelect v-model="namespaceId" :disabled="!datasourceId" clearable placeholder="全部命名空间" class="select"
+          ><ElSelect v-model="namespaceId" :loading="loadingNamespaces" :disabled="!datasourceId" placeholder="全部命名空间"
+            ><template #loading><span class="cascade-loading">正在读取命名空间…</span></template
             ><ElOption v-for="item in namespaces" :key="item.id" :label="item.displayName" :value="item.id" /><template v-if="namespaceCursor" #footer
               ><ElButton link type="primary" @click="loadNamespaces(true)">加载更多命名空间</ElButton></template
             ></ElSelect
@@ -242,7 +239,7 @@ onMounted(() => {
           ></ElTableColumn
         ></ElTable
       >
-      <CursorFooter :count="objects.length" :has-more="!!nextCursor" :loading="loading" @more="loadObjects(true)" />
+      <CursorFooter v-if="objectsLoaded" :count="objects.length" :has-more="!!nextCursor" :loading="loading" @more="loadObjects(true)" />
     </ElCard>
   </section>
 </template>
@@ -265,8 +262,28 @@ onMounted(() => {
 .filters :deep(.el-form-item) {
   margin: 0;
 }
+.cascade-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ptmcp-text-muted);
+  font-size: 12px;
+}
 .select {
   min-width: 210px;
+}
+.filters :deep(.el-select) {
+  width: 100%;
+}
+@media (max-width: 640px) {
+  .filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .select {
+    min-width: 0;
+    width: 100%;
+  }
 }
 .second {
   margin-bottom: 18px;

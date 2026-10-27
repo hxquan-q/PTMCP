@@ -1,4 +1,3 @@
-import type { ApiError } from '../services/orgPortalApi';
 import { onBeforeUnmount } from 'vue';
 import { PortalRequest } from '../services/portalRequest';
 
@@ -20,10 +19,14 @@ export function usePortalTask(clear: () => void = () => undefined): {
   return { cancel: () => task.cancel(), run: <T>(work: (signal: AbortSignal) => Promise<T>) => task.run(work) };
 }
 
+export function errorRequestId(error: unknown): string | null {
+  return error && typeof error === 'object' && 'requestId' in error && typeof error.requestId === 'string' ? error.requestId : null;
+}
+
 export function errorText(error: unknown, includeRequestId = true): string {
   if (error && typeof error === 'object' && 'message' in error) {
     const message = String((error as { message: unknown }).message);
-    const requestId = (error as ApiError).requestId;
+    const requestId = errorRequestId(error);
     return requestId && includeRequestId ? `${message}（requestId: ${requestId}）` : message;
   }
   return '请求失败，请稍后重试';

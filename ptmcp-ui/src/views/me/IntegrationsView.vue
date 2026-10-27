@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import PageHeader from '../../components/common/PageHeader.vue';
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { mePortalApi, type PlatformItem, type McpConfig } from '../../services/mePortalApi';
 import { copyText } from '../../services/clipboard';
-import { errorText, usePortalTask } from '../portalUtils';
+import { errorRequestId, errorText, usePortalTask } from '../portalUtils';
 
 const platforms = ref<PlatformItem[]>([]);
 const platformId = ref('');
@@ -12,12 +12,17 @@ const clientType = ref('GENERIC');
 const config = ref<McpConfig | null>(null);
 const loading = ref(false);
 const error = ref('');
+const requestId = ref<string | null>(null);
+const platformLoading = ref(false);
+const templateParts = computed(() => config.value?.configTemplate.split(/(\$\{PTMCP_PAT\}|<YOUR_PAT>|<PAT_OR_OAUTH_ACCESS_TOKEN>)/g) ?? []);
+const needsPat = computed(() => templateParts.value.length > 1);
 const nextPlatformCursor = ref<string | null>(null);
 let configSequence = 0;
 const platformTask = usePortalTask(() => {
   platforms.value = [];
   platformId.value = '';
   nextPlatformCursor.value = null;
+  platformLoading.value = false;
 });
 const configTask = usePortalTask(() => {
   configSequence++;
@@ -33,6 +38,10 @@ const clientTypes = [
 ];
 
 async function loadPlatforms(append = false): Promise<void> {
+  if (platformLoading.value) return;
+  platformLoading.value = true;
+  error.value = '';
+  requestId.value = null;
   try {
     const page = await platformTask.run((signal) =>
       mePortalApi.accessContext.platforms(append ? (nextPlatformCursor.value ?? undefined) : undefined, signal),
@@ -42,7 +51,10 @@ async function loadPlatforms(append = false): Promise<void> {
     nextPlatformCursor.value = page.nextCursor;
     if (!platformId.value && platforms.value[0]) platformId.value = platforms.value[0].id;
   } catch (reason) {
-    error.value = errorText(reason);
+    error.value = errorText(reason, false);
+    requestId.value = errorRequestId(reason);
+  } finally {
+    platformLoading.value = false;
   }
 }
 async function loadConfig(): Promise<void> {
@@ -50,6 +62,7 @@ async function loadConfig(): Promise<void> {
   configTask.cancel();
   config.value = null;
   error.value = '';
+  requestId.value = null;
   if (!platformId.value) {
     loading.value = false;
     return;
@@ -59,7 +72,10 @@ async function loadConfig(): Promise<void> {
     const result = await configTask.run((signal) => mePortalApi.mcpConfig(platformId.value, clientType.value, signal));
     if (result && own === configSequence) config.value = result;
   } catch (reason) {
-    if (own === configSequence) error.value = errorText(reason);
+    if (own === configSequence) {
+      error.value = errorText(reason, false);
+      requestId.value = errorRequestId(reason);
+    }
   } finally {
     if (own === configSequence) loading.value = false;
   }
@@ -84,24 +100,39 @@ onMounted(() => {
 <template>
   <section class="portal-page" aria-labelledby="integrations-title">
     <PageHeader title-id="integrations-title" title="MCP 接入配置" description="模板只提供人工配置步骤，不会自动连接客户端或执行查询。" />
-    <ElAlert v-if="error" type="error" :closable="false" :title="error" class="mb-4"
-      ><ElButton @click="platforms.length ? loadConfig() : loadPlatforms()">重新读取</ElButton></ElAlert
-    >
-    <ElCard shadow="never" class="portal-card"
+    <PageState
+      v-if="error"
+      kind="error"
+      title="接入配置读取失败"
+      :description="error"
+      :request-id="requestId"
+      action-label="重新读取"
+      @action="platforms.length ? loadConfig() : loadPlatforms()"
+    />
+    <ElCard shadow="never" class="portal-card ptmcp-filter-bar"
       ><div class="filters">
         <ElFormItem label="平台"
-          ><ElSelect v-model="platformId" placeholder="选择平台" class="select"
+          ><ElSelect v-model="platformId" :loading="platformLoading" placeholder="选择平台" class="select"
             ><ElOption v-for="item in platforms" :key="item.id" :label="`${item.name} · Tier ${item.tier}`" :value="item.id" /><template
               v-if="nextPlatformCursor"
               #footer
               ><ElButton link type="primary" @click="loadPlatforms(true)">加载更多平台</ElButton></template
             ></ElSelect
           ></ElFormItem
-        ><ElFormItem label="客户端"
-          ><ElSelect v-model="clientType" class="select"
-            ><ElOption v-for="item in clientTypes" :key="item.value" :label="item.label" :value="item.value" /></ElSelect
-        ></ElFormItem></div
-    ></ElCard>
+        >
+      </div>
+      <h2 class="client-heading">选择客户端</h2>
+      <ElRadioGroup v-model="clientType" class="client-options" aria-label="MCP 客户端">
+        <ElRadio v-for="client in clientTypes" :key="client.value" :value="client.value" border>
+          <span class="client-option"
+            ><span aria-hidden="true" class="client-icon"
+              ><IconEpConnection v-if="client.value === 'WORKBUDDY'" /><IconEpEditPen v-else-if="client.value === 'CURSOR'" /><IconEpCpu
+                v-else-if="client.value === 'CLAUDE_CODE'" /><IconEpMonitor v-else-if="client.value === 'VSCODE'" /><IconEpSetting v-else /></span
+            >{{ client.label }}</span
+          >
+        </ElRadio>
+      </ElRadioGroup>
+    </ElCard>
     <ElCard shadow="never" class="portal-card"
       ><ElSkeleton v-if="loading" :rows="8" animated /><PageState v-else-if="!config" description="选择平台后加载配置" /><template v-else
         ><div class="status-row">
@@ -120,8 +151,14 @@ onMounted(() => {
           title="部署地址或客户端版本尚未验证，请在人工配置前确认环境。"
           class="mb-4"
         />
+        <ElAlert v-if="needsPat" type="warning" :closable="false" title="模板包含凭证占位符" class="mb-4"
+          ><p>使用 PAT 时，先创建 PAT，再在客户端受控凭证设置中替换高亮占位符；使用 OAuth 时由客户端完成授权。</p>
+          <RouterLink to="/me/tokens">前往创建 PAT</RouterLink></ElAlert
+        >
         <div class="code-heading"><span>配置模板</span><ElButton size="small" @click="copyConfig">复制模板</ElButton></div>
-        <pre class="config-block"><code>{{ config.configTemplate }}</code></pre>
+        <pre
+          class="config-block"
+        ><code><template v-for="(part, index) in templateParts" :key="index"><mark v-if="index % 2 === 1">{{ part }}</mark><template v-else>{{ part }}</template></template></code></pre>
         <p class="muted">
           验证版本：{{ config.validatedVersion ?? '尚未验证' }}。PAT 仅作为占位符使用。<RouterLink to="/me/tokens">创建和管理 PAT</RouterLink>
         </p>
@@ -138,6 +175,38 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.client-heading {
+  margin: 20px 0 12px;
+  font-size: 14px;
+}
+.client-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+.client-options :deep(.el-radio) {
+  margin: 0;
+  min-width: 0;
+  min-height: 52px;
+  height: auto;
+  padding: 12px;
+  background: var(--ptmcp-canvas);
+}
+.client-options :deep(.el-radio.is-checked) {
+  background: var(--ptmcp-blue-soft);
+}
+.client-option,
+.client-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.config-block mark {
+  background: var(--ptmcp-bg-warning);
+  color: var(--ptmcp-orange);
+  padding: 2px;
+}
 .muted {
   color: var(--ptmcp-muted);
   font-size: 14px;
