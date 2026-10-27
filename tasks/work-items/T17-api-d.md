@@ -214,3 +214,7 @@ DENY 行红色高亮）——此前列表无错误码列，用户须点进详情
 PAT scope 边界 E2E（走查记录）：受控管理员 catalog-only PAT 查询→TOKEN_INVALID（缺
 mcp:query 授权范围）；full-scope PAT 查询 200 success——scope 最小化边界在真实栈（gateway
 启用+TLS 执行段）验证。注：python cookiejar 会话多步间失效会映射 400 假阳性，curl 实证为准。
+
+个人历史数据隔离 E2E（走查记录）：delegate-walker（user 3）me/history 显示仅本人 5 行
+（PAT 查询 ALLOW/DENY 混合），admin 的 19 行（含 DELETE 密文行）零泄露；DENY 行 sqlMasked
+有值（S9 拒绝路径密封+脱敏对错误路径同样生效的实证）。多租户数据隔离在真实栈验证通过。
