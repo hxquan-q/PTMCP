@@ -98,6 +98,13 @@ public final class OrgStore {
                     statement.executeUpdate();
                     id = generatedKey(statement);
                 }
+                writeOperationLog(
+                        connection,
+                        actorId,
+                        "DEPARTMENT_CREATE",
+                        "DEPARTMENT",
+                        id,
+                        "{\"name\":\"" + name + "\",\"enabled\":" + enabled + "}");
                 connection.commit();
                 return getDepartment(id);
             } catch (SQLException | RuntimeException failure) {
@@ -216,6 +223,13 @@ public final class OrgStore {
                         statement.executeUpdate();
                     }
                 }
+                writeOperationLog(
+                        connection,
+                        actorId,
+                        "DEPARTMENT_MOVE",
+                        "DEPARTMENT",
+                        id,
+                        "{\"descendantsMoved\":" + descendants.size() + "}");
                 connection.commit();
                 return getDepartment(id);
             } catch (SQLException | RuntimeException failure) {
@@ -274,6 +288,7 @@ public final class OrgStore {
                         throw new DomainException(ErrorCode.VERSION_CONFLICT);
                     }
                 }
+                writeOperationLog(connection, actorId, "DEPARTMENT_DELETE", "DEPARTMENT", id, null);
                 connection.commit();
             } catch (SQLException | RuntimeException failure) {
                 try {
@@ -356,6 +371,13 @@ public final class OrgStore {
                     id = generatedKey(statement);
                 }
                 insertPermissions(connection, id, codes);
+                writeOperationLog(
+                        connection,
+                        actorId,
+                        "ROLE_CREATE",
+                        "ROLE",
+                        id,
+                        "{\"key\":\"" + key + "\",\"permissionCount\":" + codes.size() + "}");
                 connection.commit();
                 return getRole(id);
             } catch (SQLException | RuntimeException failure) {
@@ -415,6 +437,13 @@ public final class OrgStore {
                     }
                     insertPermissions(connection, id, codes);
                 }
+                writeOperationLog(
+                        connection,
+                        actorId,
+                        "ROLE_UPDATE",
+                        "ROLE",
+                        id,
+                        "{\"permissionCount\":" + (codes == null ? 0 : codes.size()) + "}");
                 connection.commit();
                 return getRole(id);
             } catch (SQLException | RuntimeException failure) {
@@ -479,6 +508,7 @@ public final class OrgStore {
                     delete.setLong(1, id);
                     delete.executeUpdate();
                 }
+                writeOperationLog(connection, actorId, "ROLE_DELETE", "ROLE", id, null);
                 connection.commit();
             } catch (SQLException | RuntimeException failure) {
                 try {
@@ -641,6 +671,13 @@ public final class OrgStore {
                     statement.executeUpdate();
                 }
                 insertUserRoles(connection, userId, roles);
+                writeOperationLog(
+                        connection,
+                        actorId,
+                        "USER_CREATE",
+                        "USER",
+                        userId,
+                        "{\"username\":\"" + username + "\",\"enabled\":" + enabled + "}");
                 connection.commit();
                 return getUser(userId);
             } catch (SQLException | RuntimeException failure) {
