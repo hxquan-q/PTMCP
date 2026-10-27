@@ -9,6 +9,7 @@ export interface NavigationItem {
   to: string;
   icon: Component;
   permission?: string;
+  platformAdminOnly?: boolean;
   group?: string;
 }
 const props = defineProps<{ mode: 'admin' | 'personal'; items: NavigationItem[]; title: string; subtitle: string }>();
@@ -22,7 +23,9 @@ const menuButton = ref<HTMLButtonElement | null>(null);
 const content = ref<HTMLElement | null>(null);
 const loggingOut = ref(false);
 const logoutError = ref('');
-const visibleItems = computed(() => props.items.filter((item) => !item.permission || session.can(item.permission)));
+const visibleItems = computed(() =>
+  props.items.filter((item) => (!item.permission || session.can(item.permission)) && (!item.platformAdminOnly || session.platformAdmin)),
+);
 const navigationGroups = computed(() => {
   const groups = new Map<string, NavigationItem[]>();
   for (const item of visibleItems.value) {

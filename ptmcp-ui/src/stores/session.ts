@@ -10,6 +10,7 @@ export interface SessionUser {
   roles: { id?: string; name: string; key?: string }[];
   permissions: string[];
   managedScopes: string[];
+  platformAdmin: boolean;
   expiresAt: string;
 }
 
@@ -23,6 +24,7 @@ export const useSessionStore = defineStore('session', () => {
   let refreshGeneration = 0;
   const isAuthenticated = computed(() => user.value !== null);
   const authenticated = isAuthenticated;
+  const platformAdmin = computed(() => user.value?.platformAdmin ?? false);
 
   function can(permission: string): boolean {
     return !!user.value?.permissions.includes(permission);
@@ -106,5 +108,20 @@ export const useSessionStore = defineStore('session', () => {
     initialized.value = true;
   }
 
-  return { user, initialized, checking, statusError, isAuthenticated, authenticated, can, clear, init, refresh, login, logout, changePassword };
+  return {
+    user,
+    initialized,
+    checking,
+    statusError,
+    isAuthenticated,
+    authenticated,
+    platformAdmin,
+    can,
+    clear,
+    init,
+    refresh,
+    login,
+    logout,
+    changePassword,
+  };
 });

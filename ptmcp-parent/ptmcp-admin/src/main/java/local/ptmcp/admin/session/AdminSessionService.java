@@ -88,6 +88,7 @@ public final class AdminSessionService {
             List<RoleView> roles,
             List<String> permissions,
             List<String> managedScopes,
+            boolean platformAdmin,
             Instant expiresAt) {}
 
     public record SessionContext(long userId, boolean platformAdmin, Instant expiresAt) {}
@@ -220,6 +221,7 @@ public final class AdminSessionService {
                 roles,
                 permissions,
                 managedScopes(session.userId()),
+                session.platformAdmin(),
                 session.expiresAt());
     }
 
