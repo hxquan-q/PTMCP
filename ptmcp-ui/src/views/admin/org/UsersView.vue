@@ -173,7 +173,15 @@ async function save(): Promise<void> {
         completed += 1;
       }
       if (plan.includes('roles')) {
-        current = await orgPortalApi.users.setRoles(current.id, [...form.roleIds], current.version);
+        try {
+          current = await orgPortalApi.users.setRoles(current.id, [...form.roleIds], current.version);
+        } catch (error) {
+          // AC-02 hint: a delegated admin's boundary excludes roles carrying outside codes.
+          if (error && typeof error === 'object' && (error as { code?: string }).code === 'MANAGEMENT_SCOPE_DENIED') {
+            throw new Error('所选角色包含你委派范围外的功能码，无法赋予该用户。请联系平台管理员调整角色或委派范围。');
+          }
+          throw error;
+        }
         editing.value = current;
         completed += 1;
       }
