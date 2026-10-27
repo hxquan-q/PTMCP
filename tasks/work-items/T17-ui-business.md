@@ -137,7 +137,14 @@ Updated: 2026-10-26
 
 当前焦点：全部页面前端候选已可在5174的页面工作台集中体验；保持 `verifying`/`pending`。真实模式端点缺口按上文继续对接，不把合成预览升级成18组真实业务端到端通过。2026-10-26 补充：SAP 视觉统一（令牌层/眉题清理/登录 navy 面）已由 [T17-sap-impl](T17-sap-impl.md) 落地到全部页面并与本项同树交付，工程门禁复跑全绿。
 
-仓库/分支：`C:/Users/xquan/Desktop/Datachat-mcp`，`xquan/feat-backend`。仅本地提交/集成，无推送、发布或生产操作。`.local` 隔离配置/工具、浏览器截图与测试日志已保留（根目录日志移入 `.local/evidence-logs/`）；`DESIGN.md`、`PRODUCT.md`、`docs/frontend/design/`、`.impeccable/` 与 T17 工作项纳入设计/文档提交，不进入前端业务代码提交。
+2026-10-28 补充（真实模式 P-01 核心流，由 T17-sap-refine 环境完成，Dev-Linux 后端 8080/8081/8082 + 5173 正常模式）：
+
+- 未登录访问受保护路由 → `/login?returnTo=...`；未知用户错误密码 → `session/login` 401 + 持久错误警报（不区分账号）。
+- 连续失败触发 `LOGIN_LOCKED` → 429 + 明确锁定提示，验证通过（截图 `real-p01-locked.png`）；等待锁窗口（10 分钟）后正确密码 → 200，会话轮换：`PTMCP_ADMIN_SESSION`（HttpOnly）写入、`PRESESSION` 清除、`me` 200、真实数据源列表 200。
+- 退出 → `logout` 200 回登录页；localStorage/sessionStorage 零凭证键；全程 0 pageerror。证据：`.local/run/real-p01-login.py` 输出与 `.playwright-mcp/sap-refine/real-p01-*.png`。
+- P-01 剩余：改密后全凭证撤销流、离页清密细节、锁定倒计时等待提示；仍按规格第20节逐项补齐。
+
+仓库/分支：`C:/Users/xquan/Desktop/Datachat-mcp`，`xquan/feat-backend`。仅本地提交/集成，无推送、发布或生产操作。`.local` 隔离配置/工具、浏览器截图与测试日志已保留（根目录日志移入 `.local/evidence-logs/`）；`DESIGN.md`、`PRODUCT.md`、`docs/frontend/design/`、`.impeccable/` 与 T17 工作项纳入设计/文档提交，不进入前端业务代码提交。凭证文件仅本地 0600，不入仓。
 
 下一步：以[业务覆盖矩阵](../../docs/frontend/business-coverage.md)逐项补后端端点和网络证据，再做完整业务验收；用户未回复不视为接受。
 
