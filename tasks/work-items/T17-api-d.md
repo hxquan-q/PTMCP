@@ -218,3 +218,8 @@ mcp:query 授权范围）；full-scope PAT 查询 200 success——scope 最小�
 个人历史数据隔离 E2E（走查记录）：delegate-walker（user 3）me/history 显示仅本人 5 行
 （PAT 查询 ALLOW/DENY 混合），admin 的 19 行（含 DELETE 密文行）零泄露；DENY 行 sqlMasked
 有值（S9 拒绝路径密封+脱敏对错误路径同样生效的实证）。多租户数据隔离在真实栈验证通过。
+
+org 变更操作日志（702895f）：OrgStore.writeOperationLog 共享 helper（connection 内事务写，
+UUID request_id，masked payload 调用方构造）+updateUser 事务内写 USER_UPDATE 轨迹。显式
+用例（改名后 USER_UPDATE 行 after 含新名）。教训：改 persistence 后测试跑旧类（target
+过期）——两次失败假象同根因，必须 install。departments/roles 接线为下一切片。
