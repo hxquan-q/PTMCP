@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue';
 import PageHeader from '../../../components/common/PageHeader.vue';
 import { useAccessWorkspace } from './useAccessWorkspace';
 import type { Grant } from '../../../services/access';
@@ -58,6 +59,14 @@ const {
   revoke,
   runPreview,
 } = useAccessWorkspace();
+const subjectSearch = ref('');
+const filteredSubjects = computed(() => {
+  const query = subjectSearch.value.trim().toLocaleLowerCase();
+  return subjectOptions[subjectType.value].filter((item) => !query || `${item.label} ${item.id}`.toLocaleLowerCase().includes(query));
+});
+watch(subjectType, () => {
+  subjectSearch.value = '';
+});
 const resourceLabels = { DATASOURCE: '数据源', NAMESPACE: '命名空间', OBJECT: '对象' };
 function date(value: string | null) {
   return value ? new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Taipei', hour12: false }) : '无结束时间';
@@ -80,19 +89,32 @@ function date(value: string | null) {
     <ElAlert v-if="lookupError" :title="lookupError" type="warning" :closable="false" show-icon />
     <ElAlert v-if="pageError" :title="pageError" type="error" :closable="false" show-icon />
     <div class="access-workspace">
-      <aside class="selection-panel" aria-label="授权主体与资源">
+      <aside class="selection-panel" aria-label="授权主体">
         <h2>授权主体</h2>
+        <ElTabs v-model="subjectType" aria-label="主体类型">
+          <ElTabPane label="用户" name="USER" :disabled="saving" />
+          <ElTabPane label="角色" name="ROLE" :disabled="saving" />
+          <ElTabPane label="部门" name="DEPT" :disabled="saving" />
+        </ElTabs>
+        <ElInput v-model="subjectSearch" clearable placeholder="搜索主体名称或 ID" aria-label="搜索授权主体" :disabled="saving" />
+        <div class="subject-list" aria-label="可管理主体">
+          <button
+            v-for="item in filteredSubjects"
+            :key="item.id"
+            type="button"
+            :aria-pressed="subjectId === item.id"
+            :disabled="saving"
+            @click="subjectId = item.id"
+          >
+            {{ item.label }}<small>ID {{ item.id }}</small>
+          </button>
+        </div>
+        <p v-if="!filteredSubjects.length" class="help-text">{{ subjectSearch ? '没有匹配的主体。' : '没有可选主体，或缺少对应目录的读取权限。' }}</p>
+        <ElButton v-if="subjectId" text :disabled="saving" @click="subjectId = ''">清除主体选择</ElButton>
+      </aside>
+      <aside class="resource-panel" aria-label="资源范围">
+        <h2>资源范围</h2>
         <ElForm label-position="top" :disabled="saving">
-          <ElFormItem label="主体类型"
-            ><ElSelect v-model="subjectType"
-              ><ElOption label="用户" value="USER" /><ElOption label="角色" value="ROLE" /><ElOption label="部门" value="DEPT" /></ElSelect
-          ></ElFormItem>
-          <ElFormItem label="选择主体"
-            ><ElSelect v-model="subjectId" filterable clearable placeholder="选择有权管理的主体"
-              ><ElOption v-for="item in subjectOptions[subjectType]" :key="item.id" :label="item.label" :value="item.id" /></ElSelect
-          ></ElFormItem>
-          <p v-if="!subjectOptions[subjectType].length" class="help-text">没有可选主体，或缺少对应目录的读取权限。</p>
-          <h2 class="resource-title">资源范围</h2>
           <ElFormItem label="数据源"
             ><ElSelect v-model="sourceId" filterable clearable placeholder="选择数据源"
               ><ElOption v-for="source in sources" :key="source.id" :label="source.name" :value="source.id" /></ElSelect
@@ -114,7 +136,7 @@ function date(value: string | null) {
           @node-click="selectResource"
         >
           <template #default="{ data }"
-            ><span class="tree-label"
+            ><span class="tree-label" tabindex="0" :title="data.label"
               ><span>{{ data.label }}</span
               ><small>{{ data.type === 'GROUP' ? '目录分组' : resourceLabels[data.type as keyof typeof resourceLabels] }}</small></span
             ></template
@@ -206,6 +228,12 @@ function date(value: string | null) {
               <p>由服务端计算当前选中资源，不执行查询。</p>
             </div>
           </header>
+          <div class="permission-explanation" role="note" aria-label="有效权限判定公式">
+            <div class="permission-equation">
+              <span>平台 Scope</span><strong>∩</strong><span>用户规则（含继承）</span><strong>=</strong><span>最终权限</span>
+            </div>
+            <p>由服务端按有效期计算；DENY 优先，META DENY 阻断 READ。预览不代替执行时授权。</p>
+          </div>
           <ElForm label-position="top" class="preview-form">
             <ElFormItem v-if="subjectType !== 'USER'" label="预览用户"
               ><ElSelect v-model="previewUserId" filterable clearable placeholder="指定实际用户"
@@ -346,12 +374,13 @@ h2 {
 }
 .access-workspace {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(220px, 1fr) minmax(0, 2.6fr);
+  gap: 16px;
   margin-top: 16px;
   align-items: start;
 }
 .selection-panel,
+.resource-panel,
 .rules-panel,
 .preview-panel {
   border: 1px solid var(--ptmcp-line);
@@ -365,9 +394,52 @@ h2 {
   display: grid;
   gap: 20px;
 }
-.resource-title {
-  padding-top: 16px;
-  border-top: 1px solid var(--ptmcp-line);
+.selection-panel :deep(.el-tabs__item) {
+  padding-inline: 8px;
+  font-size: 13px;
+}
+.subject-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  max-height: 480px;
+  overflow: auto;
+}
+.subject-list button {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--ptmcp-border);
+  border-radius: 4px;
+  background: var(--ptmcp-canvas);
+  color: var(--ptmcp-text);
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.subject-list button[aria-pressed='true'] {
+  background: var(--ptmcp-blue-soft);
+  border-color: var(--ptmcp-blue);
+}
+.subject-list small {
+  color: var(--ptmcp-text-muted);
+}
+.permission-explanation {
+  padding: 16px;
+  margin-bottom: 20px;
+  background: var(--ptmcp-chrome);
+}
+.permission-equation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.permission-explanation p {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ptmcp-text-muted);
 }
 .help-text,
 .panel-note,
@@ -396,8 +468,13 @@ h2 {
   min-width: 0;
 }
 .tree-label > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  padding-block: 6px;
+}
+.resource-panel :deep(.el-tree-node__content) {
+  height: auto;
+  min-height: 32px;
 }
 .tree-label small {
   color: var(--ptmcp-muted);
@@ -417,7 +494,7 @@ h2 {
 }
 .preview-form .el-date-editor,
 .form-grid .el-date-editor,
-.selection-panel .el-select,
+.resource-panel .el-select,
 .preview-form .el-select,
 .grant-form .el-select {
   width: 100%;
@@ -462,10 +539,14 @@ h2 {
 }
 @media (max-width: 1100px) {
   .access-workspace {
-    grid-template-columns: 230px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 14px;
   }
+  .rules-column {
+    grid-column: 1 / -1;
+  }
   .selection-panel,
+  .resource-panel,
   .rules-panel,
   .preview-panel {
     padding: 16px;

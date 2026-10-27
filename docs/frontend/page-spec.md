@@ -106,7 +106,7 @@ Scope页：GET/PUT /platforms/{id}/scopes，资源树项resourceType/resourceId/
 
 **路由**：`/admin/permissions`、`/admin/permissions/preview`。**权限**：acl:list/read/create/update/delete/preview/effective及委派。**关联**：FR-07、08。
 
-主体选择USER/ROLE/DEPT+subjectId；资源树datasource/catalog/schema/object；PG catalog为无授权勾选框的分组节点，NAMESPACE对应实际catalog+schema，只提交DATASOURCE/NAMESPACE/OBJECT目标。规则表effect/action/includeDescendants/validFrom/validTo/reason、来源和staleResource。GET /acl/grants查询，POST/PUT/DELETE单条规则；一次变更最多100条，页面不伪造不存在的无界批量接口。多条提交需逐条显示结果和未提交项，部分失败不得显示整批成功。
+主体面板以用户/角色/部门 Tab 切换目录，支持按名称或字符串 ID 搜索；资源树与规则/预览分成独立面板，桌面三栏、窄屏纵向。公式解释“平台 Scope ∩ 用户规则（含继承）= 最终权限”，DENY 优先，结论只由后端返回。主体选择USER/ROLE/DEPT+subjectId；资源树datasource/catalog/schema/object；PG catalog为无授权勾选框的分组节点，NAMESPACE对应实际catalog+schema，只提交DATASOURCE/NAMESPACE/OBJECT目标。规则表effect/action/includeDescendants/validFrom/validTo/reason、来源和staleResource。GET /acl/grants查询，POST/PUT/DELETE单条规则；一次变更最多100条，页面不伪造不存在的无界批量接口。多条提交需逐条显示结果和未提交项，部分失败不得显示整批成功。
 
 规则输入resourceType/resourceId/resourceGeneration，版本由服务端快照给出；过期或已重建资源禁止复用旧generation。READ/META及DENY优先级见开发规范。时间为左闭右开，validTo须晚于validFrom；开放结束日期仅完整委派可选。每次保存说明新查询最大5秒生效。
 

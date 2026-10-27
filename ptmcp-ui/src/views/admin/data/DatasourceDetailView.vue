@@ -81,12 +81,6 @@ function emptyForm(): DatasourceWrite {
 function formatDate(value: string | null | undefined): string {
   return value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
 }
-function statusLabel(value: string): string {
-  return { ACTIVE: '运行中', DRAFT: '草稿', DISABLED: '已停用' }[value] ?? value;
-}
-function statusType(value: string): 'success' | 'warning' | 'info' {
-  return value === 'ACTIVE' ? 'success' : value === 'DISABLED' ? 'info' : 'warning';
-}
 function errorMessage(value: unknown): string {
   if (value instanceof DataRequestError) {
     requestId.value = value.requestId;
@@ -401,9 +395,8 @@ onBeforeUnmount(() => {
     <ElSkeleton v-if="loading" :rows="8" animated />
     <template v-else-if="datasource">
       <div class="status-strip">
-        <span class="status-label">当前状态</span><ElTag :type="statusType(datasource.status)">{{ statusLabel(datasource.status) }}</ElTag>
-        <span>健康：{{ datasource.health || 'UNKNOWN' }}</span
-        ><span>凭据：{{ datasource.credentialConfigured ? '已配置' : '未配置' }}</span>
+        <span class="status-label">当前状态</span><StatusBadge domain="lifecycle" :value="datasource.status" />
+        <StatusBadge domain="connection" :value="datasource.health" /><span>凭据：{{ datasource.credentialConfigured ? '已配置' : '未配置' }}</span>
         <ElButton v-if="datasource.activeSnapshotId && session.can('ptmcp:metadata:list')" link type="primary" @click="openMetadata"
           >查看元数据</ElButton
         >

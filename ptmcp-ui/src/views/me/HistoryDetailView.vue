@@ -55,15 +55,11 @@ watch(
       ><template #default><ElButton link type="danger" @click="load">重试</ElButton></template></ElAlert
     ><template v-else-if="item"
       ><PageHeader title-id="history-detail-title" :title="item.requestId" :description="`${formatDate(item.startedAt)} · ${item.tool}`">
-        <template #status
-          ><ElTag :type="item.result === 'SUCCESS' ? 'success' : 'warning'">{{ item.result }}</ElTag></template
-        >
+        <template #status><StatusBadge domain="execution" :value="item.result" /></template>
       </PageHeader>
       <ElCard shadow="never" class="portal-card"
         ><div class="metrics">
-          <div>
-            <span>判定</span><strong>{{ item.verdict }}</strong>
-          </div>
+          <div><span>判定</span><StatusBadge domain="verdict" :value="item.verdict" /></div>
           <div>
             <span>耗时</span><strong>{{ item.durationMs ?? '—' }} ms</strong>
           </div>

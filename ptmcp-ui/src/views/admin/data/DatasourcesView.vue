@@ -73,12 +73,6 @@ function emptyForm(): DatasourceWrite {
 function formatDate(value: string | null | undefined): string {
   return value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
 }
-function statusLabel(status: string): string {
-  return { ACTIVE: '运行中', DRAFT: '草稿', DISABLED: '已停用' }[status] ?? status;
-}
-function statusType(status: string): 'success' | 'warning' | 'info' | 'danger' {
-  return status === 'ACTIVE' ? 'success' : status === 'DISABLED' ? 'info' : 'warning';
-}
 function requestErrorMessage(value: unknown): string {
   if (value instanceof DataRequestError) {
     requestId.value = value.requestId;
@@ -268,13 +262,11 @@ onBeforeUnmount(() => {
         <ElTableColumn prop="databaseName" label="数据库" min-width="160" show-overflow-tooltip />
         <ElTableColumn label="状态" width="130">
           <template #default="scope">
-            <ElTag :type="statusType(scope.row.status)" effect="light">{{ statusLabel(scope.row.status) }}</ElTag>
+            <StatusBadge domain="lifecycle" :value="scope.row.status" />
           </template>
         </ElTableColumn>
         <ElTableColumn label="健康" width="120">
-          <template #default="scope"
-            ><span class="health-dot" :class="scope.row.health?.toLowerCase()">{{ scope.row.health || 'UNKNOWN' }}</span></template
-          >
+          <template #default="scope"><StatusBadge domain="connection" :value="scope.row.health" /></template>
         </ElTableColumn>
         <ElTableColumn label="凭据" width="120">
           <template #default="scope">{{ scope.row.credentialConfigured ? '已配置' : '未配置' }}</template>
@@ -383,14 +375,6 @@ onBeforeUnmount(() => {
   color: var(--ptmcp-text-muted);
   font-size: 12px;
   font-weight: 400;
-}
-.health-dot {
-  color: var(--ptmcp-text-muted);
-  font-size: 12px;
-}
-.health-dot.ok,
-.health-dot.healthy {
-  color: var(--ptmcp-green);
 }
 .state-alert {
   margin-bottom: 16px;
