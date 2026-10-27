@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 import javax.sql.DataSource;
@@ -655,6 +656,36 @@ public final class OrgStore {
         }
     }
 
+    /**
+     * Writes one admin operations-trail row inside the caller's transaction (PRD: 管理操作可追溯).
+     * Payloads are caller-provided and already masked; this helper never formats sensitive data.
+     */
+    private static void writeOperationLog(
+            Connection connection,
+            long actorId,
+            String action,
+            String aggregateType,
+            long aggregateId,
+            String afterMasked) {
+        try (PreparedStatement statement =
+                OrgSql.statement(
+                        connection,
+                        "INSERT INTO admin_operation_log (actor_id, request_id, action,"
+                                + " aggregate_type, aggregate_id, before_masked, after_masked,"
+                                + " occurred_at, create_time)"
+                                + " VALUES (?, ?, ?, ?, ?, NULL, ?, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))")) {
+            statement.setLong(1, actorId);
+            statement.setString(2, UUID.randomUUID().toString());
+            statement.setString(3, action);
+            statement.setString(4, aggregateType);
+            statement.setLong(5, aggregateId);
+            statement.setString(6, afterMasked);
+            statement.executeUpdate();
+        } catch (SQLException error) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+    }
+
     public UserRow updateUser(
             long id,
             String displayName,
@@ -713,6 +744,21 @@ public final class OrgStore {
                     }
                     insertUserRoles(connection, id, roles);
                 }
+                writeOperationLog(
+                        connection,
+                        actorId,
+                        "USER_UPDATE",
+                        "USER",
+                        id,
+                        "{\"displayName\":\""
+                                + displayName
+                                + "\",\"deptId\":"
+                                + deptId
+                                + ",\"enabled\":"
+                                + enabled
+                                + ",\"rolesChanged\":"
+                                + (roles != null)
+                                + "}");
                 connection.commit();
                 return getUser(id);
             } catch (SQLException | RuntimeException failure) {

@@ -1130,6 +1130,61 @@ class AdminApiTest {
     }
 
     @Test
+    void userUpdateWritesOperationsTrail() throws Exception {
+        long deptId = createDepartment("轨迹部");
+        long userId = createUser("trail-user", "轨迹用户", deptId);
+        int version =
+                (int)
+                        readLong(
+                                mockMvc.perform(
+                                                get("/api/v1/admin/users/" + userId)
+                                                        .header("X-Test-User-Id", ADMIN_ID)
+                                                        .header("X-Test-Platform-Admin", "true"))
+                                        .andExpect(status().isOk())
+                                        .andReturn()
+                                        .getResponse()
+                                        .getContentAsString(),
+                                "version");
+
+        mockMvc.perform(
+                        put("/api/v1/admin/users/" + userId)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", String.valueOf(version))
+                                .contentType("application/json")
+                                .content(
+                                        "{\"displayName\":\"轨迹用户改\",\"deptId\":"
+                                                + deptId
+                                                + ",\"enabled\":true}"))
+                .andExpect(status().isOk());
+
+        try (Connection connection = connect();
+                PreparedStatement log =
+                        connection.prepareStatement(
+                                "SELECT after_masked FROM admin_operation_log"
+                                        + " WHERE aggregate_type = 'USER' AND aggregate_id = ?"
+                                        + " AND action = 'USER_UPDATE'")) {
+            log.setLong(1, userId);
+            try (ResultSet result = log.executeQuery()) {
+                assertTrue(result.next(), "USER_UPDATE trail row missing");
+                String after = result.getString(1);
+                assertTrue(after.contains("轨迹用户改"), "after payload missing new name");
+            }
+        }
+        try (Connection connection = connect();
+                PreparedStatement dump =
+                        connection.prepareStatement(
+                                "SELECT action, aggregate_id FROM admin_operation_log ORDER BY id")) {
+            try (ResultSet result = dump.executeQuery()) {
+                while (result.next()) {
+                    System.out.println(
+                            "TRAIL-DUMP " + result.getString(1) + " " + result.getLong(2));
+                }
+            }
+        }
+    }
+
+    @Test
     void operationsLogIsCursorPagedFilteredAndPlatformAdminOnly() throws Exception {
         // Seed three operation rows (as the delegations/platform slices would have written).
         try (Connection connection = connect();
