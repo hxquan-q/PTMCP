@@ -1,5 +1,6 @@
 package local.ptmcp.persistence.schema;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -210,6 +211,109 @@ class MetadataSyncStoreTest {
     }
 
     @Test
+    void gatewayReaderRejectsSnapshotFromPreviousConnectionConfiguration() throws Exception {
+        SchemaSnapshotStore snapshots = snapshotStore();
+        long snapshotId = snapshots.stage(1L, model("public", "alpha"), nowUtc());
+        snapshots.publish(snapshotId, 1L);
+        PublishedSnapshotReader reader = new PublishedSnapshotReader(source());
+        assertTrue(reader.load(1L).usable());
+        try (Connection connection = open()) {
+            update(
+                    connection,
+                    "UPDATE datasource SET host = 'replacement.invalid', config_version = 2 WHERE id = 1");
+        }
+        assertFalse(
+                reader.load(1L).usable(), "old resource identity must not describe a new target");
+        assertEquals(
+                ErrorCode.SCHEMA_STALE,
+                assertThrows(DomainException.class, () -> snapshots.requireUsableActiveSnapshot(1L))
+                        .errorCode());
+    }
+
+    @Test
+    void gatewayReaderRejectsSnapshotOwnedByAnotherDatasource() throws Exception {
+        SchemaSnapshotStore snapshots = snapshotStore();
+        long snapshotId = snapshots.stage(1L, model("public", "alpha"), nowUtc());
+        snapshots.publish(snapshotId, 1L);
+        try (Connection connection = open()) {
+            update(
+                    connection,
+                    "INSERT INTO datasource (id, code, name, engine, host, port, database_name, "
+                            + "username, credential_cipher, key_id, tls_mode, pool_max, status, "
+                            + "config_version, resource_version, active_snapshot_id, create_time, "
+                            + "update_time, created_by, updated_by) VALUES "
+                            + "(2, 'other-source', 'Other Source', 'MYSQL', 'other.invalid', 3306, "
+                            + "'synthetic', 'sync', X'00', 'test-key', 'VERIFY_FULL', 1, 'ACTIVE', "
+                            + "1, 2, ?, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), 1, 1)",
+                    snapshotId);
+        }
+        assertFalse(new PublishedSnapshotReader(source()).load(2L).usable());
+        assertEquals(
+                ErrorCode.SCHEMA_STALE,
+                assertThrows(DomainException.class, () -> snapshots.requireUsableActiveSnapshot(2L))
+                        .errorCode());
+    }
+
+    @Test
+    void publicationDuringGatewayReadNeverMixesSnapshotGenerations() throws Exception {
+        SchemaSnapshotStore snapshots = snapshotStore();
+        long first = snapshots.stage(1L, model("public", "alpha"), nowUtc());
+        snapshots.publish(first, 1L);
+        long next = snapshots.stage(1L, model("public", "beta"), nowUtc());
+        java.util.concurrent.atomic.AtomicBoolean published =
+                new java.util.concurrent.atomic.AtomicBoolean();
+        DataSource observed =
+                (DataSource)
+                        java.lang.reflect.Proxy.newProxyInstance(
+                                DataSource.class.getClassLoader(),
+                                new Class<?>[] {DataSource.class},
+                                (proxy, method, args) -> {
+                                    if (!method.getName().equals("getConnection")) {
+                                        throw new UnsupportedOperationException(method.getName());
+                                    }
+                                    Connection connection = open();
+                                    return java.lang.reflect.Proxy.newProxyInstance(
+                                            Connection.class.getClassLoader(),
+                                            new Class<?>[] {Connection.class},
+                                            (connectionProxy, connectionMethod, connectionArgs) -> {
+                                                if (connectionMethod
+                                                                .getName()
+                                                                .equals("prepareStatement")
+                                                        && ((String) connectionArgs[0])
+                                                                .startsWith(
+                                                                        "SELECT status, expires_at FROM schema_snapshot")
+                                                        && published.compareAndSet(false, true)) {
+                                                    snapshots.publish(next, 1L);
+                                                }
+                                                try {
+                                                    return connectionMethod.invoke(
+                                                            connection, connectionArgs);
+                                                } catch (
+                                                        java.lang.reflect.InvocationTargetException
+                                                                failure) {
+                                                    throw failure.getCause();
+                                                }
+                                            });
+                                });
+        PublishedSnapshotReader.Published before = new PublishedSnapshotReader(observed).load(1L);
+        assertTrue(published.get());
+        assertTrue(before.usable());
+        assertEquals(first, before.snapshotId());
+        assertEquals(
+                List.of("alpha"),
+                before.namespaces().getFirst().objects().stream()
+                        .map(PublishedSnapshotReader.TableObject::objectRaw)
+                        .toList());
+        PublishedSnapshotReader.Published after = new PublishedSnapshotReader(source()).load(1L);
+        assertEquals(next, after.snapshotId());
+        assertEquals(
+                List.of("beta"),
+                after.namespaces().getFirst().objects().stream()
+                        .map(PublishedSnapshotReader.TableObject::objectRaw)
+                        .toList());
+    }
+
+    @Test
     void configDriftRejectsPublishAndKeepsPreviousActive() throws Exception {
         SchemaSnapshotStore snapshots = snapshotStore();
         long first = snapshots.stage(1L, model("public", "alpha"), nowUtc());
@@ -225,6 +329,223 @@ class MetadataSyncStoreTest {
         assertEquals("STAGING", statusOf("schema_snapshot", second));
         snapshots.markSnapshotFailed(second);
         assertEquals("FAILED", statusOf("schema_snapshot", second));
+    }
+
+    @Test
+    void abandonedStagingNeverChangesPublishedResourceVisibility() throws Exception {
+        SchemaSnapshotStore snapshots = snapshotStore();
+        long first = snapshots.stage(1L, model("public", "alpha"), nowUtc());
+        snapshots.publish(first, 1L);
+        long originalObject = singleObjectId();
+        long abandoned = snapshots.stage(1L, model("replacement", "beta"), nowUtc());
+        assertEquals("ACTIVE", statusOf("resource_object", originalObject));
+        PublishedSnapshotReader reader = new PublishedSnapshotReader(source());
+        assertEquals(first, reader.load(1L).snapshotId());
+        assertEquals(1, reader.load(1L).namespaces().size());
+        assertEquals(
+                "alpha", reader.load(1L).namespaces().getFirst().objects().getFirst().objectRaw());
+        snapshots.markSnapshotFailed(abandoned);
+        assertEquals("ACTIVE", statusOf("resource_object", originalObject));
+        assertEquals(first, snapshots.requireUsableActiveSnapshot(1L).snapshotId());
+    }
+
+    @Test
+    void snapshotCannotBeRelabelledWithTheCurrentConfiguration() throws Exception {
+        SchemaSnapshotStore snapshots = snapshotStore();
+        long staged = snapshots.stage(1L, model("public", "alpha"), nowUtc());
+        try (Connection connection = open()) {
+            update(connection, "UPDATE datasource SET config_version = 2 WHERE id = 1");
+        }
+        DomainException rejected =
+                assertThrows(DomainException.class, () -> snapshots.publish(staged, 2L));
+        assertEquals(ErrorCode.RESOURCE_VERSION_CHANGED, rejected.errorCode());
+        assertEquals("STAGING", statusOf("schema_snapshot", staged));
+    }
+
+    @Test
+    void obsoleteStagingCannotReplaceANewerPublishedSnapshot() throws Exception {
+        SchemaSnapshotStore snapshots = snapshotStore();
+        long first = snapshots.stage(1L, model("public", "alpha"), nowUtc());
+        snapshots.publish(first, 1L);
+        long obsolete = snapshots.stage(1L, model("public", "alpha", "beta"), nowUtc());
+        long current = snapshots.stage(1L, model("public", "beta"), nowUtc());
+        snapshots.publish(current, 1L);
+        DomainException rejected =
+                assertThrows(DomainException.class, () -> snapshots.publish(obsolete, 1L));
+        assertEquals(ErrorCode.RESOURCE_VERSION_CHANGED, rejected.errorCode());
+        assertEquals(current, snapshots.requireUsableActiveSnapshot(1L).snapshotId());
+        assertEquals("STAGING", statusOf("schema_snapshot", obsolete));
+    }
+
+    @Test
+    void definitionChangesAreAppliedOnlyWhenTheCaptureIsPublished() throws Exception {
+        SchemaSnapshotStore snapshots = snapshotStore();
+        long first = snapshots.stage(1L, model("public", "alpha", "beta"), nowUtc());
+        snapshots.publish(first, 1L);
+        SnapshotModel.ObjectModel original = object("alpha");
+        SnapshotModel.ObjectModel changed =
+                new SnapshotModel.ObjectModel(
+                        original.objectRaw(),
+                        original.objectNorm(),
+                        original.quoted(),
+                        original.kind(),
+                        sha256("changed"),
+                        null,
+                        null,
+                        original.columns());
+        SnapshotModel candidate =
+                new SnapshotModel(
+                        "synthetic",
+                        "TRUE",
+                        List.of(
+                                new SnapshotModel.NamespaceModel(
+                                        "catalog",
+                                        "catalog",
+                                        "public",
+                                        "public",
+                                        List.of(changed, object("beta")))));
+        long staged = snapshots.stage(1L, candidate, nowUtc());
+        try (Connection connection = open();
+                Statement statement = connection.createStatement();
+                ResultSet result =
+                        statement.executeQuery(
+                                "SELECT definition_hash, physical_identity FROM resource_object WHERE object_norm = 'alpha'")) {
+            assertTrue(result.next());
+            assertArrayEquals(sha256("alpha"), result.getBytes(1));
+            assertEquals(null, result.getString(2));
+        }
+        snapshots.publish(staged, 1L);
+        try (Connection connection = open();
+                Statement statement = connection.createStatement();
+                ResultSet result =
+                        statement.executeQuery(
+                                "SELECT definition_hash, physical_identity FROM resource_object WHERE object_norm = 'alpha'")) {
+            assertTrue(result.next());
+            assertArrayEquals(sha256("changed"), result.getBytes(1));
+            assertEquals(null, result.getString(2));
+        }
+        // Equal column signatures on different objects must not make an unchanged table advance.
+        PublishedSnapshotReader.Published published =
+                new PublishedSnapshotReader(source()).load(1L);
+        assertEquals(
+                2,
+                published.namespaces().getFirst().objects().stream()
+                        .filter(object -> object.objectRaw().equals("alpha"))
+                        .findFirst()
+                        .orElseThrow()
+                        .objectVersion());
+        assertEquals(
+                1,
+                published.namespaces().getFirst().objects().stream()
+                        .filter(object -> object.objectRaw().equals("beta"))
+                        .findFirst()
+                        .orElseThrow()
+                        .objectVersion());
+    }
+
+    @Test
+    void expiredStagingCannotReplaceAFreshSnapshot() throws Exception {
+        SchemaSnapshotStore snapshots = snapshotStore();
+        long first = snapshots.stage(1L, model("public", "alpha"), nowUtc());
+        snapshots.publish(first, 1L);
+        long expired = snapshots.stage(1L, model("replacement", "beta"), nowUtc().minusDays(2));
+        DomainException rejected =
+                assertThrows(DomainException.class, () -> snapshots.publish(expired, 1L));
+        assertEquals(ErrorCode.RESOURCE_VERSION_CHANGED, rejected.errorCode());
+        assertEquals(first, snapshots.requireUsableActiveSnapshot(1L).snapshotId());
+        assertEquals("STAGING", statusOf("schema_snapshot", expired));
+    }
+
+    @Test
+    void failedPublicationRollsBackResourceLifecycleAndActivePointer() throws Exception {
+        SchemaSnapshotStore snapshots = snapshotStore();
+        long first = snapshots.stage(1L, model("public", "alpha"), nowUtc());
+        snapshots.publish(first, 1L);
+        long original = singleObjectId();
+        long epochBefore;
+        try (Connection connection = open()) {
+            update(
+                    connection,
+                    "INSERT INTO acl_grant (subject_type,subject_id,resource_type,resource_id,"
+                            + "resource_generation,action,effect,valid_from,status,reason,create_time,update_time,created_by,updated_by) "
+                            + "VALUES ('USER',7,'OBJECT',?,1,'READ','ALLOW',UTC_TIMESTAMP(6),'ACTIVE','synthetic',"
+                            + "UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),1,1)",
+                    original);
+            try (Statement statement = connection.createStatement();
+                    ResultSet result =
+                            statement.executeQuery(
+                                    "SELECT policy_epoch FROM sys_security_state WHERE singleton_id=1")) {
+                assertTrue(result.next());
+                epochBefore = result.getLong(1);
+            }
+        }
+        long candidate = snapshots.stage(1L, model("replacement", "beta"), nowUtc());
+        DataSource failAtEventWrite =
+                (DataSource)
+                        java.lang.reflect.Proxy.newProxyInstance(
+                                DataSource.class.getClassLoader(),
+                                new Class<?>[] {DataSource.class},
+                                (proxy, method, args) -> {
+                                    if (!method.getName().equals("getConnection")) {
+                                        throw new UnsupportedOperationException(method.getName());
+                                    }
+                                    Connection actual = open();
+                                    return java.lang.reflect.Proxy.newProxyInstance(
+                                            Connection.class.getClassLoader(),
+                                            new Class<?>[] {Connection.class},
+                                            (connectionProxy, connectionMethod, connectionArgs) -> {
+                                                if (connectionMethod
+                                                                .getName()
+                                                                .equals("prepareStatement")
+                                                        && ((String) connectionArgs[0])
+                                                                .startsWith(
+                                                                        "INSERT INTO sys_security_event")) {
+                                                    throw new SQLException(
+                                                            "synthetic publication failure",
+                                                            "45000");
+                                                }
+                                                try {
+                                                    return connectionMethod.invoke(
+                                                            actual, connectionArgs);
+                                                } catch (
+                                                        java.lang.reflect.InvocationTargetException
+                                                                failure) {
+                                                    throw failure.getCause();
+                                                }
+                                            });
+                                });
+        DomainException rejected =
+                assertThrows(
+                        DomainException.class,
+                        () -> new SchemaSnapshotStore(failAtEventWrite).publish(candidate, 1L));
+        assertEquals(ErrorCode.DEPENDENCY_UNAVAILABLE, rejected.errorCode());
+        assertEquals("ACTIVE", statusOf("resource_object", original));
+        assertEquals("STAGING", statusOf("schema_snapshot", candidate));
+        PublishedSnapshotReader.Published published =
+                new PublishedSnapshotReader(source()).load(1L);
+        assertEquals(first, published.snapshotId());
+        assertEquals(2L, published.resourceVersion());
+        assertEquals(1, published.namespaces().size());
+        assertEquals("alpha", published.namespaces().getFirst().objects().getFirst().objectRaw());
+        try (Connection connection = open();
+                Statement statement = connection.createStatement()) {
+            try (ResultSet result =
+                    statement.executeQuery(
+                            "SELECT policy_epoch FROM sys_security_state WHERE singleton_id = 1")) {
+                assertTrue(result.next());
+                assertEquals(epochBefore, result.getLong(1));
+            }
+            try (ResultSet events =
+                    statement.executeQuery("SELECT COUNT(*) FROM sys_security_event")) {
+                assertTrue(events.next());
+                assertEquals(1, events.getInt(1));
+            }
+            try (ResultSet grant = statement.executeQuery("SELECT status,version FROM acl_grant")) {
+                assertTrue(grant.next());
+                assertEquals("ACTIVE", grant.getString(1));
+                assertEquals(1, grant.getLong(2));
+            }
+        }
     }
 
     @Test

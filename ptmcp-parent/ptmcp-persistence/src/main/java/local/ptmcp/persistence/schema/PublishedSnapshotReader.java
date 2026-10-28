@@ -115,41 +115,50 @@ public final class PublishedSnapshotReader {
         }
         try (Connection connection = primaryMetadata.getConnection()) {
             connection.setReadOnly(true);
-            connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
-            Head head = readHead(connection, datasourceId);
-            if (head == null) {
-                return unusable(datasourceId);
+            connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+            connection.setAutoCommit(false);
+            try {
+                return load(connection, datasourceId);
+            } finally {
+                connection.rollback();
             }
-            Map<Long, NamespaceDraft> namespaces = new LinkedHashMap<>();
-            Map<Long, ObjectDraft> objects = new LinkedHashMap<>();
-            readNamespaces(connection, datasourceId, namespaces);
-            readObjects(connection, head.snapshotId(), namespaces, objects);
-            readColumns(connection, head.snapshotId(), objects);
-            List<Namespace> published = new ArrayList<>(namespaces.size());
-            for (NamespaceDraft draft : namespaces.values()) {
-                List<TableObject> objectList = new ArrayList<>(draft.objects.size());
-                for (ObjectDraft object : draft.objects) {
-                    objectList.add(object.toRecord());
-                }
-                published.add(draft.toRecord(objectList));
-            }
-            return new Published(
-                    datasourceId,
-                    head.snapshotId(),
-                    head.configVersion(),
-                    head.resourceVersion(),
-                    head.engine(),
-                    head.host(),
-                    head.port(),
-                    head.databaseName(),
-                    head.username(),
-                    head.credentialCipher(),
-                    head.keyId(),
-                    head.poolMax(),
-                    published);
         } catch (SQLException error) {
             throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
+    }
+
+    private static Published load(Connection connection, long datasourceId) throws SQLException {
+        Head head = readHead(connection, datasourceId);
+        if (head == null) {
+            return unusable(datasourceId);
+        }
+        Map<Long, NamespaceDraft> namespaces = new LinkedHashMap<>();
+        Map<Long, ObjectDraft> objects = new LinkedHashMap<>();
+        readNamespaces(connection, datasourceId, namespaces);
+        readObjects(connection, head.snapshotId(), namespaces, objects);
+        readColumns(connection, head.snapshotId(), objects);
+        List<Namespace> published = new ArrayList<>(namespaces.size());
+        for (NamespaceDraft draft : namespaces.values()) {
+            List<TableObject> objectList = new ArrayList<>(draft.objects.size());
+            for (ObjectDraft object : draft.objects) {
+                objectList.add(object.toRecord());
+            }
+            published.add(draft.toRecord(objectList));
+        }
+        return new Published(
+                datasourceId,
+                head.snapshotId(),
+                head.configVersion(),
+                head.resourceVersion(),
+                head.engine(),
+                head.host(),
+                head.port(),
+                head.databaseName(),
+                head.username(),
+                head.credentialCipher(),
+                head.keyId(),
+                head.poolMax(),
+                published);
     }
 
     private static Published unusable(long datasourceId) {
@@ -286,8 +295,11 @@ public final class PublishedSnapshotReader {
         try (PreparedStatement statement =
                 statement(
                         connection,
-                        "SELECT status, expires_at FROM schema_snapshot WHERE id = ?")) {
+                        "SELECT status, expires_at FROM schema_snapshot WHERE id = ?"
+                                + " AND datasource_id = ? AND config_version = ?")) {
             statement.setLong(1, snapshotId);
+            statement.setLong(2, datasourceId);
+            statement.setLong(3, configVersion);
             try (ResultSet result = statement.executeQuery()) {
                 LocalDateTime expiresAt =
                         result.next() ? result.getObject(2, LocalDateTime.class) : null;

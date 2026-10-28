@@ -17,11 +17,9 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
 
 import javax.sql.DataSource;
@@ -79,6 +77,17 @@ public final class SchemaSnapshotStore {
             Connection connection, long datasourceId, SnapshotModel model, LocalDateTime capturedAt)
             throws SQLException {
         LocalDateTime now = nowUtc();
+        // Serializes identity allocation and its publication baseline with config changes and
+        // other captures. This transaction never subsequently takes the security-global lock.
+        try (PreparedStatement lock =
+                statement(connection, "SELECT id FROM datasource WHERE id = ? FOR UPDATE")) {
+            lock.setLong(1, datasourceId);
+            try (ResultSet result = lock.executeQuery()) {
+                if (!result.next()) {
+                    throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
+                }
+            }
+        }
         Previous previous = loadPreviousPublished(connection, datasourceId);
 
         try (PreparedStatement insert =
@@ -100,31 +109,15 @@ public final class SchemaSnapshotStore {
         }
         long snapshotId = lastId(connection);
 
-        Set<Long> stagedObjects = new HashSet<>();
-        Set<Long> stagedNamespaces = new HashSet<>();
         int objectCount = 0;
         for (SnapshotModel.NamespaceModel namespace : model.namespaces()) {
             long namespaceId = resolveNamespace(connection, datasourceId, namespace, now);
-            stagedNamespaces.add(namespaceId);
             for (SnapshotModel.ObjectModel object : namespace.objects()) {
                 long objectId = resolveObject(connection, namespaceId, object, capturedAt, now);
                 ObjectVersion versioned = objectVersion(objectId, object, previous);
                 insertSnapshotObject(connection, snapshotId, objectId, object, versioned, now);
                 insertColumns(connection, snapshotId, objectId, object, now);
-                stagedObjects.add(objectId);
                 objectCount++;
-            }
-        }
-        // Everything previously ACTIVE that is absent from this capture is dropped; nothing is
-        // half-staged because the whole capture lives in this transaction.
-        for (Long objectId : previous.objectIds()) {
-            if (!stagedObjects.contains(objectId)) {
-                markMissing(connection, "resource_object", objectId, now);
-            }
-        }
-        for (Long namespaceId : previous.namespaceIds()) {
-            if (!stagedNamespaces.contains(namespaceId)) {
-                markMissing(connection, "resource_namespace", namespaceId, now);
             }
         }
         try (PreparedStatement update =
@@ -141,52 +134,34 @@ public final class SchemaSnapshotStore {
 
     private Previous loadPreviousPublished(Connection connection, long datasourceId)
             throws SQLException {
-        Map<String, Long> signatureToObject = new HashMap<>();
+        Map<Long, String> objectSignatures = new HashMap<>();
         Map<Long, Long> objectVersions = new HashMap<>();
-        Set<Long> objectIds = new HashSet<>();
-        Set<Long> namespaceIds = new HashSet<>();
+        Map<Long, byte[]> objectDefinitions = new HashMap<>();
         try (PreparedStatement statement =
                 statement(
                         connection,
-                        "SELECT so.object_id, so.object_version, so.column_signature, "
-                                + "ro.namespace_id FROM snapshot_object so "
-                                + "JOIN schema_snapshot ss ON ss.id = so.snapshot_id "
-                                + "JOIN resource_object ro ON ro.id = so.object_id "
-                                + "WHERE ss.datasource_id = ? AND ss.status = 'PUBLISHED' "
-                                + "ORDER BY ss.captured_at DESC LIMIT "
+                        "SELECT so.object_id, so.object_version, so.column_signature, so.definition_hash "
+                                + "FROM datasource ds JOIN snapshot_object so "
+                                + "ON so.snapshot_id = ds.active_snapshot_id "
+                                + "WHERE ds.id = ? LIMIT "
                                 + MAX_PREVIOUS_OBJECTS)) {
             statement.setLong(1, datasourceId);
             try (ResultSet result = statement.executeQuery()) {
                 while (result.next()) {
                     long objectId = result.getLong(1);
-                    long namespaceId = result.getLong(4);
                     objectVersions.putIfAbsent(objectId, result.getLong(2));
-                    signatureToObject.putIfAbsent(
-                            HexFormat.of().formatHex(result.getBytes(3)), objectId);
-                    objectIds.add(objectId);
-                    namespaceIds.add(namespaceId);
+                    objectSignatures.put(objectId, HexFormat.of().formatHex(result.getBytes(3)));
+                    objectDefinitions.put(objectId, result.getBytes(4));
                 }
             }
         }
-        try (PreparedStatement statement =
-                statement(
-                        connection,
-                        "SELECT id FROM resource_namespace WHERE datasource_id = ? AND status = 'ACTIVE'")) {
-            statement.setLong(1, datasourceId);
-            try (ResultSet result = statement.executeQuery()) {
-                while (result.next()) {
-                    namespaceIds.add(result.getLong(1));
-                }
-            }
-        }
-        return new Previous(signatureToObject, objectVersions, objectIds, namespaceIds);
+        return new Previous(objectSignatures, objectVersions, objectDefinitions);
     }
 
     private record Previous(
-            Map<String, Long> signatureToObject,
+            Map<Long, String> objectSignatures,
             Map<Long, Long> objectVersions,
-            Set<Long> objectIds,
-            Set<Long> namespaceIds) {}
+            Map<Long, byte[]> objectDefinitions) {}
 
     private record ObjectVersion(String signature, long version) {}
 
@@ -224,9 +199,12 @@ public final class SchemaSnapshotStore {
         }
         // Same generation keeps its identity; the version only advances when the captured shape
         // differs from the version the object last published.
-        Long sameSignatureObject = previous.signatureToObject().get(signature);
         long version =
-                sameSignatureObject != null && sameSignatureObject == objectId
+                signature.equals(previous.objectSignatures().get(objectId))
+                                && previous.objectDefinitions().get(objectId) != null
+                                && MessageDigest.isEqual(
+                                        object.definitionHash(),
+                                        previous.objectDefinitions().get(objectId))
                         ? previousVersion
                         : previousVersion + 1;
         return new ObjectVersion(signature, version);
@@ -243,7 +221,7 @@ public final class SchemaSnapshotStore {
                         connection,
                         "SELECT id, generation, status FROM resource_namespace "
                                 + "WHERE datasource_id = ? AND catalog_norm = ? AND schema_norm = ? "
-                                + "ORDER BY generation DESC LIMIT 1 FOR UPDATE")) {
+                                + "ORDER BY (status = 'ACTIVE') DESC, generation DESC LIMIT 1 FOR UPDATE")) {
             statement.setLong(1, datasourceId);
             statement.setString(2, namespace.catalogNorm());
             statement.setString(3, namespace.schemaNorm());
@@ -275,7 +253,7 @@ public final class SchemaSnapshotStore {
                         connection,
                         "INSERT INTO resource_namespace (datasource_id, catalog_raw, catalog_norm, "
                                 + "schema_raw, schema_norm, generation, status, create_time, update_time) "
-                                + "VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)")) {
+                                + "VALUES (?, ?, ?, ?, ?, ?, 'STAGING', ?, ?)")) {
             insert.setLong(1, datasourceId);
             insert.setString(2, namespace.catalogRaw());
             insert.setString(3, namespace.catalogNorm());
@@ -301,25 +279,13 @@ public final class SchemaSnapshotStore {
                         connection,
                         "SELECT id, status FROM resource_object "
                                 + "WHERE namespace_id = ? AND object_norm = ? "
-                                + "ORDER BY generation DESC LIMIT 1 FOR UPDATE")) {
+                                + "ORDER BY (status = 'ACTIVE') DESC, generation DESC LIMIT 1 FOR UPDATE")) {
             statement.setLong(1, namespaceId);
             statement.setString(2, object.objectNorm());
             try (ResultSet result = statement.executeQuery()) {
                 if (result.next()) {
                     long id = result.getLong(1);
                     if ("ACTIVE".equals(result.getString(2))) {
-                        try (PreparedStatement touch =
-                                statement(
-                                        connection,
-                                        "UPDATE resource_object SET last_seen_at = ?, definition_hash = ?, "
-                                                + "physical_identity = ?, update_time = ? WHERE id = ?")) {
-                            touch.setObject(1, capturedAt);
-                            touch.setBytes(2, object.definitionHash());
-                            setNullableString(touch, 3, object.physicalIdentity());
-                            touch.setObject(4, now);
-                            touch.setLong(5, id);
-                            touch.executeUpdate();
-                        }
                         return id;
                     }
                 }
@@ -332,7 +298,7 @@ public final class SchemaSnapshotStore {
                         "INSERT INTO resource_object (namespace_id, generation, object_raw, object_norm, "
                                 + "quoted, kind, status, definition_hash, physical_identity, first_seen_at, "
                                 + "last_seen_at, create_time, update_time) "
-                                + "SELECT ?, COALESCE(MAX(generation), 0) + 1, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?, ?, ?, ? "
+                                + "SELECT ?, COALESCE(MAX(generation), 0) + 1, ?, ?, ?, ?, 'STAGING', ?, ?, ?, ?, ?, ? "
                                 + "FROM resource_object WHERE namespace_id = ?")) {
             insert.setLong(1, namespaceId);
             insert.setString(2, object.objectRaw());
@@ -365,15 +331,17 @@ public final class SchemaSnapshotStore {
                 statement(
                         connection,
                         "INSERT INTO snapshot_object (snapshot_id, object_id, object_version, "
-                                + "table_comment, column_signature, create_time, update_time) "
-                                + "VALUES (?, ?, ?, ?, UNHEX(?), ?, ?)")) {
+                                + "table_comment, column_signature, definition_hash, physical_identity, "
+                                + "create_time, update_time) VALUES (?, ?, ?, ?, UNHEX(?), ?, ?, ?, ?)")) {
             insert.setLong(1, snapshotId);
             insert.setLong(2, objectId);
             insert.setLong(3, versioned.version());
             insert.setString(4, object.tableComment());
             insert.setString(5, versioned.signature());
-            insert.setObject(6, now);
-            insert.setObject(7, now);
+            insert.setBytes(6, object.definitionHash());
+            setNullableString(insert, 7, object.physicalIdentity());
+            insert.setObject(8, now);
+            insert.setObject(9, now);
             insert.executeUpdate();
         }
     }
@@ -437,21 +405,6 @@ public final class SchemaSnapshotStore {
         }
     }
 
-    private static void markMissing(Connection connection, String table, long id, LocalDateTime now)
-            throws SQLException {
-        try (PreparedStatement statement =
-                statement(
-                        connection,
-                        "UPDATE "
-                                + table
-                                + " SET status = 'MISSING', update_time = ? "
-                                + "WHERE id = ? AND status = 'ACTIVE'")) {
-            statement.setObject(1, now);
-            statement.setLong(2, id);
-            statement.executeUpdate();
-        }
-    }
-
     /**
      * Publishes a STAGING snapshot: config_version re-check, atomic active switch, resource version
      * bump, retirement of the previous snapshot and revocation of grants that point at objects this
@@ -475,13 +428,16 @@ public final class SchemaSnapshotStore {
                     try (PreparedStatement lock =
                             statement(
                                     connection,
-                                    "SELECT config_version FROM datasource WHERE id = ? FOR UPDATE")) {
+                                    "SELECT config_version, resource_version FROM datasource WHERE id = ? FOR UPDATE")) {
                         lock.setLong(1, datasourceId);
                         try (ResultSet result = lock.executeQuery()) {
                             if (!result.next()) {
                                 throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
                             }
                             configVersion = result.getLong(1);
+                            if (result.getLong(2) != currentResourceVersion) {
+                                throw new DomainException(ErrorCode.RESOURCE_VERSION_CHANGED);
+                            }
                         }
                     }
                     if (configVersion != expectedConfigVersion) {
@@ -491,12 +447,18 @@ public final class SchemaSnapshotStore {
                             statement(
                                     connection,
                                     "UPDATE schema_snapshot SET status = 'PUBLISHED', update_time = UTC_TIMESTAMP(6) "
-                                            + "WHERE id = ? AND status = 'STAGING'")) {
+                                            + "WHERE id = ? AND datasource_id = ? AND config_version = ? "
+                                            + "AND resource_version = ? AND status = 'STAGING' "
+                                            + "AND expires_at > UTC_TIMESTAMP(6)")) {
                         publish.setLong(1, snapshotId);
+                        publish.setLong(2, datasourceId);
+                        publish.setLong(3, expectedConfigVersion);
+                        publish.setLong(4, currentResourceVersion);
                         if (publish.executeUpdate() != 1) {
                             throw new DomainException(ErrorCode.RESOURCE_VERSION_CHANGED);
                         }
                     }
+                    publishResources(connection, datasourceId, snapshotId);
                     try (PreparedStatement retire =
                             statement(
                                     connection,
@@ -523,6 +485,70 @@ public final class SchemaSnapshotStore {
                     revokeRetiredGrants(connection, datasourceId);
                 });
         return newResourceVersion;
+    }
+
+    private static void publishResources(Connection connection, long datasourceId, long snapshotId)
+            throws SQLException {
+        try (PreparedStatement validate =
+                statement(
+                        connection,
+                        "SELECT COUNT(*) FROM snapshot_object so "
+                                + "JOIN resource_object ro ON ro.id = so.object_id "
+                                + "JOIN resource_namespace ns ON ns.id = ro.namespace_id "
+                                + "WHERE so.snapshot_id = ? AND (ns.datasource_id <> ? "
+                                + "OR ro.status NOT IN ('ACTIVE', 'STAGING') "
+                                + "OR ns.status NOT IN ('ACTIVE', 'STAGING') OR so.definition_hash IS NULL)")) {
+            validate.setLong(1, snapshotId);
+            validate.setLong(2, datasourceId);
+            try (ResultSet result = validate.executeQuery()) {
+                if (!result.next() || result.getLong(1) != 0) {
+                    throw new DomainException(ErrorCode.RESOURCE_VERSION_CHANGED);
+                }
+            }
+        }
+        try (PreparedStatement retire =
+                statement(
+                        connection,
+                        "UPDATE resource_object ro JOIN resource_namespace ns ON ns.id = ro.namespace_id "
+                                + "LEFT JOIN snapshot_object so ON so.object_id = ro.id AND so.snapshot_id = ? "
+                                + "SET ro.status = 'MISSING', ro.update_time = UTC_TIMESTAMP(6) "
+                                + "WHERE ns.datasource_id = ? AND ro.status = 'ACTIVE' AND so.object_id IS NULL")) {
+            retire.setLong(1, snapshotId);
+            retire.setLong(2, datasourceId);
+            retire.executeUpdate();
+        }
+        try (PreparedStatement retire =
+                statement(
+                        connection,
+                        "UPDATE resource_namespace ns SET ns.status = 'MISSING', ns.update_time = UTC_TIMESTAMP(6) "
+                                + "WHERE ns.datasource_id = ? AND ns.status = 'ACTIVE' AND NOT EXISTS "
+                                + "(SELECT 1 FROM snapshot_object so JOIN resource_object ro ON ro.id = so.object_id "
+                                + "WHERE so.snapshot_id = ? AND ro.namespace_id = ns.id)")) {
+            retire.setLong(1, datasourceId);
+            retire.setLong(2, snapshotId);
+            retire.executeUpdate();
+        }
+        try (PreparedStatement activate =
+                statement(
+                        connection,
+                        "UPDATE resource_namespace ns JOIN resource_object ro ON ro.namespace_id = ns.id "
+                                + "JOIN snapshot_object so ON so.object_id = ro.id AND so.snapshot_id = ? "
+                                + "SET ns.status = 'ACTIVE', ns.update_time = UTC_TIMESTAMP(6) WHERE ns.datasource_id = ?")) {
+            activate.setLong(1, snapshotId);
+            activate.setLong(2, datasourceId);
+            activate.executeUpdate();
+        }
+        try (PreparedStatement activate =
+                statement(
+                        connection,
+                        "UPDATE resource_object ro JOIN snapshot_object so ON so.object_id = ro.id "
+                                + "JOIN schema_snapshot ss ON ss.id = so.snapshot_id AND ss.id = ? "
+                                + "SET ro.status = 'ACTIVE', ro.definition_hash = so.definition_hash, "
+                                + "ro.physical_identity = so.physical_identity, ro.last_seen_at = ss.captured_at, "
+                                + "ro.update_time = UTC_TIMESTAMP(6)")) {
+            activate.setLong(1, snapshotId);
+            activate.executeUpdate();
+        }
     }
 
     private static void revokeRetiredGrants(Connection connection, long datasourceId)
@@ -584,14 +610,18 @@ public final class SchemaSnapshotStore {
                                     + "ss.captured_at, ss.expires_at, ss.object_count "
                                     + "FROM datasource ds "
                                     + "JOIN schema_snapshot ss ON ss.id = ds.active_snapshot_id "
-                                    + "WHERE ds.id = ? AND ss.status = 'PUBLISHED'")) {
+                                    + "AND ss.datasource_id = ds.id "
+                                    + "WHERE ds.id = ? AND ds.status = 'ACTIVE' "
+                                    + "AND ss.status = 'PUBLISHED'")) {
                 statement.setLong(1, datasourceId);
                 try (ResultSet result = statement.executeQuery()) {
                     if (!result.next()) {
                         throw new DomainException(ErrorCode.SCHEMA_STALE);
                     }
                     LocalDateTime expiresAt = result.getObject(6, LocalDateTime.class);
-                    if (expiresAt.isBefore(nowUtc()) || result.getLong(2) != result.getLong(3)) {
+                    if (expiresAt == null
+                            || !expiresAt.isAfter(nowUtc())
+                            || result.getLong(2) != result.getLong(3)) {
                         throw new DomainException(ErrorCode.SCHEMA_STALE);
                     }
                     return new ActiveSnapshot(
