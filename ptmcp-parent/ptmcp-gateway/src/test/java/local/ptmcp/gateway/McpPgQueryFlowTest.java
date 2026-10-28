@@ -3,6 +3,7 @@ package local.ptmcp.gateway;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -11,22 +12,20 @@ import local.ptmcp.common.resource.DatabaseEngine;
 import local.ptmcp.datasource.DataSourcePoolRegistry;
 import local.ptmcp.datasource.connection.CredentialCipher;
 import local.ptmcp.datasource.metadata.PgMetadataCollector;
+import local.ptmcp.datasource.postgres.PgApprovedQueryAdapter;
+import local.ptmcp.datasource.testing.TlsDatabaseFixture;
 import local.ptmcp.persistence.schema.SchemaSnapshotStore;
 
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
-import org.testcontainers.utility.DockerImageName;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -51,25 +50,20 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Real HTTP + real PG execution; the TLS pool factory is replaced only in this test. */
+/** Real HTTP + CA-verified PostgreSQL using the production destination and TLS pool factory. */
 @SpringBootTest(
         classes = GatewayApplication.class,
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(McpPgQueryFlowTest.PlainPgPools.class)
 class McpPgQueryFlowTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final String MYSQL_IMAGE =
             System.getProperty(
                     "ptmcp.test.mysqlImage",
                     "mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69");
-    private static final String PG_IMAGE =
-            System.getProperty(
-                    "ptmcp.test.pgImage",
-                    "postgres@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6");
     private static final String KEY = Base64.getEncoder().encodeToString(new byte[32]);
     private static final String PAT = "ptmcp_pat_" + secret();
     private static final String RESOURCE = "https://mcp.test.invalid/mcp";
-    private static final String DATABASE_NAME = "pg_flow_business";
+    private static final String DATABASE_NAME = TlsDatabaseFixture.DATABASE;
 
     private static final MySQLContainer META =
             new MySQLContainer(MYSQL_IMAGE)
@@ -78,20 +72,16 @@ class McpPgQueryFlowTest {
                     .withPassword(secret())
                     .withUrlParam("sslMode", "DISABLED")
                     .withUrlParam("allowPublicKeyRetrieval", "true");
-    private static final PostgreSQLContainer BUSINESS =
-            new PostgreSQLContainer(DockerImageName.parse(PG_IMAGE))
-                    .withDatabaseName(DATABASE_NAME)
-                    .withUsername("flow_business_user")
-                    .withPassword(secret())
-                    .withEnv("TZ", "UTC")
-                    .withUrlParam("sslmode", "disable");
+    private static final TlsDatabaseFixture TLS;
+    private static final PostgreSQLContainer BUSINESS;
     private static final HikariDataSource PRIMARY;
     private static final Path WAL;
 
     static {
         try {
             META.start();
-            BUSINESS.start();
+            TLS = new TlsDatabaseFixture(DatabaseEngine.POSTGRESQL);
+            BUSINESS = (PostgreSQLContainer) TLS.container;
             HikariConfig config = new HikariConfig();
             config.setJdbcUrl(META.getJdbcUrl());
             config.setUsername(META.getUsername());
@@ -111,6 +101,8 @@ class McpPgQueryFlowTest {
     }
 
     @LocalServerPort private int port;
+    @MockitoSpyBean private DataSourcePoolRegistry pools;
+    @MockitoSpyBean private PgApprovedQueryAdapter pgAdapter;
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry properties) {
@@ -120,6 +112,8 @@ class McpPgQueryFlowTest {
         properties.add("ptmcp.gateway.metadata-password", META::getPassword);
         properties.add("ptmcp.gateway.credential-key", () -> KEY);
         properties.add("ptmcp.gateway.allowed-cidrs", () -> "127.0.0.0/8,172.16.0.0/12");
+        properties.add("ptmcp.gateway.allowed-ports", () -> Integer.toString(TLS.port()));
+        properties.add("ptmcp.gateway.pg-ssl-root-cert", () -> TLS.rootCert.toString());
         properties.add("ptmcp.gateway.truststore-path", () -> "target/test-only-trust.p12");
         properties.add("ptmcp.gateway.truststore-password", TlsMysqlFixture::secret);
         properties.add("ptmcp.gateway.wal-directory", WAL::toString);
@@ -128,44 +122,10 @@ class McpPgQueryFlowTest {
         properties.add("ptmcp.gateway.resource", () -> RESOURCE);
     }
 
-    @TestConfiguration
-    static class PlainPgPools {
-        @Bean
-        @Primary
-        DataSourcePoolRegistry testPoolRegistry() {
-            return new DataSourcePoolRegistry(
-                    (key, credential, limits) -> {
-                        if (key.engine() != DatabaseEngine.POSTGRESQL) {
-                            throw new IllegalArgumentException("test registry only supports PG");
-                        }
-                        HikariConfig config = new HikariConfig();
-                        config.setJdbcUrl(
-                                "jdbc:postgresql://"
-                                        + key.host()
-                                        + ":"
-                                        + key.port()
-                                        + "/"
-                                        + key.database()
-                                        + "?sslmode=disable");
-                        config.setUsername(key.username());
-                        config.setPassword(new String(credential));
-                        config.setMaximumPoolSize(limits.maxPoolSize());
-                        config.setMinimumIdle(0);
-                        config.setConnectionTimeout(limits.checkoutTimeoutMillis());
-                        config.setValidationTimeout(2_000);
-                        config.setInitializationFailTimeout(-1);
-                        config.setAutoCommit(true);
-                        config.setReadOnly(false);
-                        config.setPoolName("ptmcp-test-pg-" + key.datasourceId());
-                        return new HikariDataSource(config);
-                    });
-        }
-    }
-
     @AfterAll
-    static void stopOwnedContainers() {
+    static void stopOwnedContainers() throws Exception {
         PRIMARY.close();
-        BUSINESS.stop();
+        TLS.close();
         META.stop();
     }
 
@@ -241,6 +201,15 @@ class McpPgQueryFlowTest {
         assertEquals("12.34", queryData.path("rows").get(0).get(1).asText());
         assertEquals("測試😀", queryData.path("rows").get(0).get(2).asText());
         assertEquals("NUMBER", queryData.path("rows").get(0).get(0).getNodeType().name());
+        try (var lease = pools.current(1).orElseThrow().lease();
+                Connection connection = lease.dataSource().getConnection();
+                var statement = connection.createStatement();
+                var ssl =
+                        statement.executeQuery(
+                                "SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()")) {
+            assertTrue(ssl.next());
+            assertTrue(ssl.getBoolean(1), "the production pool must use TLS");
+        }
         assertEquals(
                 result.path("structuredContent"),
                 JSON.readTree(result.path("content").get(0).path("text").asText()));
@@ -268,6 +237,41 @@ class McpPgQueryFlowTest {
                         PAT);
         assertEquals(200, response.statusCode(), response.body());
         assertEquals("DIALECT_CONTEXT_INVALID", error(response).path("code").asText());
+    }
+
+    @Test
+    void pgObjectDenyRejectsBeforePoolActivationOrExecution() throws Exception {
+        try (Connection connection = PRIMARY.getConnection();
+                var statement = connection.createStatement()) {
+            statement.executeUpdate(
+                    "INSERT INTO acl_grant (subject_type,subject_id,resource_type,resource_id,resource_generation,"
+                            + "action,effect,valid_from,status,reason,create_time,update_time,created_by,updated_by) "
+                            + "SELECT 'USER',1,'OBJECT',id,generation,'READ','DENY',UTC_TIMESTAMP(6),'ACTIVE',"
+                            + "'synthetic-pg-deny',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),1,1 FROM resource_object WHERE object_norm='orders'");
+        }
+        try {
+            HttpResponse<String> response =
+                    toolCall(
+                            "execute_readonly_sql",
+                            Map.of(
+                                    "datasource_id",
+                                    "1",
+                                    "database_name",
+                                    DATABASE_NAME,
+                                    "schema_name",
+                                    "public",
+                                    "sql_query",
+                                    "SELECT id FROM orders"),
+                            PAT);
+            assertEquals(
+                    "TABLE_NOT_AUTHORIZED", error(response).path("code").asText(), response.body());
+            verifyNoInteractions(pools, pgAdapter);
+        } finally {
+            try (Connection connection = PRIMARY.getConnection();
+                    var statement = connection.createStatement()) {
+                statement.executeUpdate("DELETE FROM acl_grant WHERE reason='synthetic-pg-deny'");
+            }
+        }
     }
 
     // ---------------------------------------------------------------- helpers

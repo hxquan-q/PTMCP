@@ -27,12 +27,14 @@ final class PinnedDriverDataSource implements DataSource {
             int port,
             String url,
             String username,
-            char[] password) {
+            char[] password,
+            Properties options) {
         this.destinations = destinations;
         this.host = host;
         this.port = port;
         this.url = url;
         this.credentials = new Properties();
+        this.credentials.putAll(options);
         credentials.setProperty("user", username);
         credentials.setProperty("password", new String(password));
     }

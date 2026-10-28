@@ -165,6 +165,9 @@ class DatasourceApiTest {
 
     @DynamicPropertySource
     static void adminDatasource(DynamicPropertyRegistry registry) {
+        registry.add(
+                "ptmcp.admin.datasource.allowed-ports",
+                () -> "3306,5432," + MYSQL.getMappedPort(3306));
         registry.add("ptmcp.admin.datasource.url", MYSQL::getJdbcUrl);
         registry.add("ptmcp.admin.datasource.username", MYSQL::getUsername);
         registry.add("ptmcp.admin.datasource.password", MYSQL::getPassword);

@@ -102,6 +102,9 @@ class McpAuditResilienceTest {
         properties.add("ptmcp.gateway.metadata-password", META::getPassword);
         properties.add("ptmcp.gateway.credential-key", () -> KEY);
         properties.add("ptmcp.gateway.allowed-cidrs", TlsMysqlFixture::allowedCidrs);
+        properties.add(
+                "ptmcp.gateway.allowed-ports",
+                () -> Integer.toString(BUSINESS.container.getMappedPort(3306)));
         properties.add("ptmcp.gateway.truststore-path", () -> BUSINESS.trustStore.toString());
         properties.add("ptmcp.gateway.truststore-password", () -> BUSINESS.password);
         properties.add("ptmcp.gateway.wal-directory", WAL::toString);

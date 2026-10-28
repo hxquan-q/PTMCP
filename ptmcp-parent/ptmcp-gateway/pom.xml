@@ -24,6 +24,14 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
+      <groupId>local.ptmcp</groupId>
+      <artifactId>ptmcp-datasource</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <classifier>tests</classifier>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>org.springframework.security</groupId>
       <artifactId>spring-security-oauth2-jose</artifactId>
     </dependency>

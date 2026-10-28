@@ -133,7 +133,7 @@ class McpGatewayConfiguration {
 
     @Bean
     DestinationPolicy destinationPolicy(GatewayProperties properties) {
-        return new DestinationPolicy(properties.allowedCidrs());
+        return new DestinationPolicy(properties.allowedCidrs(), properties.allowedPorts());
     }
 
     @Bean(destroyMethod = "close")

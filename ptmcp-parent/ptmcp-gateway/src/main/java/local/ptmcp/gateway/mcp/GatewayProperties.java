@@ -19,6 +19,7 @@ public record GatewayProperties(
         String metadataPassword,
         String credentialKey,
         String allowedCidrs,
+        String allowedPorts,
         String truststorePath,
         String truststorePassword,
         String pgSslRootCert,
@@ -36,6 +37,7 @@ public record GatewayProperties(
         metadataPassword = orEmpty(metadataPassword);
         credentialKey = orEmpty(credentialKey);
         allowedCidrs = orEmpty(allowedCidrs);
+        allowedPorts = allowedPorts == null ? "3306,5432" : allowedPorts.trim();
         truststorePath = orEmpty(truststorePath);
         truststorePassword = orEmpty(truststorePassword);
         pgSslRootCert = orEmpty(pgSslRootCert);

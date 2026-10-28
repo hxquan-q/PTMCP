@@ -2,6 +2,8 @@ package local.ptmcp.admin.datasource;
 
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
+import local.ptmcp.common.resource.DatabaseEngine;
+import local.ptmcp.datasource.connection.ConnectionProfile;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -91,7 +93,12 @@ public final class DatasourceStore {
                 || !STATUSES.contains(fields.status())) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
-        DestinationPolicy.normalizeHost(fields.host());
+        new ConnectionProfile(
+                DatabaseEngine.valueOf(fields.engine()),
+                fields.host(),
+                fields.port(),
+                fields.databaseName(),
+                fields.username());
     }
 
     public Page list(String keyword, String engine, String status, Long afterId, int pageSize) {

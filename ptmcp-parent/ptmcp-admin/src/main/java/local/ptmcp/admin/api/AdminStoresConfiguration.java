@@ -12,7 +12,6 @@ import local.ptmcp.admin.datasource.DatasourceConnectionFactory;
 import local.ptmcp.admin.datasource.DatasourceJobService;
 import local.ptmcp.admin.datasource.DatasourceJobStore;
 import local.ptmcp.admin.datasource.DatasourceStore;
-import local.ptmcp.admin.datasource.DestinationPolicy;
 import local.ptmcp.admin.me.MeService;
 import local.ptmcp.admin.me.PersonalTokenService;
 import local.ptmcp.admin.metadata.MetadataCatalogService;
@@ -22,6 +21,7 @@ import local.ptmcp.admin.platform.PlatformAdminService;
 import local.ptmcp.admin.platform.PlatformDirectoryService;
 import local.ptmcp.admin.session.AdminSessionService;
 import local.ptmcp.admin.session.SessionAuthFilter;
+import local.ptmcp.datasource.connection.DestinationPolicy;
 import local.ptmcp.persistence.org.AclDirectory;
 import local.ptmcp.persistence.org.AclGrantStore;
 import local.ptmcp.persistence.org.DelegationScopeResolver;
@@ -157,8 +157,9 @@ public class AdminStoresConfiguration {
 
     @Bean
     public DestinationPolicy destinationPolicy(
-            @Value("${ptmcp.admin.datasource.allowed-cidrs:}") String cidrs) {
-        return new DestinationPolicy(cidrs);
+            @Value("${ptmcp.admin.datasource.allowed-cidrs:}") String cidrs,
+            @Value("${ptmcp.admin.datasource.allowed-ports:3306,5432}") String ports) {
+        return new DestinationPolicy(cidrs, ports);
     }
 
     @Bean
@@ -176,9 +177,16 @@ public class AdminStoresConfiguration {
             CredentialCipher cipher,
             DestinationPolicy destinationPolicy,
             @Value("${ptmcp.admin.datasource.truststore-path:}") String truststorePath,
-            @Value("${ptmcp.admin.datasource.truststore-password:}") String truststorePassword) {
+            @Value("${ptmcp.admin.datasource.truststore-password:}") String truststorePassword,
+            @Value("${ptmcp.admin.datasource.truststore-type:PKCS12}") String truststoreType,
+            @Value("${ptmcp.admin.datasource.pg-ssl-root-cert:}") String pgRootCert) {
         return new DatasourceConnectionFactory(
-                destinationPolicy, cipher, truststorePath, truststorePassword);
+                destinationPolicy,
+                cipher,
+                truststorePath,
+                truststorePassword,
+                truststoreType,
+                pgRootCert);
     }
 
     @Bean

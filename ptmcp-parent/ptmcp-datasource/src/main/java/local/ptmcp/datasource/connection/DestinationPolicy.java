@@ -7,8 +7,10 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * Destination policy for datasource endpoints: the host must resolve to addresses inside the
@@ -20,8 +22,35 @@ public final class DestinationPolicy {
     private static final byte[] METADATA_V6 = parseLiteral("fd00:ec2::254");
 
     private final List<Cidr> allowed;
+    private final Set<Integer> allowedPorts;
+    private final Resolver resolver;
 
     public DestinationPolicy(String allowedCidrs) {
+        this(allowedCidrs, "3306,5432");
+    }
+
+    public DestinationPolicy(String allowedCidrs, String allowedPorts) {
+        this(allowedCidrs, allowedPorts, InetAddress::getAllByName);
+    }
+
+    DestinationPolicy(String allowedCidrs, String portConfiguration, Resolver resolver) {
+        this.resolver = java.util.Objects.requireNonNull(resolver, "resolver");
+        Set<Integer> ports = new HashSet<>();
+        if (portConfiguration != null && !portConfiguration.isBlank()) {
+            for (String entry : portConfiguration.split(",", -1)) {
+                String value = entry.trim();
+                if (!value.matches("[0-9]{1,5}")) {
+                    throw new IllegalArgumentException(
+                            "Allowed ports must be comma-separated integers");
+                }
+                int port = Integer.parseInt(value);
+                if (port < 1 || port > 65535) {
+                    throw new IllegalArgumentException("Allowed port is out of range");
+                }
+                ports.add(port);
+            }
+        }
+        this.allowedPorts = Set.copyOf(ports);
         List<Cidr> parsed = new ArrayList<>();
         if (allowedCidrs != null) {
             for (String entry : allowedCidrs.split(",")) {
@@ -43,12 +72,12 @@ public final class DestinationPolicy {
      */
     public List<InetAddress> resolve(String host, int port) {
         String normalized = normalizeHost(host);
-        if (port < 1 || port > 65535) {
+        if (port < 1 || port > 65535 || !allowedPorts.contains(port)) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
         InetAddress[] resolved;
         try {
-            resolved = InetAddress.getAllByName(normalized);
+            resolved = resolver.resolve(normalized);
         } catch (UnknownHostException error) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
@@ -63,7 +92,7 @@ public final class DestinationPolicy {
         return List.copyOf(Arrays.asList(resolved));
     }
 
-    static String normalizeHost(String host) {
+    public static String normalizeHost(String host) {
         if (host == null) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
@@ -105,6 +134,11 @@ public final class DestinationPolicy {
             }
         }
         return false;
+    }
+
+    @FunctionalInterface
+    interface Resolver {
+        InetAddress[] resolve(String host) throws UnknownHostException;
     }
 
     private record Cidr(byte[] network, int prefix) {
