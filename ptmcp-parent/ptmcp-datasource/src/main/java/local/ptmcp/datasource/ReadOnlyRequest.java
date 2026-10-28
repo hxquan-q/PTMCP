@@ -1,5 +1,9 @@
 package local.ptmcp.datasource;
 
+import local.ptmcp.common.execution.ApprovedSqlPlan;
+
+import java.time.Clock;
+
 /**
  * A closed execution input. The factory is package-private on purpose: only the ApprovedQuery
  * adapter that lives in this package after T07-c may create one, and no module outside can execute
@@ -11,13 +15,21 @@ public final class ReadOnlyRequest {
 
     private final String sql;
     private final int maxRows;
+    private final long configVersion;
+    private final Runnable revalidation;
 
     private ReadOnlyRequest(String sql, int maxRows) {
-        this.sql = sql;
-        this.maxRows = maxRows;
+        this(sql, maxRows, 0, () -> {});
     }
 
-    /** Only the post-T07-c ApprovedQuery adapter in this package may call this factory. */
+    private ReadOnlyRequest(String sql, int maxRows, long configVersion, Runnable revalidation) {
+        this.sql = sql;
+        this.maxRows = maxRows;
+        this.configVersion = configVersion;
+        this.revalidation = revalidation;
+    }
+
+    /** Internal protocol-test input; business execution must use {@link #approved}. */
     static ReadOnlyRequest of(String sql, int maxRows) {
         if (sql == null || sql.isBlank()) {
             throw new IllegalArgumentException("sql must not be blank");
@@ -32,6 +44,27 @@ public final class ReadOnlyRequest {
             throw new IllegalArgumentException("maxRows must be between 1 and " + MAX_ROWS_LIMIT);
         }
         return new ReadOnlyRequest(sql, maxRows);
+    }
+
+    /** Only the approved-plan adapter may bind a business request to a configuration. */
+    static ReadOnlyRequest approved(ApprovedSqlPlan plan, Clock clock) {
+        if (plan.configVersion() <= 0) {
+            throw new IllegalArgumentException("configVersion must be positive");
+        }
+        ReadOnlyRequest validated = of(plan.finalSql(), plan.effectiveLimit());
+        return new ReadOnlyRequest(
+                validated.sql,
+                validated.maxRows,
+                plan.configVersion(),
+                () -> ApprovedPlanVerifier.verify(plan, clock));
+    }
+
+    void beforeExecution() {
+        revalidation.run();
+    }
+
+    long configVersion() {
+        return configVersion;
     }
 
     String sql() {

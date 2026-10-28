@@ -61,16 +61,22 @@ public final class MysqlReadOnlyExecutor {
         if (handle.key().engine() != DatabaseEngine.MYSQL) {
             throw new DomainException(ErrorCode.DIALECT_CONTEXT_INVALID);
         }
-        Connection connection;
-        try {
-            connection = handle.dataSource().getConnection();
-        } catch (SQLException failure) {
-            throw new DomainException(ErrorCode.CONNECTION_POOL_UNAVAILABLE);
+        if (request.configVersion() > 0
+                && request.configVersion() != handle.key().configVersion()) {
+            throw new DomainException(ErrorCode.RESOURCE_VERSION_CHANGED);
         }
-        TraceRecorder trace = new TraceRecorder();
-        trace.poolGeneration(handle.generation());
-        trace.record(ExecutionStage.CHECKOUT, ExecutionState.ACQUIRED);
-        return run(connection, handle, request, cancellation, trace);
+        try (PoolHandle.Lease lease = handle.lease()) {
+            Connection connection;
+            try {
+                connection = lease.dataSource().getConnection();
+            } catch (SQLException failure) {
+                throw new DomainException(ErrorCode.CONNECTION_POOL_UNAVAILABLE);
+            }
+            TraceRecorder trace = new TraceRecorder();
+            trace.poolGeneration(handle.generation());
+            trace.record(ExecutionStage.CHECKOUT, ExecutionState.ACQUIRED);
+            return run(connection, handle, request, cancellation, trace);
+        }
     }
 
     private ReadOnlyResult run(
@@ -87,6 +93,7 @@ public final class MysqlReadOnlyExecutor {
             validateBorrowed(connection, handle.key());
             configure(connection);
             trace.record(ExecutionStage.CONFIGURE, ExecutionState.CONFIGURED);
+            request.beforeExecution();
             if (cancellation.isCancelled()) {
                 trace.record(ExecutionStage.CANCEL, ExecutionState.CANCELLING);
                 failure = new DomainException(ErrorCode.CLIENT_CANCELLED);

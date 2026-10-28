@@ -42,7 +42,8 @@ public final class ApprovedQueryAdapter {
         // The last authoritative check happens after the approval window check and immediately
         // before the pool checkout; nothing between here and JDBC can widen authorization.
         guard.beforeCheckout(datasourceId);
-        ReadOnlyRequest request = ReadOnlyRequest.of(plan.finalSql(), plan.effectiveLimit());
+        ApprovedPlanVerifier.verify(plan, clock);
+        ReadOnlyRequest request = ReadOnlyRequest.approved(plan, clock);
         return executor.execute(datasourceId, request, cancellation);
     }
 }

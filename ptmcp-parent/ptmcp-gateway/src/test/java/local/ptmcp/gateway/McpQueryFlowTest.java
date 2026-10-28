@@ -1,9 +1,18 @@
 package local.ptmcp.gateway;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.mockingDetails;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
 
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
@@ -13,6 +22,9 @@ import com.sun.net.httpserver.HttpServer;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
+import local.ptmcp.datasource.DataSourcePoolRegistry;
+import local.ptmcp.datasource.MysqlReadOnlyExecutor;
+import local.ptmcp.datasource.PoolHandle;
 import local.ptmcp.datasource.connection.CredentialCipher;
 import local.ptmcp.datasource.metadata.MysqlMetadataCollector;
 import local.ptmcp.persistence.schema.SchemaSnapshotStore;
@@ -21,11 +33,11 @@ import local.ptmcp.persistence.security.QuotaLimiter;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.testcontainers.mysql.MySQLContainer;
 
 import tools.jackson.databind.JsonNode;
@@ -58,6 +70,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 /** Real HTTP, real metadata primary, real TLS business database and real guard/executor/audit. */
 @SpringBootTest(
@@ -118,7 +132,9 @@ class McpQueryFlowTest {
 
     @LocalServerPort private int port;
 
-    @Autowired private QuotaLimiter quotas;
+    @MockitoSpyBean private QuotaLimiter quotas;
+    @MockitoSpyBean private MysqlReadOnlyExecutor businessExecutor;
+    @MockitoSpyBean private DataSourcePoolRegistry businessPools;
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry properties) {
@@ -128,6 +144,9 @@ class McpQueryFlowTest {
         properties.add("ptmcp.gateway.metadata-password", META::getPassword);
         properties.add("ptmcp.gateway.credential-key", () -> KEY);
         properties.add("ptmcp.gateway.allowed-cidrs", TlsMysqlFixture::allowedCidrs);
+        properties.add(
+                "ptmcp.gateway.allowed-ports",
+                () -> Integer.toString(BUSINESS.container.getMappedPort(3306)));
         properties.add("ptmcp.gateway.truststore-path", () -> BUSINESS.trustStore.toString());
         properties.add("ptmcp.gateway.truststore-password", () -> BUSINESS.password);
         properties.add("ptmcp.gateway.wal-directory", WAL::toString);
@@ -524,6 +543,184 @@ class McpQueryFlowTest {
     }
 
     @Test
+    void staleConfigurationRejectsAllToolsWithoutBusinessCheckout() throws Exception {
+        long before = businessConnections();
+        long executedBefore = businessExecutionCount();
+        updateDatasourceConfigVersion(2);
+        try {
+            HttpResponse<String> query = call("SELECT id FROM orders", PAT);
+            HttpResponse<String> catalog =
+                    toolCall("list_databases_and_tables", Map.of("datasource_id", "1"), PAT);
+            HttpResponse<String> schema =
+                    toolCall(
+                            "get_table_schema",
+                            Map.of(
+                                    "datasource_id", "1",
+                                    "database_name", BUSINESS.container.getDatabaseName(),
+                                    "table_names", List.of("orders")),
+                            PAT);
+            assertAll(
+                    () -> assertToolError(query, "SCHEMA_STALE"),
+                    () -> assertToolError(catalog, "SCHEMA_STALE"),
+                    () -> assertToolError(schema, "SCHEMA_STALE"),
+                    () -> assertEquals(executedBefore, businessExecutionCount()),
+                    () -> assertEquals(before, businessConnections()));
+        } finally {
+            updateDatasourceConfigVersion(1);
+        }
+    }
+
+    @Test
+    void queuedReadRevocationIsRejectedWithoutBusinessCheckout() throws Exception {
+        List<QuotaLimiter.ExecutionPermit> held = holdUserExecutionPermits();
+        long before = businessConnections();
+        long executedBefore = businessExecutionCount();
+        try (HttpClient client = noProxyClient()) {
+            clearInvocations(quotas);
+            CompletableFuture<HttpResponse<String>> pending =
+                    client.sendAsync(
+                            request(91, "SELECT id FROM orders", PAT),
+                            HttpResponse.BodyHandlers.ofString());
+            try {
+                verify(quotas, timeout(10_000).atLeastOnce())
+                        .acquireExecution(eq(1L), eq(1L), any());
+                updateDatasourceReadGrantStatus("REVOKED");
+                held.forEach(quotas::release);
+                held.clear();
+                HttpResponse<String> response = pending.get(10, TimeUnit.SECONDS);
+                assertAll(
+                        () -> assertToolError(response, "TABLE_NOT_AUTHORIZED"),
+                        () -> assertEquals(executedBefore, businessExecutionCount()),
+                        () -> assertEquals(before, businessConnections()));
+            } finally {
+                held.forEach(quotas::release);
+                held.clear();
+                try {
+                    pending.get(10, TimeUnit.SECONDS);
+                } finally {
+                    updateDatasourceReadGrantStatus("ACTIVE");
+                }
+            }
+        } finally {
+            held.forEach(quotas::release);
+        }
+    }
+
+    @Test
+    void queuedConfigurationChangeIsRejectedWithoutBusinessCheckout() throws Exception {
+        List<QuotaLimiter.ExecutionPermit> held = holdUserExecutionPermits();
+        long before = businessConnections();
+        long executedBefore = businessExecutionCount();
+        try (HttpClient client = noProxyClient()) {
+            clearInvocations(quotas);
+            CompletableFuture<HttpResponse<String>> pending =
+                    client.sendAsync(
+                            request(92, "SELECT id FROM orders", PAT),
+                            HttpResponse.BodyHandlers.ofString());
+            try {
+                verify(quotas, timeout(10_000).atLeastOnce())
+                        .acquireExecution(eq(1L), eq(1L), any());
+                updateDatasourceConfigVersion(2);
+                held.forEach(quotas::release);
+                held.clear();
+                HttpResponse<String> response = pending.get(10, TimeUnit.SECONDS);
+                assertAll(
+                        () -> assertToolError(response, "SCHEMA_STALE"),
+                        () -> assertEquals(executedBefore, businessExecutionCount()),
+                        () -> assertEquals(before, businessConnections()));
+            } finally {
+                held.forEach(quotas::release);
+                held.clear();
+                try {
+                    pending.get(10, TimeUnit.SECONDS);
+                } finally {
+                    updateDatasourceConfigVersion(1);
+                }
+            }
+        } finally {
+            held.forEach(quotas::release);
+        }
+    }
+
+    @Test
+    void queuedPolicyChangeIsRetryableWithoutBusinessCheckout() throws Exception {
+        List<QuotaLimiter.ExecutionPermit> held = holdUserExecutionPermits();
+        long before = businessConnections();
+        long executedBefore = businessExecutionCount();
+        try (HttpClient client = noProxyClient()) {
+            clearInvocations(quotas);
+            CompletableFuture<HttpResponse<String>> pending =
+                    client.sendAsync(
+                            request(93, "SELECT id FROM orders", PAT),
+                            HttpResponse.BodyHandlers.ofString());
+            try {
+                verify(quotas, timeout(10_000).atLeastOnce())
+                        .acquireExecution(eq(1L), eq(1L), any());
+                updateDatasourceReadGrantStatus("ACTIVE");
+                held.forEach(quotas::release);
+                held.clear();
+                HttpResponse<String> response = pending.get(10, TimeUnit.SECONDS);
+                assertToolError(response, "SECURITY_STATE_UNAVAILABLE");
+                JsonNode content =
+                        JSON.readTree(response.body()).path("result").path("structuredContent");
+                assertTrue(content.path("error").path("retryable").asBoolean());
+                assertTerminal(content.path("requestId").asText(), "ERROR", "ERROR");
+                assertEquals(executedBefore, businessExecutionCount());
+                assertEquals(before, businessConnections());
+            } finally {
+                held.forEach(quotas::release);
+                held.clear();
+                pending.get(10, TimeUnit.SECONDS);
+            }
+        } finally {
+            held.forEach(quotas::release);
+        }
+    }
+
+    @Test
+    void readRevokedAfterPoolActivationIsRejectedBeforeCheckout() throws Exception {
+        assertChangeAfterPoolActivation(false);
+    }
+
+    @Test
+    void configurationChangedAfterPoolActivationIsRejectedBeforeCheckout() throws Exception {
+        assertChangeAfterPoolActivation(true);
+    }
+
+    private void assertChangeAfterPoolActivation(boolean configuration) throws Exception {
+        long before = businessConnections();
+        long executedBefore = businessExecutionCount();
+        doAnswer(
+                        invocation -> {
+                            PoolHandle handle = (PoolHandle) invocation.callRealMethod();
+                            if (configuration) {
+                                updateDatasourceConfigVersion(2);
+                            } else {
+                                updateDatasourceReadGrantStatus("REVOKED");
+                            }
+                            return handle;
+                        })
+                .when(businessPools)
+                .activate(any(), any(), any());
+        try {
+            HttpResponse<String> response = call("SELECT id FROM orders", PAT);
+            assertToolError(response, configuration ? "SCHEMA_STALE" : "TABLE_NOT_AUTHORIZED");
+            JsonNode content =
+                    JSON.readTree(response.body()).path("result").path("structuredContent");
+            assertTerminal(content.path("requestId").asText(), "ERROR", "ERROR");
+            assertEquals(executedBefore, businessExecutionCount());
+            assertEquals(before, businessConnections());
+        } finally {
+            doCallRealMethod().when(businessPools).activate(any(), any(), any());
+            if (configuration) {
+                updateDatasourceConfigVersion(1);
+            } else {
+                updateDatasourceReadGrantStatus("ACTIVE");
+            }
+        }
+    }
+
+    @Test
     void writeSqlIsRejectedByTheGuardBeforeCheckout() throws Exception {
         long before = businessConnections();
         HttpResponse<String> response = call("UPDATE orders SET note = 'x' WHERE id = 1", PAT);
@@ -795,6 +992,68 @@ class McpQueryFlowTest {
     }
 
     // ---------------------------------------------------------------- helpers
+
+    private long businessExecutionCount() {
+        return mockingDetails(businessExecutor).getInvocations().stream()
+                .filter(invocation -> invocation.getMethod().getName().equals("execute"))
+                .count();
+    }
+
+    private List<QuotaLimiter.ExecutionPermit> holdUserExecutionPermits() {
+        List<QuotaLimiter.ExecutionPermit> held = new java.util.ArrayList<>();
+        for (int index = 0; index < QuotaLimiter.USER_MAX; index++) {
+            QuotaLimiter.QueuePermit queued = quotas.acquireQueue(1);
+            held.add(quotas.acquireExecution(1, 1, queued));
+        }
+        return held;
+    }
+
+    private static void updateDatasourceConfigVersion(long version) throws SQLException {
+        try (Connection meta = PRIMARY.getConnection();
+                PreparedStatement update =
+                        meta.prepareStatement(
+                                "UPDATE datasource SET config_version = ? WHERE id = 1")) {
+            update.setLong(1, version);
+            assertEquals(1, update.executeUpdate());
+        }
+    }
+
+    private static void updateDatasourceReadGrantStatus(String status) throws SQLException {
+        try (Connection meta = PRIMARY.getConnection();
+                PreparedStatement update =
+                        meta.prepareStatement(
+                                "UPDATE acl_grant SET status = ? WHERE subject_type = 'USER'"
+                                        + " AND subject_id = 1 AND resource_type = 'DATASOURCE'"
+                                        + " AND resource_id = 1 AND action = 'READ' AND effect = 'ALLOW'")) {
+            meta.setAutoCommit(false);
+            try (Statement epoch = meta.createStatement()) {
+                assertEquals(
+                        1,
+                        epoch.executeUpdate(
+                                "UPDATE sys_security_state SET policy_epoch = policy_epoch + 1"
+                                        + " WHERE singleton_id = 1"));
+            }
+            update.setString(1, status);
+            assertEquals(1, update.executeUpdate());
+            meta.commit();
+        }
+    }
+
+    private static void assertToolError(HttpResponse<String> response, String errorCode)
+            throws Exception {
+        assertEquals(200, response.statusCode());
+        JsonNode result = JSON.readTree(response.body()).path("result");
+        assertAll(
+                "expected MCP error " + errorCode,
+                () -> assertTrue(result.path("isError").asBoolean(false)),
+                () ->
+                        assertEquals(
+                                errorCode,
+                                result.path("structuredContent")
+                                        .path("error")
+                                        .path("code")
+                                        .asText()));
+    }
 
     private HttpResponse<String> call(String query, String token) throws Exception {
         return call(query, token, Map.of());

@@ -1,5 +1,10 @@
 package local.ptmcp.datasource.postgres;
 
+import local.ptmcp.common.execution.ApprovedSqlPlan;
+import local.ptmcp.datasource.ApprovedPlanVerifier;
+
+import java.time.Clock;
+
 /**
  * A closed PostgreSQL execution input. The factory is package-private on purpose: only an
  * ApprovedQuery adapter that lives in this package may create one, and no module outside can
@@ -11,10 +16,16 @@ public final class PgReadOnlyRequest {
 
     private final String sql;
     private final int maxRows;
+    private final Runnable revalidation;
 
     private PgReadOnlyRequest(String sql, int maxRows) {
+        this(sql, maxRows, () -> {});
+    }
+
+    private PgReadOnlyRequest(String sql, int maxRows, Runnable revalidation) {
         this.sql = sql;
         this.maxRows = maxRows;
+        this.revalidation = revalidation;
     }
 
     /** Only a package-local ApprovedQuery adapter may call this factory. */
@@ -32,6 +43,16 @@ public final class PgReadOnlyRequest {
             throw new IllegalArgumentException("maxRows must be between 1 and " + MAX_ROWS_LIMIT);
         }
         return new PgReadOnlyRequest(sql, maxRows);
+    }
+
+    static PgReadOnlyRequest approved(ApprovedSqlPlan plan, Clock clock) {
+        PgReadOnlyRequest validated = of(plan.finalSql(), plan.effectiveLimit());
+        return new PgReadOnlyRequest(
+                validated.sql, validated.maxRows, () -> ApprovedPlanVerifier.verify(plan, clock));
+    }
+
+    void beforeExecution() {
+        revalidation.run();
     }
 
     String sql() {

@@ -278,14 +278,16 @@ final class McpToolService {
                 queueMs = elapsedMillis(queueStarted);
             }
             ToolResultEncoder.Encoded encoded;
+            ApprovedQuery executionPlan = approved;
             try {
+                revalidateExecution(identity, executionPlan);
                 PoolHandle handle = activatePool(published, engine);
                 if (engine == DatabaseEngine.MYSQL) {
                     ReadOnlyResult result =
                             adapter.execute(
                                     approved,
                                     datasource -> {
-                                        authentication.revalidate(identity);
+                                        revalidateExecution(identity, executionPlan);
                                         audit.confirmStart(requestId);
                                     },
                                     new ReadOnlyCancellation());
@@ -294,10 +296,9 @@ final class McpToolService {
                     PgReadOnlyResult result =
                             pgAdapter.execute(
                                     approved,
-                                    handle.dataSource(),
-                                    handle.generation(),
+                                    handle,
                                     datasource -> {
-                                        authentication.revalidate(identity);
+                                        revalidateExecution(identity, executionPlan);
                                         audit.confirmStart(requestId);
                                     },
                                     new ReadOnlyCancellation());
@@ -333,15 +334,6 @@ final class McpToolService {
                     approved.finalSql());
             return envelope(id, callToolResult(false, success.structured()));
         } catch (DomainException failure) {
-            System.out.println(
-                    "EXEC-PROBE code="
-                            + failure.errorCode()
-                            + " stage="
-                            + stage
-                            + " cause="
-                            + (failure.getCause() == null
-                                    ? "none"
-                                    : failure.getCause().toString()));
             if (failure.errorCode() == ErrorCode.AUDIT_UNAVAILABLE) {
                 throw failure;
             }
@@ -723,6 +715,52 @@ final class McpToolService {
 
     // ---------------------------------------------------------------- shared helpers
 
+    /** Re-evaluate the approved identities and READ after queueing and immediately before JDBC. */
+    private void revalidateExecution(McpIdentity identity, ApprovedQuery plan) {
+        McpIdentity currentIdentity = authentication.revalidate(identity);
+        requireScope(currentIdentity, "mcp:query");
+        if (currentIdentity.userId() != plan.principalId()
+                || currentIdentity.platformId() != plan.platformId()
+                || currentIdentity.authVersion() != plan.authVersion()) {
+            throw new DomainException(ErrorCode.TOKEN_REVOKED);
+        }
+        PublishedSnapshotReader.Published current = loadUsable(plan.datasourceId().value());
+        if (current.configVersion() != plan.configVersion()) {
+            throw new DomainException(ErrorCode.SCHEMA_STALE);
+        }
+        if (current.snapshotId().longValue() != plan.snapshotId().value()
+                || current.resourceVersion() != plan.resourceVersion()) {
+            throw new DomainException(ErrorCode.RESOURCE_VERSION_CHANGED);
+        }
+        ToolPermissionService.Session session =
+                permissions.open(
+                        currentIdentity.userId(),
+                        currentIdentity.platformId(),
+                        current.datasourceId(),
+                        current);
+        Map<Long, PublishedSnapshotReader.TableObject> objects = new LinkedHashMap<>();
+        for (PublishedSnapshotReader.Namespace namespace : current.namespaces()) {
+            for (PublishedSnapshotReader.TableObject object : namespace.objects()) {
+                objects.put(object.id(), object);
+            }
+        }
+        for (ResourceRef resource : plan.resourceRefs()) {
+            PublishedSnapshotReader.TableObject object = objects.get(resource.objectId().value());
+            if (object == null
+                    || object.generation() != resource.generation()
+                    || object.objectVersion() != resource.objectVersion()) {
+                throw new DomainException(ErrorCode.RESOURCE_VERSION_CHANGED);
+            }
+            if (!session.decide(object.id()).read()) {
+                throw new DomainException(ErrorCode.TABLE_NOT_AUTHORIZED);
+            }
+        }
+        // Detect policy changes during the separate ACL reads as well as during queueing.
+        if (freshSnapshot(currentIdentity).policyEpoch() != plan.policyEpoch()) {
+            throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+        }
+    }
+
     private PublishedSnapshotReader.Published loadUsable(long datasourceId) {
         PublishedSnapshotReader.Published published = snapshots.load(datasourceId);
         if (!published.usable()) {
@@ -1027,6 +1065,9 @@ final class McpToolService {
     private static boolean revalidationFailure(ErrorCode code) {
         return code == ErrorCode.TOKEN_INVALID
                 || code == ErrorCode.TOKEN_REVOKED
+                || code == ErrorCode.SCHEMA_STALE
+                || code == ErrorCode.TABLE_NOT_AUTHORIZED
+                || code == ErrorCode.RESOURCE_NOT_FOUND
                 || code == ErrorCode.SECURITY_STATE_UNAVAILABLE
                 || code == ErrorCode.RESOURCE_VERSION_CHANGED;
     }

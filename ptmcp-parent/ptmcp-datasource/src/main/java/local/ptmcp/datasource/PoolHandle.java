@@ -1,8 +1,12 @@
 package local.ptmcp.datasource;
 
+import local.ptmcp.common.error.DomainException;
+import local.ptmcp.common.error.ErrorCode;
+
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.sql.DataSource;
@@ -20,6 +24,8 @@ public final class PoolHandle {
     private final DataSource dataSource;
     private final AtomicInteger evictedConnections = new AtomicInteger();
     private volatile State state = State.ACTIVE;
+    private volatile boolean disposalFailed;
+    private int leases;
 
     PoolHandle(PoolKey key, long generation, DataSource dataSource) {
         this.key = Objects.requireNonNull(key, "key");
@@ -39,6 +45,10 @@ public final class PoolHandle {
         return state;
     }
 
+    public boolean disposalFailed() {
+        return disposalFailed;
+    }
+
     public int evictedConnections() {
         return evictedConnections.get();
     }
@@ -51,11 +61,64 @@ public final class PoolHandle {
         return dataSource;
     }
 
-    void beginDrain() {
-        state = State.DRAINING;
+    /** Pins this exact generation until execution, cancellation and cleanup have finished. */
+    public synchronized Lease lease() {
+        if (state != State.ACTIVE) {
+            throw new DomainException(ErrorCode.RESOURCE_VERSION_CHANGED);
+        }
+        leases++;
+        return new Lease();
     }
 
-    void markClosed() {
+    public final class Lease implements AutoCloseable {
+        private final AtomicBoolean released = new AtomicBoolean();
+
+        private Lease() {}
+
+        public DataSource dataSource() {
+            if (released.get()) {
+                throw new IllegalStateException("lease is released");
+            }
+            return dataSource;
+        }
+
+        @Override
+        public void close() {
+            if (released.compareAndSet(false, true)) {
+                release();
+            }
+        }
+    }
+
+    synchronized void beginDrain() {
+        if (state == State.ACTIVE) {
+            state = State.DRAINING;
+            closeIfDrained();
+        }
+    }
+
+    private synchronized void release() {
+        leases--;
+        closeIfDrained();
+    }
+
+    synchronized void retryDisposal() {
+        closeIfDrained();
+    }
+
+    private void closeIfDrained() {
+        if (state != State.DRAINING || leases != 0) {
+            return;
+        }
+        if (dataSource instanceof AutoCloseable closeable) {
+            try {
+                closeable.close();
+            } catch (Exception ignored) {
+                disposalFailed = true;
+                return;
+            }
+        }
+        disposalFailed = false;
         state = State.CLOSED;
     }
 

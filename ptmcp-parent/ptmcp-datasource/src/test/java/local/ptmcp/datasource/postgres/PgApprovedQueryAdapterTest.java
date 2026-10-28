@@ -13,6 +13,7 @@ import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.common.execution.ApprovedSqlPlan;
 import local.ptmcp.common.resource.ResourceId;
 import local.ptmcp.datasource.ReadOnlyCancellation;
+import local.ptmcp.datasource.testing.CheckoutExpiryProbe;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -83,6 +84,30 @@ class PgApprovedQueryAdapterTest {
         }
         if (postgres != null) {
             postgres.stop();
+        }
+    }
+
+    @Test
+    void approvalExpiringDuringPhysicalCheckoutSubmitsNoUserSqlAndCleansTheConnection()
+            throws Exception {
+        CheckoutExpiryProbe probe = new CheckoutExpiryProbe();
+        PgApprovedQueryAdapter expiring =
+                new PgApprovedQueryAdapter(PgExecutorSettings.defaults(), probe);
+        DomainException failure =
+                assertThrows(
+                        DomainException.class,
+                        () ->
+                                expiring.execute(
+                                        probe.plan(),
+                                        probe.wrap(dataSource, false),
+                                        1,
+                                        ignored -> {},
+                                        new ReadOnlyCancellation()));
+        assertEquals(ErrorCode.RESOURCE_VERSION_CHANGED, failure.errorCode());
+        assertEquals(0, probe.executions());
+        try (var connection = dataSource.getConnection()) {
+            assertTrue(connection.getAutoCommit());
+            assertFalse(connection.isReadOnly());
         }
     }
 
@@ -207,6 +232,11 @@ class PgApprovedQueryAdapterTest {
             implements ApprovedSqlPlan {
         private Plan {
             sqlHash = sqlHash.clone();
+        }
+
+        @Override
+        public long configVersion() {
+            return 1;
         }
 
         @Override

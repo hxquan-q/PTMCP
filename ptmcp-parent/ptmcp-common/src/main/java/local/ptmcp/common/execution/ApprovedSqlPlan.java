@@ -16,6 +16,9 @@ public interface ApprovedSqlPlan {
     /** Physical datasource identity the plan was approved for. */
     ResourceId datasourceId();
 
+    /** Exact datasource configuration approved by the guard; never use a newer current pool. */
+    long configVersion();
+
     /** The only SQL text that may reach JDBC; it is never the caller's original string. */
     String finalSql();
 

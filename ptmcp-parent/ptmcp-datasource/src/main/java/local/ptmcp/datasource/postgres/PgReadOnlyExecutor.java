@@ -108,6 +108,7 @@ public final class PgReadOnlyExecutor {
             configure(connection);
             configured = true;
             trace.record(ExecutionStage.CONFIGURE, ExecutionState.CONFIGURED);
+            request.beforeExecution();
             if (cancellation.isCancelled()) {
                 trace.record(ExecutionStage.CANCEL, ExecutionState.CANCELLING);
                 failure = new DomainException(ErrorCode.CLIENT_CANCELLED);

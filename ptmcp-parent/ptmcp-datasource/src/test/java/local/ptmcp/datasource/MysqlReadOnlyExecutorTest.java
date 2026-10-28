@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.common.resource.DatabaseEngine;
+import local.ptmcp.datasource.testing.CheckoutExpiryProbe;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -346,7 +347,7 @@ class MysqlReadOnlyExecutorTest {
         assertEquals(firstGeneration, same.generation());
 
         PoolHandle next = registry.activate(key(1, 2), password.toCharArray(), PoolLimits.of(1));
-        assertEquals(PoolHandle.State.DRAINING, handle.state());
+        assertEquals(PoolHandle.State.CLOSED, handle.state());
         assertTrue(next.generation() > firstGeneration);
         assertEquals(next, registry.current(1).orElseThrow());
         assertThrows(SQLException.class, () -> handle.dataSource().getConnection());
@@ -355,6 +356,54 @@ class MysqlReadOnlyExecutorTest {
                 executor.execute(1, request("SELECT 2 AS value", 1), new ReadOnlyCancellation());
         assertEquals(next.generation(), second.trace().poolGeneration());
         assertEquals("2", second.rows().get(0).get(0));
+    }
+
+    @Test
+    void activeGenerationLeaseKeepsTheOriginalPhysicalConnectionAliveDuringRotation()
+            throws Exception {
+        PoolHandle original = handle;
+        PoolHandle next;
+        try (PoolHandle.Lease lease = original.lease();
+                Connection connection = lease.dataSource().getConnection();
+                Statement statement = connection.createStatement()) {
+            next = registry.activate(key(1, 2), password.toCharArray(), PoolLimits.of(1));
+            assertEquals(PoolHandle.State.DRAINING, original.state());
+            assertThrows(DomainException.class, original::lease);
+            try (ResultSet result = statement.executeQuery("SELECT 1")) {
+                assertTrue(result.next());
+                assertEquals(1, result.getInt(1));
+            }
+        }
+        assertEquals(PoolHandle.State.CLOSED, original.state());
+        ReadOnlyResult result =
+                executor.execute(1, request("SELECT 2 AS value", 1), new ReadOnlyCancellation());
+        assertEquals(next.generation(), result.trace().poolGeneration());
+        assertEquals("2", result.rows().get(0).get(0));
+    }
+
+    @Test
+    void approvalExpiringDuringPhysicalCheckoutSubmitsNoUserSqlAndCleansTheConnection()
+            throws Exception {
+        registry.close();
+        CheckoutExpiryProbe probe = new CheckoutExpiryProbe();
+        registry =
+                new DataSourcePoolRegistry(
+                        (poolKey, secret, limits) ->
+                                probe.wrap(
+                                        new HikariPoolFactory().create(poolKey, secret, limits),
+                                        true));
+        registry.activate(key(1, 1), password.toCharArray(), PoolLimits.of(1));
+        executor = new MysqlReadOnlyExecutor(registry, ExecutorSettings.defaults(), TRACES::add);
+        ApprovedQueryAdapter adapter = new ApprovedQueryAdapter(executor, probe);
+        DomainException failure =
+                assertThrows(
+                        DomainException.class,
+                        () ->
+                                adapter.execute(
+                                        probe.plan(), ignored -> {}, new ReadOnlyCancellation()));
+        assertEquals(ErrorCode.RESOURCE_VERSION_CHANGED, failure.errorCode());
+        assertEquals(0, probe.executions());
+        assertEquals(ExecutionState.RETURNED, TRACES.getLast().finalState());
     }
 
     @Test
@@ -449,16 +498,16 @@ class MysqlReadOnlyExecutorTest {
         }
     }
 
-    private static PoolKey key(long datasourceId, long credentialVersion) {
+    private static PoolKey key(long datasourceId, long configVersion) {
         return new PoolKey(
                 datasourceId,
-                1,
+                configVersion,
                 DatabaseEngine.MYSQL,
                 mysql.getHost(),
                 mysql.getMappedPort(3306),
                 mysql.getDatabaseName(),
                 mysql.getUsername(),
-                credentialVersion);
+                configVersion);
     }
 
     private static final class FailingRollbackDataSource implements DataSource, AutoCloseable {

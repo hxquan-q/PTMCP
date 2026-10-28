@@ -1,8 +1,12 @@
 package local.ptmcp.datasource.postgres;
 
+import local.ptmcp.common.error.DomainException;
+import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.common.execution.ApprovedSqlPlan;
+import local.ptmcp.common.resource.DatabaseEngine;
 import local.ptmcp.datasource.ApprovedPlanVerifier;
 import local.ptmcp.datasource.ApprovedQueryAdapter;
+import local.ptmcp.datasource.PoolHandle;
 import local.ptmcp.datasource.ReadOnlyCancellation;
 
 import java.time.Clock;
@@ -30,6 +34,23 @@ public final class PgApprovedQueryAdapter {
 
     public PgReadOnlyResult execute(
             ApprovedSqlPlan plan,
+            PoolHandle handle,
+            ApprovedQueryAdapter.CheckoutGuard guard,
+            ReadOnlyCancellation cancellation) {
+        Objects.requireNonNull(plan, "plan");
+        Objects.requireNonNull(handle, "handle");
+        if (handle.key().datasourceId() != plan.datasourceId().value()
+                || handle.key().configVersion() != plan.configVersion()
+                || handle.key().engine() != DatabaseEngine.POSTGRESQL) {
+            throw new DomainException(ErrorCode.RESOURCE_VERSION_CHANGED);
+        }
+        try (PoolHandle.Lease lease = handle.lease()) {
+            return execute(plan, lease.dataSource(), handle.generation(), guard, cancellation);
+        }
+    }
+
+    PgReadOnlyResult execute(
+            ApprovedSqlPlan plan,
             DataSource dataSource,
             long poolGeneration,
             ApprovedQueryAdapter.CheckoutGuard guard,
@@ -40,7 +61,8 @@ public final class PgApprovedQueryAdapter {
         Objects.requireNonNull(cancellation, "cancellation");
         ApprovedPlanVerifier.verify(plan, clock);
         guard.beforeCheckout(plan.datasourceId().value());
-        PgReadOnlyRequest request = PgReadOnlyRequest.of(plan.finalSql(), plan.effectiveLimit());
+        ApprovedPlanVerifier.verify(plan, clock);
+        PgReadOnlyRequest request = PgReadOnlyRequest.approved(plan, clock);
         return new PgReadOnlyExecutor(dataSource, settings)
                 .execute(poolGeneration, request, cancellation);
     }
