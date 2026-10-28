@@ -88,9 +88,10 @@ python scripts/check.py
 # 分项定位
 python docs/evidence/validate_docs.py
 python scripts/verify_agent_workflow.py
+python scripts/verify_commits.py
 python -m unittest discover -s scripts/tests -v
 ```
 
-统一入口顺序运行文档检查、规则/任务/笔记结构检查、检查器回归；失败返回非零。CI 定义在[quality.yml](../../.github/workflows/quality.yml)，只有提交到 GitHub 后才可能实际运行，本轮未触发。
+统一入口顺序运行文档检查、规则/任务/笔记结构检查、提交消息检查与检查器回归；失败返回非零。CI 定义在[quality.yml](../../.github/workflows/quality.yml)，只有提交到 GitHub 后才可能实际运行，本轮未触发。
 
 机械门禁检查根入口 8 KiB、桥接入口 1 KiB、文件/链接/骨架、状态一致性、完成任务证据节和已跟踪归档的冻结。它不能判断需求完整性、理由是否真实、证据内容是否充分、Agent 是否遵循流程或业务是否安全。变更须人工/Agent 语义评审，不能用静态 PASS 替代。当前不承诺覆盖率或性能数字；工程就绪后按 M0 锁定并接入真实检查。

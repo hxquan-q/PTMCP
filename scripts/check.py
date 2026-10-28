@@ -12,6 +12,7 @@ CHECKS = (
     ("docs/evidence/validate_docs.py",),
     ("scripts/verify_agent_workflow.py",),
     ("scripts/verify_quality_config.py",),
+    ("scripts/verify_commits.py",),
     ("-m", "unittest", "discover", "-s", "scripts/tests", "-v"),
 )
 

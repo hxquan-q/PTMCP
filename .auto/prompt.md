@@ -54,12 +54,24 @@ frontendPreview`（仅预览模式放行）把真实模式全部禁用。每个�
 - 前端 Node 24 + pnpm（`pnpm --dir ptmcp-ui`）。
 - 每切片：`measure.sh` 全绿（0 failed）+ `checks.sh` 通过才 keep；keep 后按仓库规范
   提交（中文 conventional commit），推送到 `xquan/feat-backend` 已获长期授权。
+  类型只用 feat/fix/docs/refactor/test/build/ci/chore/perf/revert（`scripts/verify_commits.py`
+  会拒绝白名单外类型）：验证轮用 `test(scope): ...` 或 `chore(evidence): ...`，会话/目标
+  状态用 `chore(session): ...`；不要用 `verify`、`session` 等类型。
 - API 契约以 `ptmcp-ui/src/services/controlPlane.ts`、`orgPortalApi.ts` 为准（前端已定
   形状）；后端实现不得随意改契约，发现契约与安全模型冲突时停下来报告。
 - 权限门禁沿用 `ManagementScope.requirePlatformAdmin`；委派的细粒度作用域是后续切片，
   不在本会话伪造。
 - Idempotency-Key / If-Match 语义与现有控制器一致（见 AclGrantAdminController、
   UserAdminController、DELEGATIONS 前端 `versioned()` 头）。
+
+## 停止条件（必须遵守）
+
+- **目标阻塞即停**：目标需要用户域输入（验收、授权、外部资产）而无法推进时，写交接并停止；
+  不得用验证复跑代替推进。
+- **无进展即停**：连续 5 轮 `discard` 且主指标不变时停止并报告，不继续消耗轮次。
+- 记账区分：指标持平但产生新证据（走查/边界取证）记 `evidence`；指标变化或有代码变更记
+  `progress`。停止判断只看 `progress` 轮。
+- 停止时在 `.auto/log.jsonl` 末轮写 `status: "stopped"` 与原因；人工重启后才继续。
 
 ## 会话稳定点（2026-10-27）
 

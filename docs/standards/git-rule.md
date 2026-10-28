@@ -12,6 +12,8 @@
 
 采用 [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)：`type(scope)!: 中文或英文具体动作`，scope 与 ! 均可选，类型为feat/fix/docs/refactor/test/build/ci/chore/perf/revert。scope使用模块ID或docs域；一条提交解决一个可评审问题。功能与大规模重排格式分开提交，不能把安全行为变化藏进refactor。
 
+提交消息由 `scripts/verify_commits.py` 机械校验（随 `scripts/check.py` 运行）：类型必须在白名单内，标题不超过 72 字符，禁止私钥、平台令牌和脱敏占位符。历史提交不改写；本地默认检查 HEAD，CI 只检查本次推送或 PR 的范围。
+
 ```text
 docs(architecture): 明确主库安全状态与五秒撤销边界
 fix(guard): 保留派生表同名情况下的物理关系绑定

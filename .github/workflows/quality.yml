@@ -7,7 +7,34 @@ on:
 permissions:
   contents: read
 
+# 同分支连续推送只保留最新运行；旧运行自动取消。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: filter
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --quiet "$BASE" "$GITHUB_SHA" -- . ':(exclude)docs/**' ':(exclude)tasks/**' ':(exclude).agents/notes/**'; then
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          fi
   documentation-and-workflow:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -22,8 +49,11 @@ jobs:
       - name: Check documentation, workflow contracts and checker regressions
         env:
           AGENT_ARCHIVE_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+          AGENT_COMMIT_RANGE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}..${{ github.sha }}
         run: python scripts/check.py
   backend-framework:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -50,6 +80,8 @@ jobs:
         working-directory: .
         run: python scripts/check_backend_quality.py --seed-repository "$HOME/.m2/repository" --timeout 180
   frontend-framework:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:

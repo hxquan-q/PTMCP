@@ -11,3 +11,12 @@ ptmcp-ui/src/components.d.ts
 .env
 .env.*
 !.env.example
+# 自治循环运行日志：本机状态，不作为仓库事实；需要留存时另存摘要
+.auto/*.log
+.auto/log.jsonl
+# 本机 Agent/工具安装物：确需团队共享时另行显式提交
+.agents/skills/
+.codex/
+.github/agents/
+.github/hooks/
+.github/skills/

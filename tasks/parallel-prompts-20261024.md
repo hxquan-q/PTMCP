@@ -1,4 +1,6 @@
-# 剩余后端工作的多窗口并发 Prompt 集
+# 后端工作的多窗口并发 Prompt 集（历史）
+
+> **状态（2026-10-28）**：A～C 波次的切片均已完成，D 波次仅 T13-b（verifying）、T18（BLOCKED-EXTERNAL）仍可参考。当前剩余范围与状态以 `tasks/work-items/` 和 `python scripts/work_status.py` 为准；本文件保留为历史执行参考，不再作为排期入口。
 
 日期：2026-10-24（UTC）。基线：`origin/xquan/feat-backend` @ `7dcbd88`（如协调者已推进，以开工时 `git fetch` 后的最新提交为准）。每个 Prompt 可直接粘贴到一个新窗口执行；同一波内文件互不重叠，可真正并发。
 

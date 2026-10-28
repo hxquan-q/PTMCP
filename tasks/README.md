@@ -11,15 +11,15 @@
 目标/范围、实施/验证、结果/证据和交接为固定章节，内容按任务裁剪。小改可复用原工作项；没有原记录时用短工作项，不为管理工作本身递归建档。状态和完成规则以[开发流程](../docs/standards/agent-workflow.md)为唯一正文。
 
 ```powershell
-# 看工作状态，不维护第二份动态总表
-rg '^Status:' tasks/work-items
-rg '^Status: (ready|in_progress|verifying|blocked)$' tasks/work-items
+# 看工作状态：派生视图只读工作项，不维护第二份动态总表
+python scripts/work_status.py
+python scripts/work_status.py --strict   # 有可收尾或矛盾项时非零退出
 ```
 
 ## 并行实施 Prompt
 
-剩余工作的多窗口并发 Prompt 集见[parallel-prompts-20261024](parallel-prompts-20261024.md)：
-按 A→B→C→D 波次给出每切片独立 Prompt、写入范围、RED 要求与验收命令；每窗口只推自己的分支，
+历史多窗口并发 Prompt 集见[parallel-prompts-20261024](parallel-prompts-20261024.md)：
+A～C 波次对应切片均已完成，仅 D 波次（T13-b、T18）仍可作参考；当前剩余范围以工作项为准。
 协调者负责评审、cherry-pick、组合 `--all` 重验与推送。
 
 ## 直接给 Agent 的任务示例
