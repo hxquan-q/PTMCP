@@ -73,7 +73,7 @@ flowchart LR
 | --- | --- |
 | 控制台站点与REST | `https://console.example.com`；`/api/v1/admin`、`/api/v1/me`、`/api/v1/session` |
 | OAuth issuer | `https://auth.example.com`，必须与发现、签名iss完全一致 |
-| MCP资源与audience | `https://mcp.example.com/mcp`，以正式接口的规范化resource值为准 |
+| MCP资源与audience | `ptmcp.gateway.resource-uri`填对外MCP URL（如`https://mcp.example.com/mcp`），`ptmcp.gateway.resource-metadata-uri`填发现URL，`ptmcp.gateway.resource`为JWT audience；三者均来自部署配置，不从Host/Forwarded推导 |
 | 传输 | HTTPS Streamable HTTP `/mcp`；一期无跨请求会话 |
 | Spring AI候选协议 | `STATELESS`模式需在M0验证；配置STREAMABLE后仍产生会话不能称为无状态 |
 | 超时 | ingress读取60秒；应用总请求deadline30秒；排队最长3秒、借池3秒、SQL15秒、取消3秒、清理2秒，均受剩余deadline约束 |

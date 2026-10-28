@@ -9,7 +9,6 @@ import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -30,13 +29,12 @@ public final class McpAuthenticationFilter extends OncePerRequestFilter {
     public static final String REQUEST_ID = McpAuthenticationFilter.class.getName() + ".requestId";
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private final ObjectProvider<McpAuthentication> authentication;
-    private final String metadataUri;
+    private final McpResourceMetadata metadata;
 
     public McpAuthenticationFilter(
-            ObjectProvider<McpAuthentication> authentication,
-            @Value("${ptmcp.gateway.resource-metadata-uri:}") String metadataUri) {
+            ObjectProvider<McpAuthentication> authentication, McpResourceMetadata metadata) {
         this.authentication = authentication;
-        this.metadataUri = metadataUri;
+        this.metadata = metadata;
     }
 
     @Override
@@ -79,12 +77,7 @@ public final class McpAuthenticationFilter extends OncePerRequestFilter {
                             : code == ErrorCode.SECURITY_STATE_UNAVAILABLE ? 503 : 401;
             response.setStatus(status);
             if (status == 401) {
-                response.setHeader(
-                        "WWW-Authenticate",
-                        "Bearer realm=\"PTMCP\""
-                                + (metadataUri.isBlank()
-                                        ? ""
-                                        : ", resource_metadata=\"" + metadataUri + "\""));
+                response.setHeader("WWW-Authenticate", metadata.challenge());
             }
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter()

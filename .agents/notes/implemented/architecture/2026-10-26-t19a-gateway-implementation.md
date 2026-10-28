@@ -21,6 +21,8 @@ T19-a 存在两套互不兼容的实现：
 旧工作项中的“T19-b 接线”计划已由当前实现覆盖，后续 PG/Tier1/预算等缺口从当前工作项继续。
 
 本记录与 [T19-a 工作项](../../../../tasks/work-items/T19-a.md) 同步；分支保留，不删除共享历史。
+当前能力核查与增强顺序见 [网关收尾提案](../../proposed/architecture/2026-10-28-gateway-capability-hardening.md)，
+该提案不改变本记录的唯一网关基线决定。
 
 ## Alternatives considered
 
@@ -34,8 +36,9 @@ T19-a 存在两套互不兼容的实现：
 ## Consequences
 
 - `xquan/feat-t19-a` 的 `dc16748` 标记为已替代，不进入当前分支历史；工作树的实现随四线整理提交。
-- 当前实现仍是候选：PostgreSQL 执行、Tier1 proof、并发预算/排队、公开客户端 refresh/revoke、
-  独立安全评审与四客户端矩阵未完成，`T19-a` 保持 `verifying`。
+- 当前实现仍是候选：PostgreSQL 执行、Tier1 proof、单进程并发预算/排队、公开客户端 refresh
+  轮换与 refresh revoke 已有后续实现；完整客户端/部署矩阵、恢复与容量等收尾以当前工作项和
+  [能力核查](../../proposed/architecture/2026-10-28-gateway-capability-hardening.md) 为准，不把历史缺口当作现状。
 - 网关类名以工作树为准；后续文档和测试不应再引用旧骨架的 `McpProtocolController`/stub token。
 
 ## Verification

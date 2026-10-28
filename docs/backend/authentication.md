@@ -130,6 +130,9 @@ return tokens only after commit confirmed
 ## 8. DCR/CIMD 与 SSRF 防线
 
 DCR为可关闭能力；初始注册最小mcp:catalog、无平台资源范围、不可成为Tier1、不可自行声明platform_id/可信proof。管理员审核/绑定平台后才可能有业务能力，注册/同意不自动产生表授权。配额限制每IP/账号注册数、请求长度、URI数量和client总数；registration access token独立摘要存储、最小权限，客户端不能编辑Tier与scope上限。
+DCR保持关闭时，客户端须先由平台管理员通过 `POST /api/v1/admin/platforms/{id}/clients` 预注册为
+PUBLIC + none + S256，登记精确回调URI、scope和平台绑定；客户端侧只配置该 `client_id` 与回调，
+静态`client_id`不证明平台归属，仍需用户授权与平台/用户权限交集。当前未提供匿名自助注册入口。
 
 CIMD/jwks_uri/metadata_uri一期外抓只允许公网https/443和批准域名；先解析所有A/AAAA拒loopback、link-local、云元数据、private/保留地址，企业受管域白名单也必须解析公网IP，不设私网例外（业务数据源连接另走独立允许内网名单）。连接时固定已验证IP并校验TLS域名，避免DNS rebinding。禁止userinfo/fragment、非HTTP协议；默认不跟随重定向，如业务需要则每跳同样验证并限制次数。限制连接/读取时间、压缩后/解压后体积、内容类型、JSON深度，不能把凭证/cookie带向metadata域。内容缓存含来源/摘要/有效期，变更redirect/JWKS安全参数需重新核验；URL可被控制不代表调用者是后端。
 
