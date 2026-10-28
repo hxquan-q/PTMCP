@@ -4,6 +4,8 @@ import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.common.resource.DatabaseEngine;
 import local.ptmcp.datasource.connection.ConnectionProfile;
+import local.ptmcp.persistence.SecurityChangeTransaction;
+import local.ptmcp.persistence.SecurityEvent;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -14,6 +16,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.sql.DataSource;
 
@@ -27,9 +31,11 @@ public final class DatasourceStore {
     private static final int MAX_USERNAME = 128;
 
     private final DataSource primary;
+    private final SecurityChangeTransaction changes;
 
     public DatasourceStore(DataSource primary) {
         this.primary = primary;
+        this.changes = new SecurityChangeTransaction(primary);
     }
 
     public record Fields(
@@ -231,75 +237,152 @@ public final class DatasourceStore {
             byte[] sealed,
             String keyId,
             long actorId) {
+        return update(id, expectedVersion, fields, sealed, keyId, actorId, null);
+    }
+
+    public Row update(
+            long id,
+            long expectedVersion,
+            Fields fields,
+            byte[] sealed,
+            String keyId,
+            long actorId,
+            String requestId) {
         validate(fields);
         AdminSql.requireActor(actorId);
-        if (expectedVersion < 1) {
+        if (expectedVersion < 1
+                || expectedVersion == Long.MAX_VALUE
+                || (sealed != null && (sealed.length == 0 || keyId == null))) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
         LocalDateTime now = AdminSql.nowUtc();
-        try (Connection connection = AdminSql.configure(primary)) {
-            connection.setAutoCommit(false);
-            try {
-                Row current = getForUpdate(connection, id);
-                if (!current.code().equals(fields.code())
-                        || !current.engine().equals(fields.engine())) {
-                    throw new DomainException(ErrorCode.INVALID_ARGUMENT);
-                }
-                if (current.configVersion() != expectedVersion) {
-                    throw new DomainException(ErrorCode.VERSION_CONFLICT);
-                }
-                long nextConfig = current.configVersion() + 1;
-                long nextResource =
-                        current.resourceVersion() + ("DISABLED".equals(fields.status()) ? 1 : 0);
-                try (PreparedStatement statement =
-                        AdminSql.statement(
-                                connection,
-                                "UPDATE datasource SET name = ?, host = ?, port = ?, database_name = ?, "
-                                        + "username = ?, tls_mode = ?, pool_max = ?, status = ?, "
-                                        + "config_version = ?, resource_version = ?, "
-                                        + "credential_cipher = COALESCE(?, credential_cipher), "
-                                        + "key_id = COALESCE(?, key_id), update_time = ?, updated_by = ? "
-                                        + "WHERE id = ? AND config_version = ? AND status <> 'DELETED'")) {
-                    statement.setString(1, fields.name());
-                    statement.setString(2, fields.host().trim().toLowerCase(Locale.ROOT));
-                    statement.setInt(3, fields.port());
-                    statement.setString(4, fields.databaseName());
-                    statement.setString(5, fields.username());
-                    statement.setString(6, fields.tlsMode());
-                    statement.setInt(7, fields.poolMax());
-                    statement.setString(8, fields.status());
-                    statement.setLong(9, nextConfig);
-                    statement.setLong(10, nextResource);
-                    if (sealed == null) {
-                        statement.setNull(11, java.sql.Types.BLOB);
-                        statement.setNull(12, java.sql.Types.VARCHAR);
-                    } else {
-                        statement.setBytes(11, sealed);
-                        statement.setString(12, keyId);
+        UUID commandId;
+        try {
+            commandId = requestId == null ? UUID.randomUUID() : UUID.fromString(requestId);
+        } catch (IllegalArgumentException invalid) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
+        SecurityEvent event =
+                new SecurityEvent(
+                        commandId,
+                        SecurityEvent.Kind.ACL_CHANGED,
+                        new SecurityEvent.NumericId(id),
+                        expectedVersion + 1);
+        AtomicReference<Row> updated = new AtomicReference<>();
+        changes.execute(
+                event,
+                connection -> {
+                    Row current = getForUpdate(connection, id);
+                    if (!current.code().equals(fields.code())
+                            || !current.engine().equals(fields.engine())) {
+                        throw new DomainException(ErrorCode.INVALID_ARGUMENT);
                     }
-                    statement.setObject(13, now);
-                    statement.setLong(14, actorId);
-                    statement.setLong(15, id);
-                    statement.setLong(16, expectedVersion);
-                    if (statement.executeUpdate() != 1) {
+                    if (current.configVersion() != expectedVersion) {
                         throw new DomainException(ErrorCode.VERSION_CONFLICT);
                     }
-                }
-                connection.commit();
-                return get(id);
-            } catch (SQLException | RuntimeException failure) {
-                try {
-                    connection.rollback();
-                } catch (SQLException ignored) {
-                    // Preserve the original failure.
-                }
-                if (failure instanceof SQLException sql) {
-                    throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
-                }
-                throw failure;
-            }
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+                    boolean targetChanged =
+                            !current.host().equalsIgnoreCase(fields.host().trim())
+                                    || current.port() != fields.port()
+                                    || !current.databaseName().equals(fields.databaseName());
+                    long nextConfig = expectedVersion + 1;
+                    long nextResource =
+                            current.resourceVersion()
+                                    + (targetChanged || "DISABLED".equals(fields.status()) ? 1 : 0);
+                    try (PreparedStatement statement =
+                            AdminSql.statement(
+                                    connection,
+                                    "UPDATE datasource SET name = ?, host = ?, port = ?, database_name = ?, "
+                                            + "username = ?, tls_mode = ?, pool_max = ?, status = ?, config_version = ?, resource_version = ?, "
+                                            + "credential_cipher = COALESCE(?, credential_cipher), key_id = COALESCE(?, key_id), "
+                                            + "active_snapshot_id = CASE WHEN ? THEN NULL ELSE active_snapshot_id END, "
+                                            + "last_sync_at = CASE WHEN ? THEN NULL ELSE last_sync_at END, update_time = ?, updated_by = ? "
+                                            + "WHERE id = ? AND config_version = ? AND status <> 'DELETED'")) {
+                        statement.setString(1, fields.name());
+                        statement.setString(2, fields.host().trim().toLowerCase(Locale.ROOT));
+                        statement.setInt(3, fields.port());
+                        statement.setString(4, fields.databaseName());
+                        statement.setString(5, fields.username());
+                        statement.setString(6, fields.tlsMode());
+                        statement.setInt(7, fields.poolMax());
+                        statement.setString(8, fields.status());
+                        statement.setLong(9, nextConfig);
+                        statement.setLong(10, nextResource);
+                        statement.setBytes(11, sealed);
+                        statement.setString(12, sealed == null ? null : keyId);
+                        statement.setBoolean(13, targetChanged);
+                        statement.setBoolean(14, targetChanged);
+                        statement.setObject(15, now);
+                        statement.setLong(16, actorId);
+                        statement.setLong(17, id);
+                        statement.setLong(18, expectedVersion);
+                        if (statement.executeUpdate() != 1)
+                            throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                    }
+                    if (targetChanged) DatasourceTargetIsolation.retire(connection, id, actorId);
+                    logUpdate(
+                            connection,
+                            commandId,
+                            actorId,
+                            current,
+                            nextConfig,
+                            nextResource,
+                            targetChanged,
+                            fields.status());
+                    updated.set(
+                            new Row(
+                                    id,
+                                    current.code(),
+                                    fields.name(),
+                                    current.engine(),
+                                    fields.host().trim().toLowerCase(Locale.ROOT),
+                                    fields.port(),
+                                    fields.databaseName(),
+                                    fields.username(),
+                                    sealed == null ? current.credentialCipher() : sealed,
+                                    sealed == null ? current.keyId() : keyId,
+                                    fields.tlsMode(),
+                                    fields.poolMax(),
+                                    fields.status(),
+                                    nextConfig,
+                                    nextResource,
+                                    targetChanged ? null : current.activeSnapshotId(),
+                                    targetChanged ? null : current.lastSyncAt(),
+                                    current.createdAt(),
+                                    now));
+                });
+        // The receipt confirms commit. Returning the captured value avoids an extra metadata read
+        // failing after commit and misleading a caller into replaying an already-applied command.
+        return updated.get();
+    }
+
+    private static void logUpdate(
+            Connection connection,
+            UUID commandId,
+            long actorId,
+            Row before,
+            long nextConfig,
+            long nextResource,
+            boolean targetChanged,
+            String status)
+            throws SQLException {
+        try (PreparedStatement statement =
+                AdminSql.statement(
+                        connection,
+                        "INSERT INTO admin_operation_log (actor_id,request_id,action,aggregate_type,aggregate_id,before_masked,after_masked,occurred_at,create_time) "
+                                + "VALUES (?,?,'DATASOURCE_UPDATE','DATASOURCE',?,"
+                                + "JSON_OBJECT('configVersion',?,'resourceVersion',?,'status',?),"
+                                + "JSON_OBJECT('configVersion',?,'resourceVersion',?,'status',?,'targetChanged',?),UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))")) {
+            statement.setLong(1, actorId);
+            statement.setString(2, commandId.toString());
+            statement.setString(3, Long.toString(before.id()));
+            statement.setLong(4, before.configVersion());
+            statement.setLong(5, before.resourceVersion());
+            statement.setString(6, before.status());
+            statement.setLong(7, nextConfig);
+            statement.setLong(8, nextResource);
+            statement.setString(9, status);
+            statement.setBoolean(10, targetChanged);
+            statement.executeUpdate();
         }
     }
 

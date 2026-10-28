@@ -79,6 +79,10 @@ public final class DatasourceAdminService {
     }
 
     public Read update(long id, long expectedVersion, Write write, long actorId) {
+        return update(id, expectedVersion, write, actorId, null);
+    }
+
+    public Read update(long id, long expectedVersion, Write write, long actorId, String requestId) {
         DatasourceStore.Fields fields = requireFields(write);
         destinationPolicy.validate(fields.host(), fields.port());
         CredentialCipher.Sealed sealed =
@@ -92,7 +96,8 @@ public final class DatasourceAdminService {
                         fields,
                         sealed == null ? null : sealed.ciphertext(),
                         sealed == null ? null : sealed.keyId(),
-                        actorId));
+                        actorId,
+                        requestId));
     }
 
     public Read get(long id) {

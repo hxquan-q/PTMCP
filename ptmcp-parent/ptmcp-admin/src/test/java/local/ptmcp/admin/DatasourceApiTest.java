@@ -363,6 +363,45 @@ class DatasourceApiTest {
     }
 
     @Test
+    void updateAuditUsesTheServerRequestIdWithoutCredentials() throws Exception {
+        MvcResult created =
+                mockMvc.perform(
+                                admin(post("/api/v1/admin/datasources"))
+                                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(body("audit-source", "127.0.0.1")))
+                        .andExpect(status().isCreated())
+                        .andReturn();
+        String id = json(created).get("id").asString();
+        Map<String, Object> disabled = write("audit-source", "127.0.0.1");
+        disabled.put("status", "DISABLED");
+        disabled.remove("credential");
+        MvcResult result =
+                mockMvc.perform(
+                                admin(put("/api/v1/admin/datasources/" + id))
+                                        .header("If-Match", "\"1\"")
+                                        .header("X-Request-Id", "forged-id")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(JSON.writeValueAsString(disabled)))
+                        .andExpect(status().isOk())
+                        .andReturn();
+        String requestId = result.getResponse().getHeader("X-Request-Id");
+        assertNotEquals("forged-id", requestId);
+        try (Connection connection = connect();
+                var statement =
+                        connection.prepareStatement(
+                                "SELECT before_masked,after_masked FROM admin_operation_log WHERE request_id=? AND action='DATASOURCE_UPDATE'")) {
+            statement.setString(1, requestId);
+            try (var rows = statement.executeQuery()) {
+                assertTrue(rows.next(), "the committed operation must share the server request id");
+                assertFalse(rows.getString(1).contains(CREDENTIAL));
+                assertFalse(rows.getString(2).contains(CREDENTIAL));
+                assertFalse(rows.getString(2).contains("credentialCipher"));
+            }
+        }
+    }
+
+    @Test
     void deleteConflictsWithActiveGrantThenIsIdempotent() throws Exception {
         MvcResult created =
                 mockMvc.perform(

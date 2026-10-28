@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 
 import local.ptmcp.admin.datasource.DatasourceAdminService;
 import local.ptmcp.admin.datasource.DatasourceJobService;
+import local.ptmcp.admin.web.RequestIdFilter;
 import local.ptmcp.admin.web.StrictJson;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
@@ -107,7 +108,12 @@ public class DatasourceAdminController {
         DatasourceAdminService.Write write =
                 StrictJson.parse(body, DatasourceAdminService.Write.class);
         DatasourceAdminService.Read updated =
-                datasources.update(id, expectedVersion, write, principal.userId());
+                datasources.update(
+                        id,
+                        expectedVersion,
+                        write,
+                        principal.userId(),
+                        RequestIdFilter.requestId(request));
         return ResponseEntity.ok()
                 .eTag(IfMatch.etag(Long.parseLong(updated.configVersion())))
                 .body(updated);
