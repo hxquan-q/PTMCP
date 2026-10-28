@@ -190,6 +190,10 @@ ensure_env() {
                 printf "PTMCP_ADMIN_IDENTITY_DATASOURCE_PASSWORD='%s'\n" "${PTMCP_ADMIN_DATASOURCE_PASSWORD}"
             } >>"$ENV_FILE"
         fi
+        # resource-uri pairs with resource-metadata-uri validation; keep both back-filled together.
+        if [ -z "${PTMCP_GATEWAY_RESOURCEURI:-}" ]; then
+            printf "PTMCP_GATEWAY_RESOURCEURI='http://127.0.0.1:8082/mcp'\n" >>"$ENV_FILE"
+        fi
         return 0
     fi
 
