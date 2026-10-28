@@ -283,6 +283,15 @@ function departmentName(id: string): string {
   return departments.value.find((department) => department.id === id)?.name ?? `部门 ${id}`;
 }
 
+function hasSecondaryActions(): boolean {
+  return session.can('ptmcp:user:status') || session.can('ptmcp:user:reset-password') || session.can('ptmcp:user:delete');
+}
+function rowAction(command: string, user: User): void {
+  if (command === 'status') void toggleStatus(user);
+  else if (command === 'password') openPassword(user.id);
+  else if (command === 'delete') void removeUser(user.id);
+}
+
 async function loadRouteDetail(): Promise<void> {
   detailTask.cancel();
   const id = typeof route.params.id === 'string' ? route.params.id : null;
@@ -328,7 +337,7 @@ onMounted(async () => {
     <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError"
       ><template #default><ElButton link type="danger" @click="load">重新加载</ElButton></template></ElAlert
     >
-    <ElCard shadow="never" class="portal-card">
+    <section class="users-table-section ptmcp-table-region" aria-labelledby="users-table-title">
       <div class="filters ptmcp-filter-bar" role="search">
         <ElInput v-model="keyword" clearable placeholder="搜索用户名或显示名称" aria-label="搜索用户名或显示名称" @keyup.enter="load" />
         <ElSelect v-model="departmentFilter" clearable placeholder="全部部门" aria-label="部门筛选" @change="load"
@@ -336,48 +345,81 @@ onMounted(async () => {
         /></ElSelect>
         <ElButton type="primary" plain @click="load">筛选</ElButton>
       </div>
+      <div class="ptmcp-table-heading">
+        <h2 id="users-table-title" class="ptmcp-section-title">用户列表</h2>
+        <p class="ptmcp-meta-note">状态与部门变更会重新计算该用户的有效授权。</p>
+      </div>
+      <p class="ptmcp-scroll-hint">左右滑动表格查看完整列。</p>
+      <p v-if="!userDeleteApiReady" class="table-note">用户删除端点尚未接入，删除操作在正常模式保持禁用。</p>
       <ElSkeleton v-if="loading" :rows="5" animated />
-      <PageState v-else-if="!users.length" description="没有符合条件的用户" />
-      <ElTable v-else :data="users" stripe row-key="id" aria-label="用户列表">
-        <ElTableColumn prop="username" label="用户名" min-width="160" />
-        <ElTableColumn prop="displayName" label="显示名称" min-width="140" />
-        <ElTableColumn label="部门" min-width="140"
-          ><template #default="{ row }">{{ departmentName(row.deptId) }}</template></ElTableColumn
-        >
-        <ElTableColumn label="角色" min-width="180"
+      <PageState v-else-if="!users.length && !loadError" kind="empty" description="没有符合条件的用户" />
+      <ElTable
+        v-else-if="users.length"
+        class="users-table ptmcp-data-table"
+        :data="users"
+        row-key="id"
+        table-layout="fixed"
+        scrollbar-tabindex="0"
+        aria-label="用户列表"
+      >
+        <ElTableColumn prop="username" label="用户名" width="160"
           ><template #default="{ row }"
-            ><span class="muted">{{ roleNames(row.roleIds) }}</span></template
+            ><span class="ptmcp-cell-truncate" :title="row.username">{{ row.username }}</span></template
           ></ElTableColumn
         >
-        <ElTableColumn label="状态" width="100"
+        <ElTableColumn prop="displayName" label="显示名称" width="160"
           ><template #default="{ row }"
-            ><ElTag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '启用' : '停用' }}</ElTag></template
+            ><span class="ptmcp-cell-truncate" :title="row.displayName">{{ row.displayName }}</span></template
           ></ElTableColumn
         >
-        <ElTableColumn label="操作" fixed="right" width="280"
+        <ElTableColumn label="部门" width="150"
           ><template #default="{ row }"
-            ><ElButton
-              v-if="['ptmcp:user:update', 'ptmcp:user:move', 'ptmcp:user:assign-role'].some(session.can)"
-              link
-              type="primary"
-              @click="openEdit(row as User)"
-              >编辑</ElButton
-            ><ElButton v-if="session.can('ptmcp:user:status')" link :type="row.enabled ? 'danger' : 'success'" @click="toggleStatus(row as User)">{{
-              row.enabled ? '停用' : '启用'
-            }}</ElButton
-            ><ElButton v-if="session.can('ptmcp:user:reset-password')" link @click="openPassword(String(row.id))">重置密码</ElButton
-            ><ElButton
-              v-if="session.can('ptmcp:user:delete')"
-              link
-              type="danger"
-              :disabled="!userDeleteApiReady || saving || row.enabled"
-              @click="removeUser(String(row.id))"
-              >删除</ElButton
-            ><span v-if="!userDeleteApiReady" class="helper">删除接口待接入</span> ></template
+            ><span class="ptmcp-cell-truncate" :title="departmentName(row.deptId)">{{ departmentName(row.deptId) }}</span></template
+          ></ElTableColumn
+        >
+        <ElTableColumn label="角色" min-width="200"
+          ><template #default="{ row }"
+            ><span class="ptmcp-cell-truncate ptmcp-cell-meta" :title="roleNames(row.roleIds)">{{ roleNames(row.roleIds) }}</span></template
+          ></ElTableColumn
+        >
+        <ElTableColumn label="状态" width="90"
+          ><template #default="{ row }"
+            ><ElTag class="ptmcp-table-tag" :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '启用' : '停用' }}</ElTag></template
+          ></ElTableColumn
+        >
+        <ElTableColumn label="操作" width="110" align="right" fixed="right"
+          ><template #default="{ row }"
+            ><div class="ptmcp-row-actions">
+              <ElButton
+                v-if="['ptmcp:user:update', 'ptmcp:user:move', 'ptmcp:user:assign-role'].some(session.can)"
+                class="ptmcp-edit-action"
+                :aria-label="`编辑用户：${row.displayName}`"
+                @click="openEdit(row as User)"
+                >编辑</ElButton
+              ><ElDropdown v-if="hasSecondaryActions()" trigger="click" @command="rowAction($event, row as User)">
+                <button type="button" class="ptmcp-more-actions" :aria-label="`更多用户操作：${row.displayName}`" title="更多用户操作">
+                  <IconEpMoreFilled aria-hidden="true" /></button
+                ><template #dropdown
+                  ><ElDropdownMenu
+                    ><ElDropdownItem v-if="session.can('ptmcp:user:status')" command="status" :disabled="saving">{{
+                      row.enabled ? '停用用户' : '启用用户'
+                    }}</ElDropdownItem
+                    ><ElDropdownItem v-if="session.can('ptmcp:user:reset-password')" command="password" :disabled="saving">重置密码</ElDropdownItem
+                    ><ElDropdownItem
+                      v-if="session.can('ptmcp:user:delete')"
+                      command="delete"
+                      divided
+                      :disabled="!userDeleteApiReady || saving || row.enabled"
+                      >{{ !userDeleteApiReady ? '删除用户（接口待接入）' : row.enabled ? '删除用户（需先停用）' : '删除用户' }}</ElDropdownItem
+                    ></ElDropdownMenu
+                  ></template
+                ></ElDropdown
+              >
+            </div></template
           ></ElTableColumn
         >
       </ElTable>
-    </ElCard>
+    </section>
     <ElDialog
       v-model="dialogVisible"
       :title="editing ? '编辑用户' : '新建用户'"
@@ -485,8 +527,16 @@ onMounted(async () => {
   color: var(--ptmcp-muted);
   font-size: 14px;
 }
-.portal-card {
-  border-color: var(--ptmcp-border);
+.users-table-section {
+  margin-top: 24px;
+}
+.table-note {
+  margin: 0 0 12px;
+  color: var(--ptmcp-text-muted);
+  font-size: 13px;
+}
+.users-table {
+  width: 100%;
 }
 .filters {
   margin-bottom: 18px;

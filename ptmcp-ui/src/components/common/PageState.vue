@@ -2,7 +2,7 @@
 import { onBeforeUnmount, ref, watch } from 'vue';
 const props = withDefaults(
   defineProps<{
-    kind?: 'loading' | 'empty' | 'error' | 'forbidden' | 'not-found';
+    kind?: 'idle' | 'loading' | 'empty' | 'error' | 'forbidden' | 'not-found';
     title?: string;
     description?: string;
     actionLabel?: string;
@@ -41,7 +41,8 @@ async function copyRequestId(): Promise<void> {
   <section class="page-state" :data-kind="kind" role="status" aria-live="polite">
     <div v-if="kind === 'loading'" class="page-state__spinner" aria-hidden="true"><span /></div>
     <div v-else class="page-state__mark" aria-hidden="true">
-      <IconEpCircleCheck v-if="kind === 'empty'" />
+      <IconEpQuestionFilled v-if="kind === 'idle'" />
+      <IconEpCircleCheck v-else-if="kind === 'empty'" />
       <IconEpWarning v-else-if="kind === 'error'" />
       <IconEpLock v-else-if="kind === 'forbidden'" />
       <IconEpDocumentDelete v-else />
@@ -51,13 +52,15 @@ async function copyRequestId(): Promise<void> {
         title ??
         (kind === 'loading'
           ? '正在加载'
-          : kind === 'empty'
-            ? '暂无记录'
-            : kind === 'forbidden'
-              ? '无权访问'
-              : kind === 'not-found'
-                ? '页面不存在'
-                : '加载失败')
+          : kind === 'idle'
+            ? '尚未开始'
+            : kind === 'empty'
+              ? '暂无记录'
+              : kind === 'forbidden'
+                ? '无权访问'
+                : kind === 'not-found'
+                  ? '页面不存在'
+                  : '加载失败')
       }}
     </component>
     <p>
@@ -65,13 +68,15 @@ async function copyRequestId(): Promise<void> {
         description ??
         (kind === 'loading'
           ? '正在获取最新数据，请稍候。'
-          : kind === 'empty'
-            ? '调整筛选条件，或使用右上角主操作开始。'
-            : kind === 'forbidden'
-              ? '当前账号或管理范围没有访问此资源的权限。'
-              : kind === 'not-found'
-                ? '资源不存在或当前不可见。'
-                : '请稍后重试；如果问题持续，请联系平台管理员。')
+          : kind === 'idle'
+            ? '请先完成上方选择，再读取数据。'
+            : kind === 'empty'
+              ? '调整筛选条件，或使用右上角主操作开始。'
+              : kind === 'forbidden'
+                ? '当前账号或管理范围没有访问此资源的权限。'
+                : kind === 'not-found'
+                  ? '资源不存在或当前不可见。'
+                  : '请稍后重试；如果问题持续，请联系平台管理员。')
       }}
     </p>
     <div v-if="requestId" class="page-state__request">
@@ -137,6 +142,10 @@ async function copyRequestId(): Promise<void> {
   color: var(--ptmcp-orange);
 }
 [data-kind='not-found'] .page-state__mark {
+  background: var(--ptmcp-bg-neutral);
+  color: var(--ptmcp-text-muted);
+}
+[data-kind='idle'] .page-state__mark {
   background: var(--ptmcp-bg-neutral);
   color: var(--ptmcp-text-muted);
 }

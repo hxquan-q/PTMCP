@@ -11,11 +11,12 @@ test('主体面板按名称或精确字符串ID筛选，切换主体类型清除
   const url = (code) => `data:text/javascript,${encodeURIComponent(code)}`;
   const vue = JSON.stringify(import.meta.resolve('vue'));
   const workspace = url(
-    `import {ref,reactive} from ${vue};export const useAccessWorkspace=()=>({subjectType:ref('USER'),subjectId:ref(''),subjectOptions:reactive({USER:[{id:'9007199254740993',label:'合成分析员 · Analyst'},{id:'2',label:'合成管理员'}],ROLE:[{id:'r-1',label:'只读角色'}],DEPT:[]})});`,
+    `import {ref,reactive} from ${vue};export const useAccessWorkspace=()=>{const selectResource=(node)=>{globalThis.__selectedResource=node;};return {subjectType:ref('USER'),subjectId:ref(''),subjectOptions:reactive({USER:[{id:'9007199254740993',label:'合成分析员 · Analyst'},{id:'2',label:'合成管理员'}],ROLE:[{id:'r-1',label:'只读角色'}],DEPT:[]}),resourceTree:ref([{key:'DATASOURCE:1',id:'1',label:'source',type:'DATASOURCE',generation:'1',children:[{key:'OBJECT:3',id:'3',label:'orders',type:'OBJECT',generation:'2'}]}]),selectResource};};`,
   );
   const code = compileScript(descriptor, { id: 'permissions-view-test' }).content.replace(/from\s+(['"])([^'"]+)\1/g, (original, _q, specifier) => {
     if (specifier === 'vue') return `from ${vue}`;
     if (specifier === './useAccessWorkspace') return `from ${JSON.stringify(workspace)}`;
+    if (specifier === './resource-tree') return `from ${JSON.stringify(new URL('../src/views/admin/access/resource-tree.ts', import.meta.url).href)}`;
     if (specifier.endsWith('.vue')) return `from ${JSON.stringify(url('export default {};'))}`;
     return original;
   });
@@ -51,7 +52,20 @@ test('主体面板按名称或精确字符串ID筛选，切换主体类型清除
     state.subjectType = 'DEPT';
     await nextTick();
     assert.deepEqual(state.filteredSubjects, []);
+    let prevented = false;
+    state.activateTreeNode({
+      key: 'Enter',
+      target: { closest: () => ({ dataset: { key: 'OBJECT:3' } }) },
+      preventDefault: () => {
+        prevented = true;
+      },
+    });
+    assert.equal(prevented, true);
+    assert.equal(globalThis.__selectedResource.key, 'OBJECT:3');
+    state.activateTreeNode({ key: 'Tab', target: { closest: () => ({ dataset: { key: 'OBJECT:3' } }) }, preventDefault: () => {} });
+    assert.equal(globalThis.__selectedResource.key, 'OBJECT:3');
   } finally {
     app.unmount();
+    delete globalThis.__selectedResource;
   }
 });

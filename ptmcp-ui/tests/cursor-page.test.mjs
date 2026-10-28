@@ -96,6 +96,25 @@ test('速览失效清除已选ID及详情，错误重试只读取当前记录', 
   }
 });
 
+test('列表上下文的离开/返回快照恢复行、游标和已读取标记，且不与记忆对象共享引用', async () => {
+  const page = mount(async () => ({ items: [], nextCursor: null }));
+  try {
+    const snapshot = { rows: [{ id: 'a' }], cursor: 'next-1', loaded: true };
+    page.state.restore(snapshot);
+    assert.deepEqual(
+      page.state.rows.value.map((row) => row.id),
+      ['a'],
+    );
+    assert.equal(page.state.cursor.value, 'next-1');
+    assert.equal(page.state.loaded.value, true);
+    assert.equal(page.state.loading.value, false);
+    snapshot.rows.push({ id: 'b' });
+    assert.equal(page.state.rows.value.length, 1);
+  } finally {
+    page.close();
+  }
+});
+
 test('cursor stale restarts a read at page one without appending obsolete rows', async () => {
   const calls = [];
   const page = mount(async (cursor) => {

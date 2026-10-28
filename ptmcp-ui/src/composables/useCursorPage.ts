@@ -23,6 +23,17 @@ export function useCursorPage<T>(read: (cursor: string | undefined, signal: Abor
     error.value = '';
     requestId.value = null;
   }
+  /** Rehydrate a list read by a page that intentionally leaves and returns. */
+  function restore(state: { rows: T[]; cursor: string | null; loaded: boolean }): void {
+    sequence++;
+    task.cancel();
+    rows.value = [...state.rows];
+    cursor.value = state.cursor;
+    loaded.value = state.loaded;
+    loading.value = false;
+    error.value = '';
+    requestId.value = null;
+  }
   async function load(append = false): Promise<void> {
     if (loading.value || (append && !cursor.value)) return;
     const own = ++sequence;
@@ -57,5 +68,5 @@ export function useCursorPage<T>(read: (cursor: string | undefined, signal: Abor
       if (own === sequence) loading.value = false;
     }
   }
-  return { rows, cursor, loading, error, requestId, loaded, reset, load, retry: () => load(retryAppend) };
+  return { rows, cursor, loading, error, requestId, loaded, reset, restore, load, retry: () => load(retryAppend) };
 }

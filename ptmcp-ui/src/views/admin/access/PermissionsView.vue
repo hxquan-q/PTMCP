@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import PageHeader from '../../../components/common/PageHeader.vue';
 import { useAccessWorkspace } from './useAccessWorkspace';
+import { findResourceSelection } from './resource-tree';
 import type { Grant } from '../../../services/access';
 import EffectiveAccessPane from './EffectiveAccessPane.vue';
 import EvidenceFields from '../../../components/common/EvidenceFields.vue';
@@ -68,6 +69,16 @@ watch(subjectType, () => {
   subjectSearch.value = '';
 });
 const resourceLabels = { DATASOURCE: '数据源', NAMESPACE: '命名空间', OBJECT: '对象' };
+function activateTreeNode(event: KeyboardEvent): void {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  const node = (event.target as HTMLElement).closest<HTMLElement>('[role="treeitem"][data-key]');
+  const key = node?.dataset.key;
+  if (!key) return;
+  const resource = findResourceSelection(resourceTree.value, key);
+  if (!resource) return;
+  event.preventDefault();
+  selectResource(resource);
+}
 function date(value: string | null) {
   return value ? new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Taipei', hour12: false }) : '无结束时间';
 }
@@ -87,7 +98,9 @@ function date(value: string | null) {
       </template>
     </PageHeader>
     <ElAlert v-if="lookupError" :title="lookupError" type="warning" :closable="false" show-icon />
-    <ElAlert v-if="pageError" :title="pageError" type="error" :closable="false" show-icon />
+    <ElAlert v-if="pageError" :title="pageError" type="error" :closable="false" show-icon
+      ><ElButton :disabled="!subjectId" @click="loadGrants">重新读取规则</ElButton></ElAlert
+    >
     <div class="access-workspace">
       <aside class="selection-panel" aria-label="授权主体">
         <h2>授权主体</h2>
@@ -121,28 +134,31 @@ function date(value: string | null) {
           ></ElFormItem>
         </ElForm>
         <ElButton v-if="sourceCursor" text :disabled="saving" @click="loadSources(true)">加载更多数据源</ElButton>
-        <ElAlert v-if="resourceError" :title="resourceError" type="warning" :closable="false" show-icon />
-        <ElSkeleton v-if="resourceLoading && !resourceTree.length" :rows="4" animated />
-        <ElTree
-          v-else-if="resourceTree.length"
-          :data="resourceTree"
-          node-key="key"
-          :props="{ label: 'label', children: 'children' }"
-          default-expand-all
-          highlight-current
-          :current-node-key="selectedResource?.key"
-          :expand-on-click-node="false"
-          aria-label="授权资源树"
-          @node-click="selectResource"
+        <ElAlert v-if="resourceError" :title="resourceError" type="warning" :closable="false" show-icon
+          ><ElButton :disabled="!sourceId" @click="loadResources()">重新读取资源</ElButton></ElAlert
         >
-          <template #default="{ data }"
-            ><span class="tree-label" tabindex="0" :title="data.label"
-              ><span>{{ data.label }}</span
-              ><small>{{ data.type === 'GROUP' ? '目录分组' : resourceLabels[data.type as keyof typeof resourceLabels] }}</small></span
-            ></template
+        <ElSkeleton v-if="resourceLoading && !resourceTree.length" :rows="4" animated />
+        <div v-else-if="resourceTree.length" class="resource-tree" @keydown="activateTreeNode">
+          <ElTree
+            :data="resourceTree"
+            node-key="key"
+            :props="{ label: 'label', children: 'children' }"
+            default-expand-all
+            highlight-current
+            :current-node-key="selectedResource?.key"
+            :expand-on-click-node="false"
+            aria-label="授权资源树"
+            @node-click="selectResource"
           >
-        </ElTree>
-        <p v-else class="help-text">先选择数据源以读取当前资源。</p>
+            <template #default="{ data }"
+              ><span class="tree-label" :title="data.label"
+                ><span>{{ data.label }}</span
+                ><small>{{ data.type === 'GROUP' ? '目录分组' : resourceLabels[data.type as keyof typeof resourceLabels] }}</small></span
+              ></template
+            >
+          </ElTree>
+        </div>
+        <p v-else-if="!resourceError" class="help-text">先选择数据源以读取当前资源。</p>
         <ElButton v-if="resourceCursor" text :loading="resourceLoading" @click="loadResources(true)">加载更多对象</ElButton>
         <p v-if="selectedResource" class="selection-summary">
           当前：{{ selectedResource.label }}<br />{{
@@ -167,9 +183,9 @@ function date(value: string | null) {
           </header>
           <ElSkeleton v-if="loading && !grants.length" :rows="5" animated />
           <PageState v-else-if="!canList" description="缺少授权规则列表权限，可使用下方已获授权的预览功能。" />
-          <PageState v-else-if="!subjectId" description="尚未选择授权主体" />
-          <PageState v-else-if="!grants.length && !pageError" description="此主体尚无直接授权规则" />
-          <ElTable v-else :data="grants" row-key="id" table-layout="auto" aria-label="主体授权规则">
+          <PageState v-else-if="!subjectId" kind="idle" title="尚未选择授权主体" description="先在左侧选择主体，再读取直接规则。" />
+          <PageState v-else-if="!grants.length && !pageError" kind="empty" description="此主体尚无直接授权规则" />
+          <ElTable v-else-if="grants.length" :data="grants" row-key="id" table-layout="auto" aria-label="主体授权规则">
             <ElTableColumn label="资源" min-width="150"
               ><template #default="{ row }"
                 ><strong>{{ resourceLabels[row.resourceType as keyof typeof resourceLabels] }}</strong>
@@ -466,6 +482,7 @@ h2 {
   gap: 6px;
   align-items: center;
   min-width: 0;
+  flex: 1;
 }
 .tree-label > span {
   white-space: normal;
@@ -475,6 +492,13 @@ h2 {
 .resource-panel :deep(.el-tree-node__content) {
   height: auto;
   min-height: 32px;
+}
+.resource-tree :deep(.el-tree-node:focus-visible > .el-tree-node__content) {
+  outline: 2px solid var(--ptmcp-blue);
+  outline-offset: -2px;
+}
+.resource-tree :deep(.el-tree-node.is-current > .el-tree-node__content) {
+  background: var(--ptmcp-selected);
 }
 .tree-label small {
   color: var(--ptmcp-muted);

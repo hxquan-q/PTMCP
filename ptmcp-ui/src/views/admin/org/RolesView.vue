@@ -22,6 +22,21 @@ const saving = ref(false);
 const form = reactive({ key: '', name: '', enabled: true, permissionCodes: [] as string[] });
 const permissionOptions = computed(() => [...new Set(session.user?.permissions ?? [])].sort());
 const retainedCodes = computed(() => (editing.value?.permissionCodes ?? []).filter((code) => !permissionOptions.value.includes(code)));
+// Two full codes fit the flexible column without chopping values; the rest stay in the popover.
+const INLINE_CODE_LIMIT = 2;
+function permissionList(role: Role): string[] {
+  return role.permissionCodes ?? [];
+}
+function inlineCodes(role: Role): string[] {
+  return permissionList(role).slice(0, INLINE_CODE_LIMIT);
+}
+function hiddenCodeCount(role: Role): number {
+  return Math.max(0, permissionList(role).length - INLINE_CODE_LIMIT);
+}
+/** The ptmcp: prefix repeats on every row; dropping it keeps the distinguishing resource/action visible. */
+function codeLabel(code: string): string {
+  return code.startsWith('ptmcp:') ? code.slice(6) : code;
+}
 const clearPage = (): void => {
   roles.value = [];
   editing.value = null;
@@ -178,41 +193,89 @@ onMounted(async () => {
       >
     </PageHeader>
     <ElAlert v-if="roleGate.hint" type="info" :closable="false" :title="roleGate.hint" class="mb-4" />
-    <p class="page-description">成员数量与委派部门信息当前暂不可用。</p>
     <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError"
       ><template #default><ElButton link type="danger" @click="load">重新加载</ElButton></template></ElAlert
     >
-    <ElCard shadow="never" class="portal-card">
+    <section class="roles-table-section ptmcp-table-region" aria-labelledby="roles-table-title">
+      <div class="roles-table-heading ptmcp-table-heading">
+        <h2 id="roles-table-title" class="ptmcp-section-title">角色列表</h2>
+        <p class="ptmcp-meta-note">成员数与委派部门的服务端数据暂不可用。</p>
+      </div>
+      <p class="ptmcp-scroll-hint">左右滑动表格查看完整列。</p>
       <ElSkeleton v-if="loading" :rows="5" animated />
-      <PageState v-else-if="!roles.length" description="尚未创建角色" />
-      <ElTable v-else :data="roles" stripe row-key="id" aria-label="角色列表">
-        <ElTableColumn prop="key" label="Key" min-width="180" /><ElTableColumn prop="name" label="名称" min-width="160" /><ElTableColumn
-          label="状态"
-          width="100"
+      <PageState v-else-if="!roles.length && !loadError" kind="empty" description="尚未创建角色" />
+      <ElTable
+        v-else
+        class="roles-table ptmcp-data-table"
+        :data="roles"
+        row-key="id"
+        table-layout="fixed"
+        scrollbar-tabindex="0"
+        aria-label="角色列表"
+      >
+        <ElTableColumn prop="key" label="Key" width="160"
           ><template #default="{ row }"
-            ><ElTag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '启用' : '停用' }}</ElTag></template
+            ><span class="ptmcp-cell-truncate" :title="row.key">{{ row.key }}</span></template
           ></ElTableColumn
-        ><ElTableColumn label="功能码" min-width="280"
+        ><ElTableColumn prop="name" label="名称" width="160"
           ><template #default="{ row }"
-            ><div class="code-list">
-              <ElTag v-for="code in row.permissionCodes" :key="code" size="small" effect="plain">{{ code }}</ElTag
-              ><span v-if="!row.permissionCodes.length" class="muted">未配置</span>
+            ><span class="ptmcp-cell-truncate" :title="row.name">{{ row.name }}</span></template
+          ></ElTableColumn
+        ><ElTableColumn label="状态" width="90"
+          ><template #default="{ row }"
+            ><ElTag class="ptmcp-table-tag" :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '启用' : '停用' }}</ElTag></template
+          ></ElTableColumn
+        ><ElTableColumn label="功能码" min-width="320"
+          ><template #default="{ row }"
+            ><div class="code-row">
+              <ElTag v-for="code in inlineCodes(row as Role)" :key="code" class="code-tag" :title="code">{{ codeLabel(code) }}</ElTag
+              ><ElPopover v-if="hiddenCodeCount(row as Role)" trigger="click" placement="bottom-start" :width="340" popper-class="role-codes-popover">
+                <template #reference
+                  ><button type="button" class="more-codes" :aria-label="`查看 ${row.name} 的全部 ${permissionList(row as Role).length} 个功能码`">
+                    +{{ hiddenCodeCount(row as Role) }} 项
+                  </button></template
+                >
+                <div class="codes-popover">
+                  <p class="codes-popover__title">全部 {{ permissionList(row as Role).length }} 个功能码</p>
+                  <div class="codes-popover__list">
+                    <ElTag v-for="code in permissionList(row as Role)" :key="code" class="code-tag">{{ code }}</ElTag>
+                  </div>
+                </div>
+              </ElPopover>
+              <span v-if="!permissionList(row as Role).length" class="ptmcp-cell-meta">—</span>
             </div></template
           ></ElTableColumn
-        ><ElTableColumn prop="memberCount" label="成员数" width="90"
-          ><template #default="{ row }">{{ row.memberCount ?? '未提供' }}</template></ElTableColumn
-        ><ElTableColumn label="管理部门" min-width="140"
-          ><template #default="{ row }">{{ row.managedDepartmentIds?.join('、') ?? '服务端未提供' }}</template></ElTableColumn
-        ><ElTableColumn label="操作" fixed="right" width="130"
+        ><ElTableColumn prop="memberCount" label="成员数" width="120"
           ><template #default="{ row }"
-            ><ElButton v-if="roleGate.canWrite && session.can('ptmcp:role:update')" link type="primary" @click="openEdit(row as Role)">编辑</ElButton
-            ><ElButton v-if="roleGate.canWrite && session.can('ptmcp:role:delete')" link type="danger" @click="remove(row as Role)"
-              >删除</ElButton
-            ></template
+            ><span class="ptmcp-cell-meta">{{ row.memberCount ?? '—' }}</span></template
+          ></ElTableColumn
+        ><ElTableColumn label="管理部门" width="120"
+          ><template #default="{ row }"
+            ><span class="ptmcp-cell-truncate ptmcp-cell-meta" :title="row.managedDepartmentIds?.join('、')">{{
+              row.managedDepartmentIds?.length ? row.managedDepartmentIds.join('、') : '—'
+            }}</span></template
+          ></ElTableColumn
+        ><ElTableColumn label="操作" width="110" align="right" fixed="right"
+          ><template #default="{ row }"
+            ><div class="ptmcp-row-actions">
+              <ElButton
+                v-if="roleGate.canWrite && session.can('ptmcp:role:update')"
+                class="ptmcp-edit-action"
+                :aria-label="`编辑角色：${row.name}`"
+                @click="openEdit(row as Role)"
+                >编辑</ElButton
+              ><ElDropdown v-if="roleGate.canWrite && session.can('ptmcp:role:delete')" trigger="click" @command="remove(row as Role)"
+                ><button type="button" class="ptmcp-more-actions" :aria-label="`更多角色操作：${row.name}`" title="更多角色操作">
+                  <IconEpMoreFilled aria-hidden="true" /></button
+                ><template #dropdown
+                  ><ElDropdownMenu><ElDropdownItem command="delete">删除角色</ElDropdownItem></ElDropdownMenu></template
+                ></ElDropdown
+              >
+            </div></template
           ></ElTableColumn
         >
       </ElTable>
-    </ElCard>
+    </section>
     <ElDialog v-model="dialogVisible" :title="editing ? '编辑角色' : '新建角色'" width="min(600px, calc(100vw - 32px))"
       ><ElAlert v-if="conflictDetected" type="warning" :closable="false" title="版本冲突：草稿已保留，请先核对服务器当前值。" class="mb-4"
         ><template v-if="conflict"
@@ -253,30 +316,87 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.page-description,
-.muted,
 .helper {
+  display: block;
+  margin-top: 4px;
   color: var(--ptmcp-muted);
-  font-size: 14px;
-}
-.page-description {
-  margin: 8px 0 0;
-}
-.portal-card {
-  border-color: var(--ptmcp-border);
+  font-size: 12px;
 }
 .code-list {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
 }
-.wide {
+.roles-table-section {
+  margin-top: 24px;
+}
+.roles-table {
   width: 100%;
 }
-.helper {
-  display: block;
-  margin-top: 4px;
-  font-size: 12px;
+.code-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+.code-row :deep(.code-tag),
+.codes-popover :deep(.code-tag) {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 190px;
+  overflow: hidden;
+  height: 24px;
+  padding: 2px 8px;
+  border: none;
+  border-radius: 4px;
+  background: var(--ptmcp-wash);
+  color: var(--ptmcp-blue-dark);
+  font-size: 14px;
+  line-height: 20px;
+}
+.code-row :deep(.code-tag .el-tag__content),
+.codes-popover :deep(.code-tag .el-tag__content) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.more-codes {
+  flex: none;
+  min-height: 24px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ptmcp-blue);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.more-codes:hover {
+  background: var(--ptmcp-wash);
+}
+.codes-popover__title {
+  margin: 0 0 10px;
+  color: var(--ptmcp-heading);
+  font-size: 14px;
+  font-weight: 500;
+}
+.codes-popover__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 280px;
+  overflow: auto;
+}
+.codes-popover :deep(.code-tag) {
+  max-width: 100%;
+}
+.wide {
+  width: 100%;
 }
 .mb-4 {
   margin-bottom: 16px;

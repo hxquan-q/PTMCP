@@ -179,7 +179,7 @@ button:focus-visible,
 .workspace-sidebar {
   position: fixed;
   z-index: 30;
-  inset: 106px auto 0 0;
+  inset: 104px auto 0 0;
   display: flex;
   flex-direction: column;
   width: 216px;
@@ -212,15 +212,15 @@ button:focus-visible,
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 22px;
+  gap: 20px;
   padding: 24px 12px;
   overflow: auto;
 }
 .workspace-nav__group h2 {
-  margin: 0 0 7px;
+  margin: 0 0 8px;
   padding: 0 16px;
   color: var(--ptmcp-text-muted);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 500;
 }
 .workspace-nav a {
@@ -228,11 +228,13 @@ button:focus-visible,
   align-items: center;
   gap: 12px;
   min-height: 42px;
-  padding: 0 15px;
+  padding: 0 15px 0 16px;
   margin-bottom: 3px;
-  border-radius: 8px;
-  color: #47515c;
-  font-size: 13px;
+  border-left: 3px solid transparent;
+  border-radius: 0 4px 4px 0;
+  color: var(--ptmcp-text-list);
+  font-size: 15px;
+  font-weight: 350;
   text-decoration: none;
   transition:
     background 0.15s,
@@ -243,13 +245,14 @@ button:focus-visible,
   font-size: 16px;
 }
 .workspace-nav a:hover {
-  background: #f1f5f9;
+  background: var(--ptmcp-chrome);
   color: var(--ptmcp-blue);
 }
 .workspace-nav a.is-active {
-  background: var(--ptmcp-blue-soft);
+  border-left-color: var(--ptmcp-blue);
+  background: var(--ptmcp-selected);
   color: var(--ptmcp-blue);
-  font-weight: 650;
+  font-weight: 500;
 }
 .workspace-sidebar__footer {
   padding: 17px 16px 20px;
@@ -273,7 +276,7 @@ button:focus-visible,
 .workspace-main {
   min-height: 100vh;
   margin-left: 216px;
-  padding-top: 106px;
+  padding-top: 104px;
 }
 .workspace-topbar {
   position: fixed;
@@ -281,7 +284,7 @@ button:focus-visible,
   inset: 0 0 auto;
   display: flex;
   align-items: center;
-  min-height: 60px;
+  height: 60px;
   padding: 0 28px;
   border-bottom: 1px solid var(--ptmcp-border);
   background: #f5f6f7;
@@ -293,7 +296,7 @@ button:focus-visible,
   display: flex;
   align-items: stretch;
   gap: 30px;
-  height: 46px;
+  height: 44px;
   padding-left: 252px;
   border-bottom: 1px solid var(--ptmcp-border);
   background: #fff;
@@ -302,16 +305,16 @@ button:focus-visible,
   display: flex;
   align-items: center;
   gap: 8px;
-  border-bottom: 3px solid transparent;
-  padding-top: 3px;
-  color: var(--ptmcp-text-muted);
-  font-size: 13px;
+  border-bottom: 2px solid transparent;
+  color: var(--ptmcp-text-nav);
+  font-size: 14px;
+  font-weight: 400;
   text-decoration: none;
 }
 .workspace-viewbar a.is-current {
   border-color: var(--ptmcp-blue);
   color: var(--ptmcp-blue);
-  font-weight: 650;
+  font-weight: 500;
 }
 .workspace-viewbar > span {
   display: flex;
@@ -357,8 +360,8 @@ button:focus-visible,
 }
 .workspace-user__text strong {
   display: block;
-  color: var(--ptmcp-text);
-  font-size: 12px;
+  color: var(--ptmcp-text-nav);
+  font-size: 15px;
 }
 .workspace-user__text span {
   display: block;
@@ -442,6 +445,126 @@ button:focus-visible,
   padding-inline: 0;
 }
 
+/* Shared SAP data-table chrome. Page-specific classes only style cell content. */
+.ptmcp-table-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 20px;
+  margin-bottom: 12px;
+}
+.ptmcp-table-heading .ptmcp-section-title {
+  margin-bottom: 0;
+}
+.ptmcp-meta-note {
+  margin: 0;
+  color: var(--ptmcp-text-muted);
+  font-size: 14px;
+}
+.ptmcp-data-table {
+  width: 100%;
+}
+.ptmcp-data-table .el-table__inner-wrapper::before {
+  display: none;
+}
+.ptmcp-data-table th.el-table__cell {
+  height: 48px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--ptmcp-text-muted);
+  background: var(--ptmcp-chrome);
+  color: var(--ptmcp-heading);
+  font-size: 16px;
+  font-weight: 500;
+}
+.ptmcp-data-table td.el-table__cell {
+  padding: 11px 0;
+  border-bottom: 1px solid var(--ptmcp-text-muted);
+  color: var(--ptmcp-text);
+  font-size: 15px;
+  vertical-align: top;
+}
+.ptmcp-data-table .cell {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 16px;
+  line-height: 22px;
+}
+.ptmcp-data-table .el-table__cell.is-right .cell {
+  justify-content: flex-end;
+}
+.ptmcp-data-table .el-table__row:hover > td.el-table__cell {
+  background: var(--ptmcp-chrome);
+}
+.ptmcp-data-table .ptmcp-table-tag {
+  border: none;
+  border-radius: 4px;
+}
+.ptmcp-table-region {
+  container-type: inline-size;
+}
+.ptmcp-scroll-hint {
+  display: none;
+  margin: 0 0 10px;
+  color: var(--ptmcp-text-muted);
+  font-size: 12px;
+}
+@container (max-width: 1140px) {
+  .ptmcp-scroll-hint {
+    display: block;
+  }
+}
+.ptmcp-cell-truncate {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ptmcp-cell-meta {
+  color: var(--ptmcp-text-muted);
+  font-size: 14px;
+}
+.ptmcp-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.ptmcp-edit-action {
+  height: auto;
+  padding: 6px 10px;
+  border: 1px solid var(--ptmcp-text-muted);
+  border-radius: 8px;
+  background: var(--ptmcp-surface);
+  color: var(--ptmcp-blue-dark);
+  font-size: 14px;
+  font-weight: 500;
+}
+.ptmcp-edit-action:hover {
+  border-color: var(--ptmcp-blue);
+  background: var(--ptmcp-wash);
+  color: var(--ptmcp-blue-dark);
+}
+.ptmcp-more-actions {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ptmcp-text-muted);
+  font-size: 16px;
+  cursor: pointer;
+}
+.ptmcp-more-actions:hover {
+  background: var(--ptmcp-chrome);
+  color: var(--ptmcp-text);
+}
+
 .workspace-content {
   max-width: 1440px;
   margin: 0 auto;
@@ -470,7 +593,7 @@ button:focus-visible,
   }
   .workspace-main {
     margin-left: 0;
-    padding-top: 102px;
+    padding-top: 104px;
   }
   .workspace-menu {
     display: inline-grid;
@@ -488,7 +611,7 @@ button:focus-visible,
     padding: 0 20px;
   }
   .workspace-viewbar {
-    inset-block-start: 56px;
+    inset-block-start: 60px;
     padding-left: 22px;
     gap: 25px;
   }

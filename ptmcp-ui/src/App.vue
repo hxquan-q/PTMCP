@@ -29,20 +29,20 @@ onUnmounted(() => window.removeEventListener('ptmcp:session-expired', handleExpi
   top: 108px;
 }
 .frontend-preview .workspace-sidebar {
-  top: 154px;
+  top: 152px;
 }
 .frontend-preview .workspace-main {
-  padding-top: 154px;
+  padding-top: 152px;
 }
 @media (max-width: 900px) {
   .frontend-preview .workspace-viewbar {
-    top: 104px;
+    top: 108px;
   }
   .frontend-preview .workspace-sidebar {
     top: 48px;
   }
   .frontend-preview .workspace-main {
-    padding-top: 150px;
+    padding-top: 152px;
   }
 }
 @media (max-width: 600px) {
@@ -50,13 +50,13 @@ onUnmounted(() => window.removeEventListener('ptmcp:session-expired', handleExpi
     top: 74px;
   }
   .frontend-preview .workspace-viewbar {
-    top: 130px;
+    top: 134px;
   }
   .frontend-preview .workspace-sidebar {
     top: 74px;
   }
   .frontend-preview .workspace-main {
-    padding-top: 176px;
+    padding-top: 178px;
   }
 }
 </style>

@@ -223,7 +223,8 @@ onBeforeUnmount(() => {
 
     <ElCard class="table-card ptmcp-table-section" shadow="never" :body-style="{ padding: '0' }">
       <h2 class="ptmcp-section-title">数据源列表</h2>
-      <ElTable v-loading="loading" :data="rows" row-key="id" table-layout="auto" empty-text="">
+      <ElSkeleton v-if="loading && !rows.length" :rows="5" animated />
+      <ElTable v-else-if="rows.length || (loaded && !error)" v-loading="loading" :data="rows" row-key="id" table-layout="auto" empty-text="">
         <ElTableColumn prop="name" label="数据源" min-width="210">
           <template #default="scope">
             <button
@@ -265,7 +266,7 @@ onBeforeUnmount(() => {
           </template>
         </ElTableColumn>
         <template #empty>
-          <PageState :description="loading ? '正在加载数据源…' : '暂无符合条件的数据源'">
+          <PageState kind="empty" :description="loaded ? '暂无符合条件的数据源' : '数据源尚未读取'">
             <ElButton v-if="!loading && session.can('ptmcp:datasource:create')" type="primary" @click="openCreate">新建数据源</ElButton>
           </PageState>
         </template>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, reactive, ref, onMounted, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, nextTick, reactive, ref, onMounted, watch } from 'vue';
+import { onBeforeRouteLeave, useRouter } from 'vue-router';
 import {
   ElAlert,
   ElButton,
@@ -28,11 +28,11 @@ import { queryErrorText } from '../../../services/queryErrorText';
 import { useCursorPage } from '../../../composables/useCursorPage';
 import { errorText, formatDate, usePortalTask } from '../../portalUtils';
 import { useSessionStore } from '../../../stores/session';
+import { forgetAuditQuery, recallAuditQuery, rememberAuditQuery } from './auditQueryMemory';
 
 const filters = reactive({ userId: '', platformId: '', datasourceId: '', tool: '', result: '', verdict: '', errorCode: '' });
 const from = ref<Date | null>(new Date(Date.now() - 7 * 86400000));
 const to = ref<Date | null>(new Date());
-const validation = ref('');
 const router = useRouter();
 const session = useSessionStore();
 /** 审计列表/详情/解密后端已实现（T17-api 切片）；预览模式继续用合成数据。 */
@@ -44,7 +44,7 @@ const directoryTask = usePortalTask(() => {
   platforms.value = [];
   sources.value = [];
 });
-const { rows, cursor, loading, error, requestId, loaded, reset, load, retry } = useCursorPage((cursor, signal) =>
+const { rows, cursor, loading, error, requestId, loaded, reset, restore, load, retry } = useCursorPage((cursor, signal) =>
   controlPlane.audit.list({ ...filters, from: from.value?.toISOString(), to: to.value?.toISOString(), cursor }, signal),
 );
 const {
@@ -71,7 +71,6 @@ watch(rows, () => {
   if (quickId.value && !rows.value.some((row) => row.requestId === quickId.value)) clearQuick();
 });
 async function query(): Promise<void> {
-  validateFilters();
   if (!from.value || !to.value || dateRange.value || !auditReady) return;
   await load();
 }
@@ -89,20 +88,48 @@ async function loadDirectories(): Promise<void> {
     directoryError.value = errorText(reason);
   }
 }
+let restoring = false;
 watch(
   [filters, from, to],
   () => {
+    if (restoring) return;
     reset();
     clearQuick();
-    validation.value = '';
   },
   { flush: 'sync' },
 );
-onMounted(() => {
-  if (auditReady) {
-    void query();
-    void loadDirectories();
+onMounted(async () => {
+  if (!auditReady) return;
+  const state = recallAuditQuery();
+  if (state) {
+    restoring = true;
+    Object.assign(filters, state.filters);
+    from.value = state.from ? new Date(state.from) : null;
+    to.value = state.to ? new Date(state.to) : null;
+    await nextTick();
+    restoring = false;
+    restore({ rows: state.rows, cursor: state.cursor, loaded: state.loaded });
+    if (state.quickId) void selectQuick(state.quickId);
+    requestAnimationFrame(() => window.scrollTo({ top: state.scrollY }));
+  } else void query();
+  void loadDirectories();
+});
+onBeforeRouteLeave((destination) => {
+  // Only the detail round trip is continuous; unrelated navigation starts fresh.
+  if (destination.name !== 'admin-audit-detail') {
+    forgetAuditQuery();
+    return;
   }
+  rememberAuditQuery({
+    filters: { ...filters },
+    from: from.value?.getTime() ?? null,
+    to: to.value?.getTime() ?? null,
+    rows: rows.value,
+    cursor: cursor.value,
+    loaded: loaded.value,
+    quickId: quickId.value,
+    scrollY: window.scrollY,
+  });
 });
 const dateRange = computed(() => {
   const start = from.value?.getTime();
@@ -110,18 +137,21 @@ const dateRange = computed(() => {
   if ((start !== undefined && !Number.isFinite(start)) || (end !== undefined && !Number.isFinite(end))) return '日期格式无效。';
   return validateDateRange(from.value?.toISOString() ?? '', to.value?.toISOString() ?? '');
 });
-const filterSummary = computed(() => (Object.values(filters).filter(Boolean).length ? '已设置筛选条件，点击查询更新记录。' : '未设置额外筛选条件。'));
-function validateFilters(): void {
-  validation.value =
-    !from.value || !to.value ? '请选择开始和结束时间，单次查询不超过31天。' : (dateRange.value ?? '筛选校验通过，点击查询读取审计记录。');
-}
+const filterSummary = computed(() => (Object.values(filters).filter(Boolean).length ? '已设置筛选条件；修改后需重新查询。' : '未设置额外筛选条件。'));
 function clearFilters(): void {
   Object.keys(filters).forEach((key) => {
     filters[key as keyof typeof filters] = '';
   });
   from.value = null;
   to.value = null;
-  validation.value = '';
+}
+const advancedOpen = ref(false);
+const advancedCount = computed(() => [filters.userId, filters.platformId, filters.datasourceId, filters.errorCode].filter(Boolean).length);
+function platformName(id: string | null): string {
+  return platforms.value.find((row) => row.id === id)?.name ?? id ?? '—';
+}
+function sourceName(id: string | null): string {
+  return sources.value.find((row) => row.id === id)?.name ?? id ?? '—';
 }
 </script>
 
@@ -139,21 +169,12 @@ function clearFilters(): void {
         </div>
         <span>{{ filterSummary }}</span>
       </div>
-      <ElForm label-position="top" @submit.prevent="query"
-        ><div class="filter-grid">
+      <ElForm label-position="top" @submit.prevent="query">
+        <div class="filter-grid">
           <ElFormItem label="开始时间" required><ElDatePicker v-model="from" type="datetime" placeholder="选择日期和时间" /></ElFormItem>
           <ElFormItem label="结束时间" required :error="dateRange ?? undefined"
             ><ElDatePicker v-model="to" type="datetime" placeholder="选择日期和时间"
           /></ElFormItem>
-          <ElFormItem label="员工"><ElInput v-model="filters.userId" clearable placeholder="按员工 ID 筛选" /></ElFormItem>
-          <ElFormItem label="平台"
-            ><ElSelect v-model="filters.platformId" :disabled="!auditReady || !!directoryError" clearable placeholder="全部可见平台"
-              ><ElOption v-for="row in platforms" :key="row.id" :value="row.id" :label="row.name" /></ElSelect
-          ></ElFormItem>
-          <ElFormItem label="数据源"
-            ><ElSelect v-model="filters.datasourceId" :disabled="!auditReady || !!directoryError" clearable placeholder="全部可见数据源"
-              ><ElOption v-for="row in sources" :key="row.id" :value="row.id" :label="row.name" /></ElSelect
-          ></ElFormItem>
           <ElFormItem label="工具"><ElInput v-model="filters.tool" clearable placeholder="工具名称" /></ElFormItem>
           <ElFormItem label="结果"
             ><ElSelect v-model="filters.result" clearable placeholder="全部结果"
@@ -167,16 +188,29 @@ function clearFilters(): void {
                 label="未知"
                 value="UNKNOWN" /></ElSelect
           ></ElFormItem>
-          <ElFormItem label="错误码"><ElInput v-model="filters.errorCode" clearable placeholder="稳定错误码" /></ElFormItem></div
-      ></ElForm>
+        </div>
+        <div v-show="advancedOpen" class="filter-grid advanced-grid">
+          <ElFormItem label="员工 ID"><ElInput v-model="filters.userId" clearable placeholder="按员工 ID 筛选" /></ElFormItem>
+          <ElFormItem label="平台"
+            ><ElSelect v-model="filters.platformId" :disabled="!auditReady || !!directoryError" clearable placeholder="全部可见平台"
+              ><ElOption v-for="row in platforms" :key="row.id" :value="row.id" :label="row.name" /></ElSelect
+          ></ElFormItem>
+          <ElFormItem label="数据源"
+            ><ElSelect v-model="filters.datasourceId" :disabled="!auditReady || !!directoryError" clearable placeholder="全部可见数据源"
+              ><ElOption v-for="row in sources" :key="row.id" :value="row.id" :label="row.name" /></ElSelect
+          ></ElFormItem>
+          <ElFormItem label="错误码"><ElInput v-model="filters.errorCode" clearable placeholder="稳定错误码" /></ElFormItem>
+        </div>
+      </ElForm>
       <div class="filter-actions">
-        <span v-if="validation" class="validation-message" role="status">{{ validation }}</span
-        ><ElButton @click="clearFilters">清空</ElButton><ElButton @click="validateFilters">校验筛选</ElButton
+        <ElButton @click="advancedOpen = !advancedOpen"
+          >{{ advancedOpen ? '收起高级筛选' : '高级筛选' }}<span v-if="advancedCount" class="advanced-count">{{ advancedCount }}</span></ElButton
+        ><ElButton @click="clearFilters">清空</ElButton
         ><ElButton type="primary" :disabled="!auditReady || !!dateRange" :loading="loading" @click="query">查询审计</ElButton>
       </div>
     </ElCard>
-    <div class="audit-workspace" :class="{ 'has-preview': session.can('ptmcp:audit:read') }">
-      <ElCard class="table-card ptmcp-table-section" shadow="never">
+    <div class="audit-workspace" :class="{ 'has-preview': session.can('ptmcp:audit:read') && !!quickId }">
+      <ElCard class="table-card ptmcp-table-section ptmcp-table-region" shadow="never">
         <div class="section-heading">
           <div>
             <h2>调用记录</h2>
@@ -185,39 +219,57 @@ function clearFilters(): void {
           <ElTag v-if="frontendPreview || !auditReady" type="info" effect="plain">{{ frontendPreview ? '合成数据预览' : '审计服务未就绪' }}</ElTag>
           <span v-else>已加载 {{ rows.length }} 条</span>
         </div>
+        <p class="ptmcp-scroll-hint">左右滑动表格查看结果、判定与操作列。</p>
         <PageState v-if="error" kind="error" title="审计读取失败" :description="error" :request-id="requestId" action-label="重试" @action="retry" />
         <ElSkeleton v-if="loading && !rows.length" :rows="6" animated />
         <ElTable
           v-else-if="!error || rows.length"
           :data="rows"
-          class="empty-table"
+          class="empty-table audit-table"
           aria-label="调用记录"
           row-key="requestId"
+          scrollbar-tabindex="0"
           highlight-current-row
           :current-row-key="quickId"
           @row-click="showQuick"
         >
-          <ElTableColumn label="时间（台北）" min-width="170"
+          <ElTableColumn label="时间（台北）" width="150"
             ><template #default="{ row }">{{ formatDate(row.startedAt) }}</template></ElTableColumn
           >
-          <ElTableColumn prop="userId" label="员工" min-width="130" />
-          <ElTableColumn prop="platformId" label="平台" min-width="130" />
-          <ElTableColumn prop="tool" label="工具" min-width="130" />
-          <ElTableColumn prop="datasourceId" label="数据源" min-width="180" />
-          <ElTableColumn prop="sqlMasked" label="脱敏 SQL 摘要" min-width="210" />
-          <ElTableColumn label="结果" min-width="120"
+          <ElTableColumn label="工具 / 请求" width="150"
+            ><template #default="{ row }"
+              ><span class="cell-primary">{{ row.tool }}</span
+              ><span class="cell-secondary" :title="row.requestId">{{ row.requestId }}</span></template
+            ></ElTableColumn
+          >
+          <ElTableColumn label="结果" width="120"
             ><template #default="{ row }"><StatusBadge domain="execution" :value="row.result" /></template
           ></ElTableColumn>
-          <ElTableColumn label="判定" min-width="120"
+          <ElTableColumn label="判定" width="120"
             ><template #default="{ row }"><StatusBadge domain="verdict" :value="row.verdict" /></template
           ></ElTableColumn>
-          <ElTableColumn prop="errorCode" label="错误码" min-width="170" />
-          <ElTableColumn prop="durationMs" label="耗时(ms)" width="100" />
-          <ElTableColumn prop="rowsReturned" label="行数" width="100" />
-          <ElTableColumn prop="requestId" label="Request ID" min-width="230" />
-          <ElTableColumn label="详情" width="90"
+          <ElTableColumn label="员工" width="90"
+            ><template #default="{ row }">{{ row.userId || '—' }}</template></ElTableColumn
+          >
+          <ElTableColumn label="平台" width="120"
+            ><template #default="{ row }">{{ platformName(row.platformId) }}</template></ElTableColumn
+          >
+          <ElTableColumn label="数据源" width="130"
+            ><template #default="{ row }">{{ sourceName(row.datasourceId) }}</template></ElTableColumn
+          >
+          <ElTableColumn label="错误码" width="120"
+            ><template #default="{ row }">{{ row.errorCode || '—' }}</template></ElTableColumn
+          >
+          <ElTableColumn label="操作" width="70" align="right" fixed="right"
             ><template #default="{ row }"
-              ><ElButton v-if="session.can('ptmcp:audit:read')" link type="primary" @click.stop="showQuick(row)">速览</ElButton></template
+              ><ElButton
+                v-if="session.can('ptmcp:audit:read')"
+                link
+                type="primary"
+                :aria-label="`速览调用 ${row.requestId}`"
+                @click.stop="showQuick(row)"
+                >速览</ElButton
+              ></template
             ></ElTableColumn
           >
           <template #empty
@@ -226,12 +278,12 @@ function clearFilters(): void {
         </ElTable>
         <CursorFooter v-if="loaded || rows.length" :count="rows.length" :has-more="!!cursor" :loading="loading" @more="load(true)" />
       </ElCard>
-      <aside v-if="session.can('ptmcp:audit:read')" class="audit-preview" aria-label="审计排障速览" :aria-busy="quickLoading">
+      <aside v-if="session.can('ptmcp:audit:read') && quickId" class="audit-preview" aria-label="审计排障速览" :aria-busy="quickLoading">
         <div class="section-heading">
           <h2>排障速览</h2>
-          <ElButton v-if="quickId" text @click="clearQuick">关闭速览</ElButton>
+          <ElButton text @click="clearQuick">关闭速览</ElButton>
         </div>
-        <div v-if="quickId" class="preview-navigation">
+        <div class="preview-navigation">
           <ElButton :disabled="quickIndex <= 0" @click="stepQuick(-1)">上一条</ElButton
           ><ElButton :disabled="quickIndex < 0 || quickIndex >= rows.length - 1" @click="stepQuick(1)">下一条</ElButton>
         </div>
@@ -268,17 +320,16 @@ function clearFilters(): void {
             session.can('ptmcp:audit:decrypt') ? '完整详情 / 申请解密' : '完整详情'
           }}</ElButton>
         </template>
-        <PageState v-else title="选择调用记录" description="点击列表行或速览按钮，在此连续排查；筛选和游标保持不变。" />
       </aside>
     </div>
-    <ElCard class="legend-card" shadow="never">
-      <h2>字段说明</h2>
+    <section class="legend-card" aria-labelledby="audit-legend-title">
+      <h2 id="audit-legend-title">字段说明</h2>
       <div class="legend-grid">
         <div><strong>脱敏 SQL 摘要</strong><span>只展示服务端返回的摘要，不允许在筛选框输入原 SQL。</span></div>
         <div><strong>UNKNOWN</strong><span>启动记录缺少终态时保留未知结论，不推断为失败。</span></div>
         <div><strong>解密</strong><span>需要独立解密权限及理由，明文只限时展示，关闭或离开详情立即清除。</span></div>
       </div>
-    </ElCard>
+    </section>
   </div>
 </template>
 
@@ -339,6 +390,11 @@ function clearFilters(): void {
 .legend-card {
   border-radius: 8px;
 }
+.legend-card {
+  border: 0;
+  border-top: 1px solid var(--ptmcp-border);
+  padding: 20px 0 0;
+}
 .filter-heading,
 .section-heading {
   display: flex;
@@ -362,7 +418,7 @@ h2 {
 }
 .filter-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  grid-template-columns: repeat(5, minmax(140px, 1fr));
   gap: 10px;
   margin-top: 18px;
 }
@@ -373,6 +429,11 @@ h2 {
 }
 .filter-grid .el-form-item {
   margin-bottom: 8px;
+}
+.advanced-grid {
+  margin-top: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--ptmcp-border);
 }
 .filter-actions {
   display: flex;
@@ -385,8 +446,31 @@ h2 {
 .empty-table {
   margin-top: 16px;
 }
-.validation-message {
-  margin-right: auto;
+.audit-table :deep(.status-badge) {
+  white-space: nowrap;
+}
+.advanced-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  border-radius: 9px;
+  background: var(--ptmcp-blue);
+  color: #fff;
+  font-size: 11px;
+}
+.cell-primary,
+.cell-secondary {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cell-primary {
+  color: var(--ptmcp-text);
+}
+.cell-secondary {
   color: var(--ptmcp-text-muted);
   font-size: 12px;
 }
@@ -399,10 +483,8 @@ h2 {
 .legend-grid div {
   display: grid;
   gap: 5px;
-  padding: 13px;
-  border: 1px solid var(--ptmcp-border);
-  border-radius: 6px;
-  background: var(--ptmcp-chrome);
+  padding: 13px 0;
+  border-top: 1px solid var(--ptmcp-border);
 }
 .legend-grid strong {
   color: var(--ptmcp-text);
