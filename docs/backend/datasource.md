@@ -1,6 +1,83 @@
 # 数据源、Schema 同步与安全执行器设计
 
-版本：1.0-design · 2026-10-23 · 状态：待实现。下述连接取消、宽行限幅和DDL身份边界必须实测，不能仅凭JDBC API名称宣称安全。
+版本：1.0-design · 2026-10-23 · 状态：分片实现中。下述连接取消、宽行限幅和DDL身份边界必须实测，不能仅凭JDBC API名称宣称安全。
+
+2026-10-28 连接治理候选实现见 [T15-c](../../tasks/work-items/T15-c.md)，
+选型依据与 S1～S7 依赖顺序见[参考仓对比方案](../reference/universal-db-mcp-connection-review-20261027.md)。
+本轮验证配置/快照一致性、出队复核、精确池代和共用物理连接策略；下文其余设计不因本轮实现而视作已验收。
+
+### 配置、快照与池代的一致性合同
+
+- 网关和管理面只接受属于当前 datasource、绑定当前 configVersion、已发布且未过期的快照。
+  网关以新的主库 REPEATABLE READ 只读短事务读取配置、快照和资源，不拼接不同提交状态。
+  该事务只保证读取内部一致；出队与 checkout 重新读取，不能用同一旧事务证明全局未变化。
+- 出队及 checkout 前核验主体/authVersion、源配置、snapshotId/resourceVersion、对象 generation/
+  objectVersion 和当前 READ（平台与用户交集、绝对有效时间）。实际拒绝 READ 使用
+  TABLE_NOT_AUTHORIZED；仅安全 epoch 不一致使用可重试的 SECURITY_STATE_UNAVAILABLE。
+  不因通过排队前的 guard 而保留旧授权，START 持久确认仍在物理借连接之前。
+- 执行计划绑定精确 configVersion；旧版本不能重新激活池，同版本不同物理身份拒绝。
+  旧池进入 DRAINING 后拒绝新租约，在途执行、取消与清理持有原池代租约，释放最后租约后销毁。
+  MySQL/PG 都遵守该合同；异步取消 owner、共享数据库总预算和跨副本配额仍由后续 S5 验收。
+- 当前发布算法在 snapshot 行记录采集时的 resourceVersion，再推进 datasource.resourceVersion；
+  不能直接断言这两个字段数值相等。查询计划绑定当前 datasource 的资源版本和快照 ID。
+  host/port/database 变化已在安全事务内清 active 指针、退役旧资源、撤旧 grant/委派并
+  收窄平台 Scope，重新同步使用新身份；仅凭 configVersion 检查本身不能替代这些动作。
+  候选配置验证发布与每源 policyId/version 仍属于后续 S4。
+
+### 当前快照发布隔离与 V8 升级
+
+staging 在源行锁下绑定当时 configVersion/resourceVersion，只能新增 STAGING 身份和
+快照定义，不能修改 ACTIVE 身份、定义或 grant。发布在安全变更事务内核验调用预期、
+快照自身、当前源配置三方一致，基准资源版本未变化且快照未到期；资源激活/缺失、定义、
+授权撤销、active 指针、资源版本、epoch 与事件全部原子提交。弃置、乱序或失败发布
+不得影响仍在使用的旧快照。读取使用主库 REPEATABLE_READ 短事务。
+
+V8 为 snapshot_object 增加捕获的 definition_hash/physical_identity，并为身份增加
+STAGING 状态。旧实现可在暂存时污染 live 行，历史定义无法准确重建：存在旧
+STAGING/FAILED 采集的源升级时保守失效，保留历史记录但清 active 指针、退役 live
+身份、撤销对象/命名空间 grant；重新同步和确认资源授权后恢复问数。无此记录的源
+保留当前已发布快照；新增定义列保持 NULL，下一次同步保守提升版本，不伪造历史。
+升级须停止 gateway/admin/worker，并禁止旧 worker 在 V8 上运行；MySQL DDL 不可
+事务回滚，退旧应用前必须按备份恢复方案处理兼容性，不能直接混跑。
+
+计划窗口也在物理 checkout 完成后、用户 SQL 前复核；过期时走正常清理但不执行
+用户 SQL。池销毁失败仍为 DRAINING，注册表保留 owner、暴露失败计数并允许显式重试。
+
+### 目标变更的原子权限收窄
+
+DatasourceStore.update 通过 SecurityChangeTransaction，锁顺序为安全全局行→源行，
+复核 If-Match 后才写配置。host/port/database 变化时，同事务清 active_snapshot_id/
+last_sync_at，提升 configVersion/resourceVersion，退役 ACTIVE/STAGING 资源、撤销旧源及
+下级 grant/委派、移除对应平台 Scope 并提升平台版本；重新同步重新建代。其他源的
+授权保留；仅凭据轮换且目标不变时保留资源身份和授权，但仍升配置版本与安全 epoch。
+配置、操作审计、epoch/事件原子提交；提交确认丢失返回 OPERATION_UNKNOWN，不自动重放。
+
+HTTP 更新审计使用真实 RequestIdFilter 生成的请求 ID，忽略入站同名 header；该 filter
+已注册到实际应用并先于鉴权执行。操作记录只含版本/状态及目标是否改变，不记录凭据。
+这只完成 S4 的目标隔离切片；当前保存仍直接变更配置，candidate 验证后发布尚未完成。
+
+### 共用物理连接策略
+
+TEST/SYNC 与 QUERY 池共用 datasource 模块的 PhysicalConnectionFactory、ConnectionProfile
+和 DestinationPolicy。每次实际建连都复核全部 DNS 答案，并在该线程内绑定批准 IP；
+TLS 仍校验原 hostname。PG 使用 socketFactory 固定普通 socket，SSL 工厂保留驱动的
+默认校验器；MySQL 固定 VERIFY_IDENTITY，PG 固定 verify-full，均无明文回退。
+管理 socket timeout 为 5 秒、query 为 25 秒，connect timeout 均为 3 秒；不修改
+进程级 DriverManager login timeout。数据库名/账号校验复用于管理保存与 PoolKey。
+
+| 服务 | CIDR / 端口 | MySQL 信任材料 | PostgreSQL 信任材料 |
+| --- | --- | --- | --- |
+| admin | ptmcp.admin.datasource.allowed-cidrs / allowed-ports | truststore-path、truststore-password、truststore-type（默认 PKCS12） | pg-ssl-root-cert（PEM） |
+| gateway | ptmcp.gateway.allowed-cidrs / allowed-ports | truststore-path、truststore-password（PKCS12） | pg-ssl-root-cert（PEM） |
+
+端口默认 3306,5432；显式空值拒绝全部，其他端口须部署显式加入。空 CIDR 拒绝全部。
+路径、密码、CIDR/端口均为服务端配置，MCP/管理请求不能覆盖；两个服务部署时须使用
+等价的目的地和信任策略（文件路径可不同）。admin 的旧通用 truststore-path 不再作为
+PG PEM 使用，PG 部署必须设置独立 pg-ssl-root-cert。按每源持久化 policyId/version
+和候选验证后原子发布属于后续 S4，当前未实现。
+
+双引擎 CA/过期/hostname/DNS 变化/端口及 admin 真实连接验证见 T15-c；生产环境证书
+部署与网络仍须运维验收。测试辅助证书和容器仅在 tests 分类构件共享，不进入生产 JAR。
 
 ## 1. 模块接口和连接注册
 

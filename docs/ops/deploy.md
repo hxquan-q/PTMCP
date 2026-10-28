@@ -105,6 +105,20 @@ Nginx访问日志默认不记录Authorization、Cookie、请求body、query中�
 
 网关业务数据源的TLS信任材料必须由部署显式提供：MySQL使用`ptmcp.gateway.truststore-path`（PKCS12及密码）；PostgreSQL使用`ptmcp.gateway.pg-ssl-root-cert`（PEM根证书）。缺失时对应引擎的首次业务连接失败关闭，不回退到JDK公共信任库。
 
+admin 的 TEST/SYNC 与 gateway 共用物理连接策略。admin MySQL 信任材料使用
+`ptmcp.admin.datasource.truststore-path` / `truststore-password` / `truststore-type`；
+PG 使用独立 `ptmcp.admin.datasource.pg-ssl-root-cert`（PEM），旧通用 truststore-path
+不能再充作 PG root。两服务的 allowed-cidrs / allowed-ports 必须表达等价批准范围；
+端口默认 3306,5432，自定义端口必须显式添加，空值拒绝全部。详见
+[数据源连接策略](../backend/datasource.md#共用物理连接策略)。
+
+V8 快照隔离迁移前停止所有访问者和 metadata worker，备份后执行受控升级，禁止旧
+worker 在 V8 上重启。存在历史 STAGING/FAILED 采集的源会保守清空 active 指针、
+退役资源并撤销对象/命名空间 grant；重新同步和确认授权后再开放问数。保留历史快照
+供核验；不可直接回退旧应用混跑，DDL 恢复需按备份方案执行。此处是部署约束，
+当前实施没有执行生产迁移或发布。
+
+
 gateway每个实例使用独占持久WAL卷与稳定instanceId；只读根文件系统不替代可写WAL目录。WAL必须加密、fsync、限额、记录key_id，并有唯一消费归属；同一卷不能被两个活动实例并发恢复。卷重建、节点迁移或实例缩容前必须确认积压已入库或已以受控方式转移，不能直接删除卷。
 
 MySQL数据/binlog、Redis持久数据（如果启用）、WAL、备份和密钥备份位于独立受控存储；容器日志轮换防止挤占WAL。WAL留量按“峰值结局事件字节/秒×允许中断时长×安全系数”计算，不按业务结果集容量估算。磁盘达到阈值时停止新SQL，详见运维手册。
