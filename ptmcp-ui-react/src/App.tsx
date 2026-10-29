@@ -203,7 +203,7 @@ const ROUTES: RouteDef[] = [
     navKey: 'admin-jobs',
     breadcrumb: <>管理控制台 &nbsp;›&nbsp; 操作日志</>,
     realm: 'admin',
-    element: () => <AuditPage initialTab="jobs" title="操作日志" description="数据源同步、测试等系统任务记录。" />,
+    element: () => <AuditPage initialTab="jobs" title="操作日志" description="管理操作审计：委派、平台、客户端、用户、部门与角色的变更记录。" />,
   },
   {
     path: '/admin/jobs',

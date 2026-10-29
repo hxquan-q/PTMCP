@@ -45,12 +45,14 @@ public class ClientAdminController {
             String jwksUri,
             String status) {}
 
+    @AdminAction("ptmcp:client:read")
     @GetMapping("/{id}")
     public ClientAdminService.ClientView get(@PathVariable String id, HttpServletRequest request) {
         ManagementScope.requirePlatformAdmin(request);
         return clients.get(id);
     }
 
+    @AdminAction("ptmcp:client:update")
     @PutMapping("/{id}")
     public ResponseEntity<ClientAdminService.ClientView> update(
             @PathVariable String id,
@@ -71,6 +73,7 @@ public class ClientAdminController {
                 .body(updated);
     }
 
+    @AdminAction("ptmcp:client:delete")
     @DeleteMapping("/{id}")
     public ResponseEntity<ClientAdminService.ClientView> delete(
             @PathVariable String id, HttpServletRequest request) {

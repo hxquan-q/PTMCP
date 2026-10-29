@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Badge, EmptyState, PageHeader, Select, StatusDot, Tabs, TextInput } from '../../components/common';
-import { listAudit, listJobs, type AuditRow, type JobRow } from '../../services/access';
+import { listAudit, listOperations, type AuditRow, type OperationRow } from '../../services/access';
+import { OPERATION_AGGREGATE_TYPES, operationActionText, operationAggregateText } from '../../services/operationLabels';
 import { listDatasources, type DatasourceRead } from '../../services/data';
 import { mePortalApi, type PlatformItem } from '../../services/mePortalApi';
 
@@ -19,7 +20,10 @@ export function AuditPage({
 }) {
   const [tab, setTab] = useState(initialTab);
   const [audit, setAudit] = useState<AuditRow[]>([]);
-  const [jobs, setJobs] = useState<JobRow[]>([]);
+  const [operations, setOperations] = useState<OperationRow[]>([]);
+  const [opsCursor, setOpsCursor] = useState<string | null>(null);
+  const [opsUnavailable, setOpsUnavailable] = useState(false);
+  const [aggregateFilter, setAggregateFilter] = useState('');
   const [datasources, setDatasources] = useState<DatasourceRead[]>([]);
   const [loading, setLoading] = useState(true);
   const [platforms, setPlatforms] = useState<PlatformItem[]>([]);
@@ -84,15 +88,26 @@ export function AuditPage({
         })
         .finally(() => !cancelled && setLoading(false));
     } else {
-      listJobs({ pageSize: 200 })
-        .then((p) => !cancelled && setJobs(p.items))
-        .catch(() => !cancelled && setJobs([]))
+      listOperations({ aggregateType: aggregateFilter || undefined, pageSize: 20 })
+        .then((p) => {
+          if (cancelled) return;
+          setOperations(p.items);
+          setOpsCursor(p.nextCursor);
+          setOpsUnavailable(false);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setOperations([]);
+            setOpsCursor(null);
+            setOpsUnavailable(true);
+          }
+        })
         .finally(() => !cancelled && setLoading(false));
     }
     return () => {
       cancelled = true;
     };
-  }, [tab, queryTick]);
+  }, [tab, queryTick, aggregateFilter]);
 
   const dsName = useMemo(() => {
     const m = new Map(datasources.map((d) => [d.id, d.name]));
@@ -107,11 +122,20 @@ export function AuditPage({
           <Tabs
             tabs={[
               { key: 'audit', label: '访问审计' },
-              { key: 'jobs', label: '任务日志' },
+              { key: 'jobs', label: '操作日志' },
             ]}
             active={tab}
             onChange={setTab}
           />
+          {tab === 'jobs' ? (
+            <Select
+              value={aggregateFilter}
+              onChange={setAggregateFilter}
+              label="聚合类型"
+              width={140}
+              options={[{ value: '', label: '全部类型' }, ...OPERATION_AGGREGATE_TYPES.map((t) => ({ value: t, label: operationAggregateText(t) }))]}
+            />
+          ) : null}
         </div>
         {tab === 'audit' ? (
           <div
@@ -252,44 +276,49 @@ export function AuditPage({
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>任务</th>
-                  <th>数据源</th>
-                  <th>类型</th>
-                  <th>进度</th>
-                  <th>开始时间</th>
-                  <th>状态</th>
-                  <th style={{ width: 60 }}>操作</th>
+                  <th>时间</th>
+                  <th>操作者</th>
+                  <th>动作</th>
+                  <th>聚合对象</th>
+                  <th>动作码</th>
+                  <th>请求 ID</th>
                 </tr>
               </thead>
               <tbody>
-                {jobs.map((r) => (
+                {operations.map((r) => (
                   <tr key={r.id}>
+                    <td style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{fmt(r.occurredAt)}</td>
+                    <td style={{ color: 'var(--ptmcp-text-muted)' }}>用户 {r.actorId}</td>
                     <td>
-                      <strong>任务 #{r.id}</strong>
-                    </td>
-                    <td style={{ color: 'var(--ptmcp-text-muted)' }}>{dsName(r.datasourceId)}</td>
-                    <td>
-                      <Badge tone="neutral">{r.type}</Badge>
-                    </td>
-                    <td style={{ color: 'var(--ptmcp-text-muted)' }}>{r.progress ? `${r.progress.processed}/${r.progress.total}` : '—'}</td>
-                    <td style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{fmt(r.startedAt)}</td>
-                    <td>
-                      <StatusDot tone={r.state === 'SUCCEEDED' ? 'success' : r.state === 'FAILED' ? 'danger' : 'warning'}>
-                        {r.state === 'SUCCEEDED' ? '成功' : r.state === 'FAILED' ? '失败' : '进行中'}
-                      </StatusDot>
+                      <strong style={{ color: 'var(--ptmcp-heading)' }}>{operationActionText(r.action)}</strong>
                     </td>
                     <td>
-                      <button className="link" onClick={() => (window.location.hash = `/admin/jobs/${r.id}`)}>
-                        详情
-                      </button>
+                      <Badge tone="neutral">
+                        {operationAggregateText(r.aggregateType)} · {r.aggregateId}
+                      </Badge>
+                    </td>
+                    <td style={{ color: 'var(--ptmcp-text-muted)', fontSize: 12 }}>
+                      <code>{r.action}</code>
+                    </td>
+                    <td title={r.requestId} style={{ color: 'var(--ptmcp-text-muted)', fontSize: 12 }}>
+                      {r.requestId.slice(0, 10)}…
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
+          {!loading && tab === 'jobs' && operations.length === 0 ? (
+            opsUnavailable ? (
+              <EmptyState
+                title="操作日志端点不可用"
+                description="当前环境（preview 合成后端）未提供管理操作日志接口；接入真实后端后此处展示委派、平台、用户等管理动作记录。"
+              />
+            ) : (
+              <EmptyState title="暂无操作记录" description="调整聚合类型筛选后重试。" />
+            )
+          ) : null}
           {!loading && tab === 'audit' && audit.length === 0 ? <EmptyState title="暂无审计记录" description="调整筛选条件后重试。" /> : null}
-          {!loading && tab === 'jobs' && jobs.length === 0 ? <EmptyState title="暂无任务记录" /> : null}
         </div>
         {tab === 'audit' ? (
           <div className="table-footer" style={{ justifyContent: 'space-between' }}>
@@ -313,6 +342,30 @@ export function AuditPage({
                 }}
               >
                 {loadingMore ? '加载中…' : '加载更多'}
+              </button>
+            ) : (
+              <span style={{ fontSize: 12, color: 'var(--ptmcp-text-faint)' }}>没有更多了</span>
+            )}
+          </div>
+        ) : null}
+        {tab === 'jobs' && !opsUnavailable ? (
+          <div className="table-footer" style={{ justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
+              已加载 {operations.length} 条{opsCursor ? ' · 可能还有更多' : ''}
+            </span>
+            {opsCursor ? (
+              <button
+                className="btn btn--secondary"
+                onClick={() => {
+                  listOperations({ aggregateType: aggregateFilter || undefined, cursor: opsCursor, pageSize: 20 })
+                    .then((p) => {
+                      setOperations((prev) => [...prev, ...p.items]);
+                      setOpsCursor(p.nextCursor);
+                    })
+                    .catch(() => undefined);
+                }}
+              >
+                加载更多
               </button>
             ) : (
               <span style={{ fontSize: 12, color: 'var(--ptmcp-text-faint)' }}>没有更多了</span>

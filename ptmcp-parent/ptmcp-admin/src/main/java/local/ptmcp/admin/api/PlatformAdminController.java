@@ -66,6 +66,7 @@ public class PlatformAdminController {
     public record PageView(
             java.util.List<PlatformDirectoryService.PlatformView> items, String nextCursor) {}
 
+    @AdminAction("ptmcp:platform:list")
     @GetMapping
     public ResponseEntity<PageView> list(
             @RequestParam(required = false) String keyword,
@@ -79,6 +80,7 @@ public class PlatformAdminController {
         return ResponseEntity.ok(new PageView(page.items(), page.nextCursor()));
     }
 
+    @AdminAction("ptmcp:platform:read")
     @GetMapping("/{id}")
     public ResponseEntity<PlatformDirectoryService.PlatformView> get(
             @PathVariable long id, HttpServletRequest request) {
@@ -87,6 +89,7 @@ public class PlatformAdminController {
         return ResponseEntity.ok().eTag(IfMatch.etag(Long.parseLong(view.version()))).body(view);
     }
 
+    @AdminAction("ptmcp:platform:create")
     @PostMapping
     public ResponseEntity<byte[]> create(
             @RequestBody(required = false) byte[] body, HttpServletRequest request) {
@@ -125,6 +128,7 @@ public class PlatformAdminController {
                 });
     }
 
+    @AdminAction("ptmcp:platform:update")
     @PutMapping("/{id}")
     public ResponseEntity<PlatformDirectoryService.PlatformView> update(
             @PathVariable long id,
@@ -146,6 +150,7 @@ public class PlatformAdminController {
                 .body(updated);
     }
 
+    @AdminAction("ptmcp:platform:delete")
     @DeleteMapping("/{id}")
     public ResponseEntity<PlatformDirectoryService.PlatformView> delete(
             @PathVariable long id, HttpServletRequest request) {
@@ -173,6 +178,7 @@ public class PlatformAdminController {
             String status) {}
 
     /** POST /{id}/clients: registers a client; CONFIDENTIAL secrets appear once, never again. */
+    @AdminAction("ptmcp:client:create")
     @PostMapping("/{id}/clients")
     public ResponseEntity<byte[]> createClient(
             @PathVariable long id,
@@ -199,6 +205,7 @@ public class PlatformAdminController {
                 });
     }
 
+    @AdminAction("ptmcp:client:list")
     @GetMapping("/{id}/clients")
     public java.util.Map<String, Object> listClients(
             @PathVariable long id,
@@ -228,6 +235,7 @@ public class PlatformAdminController {
     }
 
     /** GET /{id}/scopes: the full scope set plus the version the write is keyed on. */
+    @AdminAction("ptmcp:platform:read")
     @GetMapping("/{id}/scopes")
     public PlatformAdminService.ScopeRead getScopes(
             @PathVariable long id, HttpServletRequest request) {
@@ -236,6 +244,7 @@ public class PlatformAdminController {
     }
 
     /** PUT /{id}/scopes: full-set replacement under If-Match; bumps scope + security versions. */
+    @AdminAction("ptmcp:platform:scope")
     @PutMapping("/{id}/scopes")
     public ResponseEntity<PlatformAdminService.ScopeRead> putScopes(
             @PathVariable long id,

@@ -5,7 +5,7 @@ import jakarta.servlet.http.HttpServletResponse;
 
 import org.springframework.web.servlet.HandlerInterceptor;
 
-/** Marks session and personal-portal responses as non-cacheable. */
+/** Marks session, administrative and personal-portal responses as non-cacheable. */
 public final class NoStoreInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(

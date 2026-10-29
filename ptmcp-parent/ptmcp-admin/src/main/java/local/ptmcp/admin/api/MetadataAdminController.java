@@ -29,6 +29,7 @@ public class MetadataAdminController {
         this.catalog = catalog;
     }
 
+    @AdminAction("ptmcp:metadata:list")
     @GetMapping
     public MetadataCatalogService.Page list(
             @RequestParam long datasourceId,
@@ -42,6 +43,7 @@ public class MetadataAdminController {
         return catalog.list(datasourceId, namespaceId, keyword, kind, cursor, pageSize);
     }
 
+    @AdminAction("ptmcp:metadata:read")
     @GetMapping("/{id}")
     public ResponseEntity<MetadataCatalogService.Detail> get(
             @PathVariable long id, HttpServletRequest request) {
@@ -52,6 +54,7 @@ public class MetadataAdminController {
                 .body(detail);
     }
 
+    @AdminAction("ptmcp:metadata:dictionary")
     @PutMapping("/{id}/dictionary")
     public ResponseEntity<MetadataCatalogService.Detail> replaceDictionary(
             @PathVariable long id,

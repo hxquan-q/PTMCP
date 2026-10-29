@@ -331,6 +331,31 @@ export async function getAudit(requestId: string, signal?: AbortSignal): Promise
   return data;
 }
 
+export interface OperationRow {
+  id: string;
+  actorId: string;
+  requestId: string;
+  action: string;
+  aggregateType: string;
+  aggregateId: string;
+  beforeMasked: string | null;
+  afterMasked: string | null;
+  occurredAt: string;
+}
+
+/** 管理操作日志（admin_operation_log）：真实后端域，preview 未提供该端点（501）→ 页面展示受控空态。 */
+export function listOperations(
+  params: { aggregateType?: string; actorId?: string; action?: string; cursor?: string; pageSize?: number } = {},
+  signal?: AbortSignal,
+): Promise<Page<OperationRow>> {
+  const q = new URLSearchParams({ pageSize: String(params.pageSize ?? 20) });
+  if (params.aggregateType) q.set('aggregateType', params.aggregateType);
+  if (params.actorId) q.set('actorId', params.actorId);
+  if (params.action) q.set('action', params.action);
+  if (params.cursor) q.set('cursor', params.cursor);
+  return getPage(`/api/v1/admin/operations?${q}`, signal);
+}
+
 export interface AuditDecryptResult {
   sqlRaw?: string;
   sqlFinal?: string;

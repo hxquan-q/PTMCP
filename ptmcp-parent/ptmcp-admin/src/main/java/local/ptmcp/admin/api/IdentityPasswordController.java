@@ -42,6 +42,7 @@ public class IdentityPasswordController {
 
     public record RecoveryRequest() {}
 
+    @AdminAction("ptmcp:user:read")
     @GetMapping("/{id}/identity")
     public ResponseEntity<Status> status(@PathVariable long id, HttpServletRequest request) {
         ManagementScope.requirePlatformAdminPrincipal(request);
@@ -49,6 +50,7 @@ public class IdentityPasswordController {
         return ResponseEntity.ok().eTag(IfMatch.etag(state.version())).body(state);
     }
 
+    @AdminAction("ptmcp:user:reset-password")
     @PutMapping("/{id}/password")
     public ResponseEntity<byte[]> reset(
             @PathVariable long id,
@@ -75,6 +77,7 @@ public class IdentityPasswordController {
                                         principal.userId())));
     }
 
+    @AdminAction("ptmcp:user:reset-password")
     @PostMapping("/{id}/password/retry")
     public ResponseEntity<byte[]> retry(
             @PathVariable long id,

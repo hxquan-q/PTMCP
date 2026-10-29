@@ -73,6 +73,7 @@ public class DelegationAdminController {
 
     public record PageView(List<DelegationView> items, String nextCursor) {}
 
+    @AdminAction("ptmcp:delegation:list")
     @GetMapping
     public ResponseEntity<PageView> list(
             @RequestParam(required = false) Long userId,
@@ -97,6 +98,7 @@ public class DelegationAdminController {
         return ResponseEntity.ok(new PageView(items, nextCursor));
     }
 
+    @AdminAction("ptmcp:delegation:create")
     @PostMapping
     public ResponseEntity<byte[]> create(
             @RequestBody(required = false) byte[] body, HttpServletRequest request) {
@@ -122,6 +124,7 @@ public class DelegationAdminController {
                 });
     }
 
+    @AdminAction("ptmcp:delegation:delete")
     @DeleteMapping("/{id}")
     public ResponseEntity<DelegationView> revoke(
             @PathVariable long id, HttpServletRequest request) {

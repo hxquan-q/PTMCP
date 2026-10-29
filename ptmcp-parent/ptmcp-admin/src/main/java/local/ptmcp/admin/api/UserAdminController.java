@@ -60,6 +60,7 @@ public class UserAdminController {
 
     public record UserDepartmentWrite(Long departmentId) {}
 
+    @AdminAction("ptmcp:user:list")
     @GetMapping
     public List<UserRead> list(
             @RequestParam(required = false) Long departmentId,
@@ -77,6 +78,7 @@ public class UserAdminController {
                 .toList();
     }
 
+    @AdminAction("ptmcp:user:create")
     @PostMapping
     public ResponseEntity<UserRead> create(
             @RequestBody UserWrite write, HttpServletRequest request) {
@@ -102,12 +104,14 @@ public class UserAdminController {
                 .body(created);
     }
 
+    @AdminAction("ptmcp:user:read")
     @GetMapping("/{id}")
     public UserRead get(@PathVariable long id, HttpServletRequest request) {
         scopeGate.requireUserAccess(request, orgStore.getUser(id).deptId());
         return toRead(orgStore.getUser(id));
     }
 
+    @AdminAction("ptmcp:user:update")
     @PutMapping("/{id}")
     public ResponseEntity<UserRead> update(
             @PathVariable long id, @RequestBody UserWrite write, HttpServletRequest request) {
@@ -135,6 +139,7 @@ public class UserAdminController {
         return ResponseEntity.ok().eTag(IfMatch.etag(updated.version())).body(updated);
     }
 
+    @AdminAction("ptmcp:user:status")
     @PutMapping("/{id}/status")
     public ResponseEntity<UserRead> setStatus(
             @PathVariable long id, @RequestBody UserStatusWrite write, HttpServletRequest request) {
@@ -161,6 +166,7 @@ public class UserAdminController {
         return ResponseEntity.ok().eTag(IfMatch.etag(updated.version())).body(updated);
     }
 
+    @AdminAction("ptmcp:user:assign-role")
     @PutMapping("/{id}/roles")
     public ResponseEntity<UserRead> setRoles(
             @PathVariable long id, @RequestBody UserWrite write, HttpServletRequest request) {
@@ -187,6 +193,7 @@ public class UserAdminController {
         return ResponseEntity.ok().eTag(IfMatch.etag(updated.version())).body(updated);
     }
 
+    @AdminAction("ptmcp:user:move")
     @PutMapping("/{id}/department")
     public ResponseEntity<UserRead> setDepartment(
             @PathVariable long id,

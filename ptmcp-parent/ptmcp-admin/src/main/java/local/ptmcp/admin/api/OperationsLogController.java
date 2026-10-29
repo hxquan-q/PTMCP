@@ -41,6 +41,7 @@ public class OperationsLogController {
 
     public record OperationsPage(List<OperationsRow> items, String nextCursor) {}
 
+    @AdminAction("ptmcp:audit:list")
     @GetMapping
     public OperationsPage list(
             @RequestParam(required = false) String action,

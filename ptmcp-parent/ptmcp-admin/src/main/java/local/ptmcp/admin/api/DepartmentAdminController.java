@@ -46,6 +46,7 @@ public class DepartmentAdminController {
     public record DepartmentRead(
             long id, Long parentId, String name, boolean enabled, long version, String ancestors) {}
 
+    @AdminAction("ptmcp:department:list")
     @GetMapping
     public List<DepartmentRead> list(HttpServletRequest request) {
         // Platform admins see the whole tree; delegated admins their subtree (403 without one).
@@ -54,6 +55,7 @@ public class DepartmentAdminController {
                 .toList();
     }
 
+    @AdminAction("ptmcp:department:create")
     @PostMapping
     public ResponseEntity<byte[]> create(
             @RequestBody(required = false) byte[] body, HttpServletRequest request) {
@@ -90,12 +92,14 @@ public class DepartmentAdminController {
         return key.trim();
     }
 
+    @AdminAction("ptmcp:department:read")
     @GetMapping("/{id}")
     public DepartmentRead get(@PathVariable long id, HttpServletRequest request) {
         scopeGate.requireDepartmentAccess(request, id);
         return toRead(orgStore.getDepartment(id));
     }
 
+    @AdminAction("ptmcp:department:update")
     @PutMapping("/{id}")
     public ResponseEntity<DepartmentRead> update(
             @PathVariable long id, @RequestBody DepartmentWrite write, HttpServletRequest request) {
@@ -120,6 +124,7 @@ public class DepartmentAdminController {
         return ResponseEntity.ok().eTag(IfMatch.etag(updated.version())).body(updated);
     }
 
+    @AdminAction("ptmcp:department:delete")
     @DeleteMapping("/{id}")
     public ResponseEntity<DepartmentRead> delete(
             @PathVariable long id, HttpServletRequest request) {

@@ -51,6 +51,7 @@ public class DatasourceAdminController {
 
     public record PageView(java.util.List<DatasourceAdminService.Read> items, String nextCursor) {}
 
+    @AdminAction("ptmcp:datasource:list")
     @GetMapping
     public ResponseEntity<PageView> list(
             @RequestParam(required = false) String keyword,
@@ -66,6 +67,7 @@ public class DatasourceAdminController {
         return ResponseEntity.ok(new PageView(page.items(), page.nextCursor()));
     }
 
+    @AdminAction("ptmcp:datasource:read")
     @GetMapping("/{id}")
     public ResponseEntity<DatasourceAdminService.Read> get(
             @PathVariable long id, HttpServletRequest request) {
@@ -76,6 +78,7 @@ public class DatasourceAdminController {
                 .body(read);
     }
 
+    @AdminAction("ptmcp:datasource:create")
     @PostMapping
     public ResponseEntity<byte[]> create(
             @RequestBody(required = false) byte[] body, HttpServletRequest request) {
@@ -98,6 +101,7 @@ public class DatasourceAdminController {
                 });
     }
 
+    @AdminAction("ptmcp:datasource:update")
     @PutMapping("/{id}")
     public ResponseEntity<DatasourceAdminService.Read> update(
             @PathVariable long id,
@@ -119,6 +123,7 @@ public class DatasourceAdminController {
                 .body(updated);
     }
 
+    @AdminAction("ptmcp:datasource:delete")
     @DeleteMapping("/{id}")
     public ResponseEntity<DatasourceAdminService.DeleteView> delete(
             @PathVariable long id, HttpServletRequest request) {
@@ -127,6 +132,7 @@ public class DatasourceAdminController {
         return ResponseEntity.ok(datasources.delete(id, expectedVersion, principal.userId()));
     }
 
+    @AdminAction("ptmcp:datasource:test")
     @PostMapping("/{id}/test")
     public ResponseEntity<byte[]> test(
             @PathVariable long id,
@@ -146,6 +152,7 @@ public class DatasourceAdminController {
                 () -> ResponseEntity.status(202).body(jobs.test(id, draft, principal.userId())));
     }
 
+    @AdminAction("ptmcp:datasource:sync")
     @PostMapping("/{id}/sync")
     public ResponseEntity<byte[]> sync(
             @PathVariable long id,

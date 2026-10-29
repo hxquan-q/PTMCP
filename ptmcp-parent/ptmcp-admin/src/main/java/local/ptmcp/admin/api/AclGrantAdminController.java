@@ -110,6 +110,7 @@ public class AclGrantAdminController {
      * datasource filter selects the datasource node itself plus its namespaces and objects. The
      * page window is derived from the tree, so a page always reflects the current tree state.
      */
+    @AdminAction("ptmcp:acl:effective")
     @GetMapping("/effective")
     public EffectivePage effective(
             @RequestParam Long userId,
@@ -210,6 +211,7 @@ public class AclGrantAdminController {
         return List.of("NO_EFFECTIVE_GRANT");
     }
 
+    @AdminAction("ptmcp:acl:list")
     @GetMapping("/grants")
     public List<GrantRead> list(
             @RequestParam(required = false) String subjectType,
@@ -229,6 +231,7 @@ public class AclGrantAdminController {
                 .toList();
     }
 
+    @AdminAction("ptmcp:acl:create")
     @PostMapping("/grants")
     public ResponseEntity<GrantRead> create(
             @RequestBody GrantWrite write, HttpServletRequest request) {
@@ -257,12 +260,14 @@ public class AclGrantAdminController {
                 .body(toRead(created));
     }
 
+    @AdminAction("ptmcp:acl:read")
     @GetMapping("/grants/{id}")
     public GrantRead get(@PathVariable long id, HttpServletRequest request) {
         ManagementScope.requirePlatformAdmin(request);
         return toRead(grantStore.get(id));
     }
 
+    @AdminAction("ptmcp:acl:update")
     @PutMapping("/grants/{id}")
     public ResponseEntity<GrantRead> update(
             @PathVariable long id, @RequestBody GrantWrite write, HttpServletRequest request) {
@@ -318,6 +323,7 @@ public class AclGrantAdminController {
         return ResponseEntity.ok().eTag(IfMatch.etag(created.version())).body(toRead(created));
     }
 
+    @AdminAction("ptmcp:acl:delete")
     @DeleteMapping("/grants/{id}")
     public ResponseEntity<GrantRead> revoke(@PathVariable long id, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
@@ -336,6 +342,7 @@ public class AclGrantAdminController {
         return ResponseEntity.ok().body(toRead(revoked));
     }
 
+    @AdminAction("ptmcp:acl:preview")
     @PostMapping("/preview")
     public PreviewResponse preview(
             @RequestBody PreviewRequest previewRequest, HttpServletRequest request) {

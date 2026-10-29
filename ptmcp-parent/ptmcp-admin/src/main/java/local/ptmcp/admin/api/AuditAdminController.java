@@ -43,6 +43,7 @@ public class AuditAdminController {
      * POST /{requestId}/decrypt: reason-gated plaintext reveal, audited in the same transaction.
      */
     /** GET /{requestId}/sensitive-access: who revealed this request's plaintext, when and why. */
+    @AdminAction("ptmcp:audit:read")
     @GetMapping("/{requestId}/sensitive-access")
     public java.util.List<SensitiveAccessRow> sensitiveAccess(
             @PathVariable String requestId, HttpServletRequest request) {
@@ -66,6 +67,7 @@ public class AuditAdminController {
             java.util.List<String> fields,
             Instant createdAt) {}
 
+    @AdminAction("ptmcp:audit:decrypt")
     @PostMapping("/{requestId}/decrypt")
     public AuditDecryptService.Reveal decrypt(
             @PathVariable String requestId,
@@ -79,6 +81,7 @@ public class AuditAdminController {
     public record AdminAuditPageView(
             List<AuditQueryService.AdminAuditSummary> items, String nextCursor) {}
 
+    @AdminAction("ptmcp:audit:list")
     @GetMapping
     public ResponseEntity<AdminAuditPageView> list(
             @RequestParam(required = false) String from,
@@ -110,6 +113,7 @@ public class AuditAdminController {
         return ResponseEntity.ok(new AdminAuditPageView(page.items(), page.nextCursor()));
     }
 
+    @AdminAction("ptmcp:audit:read")
     @GetMapping("/{requestId}")
     public AuditQueryService.AdminAuditDetail detail(
             @PathVariable String requestId, HttpServletRequest request) {

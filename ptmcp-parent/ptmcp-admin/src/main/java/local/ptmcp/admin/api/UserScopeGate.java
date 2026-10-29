@@ -15,7 +15,7 @@ import java.util.Set;
 
 /**
  * Delegation-aware gate for the users console, mirroring {@link DepartmentScopeGate}: platform
- * admins keep full access; a delegated admin manages only users whose department sits inside the
+ * admins keep full management scope; a delegated admin manages only users whose department sits inside the
  * delegation subtree, and only with capability codes the delegation actually carries (PRD:
  * capability code AND valid delegation). A caller with neither scope nor delegation is denied
  * outright.
@@ -91,11 +91,11 @@ public final class UserScopeGate {
             Set<String> actions,
             Set<Long> requestedRoles) {
         AdminPrincipal principal = AdminPrincipal.require(request);
-        if (principal.platformAdmin()) {
-            return;
-        }
         if (!delegationStore.permissionsOf(principal.userId()).containsAll(actions)) {
             throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
+        }
+        if (principal.platformAdmin()) {
+            return;
         }
         Instant now = Instant.now();
         List<DelegationScopeResolver.EffectiveDelegation> candidates =

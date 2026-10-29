@@ -21,6 +21,7 @@ public class JobAdminController {
         this.jobs = jobs;
     }
 
+    @AdminAction("ptmcp:job:read")
     @GetMapping("/{id}")
     public DatasourceJobService.JobView get(@PathVariable long id, HttpServletRequest request) {
         ManagementScope.requirePlatformAdmin(request);

@@ -58,12 +58,14 @@ public class RoleAdminController {
             List<String> permissionCodes,
             long version) {}
 
+    @AdminAction("ptmcp:role:list")
     @GetMapping
     public List<RoleRead> list(HttpServletRequest request) {
         requireCatalogAccess(request);
         return orgStore.listRoles().stream().map(RoleAdminController::toRead).toList();
     }
 
+    @AdminAction("ptmcp:role:create")
     @PostMapping
     public ResponseEntity<RoleRead> create(
             @RequestBody RoleWrite write, HttpServletRequest request) {
@@ -86,12 +88,14 @@ public class RoleAdminController {
                 .body(created);
     }
 
+    @AdminAction("ptmcp:role:read")
     @GetMapping("/{id}")
     public RoleRead get(@PathVariable long id, HttpServletRequest request) {
         requireCatalogAccess(request);
         return toRead(orgStore.getRole(id));
     }
 
+    @AdminAction("ptmcp:role:update")
     @PutMapping("/{id}")
     public ResponseEntity<RoleRead> update(
             @PathVariable long id, @RequestBody RoleWrite write, HttpServletRequest request) {
@@ -113,6 +117,7 @@ public class RoleAdminController {
         return ResponseEntity.ok().eTag(IfMatch.etag(updated.version())).body(updated);
     }
 
+    @AdminAction("ptmcp:role:delete")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable long id, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
