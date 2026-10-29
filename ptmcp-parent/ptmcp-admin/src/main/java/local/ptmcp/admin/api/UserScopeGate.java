@@ -54,7 +54,10 @@ public final class UserScopeGate {
             actions.add("ptmcp:user:assign-role");
         }
         requireCommand(
-                request, before.deptId(), targetDeptId, actions,
+                request,
+                before.deptId(),
+                targetDeptId,
+                actions,
                 rolesChanged ? requestedRoles : null);
     }
 
@@ -69,14 +72,16 @@ public final class UserScopeGate {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
         requireCommand(
-                request, before.deptId(), before.deptId(), Set.of("ptmcp:user:assign-role"),
+                request,
+                before.deptId(),
+                before.deptId(),
+                Set.of("ptmcp:user:assign-role"),
                 checkedRoleIds(roleIds));
     }
 
     public void requireUserMove(
             HttpServletRequest request, OrgStore.UserRow before, long targetDeptId) {
-        requireCommand(
-                request, before.deptId(), targetDeptId, Set.of("ptmcp:user:move"), null);
+        requireCommand(request, before.deptId(), targetDeptId, Set.of("ptmcp:user:move"), null);
     }
 
     private void requireCommand(

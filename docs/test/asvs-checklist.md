@@ -16,7 +16,7 @@
 | 7.2.4 | 登录/重新认证轮换并废弃旧会话 | 认证、T17 | 固定会话攻击及新旧 Cookie 测试 | NOT_RUN |
 | 7.4.1 / 7.4.2 | 登出、过期、停用/删除后会话不可用 | [权限](../backend/authorization.md)、T12 | 多副本、丢消息、族/PAT/session 一致撤销；阶段证据：[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)用户实际启停与五域撤证/版本/epoch/event/log同元库事务，106项真实MySQL及Servlet/OAuth组合通过，含并发与commit丢确认；尚未覆盖完整删除、多副本与真实客户端 | NOT_RUN |
 | 7.4.5 | 管理员可终止会话 | API/认证、T16 | 有权撤销/越权拒绝及审计 | NOT_RUN |
-| 8.1.1 / 8.2.1 | 功能权限与资源权限分开 | 权限、T08/T16 | 菜单隐藏不能代替服务端鉴权；阶段证据：[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)通用用户PUT分别核actor功能码、单一委派全部动作/新旧部门/最终角色上限，57项真实MySQL定向测试通过；ADMIN逐请求从主库重算平台管理员资格，撤成员/停或软删角色/删码/新授予及真实Cookie故障验证纳入113项组合GREEN，独立只读复审无新增阻断；专用接口旧门禁、自扩权及事务内授权重验仍待补 | NOT_RUN |
+| 8.1.1 / 8.2.1 | 功能权限与资源权限分开 | 权限、T08/T16 | 菜单隐藏不能代替服务端鉴权；阶段证据：[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)通用用户PUT分别核actor功能码、单一委派全部动作/新旧部门/最终角色上限；ADMIN逐请求从主库重算平台管理员资格；专用status/roles/department接口复用单委派完整覆盖，单快照绑定If-Match，禁止整组角色跨委派拼接，status保留联系方式。124项真实MySQL/Servlet/OAuth/MCP HTTP组合及追加Admin55项分别GREEN，独立只读终审无新增阻断；平台管理员逐动作码、自扩权及事务内授权重验仍待补 | NOT_RUN |
 | 8.2.2 | 资源归属与 IDOR/BOLA | [API](../backend/api-spec.md)、T16/T17 | 换 userId/requestId/资源 ID、直接 API 访问 | NOT_RUN |
 | 8.2.3 | 字段访问限制 | API、前端指南、T16/T17 | DTO 防越权写、无 READ 不泄露列、独立原文解密权；不宣称二期行列权限已支持 | NOT_RUN |
 | 8.3.1 | 可信服务层执行授权 | 权限、guard、T08/T10 | 绕过 UI 仍拒绝、未批准查询无执行入口；阶段证据：上述通用PUT未来If-Match并发回归先复现200，再以409且并发停用后的完整记录不变通过；快照版本绑定与落库CAS均保留，独立只读复审核阅实际GREEN后关闭High，不外推完整会话链 | NOT_RUN |

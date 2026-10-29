@@ -420,3 +420,22 @@ textarea:focus-visible,
   outline: 2px solid var(--ptmcp-blue);
   outline-offset: 2px;
 }
+
+/* ─── 权限矩阵窄屏：三栏改纵向堆叠，隐藏拖拽分隔线 ─── */
+@media (max-width: 900px) {
+  .perm-workspace {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    overflow-y: auto !important;
+    min-height: 0 !important;
+  }
+  .perm-workspace > .perm-resizer {
+    display: none !important;
+  }
+  .perm-workspace > *:not(.perm-resizer) {
+    width: 100% !important;
+    min-height: 220px;
+    max-height: 340px;
+  }
+}

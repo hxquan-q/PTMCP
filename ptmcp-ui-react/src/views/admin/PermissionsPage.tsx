@@ -32,6 +32,7 @@ import {
 import { createGrant, deleteGrant, listGrants, previewAccess, type Grant, type SubjectType } from '../../services/access';
 import { listDatasources, listMetadata, type DatasourceRead, type MetadataObject } from '../../services/data';
 import { buildTree, type ResourceNode } from './resourceTree';
+import { resizeColumns } from './columnResize';
 import { mePortalApi, type PlatformItem } from '../../services/mePortalApi';
 import { listDepartments, listRoles, listUsers, type DepartmentRow, type RoleRow, type UserRow } from '../../services/orgPortalApi';
 
@@ -268,9 +269,9 @@ export function PermissionsPage() {
 
   /* 拖拽分栏 */
   const containerRef = useRef<HTMLDivElement>(null);
-  const dragState = useRef<{ index: number; startX: number; start: [number, number] } | null>(null);
+  const dragState = useRef<{ index: 0 | 1; startX: number; start: [number, number] } | null>(null);
   const onResizerDown = useCallback(
-    (index: number) => (e: React.PointerEvent) => {
+    (index: 0 | 1) => (e: React.PointerEvent) => {
       dragState.current = { index, startX: e.clientX, start: [...colWidths] as [number, number] };
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
     },
@@ -281,16 +282,7 @@ export function PermissionsPage() {
     const el = containerRef.current;
     if (!d || !el) return;
     const deltaPct = ((e.clientX - d.startX) / el.getBoundingClientRect().width) * 100;
-    const next: [number, number] = [...d.start];
-    if (d.index === 0) {
-      // 第一分隔线:栏0 增减,栏1 补偿;栏2 取余不变
-      next[0] = clamp(d.start[0] + deltaPct, 14, 50);
-      next[1] = clamp(d.start[1] - deltaPct, 14, 50);
-    } else {
-      // 第二分隔线:栏1 增减,栏2 取余自动补偿
-      next[1] = clamp(d.start[1] + deltaPct, 14, 50);
-    }
-    setColWidths(next);
+    setColWidths(resizeColumns(d.start, d.index, deltaPct));
   }, []);
   const onResizerUp = useCallback(() => {
     dragState.current = null;
@@ -319,6 +311,7 @@ export function PermissionsPage() {
       />
       <div
         ref={containerRef}
+        className="perm-workspace"
         onPointerMove={onResizerMove}
         onPointerUp={onResizerUp}
         style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 0, flex: 1, minHeight: 0 }}
@@ -726,9 +719,6 @@ function findNode(nodes: ResourceNode[], key: string): ResourceNode | null {
   }
   return null;
 }
-function clamp(v: number, lo: number, hi: number): number {
-  return Math.min(hi, Math.max(lo, v));
-}
 
 function Pane({
   icon,
@@ -782,6 +772,7 @@ function Resizer({ onPointerDown }: { onPointerDown: (e: React.PointerEvent) => 
     <div
       role="separator"
       aria-orientation="vertical"
+      className="perm-resizer"
       onPointerDown={onPointerDown}
       style={{ cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
     >

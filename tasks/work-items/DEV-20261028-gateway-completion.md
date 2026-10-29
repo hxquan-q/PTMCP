@@ -60,6 +60,13 @@ wrapper 未设置 executable，使用 bash 调用，不改文件权限。已有�
 
 ## 结果与证据
 
+当前切片：所有admin handler显式声明功能码，统一MVC入口默认拒绝未声明/无功能码请求；
+平台管理员不能绕过端点动作，通用用户PUT仍按实际变化补status/assign-role/move。
+身份状态读复用user:read，操作日志复用audit:list，原文访问轨迹复用audit:read，解密单独audit:decrypt。
+先以真实MySQL/Servlet验证仅平台标记无权限、相邻动作码不能替代、停删角色/撤码即时拒绝、
+依赖故障零写入及平台管理员组合编辑反例，再实现、组合测试与独立只读复审。
+本片保留URL/DTO/ETag与CSRF，不扩展为事务内授权重验、最后管理员或自扩权保护。
+
 身份组合 GREEN：`ptmcp-identity-combined-green.log` BUILD SUCCESS，78 tests / 0 failures/errors/skipped；
 覆盖双 MySQL 改密恢复13、真实 ADMIN 改密HTTP2、Session8、Org13、SecurityState13、OAuth27及MCP HTTP2。
 Origin 有效 RED 为 `ptmcp-identity-origin-red.log`（8例中1 failure，跨站Origin携合法CSRF错误返回200）；
@@ -161,6 +168,14 @@ Org23、Admin43、Session17、OAuth29、McpHttpBoundary1，共113 tests，0失�
 启停例真实清空email/phone/remark。仅对应专用动作、不要求user:update的合法流程原本通过。
 实现复用命令级单委派算法，专用三端点单快照绑定If-Match；原有正向用例补齐真实actor功能角色，
 越界迁移用例改用当前版本，防止旧夹具的过期If-Match掩盖范围断言，不改变生产绕过或测试期望。
+组合GREEN：`ptmcp-user-specialized-green.log` BUILD SUCCESS/exit0，2026-10-30 04:11:37 +08:00，
+Org23、Admin54、Session17、OAuth29、MCP HTTP1，共124 tests/0 failures/0 errors/0 skipped。
+只读初审未发现新增阻断；按建议增加两个候选均含assign-role、分别覆盖不同角色码时，
+最终请求两角色整组必须403且完整写入效果不变的第12项回归。
+追加GREEN：`ptmcp-user-specialized-role-set-green.log` BUILD SUCCESS/exit0，2026-10-30 04:14:27 +08:00，
+AdminApiTest 55 tests/0 failures/0 errors/0 skipped；与前述124项组合分别记录，不将重复执行累计。
+独立只读终审已核阅实际RED、两份GREEN日志及当前diff，未发现本片新增阻断；评审未修改文件或重跑动态测试。
+本片权限拼接、授权快照漂移及status丢失联系方式关闭；事务内重验、平台管理员逐动作码、最后管理员与自扩权仍待后续。
 
 双库 CAS 首次 GREEN：`ptmcp-identity-cas-green.log`，10 tests / 0 failures/errors/skipped，BUILD SUCCESS。
 独立实际 diff 复审未发现迟到写/提交不明新增高危阻断；发现恢复 hash 长期保留、控制器 epoch 字段错配及并发完成额外 epoch，已补回归和修复，重验进行中。

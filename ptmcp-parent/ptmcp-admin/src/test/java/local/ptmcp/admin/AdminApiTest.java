@@ -795,14 +795,26 @@ class AdminApiTest {
         long delegate = createUser("userscope-admin", "受控用户管理员", insideId);
         long delegateRole =
                 orgStore.createRole(
-                                "user_scope_delegate", "用户管理功能", true,
-                                List.of("ptmcp:user:update", "ptmcp:user:status",
-                                        "ptmcp:user:assign-role", "ptmcp:user:move"), ADMIN_ID)
+                                "user_scope_delegate",
+                                "用户管理功能",
+                                true,
+                                List.of(
+                                        "ptmcp:user:update", "ptmcp:user:status",
+                                        "ptmcp:user:assign-role", "ptmcp:user:move"),
+                                ADMIN_ID)
                         .id();
         OrgStore.UserRow delegateProfile = orgStore.getUser(delegate);
         orgStore.updateUser(
-                delegate, delegateProfile.displayName(), delegateProfile.deptId(),
-                null, null, null, null, List.of(delegateRole), delegateProfile.version(), ADMIN_ID);
+                delegate,
+                delegateProfile.displayName(),
+                delegateProfile.deptId(),
+                null,
+                null,
+                null,
+                null,
+                List.of(delegateRole),
+                delegateProfile.version(),
+                ADMIN_ID);
         mockMvc.perform(
                         post("/api/v1/admin/delegations")
                                 .header("X-Test-User-Id", ADMIN_ID)
@@ -1348,7 +1360,8 @@ class AdminApiTest {
 
     @Test
     void specializedUserStatusRequiresActorCapability() throws Exception {
-        assertSpecializedActorCapability("status", "ptmcp:user:status", "{\"status\":\"DISABLED\"}");
+        assertSpecializedActorCapability(
+                "status", "ptmcp:user:status", "{\"status\":\"DISABLED\"}");
     }
 
     @Test
@@ -1399,10 +1412,27 @@ class AdminApiTest {
         addEditDelegation(fixture, ancestor, List.of("ptmcp:user:status"));
         long combinedRole =
                 orgStore.createRole(
-                                "combined_codes", "合并功能角色", true,
-                                List.of("ptmcp:user:update", "ptmcp:user:status"), ADMIN_ID)
+                                "combined_codes",
+                                "合并功能角色",
+                                true,
+                                List.of("ptmcp:user:update", "ptmcp:user:status"),
+                                ADMIN_ID)
                         .id();
         assertSpecializedEditDenied(fixture, "roles", "{\"roleIds\":[" + combinedRole + "]}");
+    }
+
+    @Test
+    void specializedUserRolesRequiresOneDelegationForEntireRoleSet() throws Exception {
+        UserEditFixture fixture =
+                userEditFixture(List.of("ptmcp:user:assign-role", "ptmcp:user:update"));
+        long ancestor = createDepartment("整组赋角祖先");
+        orgStore.moveDepartment(fixture.departmentId(), ancestor, 1, ADMIN_ID);
+        addEditDelegation(
+                fixture, ancestor, List.of("ptmcp:user:assign-role", "ptmcp:user:status"));
+        assertSpecializedEditDenied(
+                fixture,
+                "roles",
+                "{\"roleIds\":[" + fixture.narrowRoleId() + "," + fixture.broadRoleId() + "]}");
     }
 
     @Test
@@ -1420,17 +1450,31 @@ class AdminApiTest {
         OrgStore.UserRow original = orgStore.getUser(fixture.targetId());
         OrgStore.UserRow before =
                 orgStore.updateUser(
-                        original.id(), original.displayName(), original.deptId(),
-                        "status-test@example.invalid", "12345678901", "启停保留的合成备注",
-                        null, null, original.version(), ADMIN_ID);
+                        original.id(),
+                        original.displayName(),
+                        original.deptId(),
+                        "status-test@example.invalid",
+                        "12345678901",
+                        "启停保留的合成备注",
+                        null,
+                        null,
+                        original.version(),
+                        ADMIN_ID);
         performSpecializedEdit(fixture, "status", "{\"status\":\"DISABLED\"}")
                 .andExpect(status().isOk())
                 .andExpect(header().string("ETag", "\"" + (before.version() + 1) + "\""));
         assertEquals(
                 new OrgStore.UserRow(
-                        before.id(), before.username(), before.displayName(), before.deptId(),
-                        before.email(), before.phoneNumber(), before.remark(), false,
-                        before.roleIds(), before.version() + 1),
+                        before.id(),
+                        before.username(),
+                        before.displayName(),
+                        before.deptId(),
+                        before.email(),
+                        before.phoneNumber(),
+                        before.remark(),
+                        false,
+                        before.roleIds(),
+                        before.version() + 1),
                 orgStore.getUser(fixture.targetId()));
     }
 
@@ -1450,8 +1494,7 @@ class AdminApiTest {
         performSpecializedEdit(fixture, "status", "{\"status\":\"DISABLED\"}")
                 .andExpect(status().isOk());
         assertFalse(orgStore.getUser(fixture.targetId()).enabled());
-        performSpecializedEdit(fixture, "roles", "{\"roleIds\":[]}")
-                .andExpect(status().isOk());
+        performSpecializedEdit(fixture, "roles", "{\"roleIds\":[]}").andExpect(status().isOk());
         assertTrue(orgStore.getUser(fixture.targetId()).roleIds().isEmpty());
         long destination =
                 orgStore.createDepartment(fixture.departmentId(), "合法迁入部门", true, ADMIN_ID).id();
@@ -1512,21 +1555,37 @@ class AdminApiTest {
         try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
             var request =
                     executor.submit(
-                            () -> isolatedMvc.perform(
-                                            put("/api/v1/admin/users/" + fixture.targetId() + "/" + endpoint)
-                                                    .requestAttr(
-                                                            AdminPrincipal.ATTRIBUTE,
-                                                            new AdminPrincipal(fixture.delegateId(), false))
-                                                    .header("If-Match", original.version() + 1)
-                                                    .contentType("application/json")
-                                                    .content(requestBody))
-                                    .andReturn());
+                            () ->
+                                    isolatedMvc
+                                            .perform(
+                                                    put("/api/v1/admin/users/"
+                                                                    + fixture.targetId()
+                                                                    + "/"
+                                                                    + endpoint)
+                                                            .requestAttr(
+                                                                    AdminPrincipal.ATTRIBUTE,
+                                                                    new AdminPrincipal(
+                                                                            fixture.delegateId(),
+                                                                            false))
+                                                            .header(
+                                                                    "If-Match",
+                                                                    original.version() + 1)
+                                                            .contentType("application/json")
+                                                            .content(requestBody))
+                                            .andReturn());
             try {
                 assertTrue(snapshotRead.await(15, TimeUnit.SECONDS));
                 orgStore.updateUser(
-                        original.id(), "并发迁移后的资料", outside,
-                        "concurrent@example.invalid", "12345678901", "并发更新的合成备注",
-                        null, null, original.version(), ADMIN_ID);
+                        original.id(),
+                        "并发迁移后的资料",
+                        outside,
+                        "concurrent@example.invalid",
+                        "12345678901",
+                        "并发更新的合成备注",
+                        null,
+                        null,
+                        original.version(),
+                        ADMIN_ID);
                 UserWriteEffects committed = userWriteEffects(fixture.targetId());
                 concurrentMoveCommitted.countDown();
                 MvcResult result = request.get(15, TimeUnit.SECONDS);
@@ -1559,18 +1618,21 @@ class AdminApiTest {
         assertEquals(before, userWriteEffects(fixture.targetId()));
     }
 
-    private record UserWriteEffects(OrgStore.UserRow row, long epoch, long events, long operations) {}
+    private record UserWriteEffects(
+            OrgStore.UserRow row, long epoch, long events, long operations) {}
 
     private UserWriteEffects userWriteEffects(long targetId) throws Exception {
         OrgStore.UserRow row = orgStore.getUser(targetId);
         try (Connection connection = connect();
                 Statement statement = connection.createStatement();
-                ResultSet result = statement.executeQuery(
-                        "SELECT (SELECT policy_epoch FROM sys_security_state WHERE singleton_id=1),"
-                                + " (SELECT COUNT(*) FROM sys_security_event),"
-                                + " (SELECT COUNT(*) FROM admin_operation_log)")) {
+                ResultSet result =
+                        statement.executeQuery(
+                                "SELECT (SELECT policy_epoch FROM sys_security_state WHERE singleton_id=1),"
+                                        + " (SELECT COUNT(*) FROM sys_security_event),"
+                                        + " (SELECT COUNT(*) FROM admin_operation_log)")) {
             assertTrue(result.next());
-            return new UserWriteEffects(row, result.getLong(1), result.getLong(2), result.getLong(3));
+            return new UserWriteEffects(
+                    row, result.getLong(1), result.getLong(2), result.getLong(3));
         }
     }
 

@@ -99,11 +99,11 @@ host/port先做DNS与网络目的地策略验证，拒绝云元数据/loopback�
 | PUT /metadata/objects/{id}/dictionary | metadata:dictionary | DictionaryWrite+If-Match→ObjectDetail；不能修改真实数据库DDL |
 | /users CRUD | user对应动作 | UserWrite→UserDTO；筛选keyword/departmentId/status；不接受外部org树替换；删除逻辑删除并撤销令牌 |
 | PUT /users/{id} | user:update，加实际变更的status/assign-role/move | 完整 UserWrite+If-Match→UserDTO；授权分类快照版本必须等于If-Match，落库保留同版本CAS，冲突不自动重试；roleIds缺省保留、按集合比较；委派管理员须自身具备所需功能码，且同一有效委派覆盖全部动作与新旧部门；角色变化时最终整组功能码不得超过该委派，不能跨委派拼接 |
-| PUT /users/{id}/status | user:status | {status:ACTIVE/DISABLED}+If-Match→UserDTO；不能停用最后一个有效平台管理员 |
+| PUT /users/{id}/status | user:status | {status:ACTIVE/DISABLED}+If-Match→UserDTO；保留其他资料与角色；不能停用最后一个有效平台管理员 |
 | GET /users/{id}/identity | 平台管理员 | →IdentityState={userId,version,identityState:UNBOUND/READY/CHANGE_PENDING,recoveryRequired}；不返回摘要、目标或操作材料 |
 | PUT /users/{id}/password | user:reset-password，平台管理员 | {newPassword,reason}+If-Match+Idempotency-Key→200 IdentityState；先提权威版本并撤销全部认证，跨库异常保持 Pending，由管理员恢复 |
 | POST /users/{id}/password/retry | user:reset-password，平台管理员 | {}+If-Match+Idempotency-Key→200 IdentityState；只重试持久目标；完成重试不写宿主、不提版本/epoch；不接受新密码；版本与 body 一起绑定幂等摘要 |
-| PUT /users/{id}/roles | user:assign-role | {roleIds:[]}+If-Match→UserDTO；整组替换，全部角色均受管理范围约束 |
+| PUT /users/{id}/roles | user:assign-role | {roleIds:[]}+If-Match→UserDTO；整组替换，最终整组功能码由同一有效委派覆盖，不能逐角色拼接不同委派 |
 | PUT /users/{id}/department | user:move | {departmentId,reason}+If-Match→UserDTO；新旧部门均可管理；更新身份版本与epoch |
 | /departments CRUD | department对应动作 | DepartmentWrite→DepartmentDTO；列表可parentId过滤；删除有子部门/用户409；PUT移动校验整棵子树无环且在范围 |
 | /roles CRUD | role对应动作 | RoleWrite→RoleDTO；共享范围外成员的角色仅平台管理员能改；删除有关联成员/ACL则409 |
@@ -130,6 +130,11 @@ host/port先做DNS与网络目的地策略验证，拒绝云元数据/loopback�
 | POST /audit/{requestId}/decrypt | audit:decrypt，额外明确授权 | {fields:[sqlRaw/sqlFinal],reason:10..500}→{sqlRaw?,sqlFinal?,expiresAt}；每次持久审计后才返回，no-store，服务端不缓存明文；保留期外404 |
 
 身份绑定：新建用户为 UNBOUND；宿主供应/显式导入闭环前，登录、改密和发证均拒绝。普通资料编辑不改变绑定状态；当前尚无供应转换接口。已有 READY/Pending 也核对宿主 ID 与元库规范化登录名，不符时不自动重绑。
+
+专用status/roles/department接口始终核对应动作；委派管理员还须自身当前功能码与同一有效委派相交。
+这一份委派必须覆盖本条命令的全部动作、新旧部门及最终整组角色功能码，不从其他委派补足。
+每个接口使用同一次用户快照核If-Match、授权及生成写参数，保留落库同版本CAS；冲突不追新快照重试。
+专用命令不额外要求user:update，URL、DTO、ETag保持兼容。事务内actor/委派/角色定义重验与平台管理员逐动作码仍待后续切片。
 
 启停实现：通用PUT与专用status共用OrgStore；ACTIVE/DISABLED实际变化与profile/roles、
 authVersion/identityVersion、ADMIN/AS/PAT/OAuth撤销、epoch、事件和操作日志在同一元库事务提交。
