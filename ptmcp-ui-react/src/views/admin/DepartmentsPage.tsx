@@ -10,7 +10,7 @@ import {
   type DepartmentRow,
   type UserRow,
 } from '../../services/orgPortalApi';
-import { departmentDepth, departmentDescendants, validateDeptForm, type DeptFormValues } from './orgForms';
+import { canDeleteDepartment, departmentDepth, departmentDescendants, validateDeptForm, type DeptFormValues } from './orgForms';
 import { showToast } from '../../toast';
 
 export function DepartmentsPage() {
@@ -117,8 +117,11 @@ export function DepartmentsPage() {
                       style={{ marginLeft: 10, color: 'var(--ptmcp-red)' }}
                       onClick={() => setDeleting(d)}
                       aria-label={`删除 ${d.name}`}
-                      disabled={memberCount(d.id) > 0}
-                      title={memberCount(d.id) > 0 ? '部门下仍有成员，不能删除' : undefined}
+                      disabled={!canDeleteDepartment(d, rows, memberCount(d.id)).allowed}
+                      title={(() => {
+                        const check = canDeleteDepartment(d, rows, memberCount(d.id));
+                        return check.allowed ? undefined : check.reason;
+                      })()}
                     >
                       <CloseIcon /> 删除
                     </button>

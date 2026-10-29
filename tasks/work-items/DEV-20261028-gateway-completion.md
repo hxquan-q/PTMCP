@@ -145,9 +145,9 @@ SecurityState13、SecurityChangeTransaction16、Org163、Admin98、ToolPermissio
 git diff --check与Skill的tree/format/archived三项检查均exit0（12份笔记、0份归档）。
 删除仍仅检查直接未删子部门/直属用户，用户创建/换部门未共用该全局围栏，
 本片不关闭并发成员引用和跨软删桥的删除引用完整性，也不声明外部直写安全或容量达标。
-独立只读复核另发现HTTP幂等包装对OPERATION_UNKNOWN仍释放key，真实commit丢确认后同key再POST
-可能重复创建；本片store级测试仅证明单次调用不自动重放，不能声称HTTP UNKNOWN闭环。
-树写片工程验证已完成，HTTP同key重试作为下一片实施。
+树写片独立只读复核时另发现旧HTTP幂等包装对OPERATION_UNKNOWN仍释放key，真实commit丢确认后同key再POST
+可能重复创建；该片store级测试仅证明单次调用不自动重放，不能声称HTTP UNKNOWN闭环。
+树写片工程验证已完成，HTTP同key重试缺口由下一节单独修复与验证。
 
 当前实施切片：管理写请求的UNKNOWN幂等保护（API §1、FR-07/16/17、TC-API/ASVS错误与审计边界）。
 通用IdempotentWrites一旦调用action，RuntimeException不能证明未执行，不再自动completeFailed；
@@ -168,7 +168,13 @@ UNKNOWN/过期RUNNING被重新占用，完成记录故障误返503，未分类/�
 不能据此外推真实会话、CSRF及逐动作权限链。
 定向GREEN：`idempotency-focused-green.log/.exit`于2026-10-30 07:18:23 +08:00 BUILD SUCCESS/exit0，
 Org5（含原显式失败释放兼容例）与Admin13共18 tests，0 failures/0 errors/0 skipped。
-当前执行组织/安全事务/管理API/数据源/改密/会话完整兼容组合，独立只读终审待最终日志与同步哈希。
+兼容组合：`idempotency-combined-green.log/.exit`于2026-10-30 07:25:47 +08:00 BUILD SUCCESS/exit0，
+State13、Tx16、Org167、Admin111、Datasource9、Identity17、Session18共351项，0失败/错误/跳过；
+未重复累计模块汇总或前轮定向结果。实际故障注入先完成真实commit/executeUpdate再丢确认。
+5份本片源码/测试的Windows、native构建目录与`idempotency-combined-source-hashes.json`逐一一致。
+独立只读终审亲核实际代码、RED/GREEN、exit及三处SHA-256，无新增阻断，未修改文件或重跑动态测试。
+“UNKNOWN后同key重复执行”缺口按本片范围关闭；本次未重跑OAuth/MCP全套，不外推前端换新key、
+一次性secret重放、人工解除/清理、混合版本部署或整体授权闭环。
 
 React窗口协作待接：本窗口只读核查`ptmcp-ui-react/src/services/http.ts`与`orgPortalApi.ts`，
 当前传输层没有自动重试，但创建每次调用重新生成UUID，未见OPERATION_UNKNOWN专用处理；
@@ -449,6 +455,23 @@ G1 已完成：`McpResourceMetadata` 由四处部署配置（`resource-uri`、`r
 安全关键变更的独立评审、真实客户端版本与环境、生产证书/域名、故障恢复及人工接受均待实际证据。
 用户已授权本地实施；生产/发布/跨分支或破坏性动作不随本工作项自动授权。
 
+### 管理委派写入安全事务切片（2026-10-30，实施中）
+
+目标：承接authorization §6及db-design §7，修复DelegationStore.create/revoke缺少epoch/事件与跨连接结果读取。
+复用SecurityChangeTransaction.executeReturning，固定全局锁先于领域行；创建、撤销的委派行/version、
+操作日志、epoch及DELEGATION_CHANGED(ADMIN_DELEGATION，数值ID/version-only)在同一元库事务提交。
+创建的返回值从同连接读取，保持DATETIME(6)归一化；撤销在同连接锁定读取并验证If-Match/CAS。
+提交丢确认使用OPERATION_UNKNOWN，不自动重放。无需Schema迁移，不修改React或角色写入。
+事务内actor/委派授权重验、整子树、自扩权、自然到期策略及业务token撤销不在本片，不据此关闭整体授权缺口。
+
+最低验证：旧源码有效RED；创建/撤销原子成功；日志/事件故障全快照回滚；真实commit丢确认；
+单连接返回；并发重复创建及同版本撤销；stale/revoked/self拒绝无副作用。继续使用专属WSL的隔离MySQL容器。
+产品范围为DelegationStore、SecurityEvent及现有OrgManagementStoreTest；契约/原Note随实现同步。
+独立只读评审复用既有reviewer，不并行实现。动态验证与终审尚未完成，结果保持NOT_RUN。
+
+前一幂等切片收尾后实际检查：`python scripts/check.py` exit0（145份Markdown/672项链接、62项检查器回归），
+Skill tree/format/archived均exit0（12篇活跃笔记、0篇归档），`git diff --check` exit0；不替代本片验证。
+
 ## 交接
 
 2026-10-29 续接核查范围：按用户要求复核全部后端、前端真实接口、OAuth首次连接和页面，
@@ -479,7 +502,7 @@ G1 已完成：`McpResourceMetadata` 由四处部署配置（`resource-uri`、`r
 React交接另确认：权限树为fixture，部分写/预览操作未接；接入页“测试连接”仅定时置success，
 未实际请求MCP，真实模式也未隔离该回调。应由前端窗口在接管前限制为明确预览或接入真实验证，不能以UI成功宣称连通。
 
-下一实施焦点为G1后的OAuth资源契约与身份闭环，随后继续G2；
+当前实施焦点为委派创建/撤销的epoch与事件原子提交；G1/OAuth资源及G2的局部完成证据见上文，
 G3～G5及G7完整验收仍待完成，G6局部验证已通过、人工接受待定。
 React窗口可直接按报告的真实接口和安全行为迁移，不能继承Vue的测试通过状态。
 整体保持 in_progress，不把立项、计划或局部测试通过报告为完整交付。

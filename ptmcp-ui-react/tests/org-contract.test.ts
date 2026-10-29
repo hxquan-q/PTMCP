@@ -15,7 +15,7 @@ const { createPreviewServer } = await import('../src/preview/server.ts');
 const forms = await import('../src/views/admin/orgForms.ts');
 sourceImports.deregister();
 
-const { validateUserForm, validateDeptForm, departmentDescendants, departmentDepth } = forms;
+const { validateUserForm, validateDeptForm, departmentDescendants, departmentDepth, canDeleteDepartment } = forms;
 
 async function withPreviewServer(fn: () => Promise<void>): Promise<void> {
   const server = createPreviewServer();
@@ -125,4 +125,31 @@ test('departmentDescendants includes the subtree and blocks cycles in the parent
   assert.deepEqual([...departmentDescendants(tree, '4')], ['4']);
   assert.equal(departmentDepth(tree, '3'), 2);
   assert.equal(departmentDepth(tree, '1'), 0);
+});
+
+test('canDeleteDepartment blocks members and child departments, allows leaf with no members', () => {
+  const tree = [
+    { id: '1', parentId: null },
+    { id: '2', parentId: '1' },
+    { id: '3', parentId: '2' },
+    { id: '4', parentId: null },
+  ];
+  // 父部门有子部门：拒绝
+  const parent = canDeleteDepartment(tree[0]!, tree, 0);
+  assert.equal(parent.allowed, false);
+  assert.match(parent.reason!, /子部门/);
+
+  // 中间部门既有子也有成员：优先报成员（更可操作）
+  const middle = canDeleteDepartment(tree[1]!, tree, 2);
+  assert.equal(middle.allowed, false);
+  assert.match(middle.reason!, /成员/);
+
+  // 叶子节点无成员：允许
+  const leaf = canDeleteDepartment(tree[2]!, tree, 0);
+  assert.equal(leaf.allowed, true);
+  assert.equal(leaf.reason, undefined);
+
+  // 独立根节点无子无成员：允许
+  const solo = canDeleteDepartment(tree[3]!, tree, 0);
+  assert.equal(solo.allowed, true);
 });

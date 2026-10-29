@@ -67,3 +67,15 @@ export function departmentDepth(items: Array<{ id: string; parentId: string | nu
   }
   return depth;
 }
+
+/** 部门删除资格：无直接成员 AND 无子部门（防孤儿化）。 */
+export function canDeleteDepartment(
+  dept: { id: string; parentId: string | null },
+  all: Array<{ id: string; parentId: string | null }>,
+  directMemberCount: number,
+): { allowed: boolean; reason?: string } {
+  if (directMemberCount > 0) return { allowed: false, reason: '部门下仍有成员' };
+  const hasChildren = all.some((d) => d.parentId === dept.id);
+  if (hasChildren) return { allowed: false, reason: '存在子部门，需先删除或移出子部门' };
+  return { allowed: true };
+}
