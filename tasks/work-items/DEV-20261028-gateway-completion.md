@@ -455,7 +455,7 @@ G1 已完成：`McpResourceMetadata` 由四处部署配置（`resource-uri`、`r
 安全关键变更的独立评审、真实客户端版本与环境、生产证书/域名、故障恢复及人工接受均待实际证据。
 用户已授权本地实施；生产/发布/跨分支或破坏性动作不随本工作项自动授权。
 
-### 管理委派写入安全事务切片（2026-10-30，实施中）
+### 管理委派写入安全事务切片（2026-10-30）
 
 目标：承接authorization §6及db-design §7，修复DelegationStore.create/revoke缺少epoch/事件与跨连接结果读取。
 复用SecurityChangeTransaction.executeReturning，固定全局锁先于领域行；创建、撤销的委派行/version、
@@ -477,9 +477,36 @@ G1 已完成：`McpResourceMetadata` 由四处部署配置（`resource-uri`、`r
 定向GREEN：`delegation-transaction-green.log/.exit`，2026-10-30 07:42:51 +08:00，BUILD SUCCESS/exit0，
 22/22通过，0 failures/errors/skipped。静态复核无新增阻断，并发创建夹具及提交后竞争撤销钩子有效。
 并发撤销仅在入口同时释放，主要覆盖CAS及单次journal；未另加首次领域访问NOWAIT接线或store级确认commit后close故障测试，
-统一事务本身的锁序/清理边界依赖既有SecurityChangeTransactionTest，最终组合与证据终审仍待完成。
+统一事务本身的锁序/清理边界依赖既有SecurityChangeTransactionTest。
+兼容组合`delegation-transaction-combined-green.log/.exit`于2026-10-30 07:49:59 +08:00
+BUILD SUCCESS/exit0：State13、Tx16、Org189、Admin111、Datasource9、IdentityPassword17、Session18，
+共373项，0失败/错误/跳过；与定向22项分别记录、不累计。
+独立只读终审亲核RED、定向/组合日志及exit，并重算全部358项当前Windows/native/清单，差异0，
+实际候选无新增阻断；未重复运行动态测试。局部显式委派写事务缺口关闭，不外推整体授权完成。
 当前Windows/native的358份源码及构建输入SHA-256均一致，清单`delegation-transaction-source-hashes.json`。
+组合完成后重算全部358项，当前两处源码与清单仍一致。数据源目标变更另经持有全局锁的数据源事务批量撤销，
+不产生本片定义的逐委派ID/version事件；不能泛称所有委派变化的逐行事件均已闭环。
 另一窗口共享提交`a178802`已包含本片Java/契约及部分记录；保留该历史，本窗口未执行提交或推送。
+本片文档收尾实际检查：`python scripts/check.py` exit0（145份Markdown/674项链接、62项检查器回归），
+Skill tree/format/archived均exit0（12篇活跃笔记、0篇归档），`git diff --check` exit0。
+
+### 角色定义写入安全事务切片（2026-10-30，实施中）
+
+承接FR-02/AC-02、TC-ACL-002/007及authorization §6、db-design §7。
+目标：OrgStore.createRole/updateRole/deleteRole复用SecurityChangeTransaction，固定全局锁先于角色，
+角色行/version、权限码、操作日志、epoch与ROLE_CHANGED(ROLE，真实数值ID/version-only)原子提交。
+create/update在同连接读取并返回本事务不可变快照，保留CAS、角色key冲突及成员/活动授权引用拒绝，
+现存角色version耗尽拒绝SECURITY_STATE_UNAVAILABLE；commit丢确认返回OPERATION_UNKNOWN且不自动重放。
+不新增迁移，不改React、成员写路径或公共DTO/ETag；不覆盖成员/ACL引用并发、actor提交前重验、最后管理员、
+间接自扩权、正式publisher/多副本消费或旧直写版本混跑。整体工作项保持实施中。
+
+最低验证：旧产品有效RED；三命令行/权限/日志/epoch/ID事件原子成功；日志/事件故障完整写快照回滚；
+真实commit后丢确认；create/update只借一条连接并返回自身快照；update保留或清空权限码；
+同version并发写仅一次提交；缺失/过期/未来version、引用、key冲突、角色version与epoch耗尽拒绝零写入。
+复用既有合成MySQL和JDBC故障代理，不碰共享数据库。先定向，再组织/事务/管理/会话等兼容组合，
+最后独立只读评审实际diff、有效RED/GREEN与源码哈希；未运行前不升级验证状态。
+只读设计评审无阻断；补充中途权限码batch故障回滚、软删角色拒绝及null/空集合兼容测试。
+RoleAdminController.create尚未接IdempotentWrites，不能从本片推断角色创建HTTP同key防重闭环。
 
 前一幂等切片收尾后实际检查：`python scripts/check.py` exit0（145份Markdown/672项链接、62项检查器回归），
 Skill tree/format/archived均exit0（12篇活跃笔记、0篇归档），`git diff --check` exit0；不替代本片验证。
