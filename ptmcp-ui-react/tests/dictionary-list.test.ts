@@ -65,3 +65,19 @@ test('access-context exposes datasource level for the personal cascade', async (
     assert.equal(ctx.items[0]!.type, 'DATASOURCE');
   });
 });
+
+test('dictionary list filters by platformId without returning empty (objects carry platformId)', async () => {
+  await withPreviewServer(async () => {
+    const all = await mePortalApi.dictionaryList({ pageSize: 100 });
+    assert.ok(all.items.length > 0);
+
+    // 每个对象都属于平台 '1'，选平台后不应返回空列表
+    const byPlatform = await mePortalApi.dictionaryList({ platformId: '1', pageSize: 100 });
+    assert.ok(byPlatform.items.length > 0, 'selecting a platform must not return an empty list — objects carry platformId');
+    assert.ok(byPlatform.items.length <= all.items.length);
+
+    // 不存在的平台返回空（而非全部）
+    const none = await mePortalApi.dictionaryList({ platformId: '999', pageSize: 100 });
+    assert.equal(none.items.length, 0, 'nonexistent platform should return empty, not all objects');
+  });
+});

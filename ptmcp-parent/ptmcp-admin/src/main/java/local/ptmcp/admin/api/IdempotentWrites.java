@@ -17,8 +17,8 @@ import java.util.function.Supplier;
 
 /**
  * Idempotency-Key wrapper for admin write actions. A replay returns the recorded status and body
- * with {@code Idempotent-Replay: true}. Once dispatched, a failed attempt retains its intent:
- * an exception cannot prove that the action had no committed or external side effects.
+ * with {@code Idempotent-Replay: true}. Once dispatched, a failed attempt retains its intent: an
+ * exception cannot prove that the action had no committed or external side effects.
  */
 final class IdempotentWrites {
     private static final JsonMapper JSON = JsonMapper.builder().build();

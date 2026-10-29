@@ -242,6 +242,7 @@ export function createPreviewServer() {
       {
         id: '1',
         objectId: '1',
+        platformId: '1',
         datasourceId: '1',
         namespaceId: '1',
         databaseName: 'synthetic',
@@ -290,6 +291,7 @@ export function createPreviewServer() {
       {
         id: '2',
         objectId: '2',
+        platformId: '1',
         datasourceId: '1',
         namespaceId: '1',
         databaseName: 'synthetic',
@@ -311,6 +313,7 @@ export function createPreviewServer() {
       {
         id: '3',
         objectId: '3',
+        platformId: '1',
         datasourceId: '1',
         namespaceId: '1',
         databaseName: 'synthetic',
@@ -332,6 +335,7 @@ export function createPreviewServer() {
       {
         id: '4',
         objectId: '4',
+        platformId: '1',
         datasourceId: '2',
         namespaceId: '2',
         databaseName: 'analytics',
@@ -353,6 +357,7 @@ export function createPreviewServer() {
       {
         id: '5',
         objectId: '5',
+        platformId: '1',
         datasourceId: '2',
         namespaceId: '2',
         databaseName: 'analytics',

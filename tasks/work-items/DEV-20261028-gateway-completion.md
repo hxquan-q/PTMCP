@@ -164,7 +164,17 @@ occupy先比较摘要，UNKNOWN/未知状态及过期RUNNING拒绝重占；过�
 2026-10-30 07:11:46 +08:00；`idempotency-http-red.log/.exit`为13 tests/12 failures/0 errors/0 skipped、
 exit1，2026-10-30 07:13:52 +08:00。真实commit后丢确认的同key请求创建了两行；
 UNKNOWN/过期RUNNING被重新占用，完成记录故障误返503，未分类/序列化异常未脱敏归类。
-未过期在途请求的重复拒绝原本通过；当前进行最小修复，GREEN及独立终审尚未完成。
+未过期在途请求的重复拒绝原本通过。管理层13项为8个Servlet/实库实例与5个直接wrapper/实库实例，
+不能据此外推真实会话、CSRF及逐动作权限链。
+定向GREEN：`idempotency-focused-green.log/.exit`于2026-10-30 07:18:23 +08:00 BUILD SUCCESS/exit0，
+Org5（含原显式失败释放兼容例）与Admin13共18 tests，0 failures/0 errors/0 skipped。
+当前执行组织/安全事务/管理API/数据源/改密/会话完整兼容组合，独立只读终审待最终日志与同步哈希。
+
+React窗口协作待接：本窗口只读核查`ptmcp-ui-react/src/services/http.ts`与`orgPortalApi.ts`，
+当前传输层没有自动重试，但创建每次调用重新生成UUID，未见OPERATION_UNKNOWN专用处理；
+这不满足同一表单意图重试复用key的完整交互。接线时需按表单意图保留key，结果不明时保留意图并提示先查询核对，
+不能用新key或把所有409视为版本冲突后再次创建。网络错误也不能证明写入已回滚。
+React源码归另一窗口，本窗口未修改；该交互仍未验收，不据后端同key保护宣称前端重试闭环。
 
 当前切片：所有admin handler显式声明功能码，统一MVC入口默认拒绝未声明/无功能码请求；
 平台管理员不能绕过端点动作，通用用户PUT仍按实际变化补status/assign-role/move。
