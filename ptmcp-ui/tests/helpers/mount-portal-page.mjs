@@ -41,7 +41,7 @@ export async function mountPortalPage(name, api) {
   });
   let component;
   try {
-    component = (await import(dataUrl(stripTypeScriptTypes(code, { mode: 'transform' })))).default;
+    component = (await import(dataUrl(stripTypeScriptTypes(code, { mode: 'strip' })))).default;
   } finally {
     hooks.deregister();
   }

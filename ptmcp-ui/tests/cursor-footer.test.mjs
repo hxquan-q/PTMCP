@@ -12,7 +12,7 @@ async function footer(props) {
     /from\s+['"]vue['"]/g,
     `from ${JSON.stringify(import.meta.resolve('vue'))}`,
   );
-  const component = (await import(`data:text/javascript,${encodeURIComponent(stripTypeScriptTypes(code, { mode: 'transform' }))}`)).default;
+  const component = (await import(`data:text/javascript,${encodeURIComponent(stripTypeScriptTypes(code, { mode: 'strip' }))}`)).default;
   const app = createSSRApp({ render: () => h(component, props) });
   app.component('ElButton', {
     props: ['loading', 'disabled'],

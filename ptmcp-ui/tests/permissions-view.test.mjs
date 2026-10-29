@@ -22,7 +22,7 @@ test('主体面板按名称或精确字符串ID筛选，切换主体类型清除
     if (specifier.startsWith('~icons/')) return `from ${JSON.stringify(url('export default {};'))}`;
     return original;
   });
-  const component = (await import(url(stripTypeScriptTypes(code, { mode: 'transform' })))).default;
+  const component = (await import(url(stripTypeScriptTypes(code, { mode: 'strip' })))).default;
   const renderer = createRenderer({
     insert() {},
     remove() {},

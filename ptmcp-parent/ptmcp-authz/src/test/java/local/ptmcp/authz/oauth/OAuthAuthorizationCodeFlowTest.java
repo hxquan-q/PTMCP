@@ -82,7 +82,7 @@ class OAuthAuthorizationCodeFlowTest {
             System.getProperty(
                     "ptmcp.test.mysqlImage",
                     "mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69");
-    private static final String AUDIENCE = "ptmcp-mcp";
+    private static final String AUDIENCE = "https://gateway.example/mcp";
     private static final String CONFIDENTIAL_CLIENT_ID = "confidential-client";
     private static final String PUBLIC_CLIENT_ID = "public-client";
     private static final String ESCAPE_CLIENT_ID = "escape-client";
@@ -574,7 +574,8 @@ class OAuthAuthorizationCodeFlowTest {
                                         Map.of(
                                                 "grant_type", "refresh_token",
                                                 "refresh_token", refresh,
-                                                "client_id", REFRESH_CLIENT_ID)),
+                                                "client_id", REFRESH_CLIENT_ID,
+                                                "resource", AUDIENCE)),
                                 Map.of());
         assertEquals(200, refreshed.status(), refreshed.body());
         JsonNode next = JSON.readTree(refreshed.body());
@@ -610,7 +611,8 @@ class OAuthAuthorizationCodeFlowTest {
                                         Map.of(
                                                 "grant_type", "refresh_token",
                                                 "refresh_token", refresh,
-                                                "client_id", REFRESH_CLIENT_ID)),
+                                                "client_id", REFRESH_CLIENT_ID,
+                                                "resource", AUDIENCE)),
                                 Map.of());
         assertOAuthError(replay, 400, "invalid_grant");
         try (Connection connection = db()) {
@@ -708,9 +710,105 @@ class OAuthAuthorizationCodeFlowTest {
                                         Map.of(
                                                 "grant_type", "refresh_token",
                                                 "refresh_token", refresh,
+                                                "resource", AUDIENCE,
                                                 "client_id", REFRESH_CLIENT_ID)),
                                 Map.of());
         assertOAuthError(refreshAfterRevoke, 400, "invalid_grant");
+    }
+
+    @Test
+    void accessJwtRevocationVerifiesSignatureAndClientBeforeRevokingFamily() throws Exception {
+        String verifier = verifier();
+        String code =
+                issueCode(
+                        login(),
+                        REFRESH_CLIENT_ID,
+                        REFRESH_REDIRECT,
+                        PUBLIC_SCOPES,
+                        state(),
+                        verifier,
+                        true);
+        Response token = exchange(code, verifier, REFRESH_REDIRECT, REFRESH_CLIENT_ID, null);
+        assertEquals(200, token.status(), token.body());
+        String access = JSON.readTree(token.body()).get("access_token").asString();
+        String family = SignedJWT.parse(access).getJWTClaimsSet().getStringClaim("sid");
+        assertEquals(200, revoke(access, PUBLIC_CLIENT_ID).status());
+        assertFamilyActive(family, true);
+        String[] parts = access.split("\\.");
+        byte[] signature = Base64.getUrlDecoder().decode(parts[2]);
+        signature[0] ^= 1;
+        String tampered =
+                parts[0]
+                        + "."
+                        + parts[1]
+                        + "."
+                        + Base64.getUrlEncoder().withoutPadding().encodeToString(signature);
+        assertEquals(200, revoke(tampered, REFRESH_CLIENT_ID).status());
+        assertFamilyActive(family, true);
+        assertEquals(200, revoke(access, REFRESH_CLIENT_ID).status());
+        assertFamilyActive(family, false);
+        assertEquals(200, revoke(access, REFRESH_CLIENT_ID).status());
+    }
+
+    @Test
+    void revokingForeignConsumedRefreshTokenHasNoReplaySideEffect() throws Exception {
+        String verifier = verifier();
+        String code =
+                issueCode(
+                        login(),
+                        REFRESH_CLIENT_ID,
+                        REFRESH_REDIRECT,
+                        PUBLIC_SCOPES,
+                        state(),
+                        verifier,
+                        true);
+        Response token = exchange(code, verifier, REFRESH_REDIRECT, REFRESH_CLIENT_ID, null);
+        assertEquals(200, token.status(), token.body());
+        JsonNode body = JSON.readTree(token.body());
+        String refresh = body.get("refresh_token").asString();
+        String family =
+                SignedJWT.parse(body.get("access_token").asString())
+                        .getJWTClaimsSet()
+                        .getStringClaim("sid");
+        Response rotated =
+                new HttpSession()
+                        .postForm(
+                                "/oauth2/token",
+                                form(
+                                        Map.of(
+                                                "grant_type",
+                                                "refresh_token",
+                                                "refresh_token",
+                                                refresh,
+                                                "resource",
+                                                AUDIENCE,
+                                                "client_id",
+                                                REFRESH_CLIENT_ID)),
+                                Map.of());
+        assertEquals(200, rotated.status(), rotated.body());
+        assertEquals(200, revoke(refresh, PUBLIC_CLIENT_ID).status());
+        assertFamilyActive(family, true);
+        assertEquals(200, revoke(refresh, REFRESH_CLIENT_ID).status());
+        assertFamilyActive(family, false);
+    }
+
+    private Response revoke(String token, String clientId) {
+        return new HttpSession()
+                .postForm(
+                        "/oauth2/revoke",
+                        form(Map.of("token", token, "client_id", clientId)),
+                        Map.of());
+    }
+
+    private void assertFamilyActive(String family, boolean active) throws SQLException {
+        try (Connection connection = db()) {
+            assertEquals(
+                    active ? 1 : 0,
+                    scalar(
+                            connection,
+                            "SELECT COUNT(*) FROM oauth_refresh_family WHERE id = ? AND status = 'ACTIVE'",
+                            family));
+        }
     }
 
     @Test
@@ -920,6 +1018,17 @@ class OAuthAuthorizationCodeFlowTest {
 
     private Response exchange(
             String code, String verifier, String redirectUri, String clientId, String secret) {
+        return exchange(
+                code, verifier, redirectUri, clientId, secret, "&resource=" + encode(AUDIENCE));
+    }
+
+    private Response exchange(
+            String code,
+            String verifier,
+            String redirectUri,
+            String clientId,
+            String secret,
+            String resourceParameters) {
         Map<String, String> headers = new LinkedHashMap<>();
         if (secret != null) {
             headers.put("Authorization", basic(clientId, secret));
@@ -928,13 +1037,192 @@ class OAuthAuthorizationCodeFlowTest {
                 .postForm(
                         "/oauth2/token",
                         form(
-                                Map.of(
-                                        "grant_type", "authorization_code",
-                                        "code", code,
-                                        "redirect_uri", redirectUri,
-                                        "code_verifier", verifier,
-                                        "client_id", clientId)),
+                                        Map.of(
+                                                "grant_type", "authorization_code",
+                                                "code", code,
+                                                "redirect_uri", redirectUri,
+                                                "code_verifier", verifier,
+                                                "client_id", clientId))
+                                + resourceParameters,
                         headers);
+    }
+
+    @Test
+    void codeExchangeRequiresExactlyTheGrantedCanonicalResourceWithoutConsumingCode()
+            throws Exception {
+        String verifier = verifier();
+        String code =
+                issueCode(
+                        login(),
+                        PUBLIC_CLIENT_ID,
+                        PUBLIC_REDIRECT,
+                        PUBLIC_SCOPES,
+                        state(),
+                        verifier,
+                        true);
+        for (String parameters :
+                List.of(
+                        "",
+                        "&resource=ptmcp-mcp",
+                        "&resource=" + encode(AUDIENCE) + "&resource=" + encode(AUDIENCE))) {
+            assertOAuthError(
+                    exchange(code, verifier, PUBLIC_REDIRECT, PUBLIC_CLIENT_ID, null, parameters),
+                    400,
+                    "invalid_target");
+            try (Connection connection = db()) {
+                assertEquals(
+                        1,
+                        scalar(
+                                connection,
+                                "SELECT COUNT(*) FROM oauth2_authorization "
+                                        + "WHERE authorization_code_hash = ? AND code_consumed_at IS NULL",
+                                sha256(code)));
+            }
+        }
+        Response token = exchange(code, verifier, PUBLIC_REDIRECT, PUBLIC_CLIENT_ID, null);
+        assertEquals(200, token.status(), token.body());
+        assertEquals(
+                List.of(AUDIENCE),
+                SignedJWT.parse(JSON.readTree(token.body()).get("access_token").asString())
+                        .getJWTClaimsSet()
+                        .getAudience());
+    }
+
+    @Test
+    void refreshCannotOmitRepeatOrChangeResourceAndLeavesValidTokenUsable() throws Exception {
+        String verifier = verifier();
+        String code =
+                issueCode(
+                        login(),
+                        REFRESH_CLIENT_ID,
+                        REFRESH_REDIRECT,
+                        PUBLIC_SCOPES,
+                        state(),
+                        verifier,
+                        true);
+        Response token = exchange(code, verifier, REFRESH_REDIRECT, REFRESH_CLIENT_ID, null);
+        assertEquals(200, token.status(), token.body());
+        String refresh = JSON.readTree(token.body()).get("refresh_token").asString();
+        String base =
+                form(
+                        Map.of(
+                                "grant_type",
+                                "refresh_token",
+                                "client_id",
+                                REFRESH_CLIENT_ID,
+                                "refresh_token",
+                                refresh));
+        for (String parameters :
+                List.of(
+                        "",
+                        "&resource=https%3A%2F%2Fother.example%2Fmcp",
+                        "&resource=" + encode(AUDIENCE) + "&resource=" + encode(AUDIENCE))) {
+            assertOAuthError(
+                    new HttpSession().postForm("/oauth2/token", base + parameters, Map.of()),
+                    400,
+                    "invalid_target");
+        }
+        Response refreshed =
+                new HttpSession()
+                        .postForm(
+                                "/oauth2/token", base + "&resource=" + encode(AUDIENCE), Map.of());
+        assertEquals(200, refreshed.status(), refreshed.body());
+        assertEquals(
+                List.of(AUDIENCE),
+                SignedJWT.parse(JSON.readTree(refreshed.body()).get("access_token").asString())
+                        .getJWTClaimsSet()
+                        .getAudience());
+    }
+
+    @Test
+    void storedResourceCannotBeReboundAfterGrant() throws Exception {
+        String verifier = verifier();
+        String code =
+                issueCode(
+                        login(),
+                        PUBLIC_CLIENT_ID,
+                        PUBLIC_REDIRECT,
+                        PUBLIC_SCOPES,
+                        state(),
+                        verifier,
+                        true);
+        try (Connection connection = db()) {
+            execute(
+                    connection,
+                    "UPDATE oauth2_authorization SET attributes = "
+                            + "JSON_SET(CONVERT(attributes USING utf8mb4), '$.resource', ?) "
+                            + "WHERE authorization_code_hash = ?",
+                    "https://other.example/mcp",
+                    sha256(code));
+        }
+        assertOAuthError(
+                exchange(code, verifier, PUBLIC_REDIRECT, PUBLIC_CLIENT_ID, null),
+                400,
+                "invalid_grant");
+    }
+
+    @Test
+    void legacyAuthorizationWithoutResourceRequiresReauthorization() throws Exception {
+        String verifier = verifier();
+        String code =
+                issueCode(
+                        login(),
+                        PUBLIC_CLIENT_ID,
+                        PUBLIC_REDIRECT,
+                        PUBLIC_SCOPES,
+                        state(),
+                        verifier,
+                        true);
+        try (Connection connection = db()) {
+            execute(
+                    connection,
+                    "UPDATE oauth2_authorization SET attributes = "
+                            + "JSON_REMOVE(CONVERT(attributes USING utf8mb4), '$.resource') "
+                            + "WHERE authorization_code_hash = ?",
+                    sha256(code));
+        }
+        assertOAuthError(
+                exchange(code, verifier, PUBLIC_REDIRECT, PUBLIC_CLIENT_ID, null),
+                400,
+                "invalid_grant");
+    }
+
+    @Test
+    void storedRefreshResourceCannotBeRebound() throws Exception {
+        String verifier = verifier();
+        String code =
+                issueCode(
+                        login(),
+                        REFRESH_CLIENT_ID,
+                        REFRESH_REDIRECT,
+                        PUBLIC_SCOPES,
+                        state(),
+                        verifier,
+                        true);
+        Response token = exchange(code, verifier, REFRESH_REDIRECT, REFRESH_CLIENT_ID, null);
+        assertEquals(200, token.status(), token.body());
+        String refresh = JSON.readTree(token.body()).get("refresh_token").asString();
+        try (Connection connection = db()) {
+            execute(
+                    connection,
+                    "UPDATE oauth2_authorization SET attributes = "
+                            + "JSON_SET(CONVERT(attributes USING utf8mb4), '$.resource', ?) "
+                            + "WHERE authorization_code_hash = ?",
+                    "https://other.example/mcp",
+                    sha256(code));
+        }
+        Response refreshed =
+                new HttpSession()
+                        .postForm(
+                                "/oauth2/token",
+                                form(
+                                        Map.of(
+                                                "grant_type", "refresh_token",
+                                                "client_id", REFRESH_CLIENT_ID,
+                                                "refresh_token", refresh,
+                                                "resource", AUDIENCE)),
+                                Map.of());
+        assertOAuthError(refreshed, 400, "invalid_grant");
     }
 
     private static void assertAuthorizeRequestRejected(Response response) {

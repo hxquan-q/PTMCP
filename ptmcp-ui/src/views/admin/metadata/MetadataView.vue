@@ -187,7 +187,7 @@ onBeforeUnmount(() => {
         <span class="ptmcp-meta-note">共 {{ rows.length }} 条</span>
       </div>
       <div class="ptmcp-table-wrap">
-        <ElTable class="ptmcp-data-table" v-loading="loading" :data="rows" row-key="id" size="small" height="100%" empty-text="">
+        <ElTable v-loading="loading" class="ptmcp-data-table" :data="rows" row-key="id" size="small" height="100%" empty-text="">
           <ElTableColumn label="对象" min-width="270"
             ><template #default="scope"
               ><button

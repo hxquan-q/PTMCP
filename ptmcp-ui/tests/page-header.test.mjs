@@ -12,7 +12,7 @@ async function pageHeader() {
     /from\s+['"]vue['"]/g,
     `from ${JSON.stringify(import.meta.resolve('vue'))}`,
   );
-  return (await import(`data:text/javascript,${encodeURIComponent(stripTypeScriptTypes(compiled, { mode: 'transform' }))}`)).default;
+  return (await import(`data:text/javascript,${encodeURIComponent(stripTypeScriptTypes(compiled, { mode: 'strip' }))}`)).default;
 }
 
 test('公共页面头部保留区域标题关联、状态、返回与操作插槽并转义外部标题', async () => {

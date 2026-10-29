@@ -4,6 +4,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
+import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
@@ -28,6 +29,18 @@ public final class PtmcpJwtCustomizer implements OAuth2TokenCustomizer<JwtEncodi
             return;
         }
         OAuth2Authorization authorization = context.getAuthorization();
+        OAuth2AuthorizationRequest request =
+                authorization == null
+                        ? null
+                        : authorization.getAttribute(OAuth2AuthorizationRequest.class.getName());
+        Object grantedResource =
+                request == null
+                        ? null
+                        : request.getAdditionalParameters()
+                                .get(AuthorizationRequestPolicy.RESOURCE_PARAMETER);
+        if (!properties.audience().equals(grantedResource)) {
+            throw new OAuth2AuthenticationException(OAuth2ErrorCodes.INVALID_GRANT);
+        }
         AsPrincipal account = account(context.getPrincipal());
         String familyId = stringAttribute(authorization, OAuthAttributes.FAMILY_ID);
         long authVersion = longAttribute(authorization, OAuthAttributes.AUTH_VERSION);

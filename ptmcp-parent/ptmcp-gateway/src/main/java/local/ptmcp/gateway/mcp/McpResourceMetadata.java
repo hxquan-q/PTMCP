@@ -1,5 +1,7 @@
 package local.ptmcp.gateway.mcp;
 
+import local.ptmcp.common.oauth.McpResourceUri;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -26,12 +28,16 @@ public final class McpResourceMetadata {
             document = Map.of();
             return;
         }
-        // resource stays the token audience; resource-uri is the deployed MCP endpoint.
         String canonicalResource = resourceUri.isBlank() ? resource : resourceUri;
-        URI resourceUrl = trustedUri(canonicalResource);
+        URI resourceUrl;
+        try {
+            resourceUrl = McpResourceUri.requireValid(canonicalResource);
+        } catch (IllegalArgumentException failure) {
+            throw invalidConfiguration();
+        }
         URI metadataUrl = trustedUri(metadataUri);
         trustedUri(issuer);
-        if (!"/mcp".equals(resourceUrl.getRawPath())
+        if (!canonicalResource.equals(resource)
                 || !resourceUrl.getScheme().equalsIgnoreCase(metadataUrl.getScheme())
                 || !resourceUrl.getHost().equalsIgnoreCase(metadataUrl.getHost())
                 || effectivePort(resourceUrl) != effectivePort(metadataUrl)

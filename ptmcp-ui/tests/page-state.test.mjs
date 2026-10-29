@@ -13,7 +13,7 @@ async function mountState(writeText) {
     /from\s+['"]vue['"]/g,
     `from ${JSON.stringify(import.meta.resolve('vue'))}`,
   );
-  const component = (await import(`data:text/javascript,${encodeURIComponent(stripTypeScriptTypes(code, { mode: 'transform' }))}`)).default;
+  const component = (await import(`data:text/javascript,${encodeURIComponent(stripTypeScriptTypes(code, { mode: 'strip' }))}`)).default;
   const id = ref('fixture-request-1');
   const renderer = createRenderer({
     insert() {},

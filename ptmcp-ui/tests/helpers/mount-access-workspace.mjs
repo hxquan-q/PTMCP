@@ -52,7 +52,7 @@ export async function mountAccessWorkspace(api = {}) {
     '../../../adapters/access-resource': new URL('../../src/adapters/access-resource.ts', import.meta.url).href,
   };
   const file = new URL('../../src/views/admin/access/useAccessWorkspace.ts', import.meta.url);
-  const code = stripTypeScriptTypes(await readFile(file, 'utf8'), { mode: 'transform' }).replace(
+  const code = stripTypeScriptTypes(await readFile(file, 'utf8'), { mode: 'strip' }).replace(
     /from\s+(['"])([^'"]+)\1/g,
     (statement, _quote, specifier) => (urls[specifier] ? `from ${JSON.stringify(urls[specifier])}` : statement),
   );

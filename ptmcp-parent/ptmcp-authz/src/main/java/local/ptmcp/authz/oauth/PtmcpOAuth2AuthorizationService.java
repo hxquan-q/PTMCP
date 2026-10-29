@@ -231,6 +231,19 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
                         idToken == null ? null : idToken.getToken().getExpiresAt(),
                         refreshExpires);
         Map<String, Object> attributeMap = attributes(account, familyId, authVersion);
+        String resource =
+                request == null
+                        ? null
+                        : stringParameter(
+                                request.getAdditionalParameters(),
+                                AuthorizationRequestPolicy.RESOURCE_PARAMETER);
+        if (!properties.audience().equals(resource)
+                || (existing != null
+                        && !resource.equals(storedString(existing.attributes(), "resource")))) {
+            // A deployment configuration change cannot rebind an existing grant to a new target.
+            throw invalidGrant();
+        }
+        attributeMap.put("resource", resource);
         if (request != null && request.getState() != null) {
             attributeMap.put(OAuthAttributes.CLIENT_STATE, request.getState());
         }
@@ -597,6 +610,10 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
                 UsernamePasswordAuthenticationToken.authenticated(
                         account, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
         Map<String, Object> additional = new LinkedHashMap<>();
+        String resource = storedString(row.attributes(), "resource");
+        if (resource != null) {
+            additional.put(AuthorizationRequestPolicy.RESOURCE_PARAMETER, resource);
+        }
         if (row.pkceChallenge() != null) {
             additional.put(PkceParameterNames.CODE_CHALLENGE, row.pkceChallenge());
         }
@@ -774,13 +791,17 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
     }
 
     private static String clientState(byte[] attributes) {
+        return storedString(attributes, OAuthAttributes.CLIENT_STATE);
+    }
+
+    private static String storedString(byte[] attributes, String name) {
         if (attributes == null || attributes.length == 0) {
             return null;
         }
         Map<?, ?> values =
                 OAuthStoreSupport.JSON.readValue(
                         new String(attributes, java.nio.charset.StandardCharsets.UTF_8), Map.class);
-        Object value = values.get(OAuthAttributes.CLIENT_STATE);
+        Object value = values.get(name);
         return value instanceof String text ? text : null;
     }
 

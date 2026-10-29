@@ -5,7 +5,7 @@ Status: in_progress
 Owner: current-agent
 Acceptance: pending
 Verification: NOT_RUN
-Updated: 2026-10-28
+Updated: 2026-10-29
 
 ## 目标与边界
 
@@ -27,6 +27,12 @@ UI 改动涵盖 App、PageState、useCursorPage、styles、权限/审计/数据�
 本轮先不写这些被占用文件。不得把其他工作的 diff 纳入本轮提交。
 
 ## 实施与验证
+
+2026-10-29 用户已要求“开始完成后端开发”，由审计转入实施。当前切片承接 T13/T14/T19：
+统一发现文档、authorize、token、refresh 与 JWT audience 的 canonical MCP URI；
+先增加遗漏/重复/错误 resource 与首次登录跳转的回归，再修复实现。保持预注册客户端、PKCE S256、
+权限交集及 guard 前零业务连接；不开放 DCR/CIMD，不改 React 窗口资产。
+后续续接身份撤销与 G2～G7，局部通过不代表整体完成。
 
 按根工作流一次完成一个可验证切片；执行为单 Agent。安全关键切片需实际边界测试和独立评审，
 适用规则要求的独立评审只委派只读审查，不并行实现或修改共享源码。
@@ -54,6 +60,24 @@ wrapper 未设置 executable，使用 bash 调用，不改文件权限。已有�
 
 ## 结果与证据
 
+2026-10-29 OAuth 资源切片 RED 已实际复现：
+`OAuthPropertiesTest` 9 例中 8 failures，非法 URI 被接受；
+`OAuthAuthorizationCodeFlowTest` 真实 HTTP/MySQL 16 例中 3 failures（0 errors/0 skipped），
+缺失 token/refresh resource 与存储资源被修改均错误返回 200。
+日志位于本机临时目录 `ptmcp-oauth-resource-red.log`、`ptmcp-oauth-flow-red-linux.log`，不提交原日志。
+Windows Docker mTLS 转发仍不可用，改在专属 WSL 的 Unix socket 内运行隔离 Testcontainers；
+使用 OpenJDK 21.0.12.1、Maven 3.9.9 与共享依赖缓存，不关闭 TLS 或连接真实业务库。
+
+OAuth canonical resource 修复已通过 authz 定向测试：真实 HTTP/MySQL 18/18、配置9/9、
+token表单策略1/1，均0失败/0错误/0跳过；gateway元数据单测21/21，HTTP发现测试仍在执行。
+覆盖换码/刷新遗漏、错误、重复resource不消费凭证，以及持久resource被篡改或旧授权缺失时拒绝重新绑定。
+独立只读安全评审未发现本片新的安全阻断；已修正撤销后refresh测试参数和注释时序，
+补充legacy缺失与refresh存储资源篡改反例。评审未运行动态测试，动态结果来自本执行环境。
+资源切片日志 `ptmcp-resource-green-final.log`；整体目标仍在实施，不能据此宣布后端完成。
+
+下一片先复现并修复access JWT撤族，以及撤销他人已消费refresh触发重放撤族的越权副作用；
+随后续接权威用户版本/ADMIN与AS会话、G2～G7。保留另一窗口的React、Vue测试辅助和.auto改动。
+
 G1 已完成：`McpResourceMetadata` 由四处部署配置（`resource-uri`、`resource`、`issuer`、
 `resource-metadata-uri`）生成 RFC 9728 文档，只允许 HTTPS 或回环 HTTP，拒绝 userinfo/query/fragment/
 控制字符/错误端口/跨源 metadata URL；`/.well-known/oauth-protected-resource` 与 401 challenge
@@ -76,6 +100,35 @@ G1 已完成：`McpResourceMetadata` 由四处部署配置（`resource-uri`、`r
 
 ## 交接
 
-当前焦点 G1：资源发现与配置校验，完成一个切片再推进 G2。
+2026-10-29 续接核查范围：按用户要求复核全部后端、前端真实接口、OAuth首次连接和页面，
+参考本地DBX并为另一窗口React迁移提供框架无关交接；本轮不修改业务或前端源码，不迁移账号/数据，不发布。
+当前基准为 `dev` / `6ea9a66ac24d4440dbc83b5362256121685ea154`。
+另一窗口的React应用与迁移笔记归其所有，未编辑或纳入本轮变更。
+
+本轮结果见 [能力核查](../../docs/evidence/mcp-capability-audit-20261029.md)。G1发现端点仍为completed，
+但开发配置的canonical MCP URL与authorize audience不一致，真实OAuth组合需先修再验；
+另确认账号档案不供应宿主账号、access JWT revoke、AS会话撤销/登录保护与Origin/协议版本接线缺口。
+这些细化承接T13/T14/T17/T19，不以文档核查改成已实现。
+同步了既有提案及后端README、Vue README、页面覆盖矩阵的过时事实；没有翻转ADR或新增平行架构。
+
+本轮实际验证（均先进入项目环境）：
+
+- Vue `pnpm.cmd test:contracts`：exit 0，109/109通过、0失败/0跳过。
+- Vue `pnpm.cmd check`：exit 1，lint 1 error+5 warnings，后续format/typecheck/build未执行；未抢改前端文件。
+- parent `mvnw.cmd -B -ntp verify` 两次均exit 1：persistence 10 errors、0 failures、0 skipped，Docker环境发现失败；
+  common已执行，其余业务模块未运行，不能报为本轮通过。
+- 专属开发MySQL/PG/Redis已恢复Healthy并保持运行；Linux Docker用同一客户端证书_ping为OK，
+  Windows→WSL mTLS握手重置，未关闭TLS或修改共享网络。业务运行验收保持未验证。
+- `python scripts/check.py`：exit 1，文档142份/本地链接635项通过；流程门禁发现另一窗口新增React建立笔记缺Verification节。
+  未改其文件或放宽门禁；单独运行质量配置/HEAD提交格式检查及检查器回归，均exit 0，回归62/62通过。
+- 定稿后 `python docs/evidence/validate_docs.py`：exit 0，142份Markdown/637项本地链接；`git diff --check`：exit 0。
+  文档自审核对了源码/历史测试/本轮失败与proposed状态，不把报告升级为业务完成。
+  本轮未做独立安全评审、人工接受、提交、推送或发布。
+
+React交接另确认：权限树为fixture，部分写/预览操作未接；接入页“测试连接”仅定时置success，
+未实际请求MCP，真实模式也未隔离该回调。应由前端窗口在接管前限制为明确预览或接入真实验证，不能以UI成功宣称连通。
+
+下一实施焦点为G1后的OAuth资源契约与身份闭环，随后继续G2；
+G3～G6及G7完整验收仍待完成。React窗口可直接按报告的真实接口和安全行为迁移，不能继承Vue的测试通过状态。
 整体保持 in_progress，不把立项、计划或局部测试通过报告为完整交付。
 尚未提交、推送、部署或发布；原有 UI 修改归原工作所有者。

@@ -93,11 +93,6 @@ function closePanel(): void {
   open.value = false;
   activeIndex.value = -1;
 }
-function isEditableTarget(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  if (!el) return false;
-  return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
-}
 function handleGlobalKeydown(event: KeyboardEvent): void {
   if ((event.metaKey || event.ctrlKey) && (event.key === 'k' || event.key === 'K')) {
     event.preventDefault();

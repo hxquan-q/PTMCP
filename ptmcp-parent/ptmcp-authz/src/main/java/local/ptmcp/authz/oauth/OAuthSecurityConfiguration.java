@@ -12,6 +12,7 @@ import org.springframework.security.config.annotation.web.configurers.oauth2.ser
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationConsentService;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationServerMetadata;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationServerMetadataClaimNames;
@@ -67,10 +68,11 @@ public class OAuthSecurityConfiguration {
             HttpSecurity http,
             OAuthProperties properties,
             RegisteredClientRepository clients,
-            OAuth2AuthorizationService authorizations,
+            PtmcpOAuth2AuthorizationService authorizations,
             OAuth2AuthorizationConsentService consents,
             OAuth2TokenGenerator<?> tokenGenerator,
-            AuthorizationServerSettings settings)
+            AuthorizationServerSettings settings,
+            JwtDecoder revocationJwtDecoder)
             throws Exception {
         OAuth2AuthorizationServerConfigurer server = new OAuth2AuthorizationServerConfigurer();
         http.securityMatcher(server.getEndpointsMatcher())
@@ -91,6 +93,11 @@ public class OAuthSecurityConfiguration {
                                                                                 clients,
                                                                                 properties
                                                                                         .audience())))
+                                        .tokenEndpoint(
+                                                endpoint ->
+                                                        endpoint.accessTokenRequestConverter(
+                                                                new TokenRequestPolicy(
+                                                                        properties.audience())))
                                         .clientAuthentication(
                                                 clientAuthentication ->
                                                         clientAuthentication
@@ -108,7 +115,9 @@ public class OAuthSecurityConfiguration {
                                                 revocation ->
                                                         revocation.authenticationProvider(
                                                                 new PtmcpTokenRevocationAuthenticationProvider(
-                                                                        authorizations)))
+                                                                        authorizations,
+                                                                        revocationJwtDecoder,
+                                                                        properties)))
                                         .authorizationServerMetadataEndpoint(
                                                 metadata ->
                                                         metadata

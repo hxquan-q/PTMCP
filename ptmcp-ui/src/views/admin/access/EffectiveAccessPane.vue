@@ -30,7 +30,7 @@ watch(() => [props.userId, props.platformId, props.datasourceId, props.ready], r
       :request-id="requestId"
       action-label="重试"
       @action="retry"
-    /><ElSkeleton v-if="loading" :rows="4" animated /><ElTable class="ptmcp-data-table" v-else-if="loaded" :data="rows" aria-label="当前有效资源"
+    /><ElSkeleton v-if="loading" :rows="4" animated /><ElTable v-else-if="loaded" class="ptmcp-data-table" :data="rows" aria-label="当前有效资源"
       ><ElTableColumn label="资源类型" min-width="130"
         ><template #default="{ row }"
           ><div class="ptmcp-cell-lead">

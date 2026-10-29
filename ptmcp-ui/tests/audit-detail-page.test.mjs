@@ -35,7 +35,7 @@ test('审计详情首次进入即加载访问记录，初始化完成后才执�
     if (specifier.endsWith('.vue')) return `from ${JSON.stringify(dataUrl('export default {};'))}`;
     return statement;
   });
-  const component = (await import(dataUrl(stripTypeScriptTypes(code, { mode: 'transform' })))).default;
+  const component = (await import(dataUrl(stripTypeScriptTypes(code, { mode: 'strip' })))).default;
   const renderer = createRenderer({
     insert() {},
     remove() {},

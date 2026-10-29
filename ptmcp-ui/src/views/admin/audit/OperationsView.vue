@@ -84,7 +84,7 @@ onMounted(() => {
       />
       <ElSkeleton v-if="loading" :rows="6" animated />
       <div class="ptmcp-table-wrap">
-        <ElTable class="ptmcp-data-table" v-if="!error || rows.length" :data="rows" size="small" height="100%" aria-label="管理操作日志">
+        <ElTable v-if="!error || rows.length" class="ptmcp-data-table" :data="rows" size="small" height="100%" aria-label="管理操作日志">
           <ElTableColumn prop="occurredAt" label="时间" min-width="170"
             ><template #default="{ row }">{{ formatDate(row.occurredAt) }}</template></ElTableColumn
           >

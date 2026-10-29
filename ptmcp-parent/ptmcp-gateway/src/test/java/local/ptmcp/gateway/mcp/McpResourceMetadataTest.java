@@ -100,8 +100,11 @@ class McpResourceMetadataTest {
     }
 
     @Test
-    void resourceUriIsPublishedWhileAudienceStaysOpaque() {
-        var metadata = new McpResourceMetadata(RESOURCE, "ptmcp-mcp", ISSUER, METADATA);
+    void resourceUriMustBeTheTokenAudience() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new McpResourceMetadata(RESOURCE, "ptmcp-mcp", ISSUER, METADATA));
+        var metadata = new McpResourceMetadata(RESOURCE, RESOURCE, ISSUER, METADATA);
         assertEquals(RESOURCE, metadata.document().get("resource"));
     }
 }

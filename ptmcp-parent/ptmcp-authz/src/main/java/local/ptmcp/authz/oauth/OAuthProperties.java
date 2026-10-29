@@ -1,5 +1,7 @@
 package local.ptmcp.authz.oauth;
 
+import local.ptmcp.common.oauth.McpResourceUri;
+
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
@@ -21,8 +23,9 @@ public record OAuthProperties(
             issuer = "http://127.0.0.1:8081";
         }
         if (audience == null || audience.isBlank()) {
-            audience = "ptmcp-mcp";
+            audience = "http://127.0.0.1:8082/mcp";
         }
+        McpResourceUri.requireValid(audience);
         if (authorizationCodeTtl == null) {
             authorizationCodeTtl = Duration.ofMinutes(5);
         }

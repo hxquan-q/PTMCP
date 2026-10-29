@@ -108,7 +108,7 @@ export async function mountDataPage(path: string, api: Api) {
   const code = script.content.replace(/from\s+(['"])([^'"]+)\1/g, (statement, _quote: string, specifier: string) =>
     urls[specifier] ? `from ${JSON.stringify(urls[specifier])}` : statement,
   );
-  const component = (await import(dataUrl(stripTypeScriptTypes(code, { mode: 'transform' })))).default;
+  const component = (await import(dataUrl(stripTypeScriptTypes(code, { mode: 'strip' })))).default;
   hooks.deregister();
   const priorWindow = globals.window;
   globals.window = new EventTarget();

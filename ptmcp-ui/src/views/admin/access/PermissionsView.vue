@@ -165,7 +165,7 @@ onBeforeUnmount(() => {
       <StatCard label="授权规则" :value="grants.length" hint="当前主体已授权规则" :icon="KeyIcon" />
       <StatCard label="有效权限" :value="preview?.decisions?.length ?? 0" hint="平台范围内计算结果" :icon="CheckIcon" tone="success" />
     </div>
-    <div class="access-workspace" ref="workspaceEl" :class="{ 'is-focus': focusMode }">
+    <div ref="workspaceEl" class="access-workspace" :class="{ 'is-focus': focusMode }">
       <aside v-if="!focusMode" class="pane subject-pane" :style="subjectColStyle" aria-label="授权主体">
         <header class="pane-head">
           <h2>授权主体</h2>
@@ -376,7 +376,7 @@ onBeforeUnmount(() => {
           <strong id="preview-title">有效权限预览</strong>
           <span class="preview-strip-sub">由服务端计算当前选中资源，不执行查询</span>
         </span>
-        <span class="preview-strip-meta" v-if="preview">{{ preview.decisions.length }} 项决策 · {{ date(preview.evaluatedAt) }}</span>
+        <span v-if="preview" class="preview-strip-meta">{{ preview.decisions.length }} 项决策 · {{ date(preview.evaluatedAt) }}</span>
         <span class="preview-strip-toggle">{{ previewOpen ? '收起' : '展开' }}<component :is="previewOpen ? ArrowUpIcon : ArrowDownIcon" /></span>
       </button>
       <div v-show="previewOpen" id="preview-body" class="preview-strip-body" :aria-busy="previewLoading">

@@ -11,7 +11,11 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationConsentService;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
@@ -69,7 +73,7 @@ public class OAuthDataConfiguration {
     }
 
     @Bean
-    public OAuth2AuthorizationService authorizationService(
+    public PtmcpOAuth2AuthorizationService authorizationService(
             JdbcTemplate oauthJdbcTemplate,
             PtmcpRegisteredClientRepository clients,
             OAuthProperties properties) {
@@ -101,6 +105,15 @@ public class OAuthDataConfiguration {
     @Bean
     public JwtEncoder jwtEncoder(JWKSource<SecurityContext> jwkSource) {
         return new NimbusJwtEncoder(jwkSource);
+    }
+
+    @Bean
+    public JwtDecoder revocationJwtDecoder(
+            JWKSource<SecurityContext> jwkSource, OAuthProperties properties) {
+        NimbusJwtDecoder decoder =
+                (NimbusJwtDecoder) OAuth2AuthorizationServerConfiguration.jwtDecoder(jwkSource);
+        decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(properties.issuer()));
+        return decoder;
     }
 
     @Bean

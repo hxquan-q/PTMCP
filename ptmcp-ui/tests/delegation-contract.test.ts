@@ -72,7 +72,7 @@ test('normal mode: delegation domain reaches the network while unimplemented dom
     ),
   };
   const source = stripTypeScriptTypes(await readFile(new URL('../src/services/controlPlane.ts', import.meta.url), 'utf8'), {
-    mode: 'transform',
+    mode: 'strip',
   }).replace(/from\s+(['"])([^'"]+)\1/g, (statement, _quote, specifier) => (urls[specifier] ? `from ${JSON.stringify(urls[specifier])}` : statement));
   const { controlPlane } = await import(dataUrl(source));
 

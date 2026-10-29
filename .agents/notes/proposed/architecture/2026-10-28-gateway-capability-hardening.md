@@ -39,15 +39,21 @@ Status: proposed
 | 接入与发布 | 本地 HTTP/隔离双引擎已有测试，四个真实客户端与部署矩阵未完成 | [T19-e](../../../../tasks/work-items/T19-e.md) 为 blocked；不据框架构建判为可上线 |
 
 [T15-c](../../../../tasks/work-items/T15-c.md) 记录 2026-10-28 全 reactor `clean verify`：
-746 tests / 0 failures / 0 errors / 0 skipped，属于历史执行证据，本轮没有重跑。
+746 tests / 0 failures / 0 errors / 0 skipped，属于历史执行证据，首次评估没有重跑；
+2026-10-29复核尝试verify但被Windows→WSL Docker双向TLS故障阻断，不能作为新的通过证据。
 其总 Verification 仍为 NOT_RUN，表示完整 S4～S7 未验收，不能据局部 PASS 改为全部完成。
 
 ### 需要收尾的具体接线
 
-1. **OAuth 资源发现存在断点。** [McpAuthenticationFilter](../../../../ptmcp-parent/ptmcp-gateway/src/main/java/local/ptmcp/gateway/mcp/McpAuthenticationFilter.java)
-   可在 401 中发送 `resource_metadata`；[Dev-Linux](../../../../scripts/Dev-Linux.sh) 已配置该 URI，
-   但仓库未找到 `/.well-known/oauth-protected-resource` 的实际端点或静态部署实现。
-   [API 合同](../../../../docs/backend/api-spec.md) 要求该资源；当前声明的
+1. **资源发现端点已实现，OAuth 组合仍有断点。** [McpAuthenticationFilter](../../../../ptmcp-parent/ptmcp-gateway/src/main/java/local/ptmcp/gateway/mcp/McpAuthenticationFilter.java)
+   与 [McpResourceMetadata](../../../../ptmcp-parent/ptmcp-gateway/src/main/java/local/ptmcp/gateway/mcp/McpResourceMetadata.java)
+   共享受信固定配置，已提供 401 challenge 和 `/.well-known/oauth-protected-resource`，见收尾工作项 G1。
+   2026-10-29 复核确认：[Dev-Linux](../../../../scripts/Dev-Linux.sh) 的 canonical MCP URL 与 OAuth audience
+   `ptmcp-mcp` 不一致，而 authorize policy 要求 resource 等于 audience，标准客户端按发现 URL 请求会被拒。
+   当前修复候选统一 canonical URI，并在 code/refresh 表单、授权持久化及 JWT 签发处绑定资源；
+   旧缺失资源的授权需重新授权，不能根据部署配置补写。保留该兼容代价以阻止旧授权扩展到新资源。
+   仍需统一发现/authorize/token/gateway 资源契约并完成预注册客户端实际接入。
+   [API 合同](../../../../docs/backend/api-spec.md) 与当前声明的
    [MCP 2025-06-18 授权规范](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization)
    将 Protected Resource Metadata 列为 MUST，DCR 则为 SHOULD，不应混为同一缺口。
 2. **DCR/CIMD 只有原语，不能宣传即插即用。**
@@ -126,7 +132,10 @@ Status: proposed
 6. 按既有工作项完成自审/独立评审、适用 Maven/pnpm/故障测试与人工接受，分别报告；
    同步概览事实，但保留历史结果和未验证项，不降低原门禁。
 
-本轮实际执行、检查结果与未验证项见 [评估工作项](../../../../tasks/work-items/DEV-20261028-gateway-capability-review.md)。
+首次评估的实际执行、检查结果与未验证项见 [评估工作项](../../../../tasks/work-items/DEV-20261028-gateway-capability-review.md)。
+2026-10-29 的源码与运行复核见 [能力核查](../../../../docs/evidence/mcp-capability-audit-20261029.md)：
+补充账号供应、AS 会话撤销/登录保护、access revoke、Origin/协议版本和前端真实接线缺口；
+这些是原接入/安全闭环的细化，不翻转既有授权基线。
 用户在评估后要求立项实施，后续执行承接
 [网关收尾项目](../../../../tasks/work-items/DEV-20261028-gateway-completion.md)；
 本篇在所有适用切片完成前保持 proposed，不能以实施授权替代实现和验收证据。
@@ -139,4 +148,5 @@ Status: proposed
 - 密钥/AAD 与候选配置格式变更须明确迁移、旧钥保留及失败回退；T15-c 的 V8 已有停机升级边界，
   本提案不授权混跑旧代码、回退旧模型或恢复退役资源的权限。
 - 源码核查不是漏洞复现或完整安全审计；生产可能存在仓库外配置，应以可复现证据补齐，不能假定存在。
-- 本轮仅做源码研究与文档自审；没有运行参考仓代码、Maven/pnpm、真实客户端或生产演练。
+- 首次评估仅做源码研究与文档自审，没有运行参考仓代码、Maven/pnpm、真实客户端或生产演练。
+  2026-10-29复核的Maven/pnpm实际通过与失败分别记录在能力报告，不改变本篇proposed状态。

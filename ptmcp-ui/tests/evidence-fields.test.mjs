@@ -14,7 +14,7 @@ async function renderEvidence(value) {
     /from\s+['"]vue['"]/g,
     `from ${JSON.stringify(import.meta.resolve('vue'))}`,
   );
-  const component = (await import(`data:text/javascript,${encodeURIComponent(stripTypeScriptTypes(code, { mode: 'transform' }))}`)).default;
+  const component = (await import(`data:text/javascript,${encodeURIComponent(stripTypeScriptTypes(code, { mode: 'strip' }))}`)).default;
   return renderToString(createSSRApp({ render: () => h(component, { value }) }));
 }
 

@@ -19,7 +19,7 @@ import java.net.http.HttpResponse;
         classes = GatewayApplication.class,
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
-            "ptmcp.gateway.resource=ptmcp-mcp",
+            "ptmcp.gateway.resource=https://gateway.example/mcp",
             "ptmcp.gateway.resource-uri=https://gateway.example/mcp",
             "ptmcp.gateway.issuer=https://auth.example",
             "ptmcp.gateway.resource-metadata-uri=https://gateway.example/.well-known/oauth-protected-resource"

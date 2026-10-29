@@ -2,9 +2,9 @@
 
 Vue3 + TypeScript + Vite，运行入口位于本仓库根目录的 `ptmcp-ui`。现有源码已包含管理/个人布局、Cookie会话与CSRF请求层、权限路由，以及数据源、任务、元数据、组织和个人门户页面。逐页范围与缺口见[业务覆盖矩阵](../docs/frontend/business-coverage.md)，开发和验收证据由 `tasks/work-items/T17-ui-business.md` 维护；页面存在或构建通过不等于业务验收完成。
 
-管理委派、平台/客户端管理和全局审计已提供业务字段、筛选、表单/详情结构及未接入说明；缺少后端端点时查询和提交保持禁用。授权服务登录/同意页由 `ptmcp-authz` 独立承载，不使用控制台Cookie。
+管理委派、平台/客户端/Scope、有效权限、全局审计查询/解密和密码重置已接真实后端；当前接线与剩余缺口见[2026-10-29能力核查](../docs/evidence/mcp-capability-audit-20261029.md)。用户删除、初始密码/联系方式等未有正常写入合同的动作仍受限。授权服务登录/同意页由 `ptmcp-authz` 独立承载，不使用控制台Cookie。
 
-前端先行交付现提供独立开发预览：管理委派创建/撤销、平台CRUD、客户端与一次性secret、Scope差异、审计详情与限时解密、用户完整表单及个人门户均可用合成数据检查。此模式不代表后端能力完成。
+独立开发预览可用合成数据检查管理委派、平台/client/Scope、审计、用户及个人门户。此模式不代表真实后端或浏览器验收。另一窗口的React新应用迁移见[建立记录](../.agents/notes/implemented/architecture/2026-10-29-react-app-bootstrap.md)；当前Vue接线与测试不会自动成为React的完成证据。
 
 ## 当前依赖分工
 

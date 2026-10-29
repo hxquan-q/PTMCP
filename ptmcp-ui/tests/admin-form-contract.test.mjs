@@ -20,7 +20,7 @@ async function mount(name, props) {
     ),
     '../../portalUtils': url('export const errorText=e=>e.message;'),
   };
-  const script = stripTypeScriptTypes(code, { mode: 'transform' }).replace(/from\s+(['"])([^'"]+)\1/g, (s, q, p) =>
+  const script = stripTypeScriptTypes(code, { mode: 'strip' }).replace(/from\s+(['"])([^'"]+)\1/g, (s, q, p) =>
     imports[p] ? `from ${JSON.stringify(imports[p])}` : s,
   );
   const component = (await import(url(script))).default;

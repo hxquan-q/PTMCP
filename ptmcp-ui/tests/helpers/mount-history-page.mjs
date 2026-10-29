@@ -22,13 +22,13 @@ export async function mountHistoryPage(list) {
     'element-plus': dataUrl('export const ElMessage={warning(){}};'),
     '../../services/mePortalApi': dataUrl(`${prefix} export const mePortalApi={history:{list:(...args)=>f.list(...args)}};`),
     '../../services/queryErrorText': dataUrl('export const queryErrorText=(code)=>code;'),
-    '../portalUtils': dataUrl(stripTypeScriptTypes(utils, { mode: 'transform' })),
+    '../portalUtils': dataUrl(stripTypeScriptTypes(utils, { mode: 'strip' })),
   };
   const { descriptor } = parse(await readFile(new URL('../../src/views/me/HistoryView.vue', import.meta.url), 'utf8'));
   const script = compileScript(descriptor, { id: key }).content.replace(/from\s+(['"])([^'"]+)\1/g, (statement, _quote, specifier) =>
     urls[specifier] ? `from ${JSON.stringify(urls[specifier])}` : statement,
   );
-  const component = (await import(dataUrl(stripTypeScriptTypes(script, { mode: 'transform' })))).default;
+  const component = (await import(dataUrl(stripTypeScriptTypes(script, { mode: 'strip' })))).default;
   const priorWindow = globalThis.window;
   globalThis.window = new EventTarget();
   const renderer = createRenderer({

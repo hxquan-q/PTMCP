@@ -70,6 +70,16 @@ sequenceDiagram
 
 authorize必须response_type=code、PKCE=S256、精确注册redirect_uri、客户端与platform有效，scope是客户端允许∩平台能力∩用户同意；最终表授权仍执行时计算。resource/aud只允许部署配置的MCP资源，防token redirect。code短时有效期由AS安全配置固定并验收，一次消费，绑定client/redirect_uri/resource/challenge/user/authVersion。拒plain PKCE、无challenge的PUBLIC、implicit/password grant、任意回调前缀匹配。
 
+资源标识使用部署的 canonical MCP URI，例如 `https://gateway.example/mcp`；
+`ptmcp.authz.oauth.audience`、`ptmcp.gateway.resource` 与发现文档的 `resource`
+必须逐字一致。仅 HTTPS 或开发用回环 HTTP，路径固定 `/mcp`，拒绝 userinfo、query、fragment、
+非法端口及控制字符；不从 Host/Forwarded 生成。授权码与 refresh 的 token 请求均为无查询参数的
+表单 POST，携带且只携带一个相同 `resource`；缺失、重复或不匹配返回 OAuth `invalid_target`，
+在 grant 处理和消费前拒绝；PUBLIC PKCE 的前置客户端认证仍可只读查找 code。
+原始资源持久保存在授权 attributes，换码/刷新生成 JWT 时复核该绑定。
+旧的 opaque audience 或未保存 resource 的授权不能自动迁移到新 audience，须重新授权；
+修改部署 URI 时同步 AS/gateway 配置，存量 code/refresh 不得用新配置重新绑定。
+
 桌面custom scheme（如workbuddy://）只可逐客户端精确登记，须核实实际回调格式/ownership；loopback允许RFC规定的端口差异时单独配置明确URI模板，仅127.0.0.1/[::1]，不把localhost任意DNS或公网http都放开。Web redirect必须https，禁止fragment、userinfo、开放重定向嵌套参数；同意页显示可信client显示名、平台、请求scope，metadata文本不能注入HTML。
 
 JWT至少iss、sub(userId字符串)、aud、exp、iat、nbf、jti、client_id、platform_id、sid、auth_version、scope，TTL10分钟；不装整套表授权。算法显式白名单，禁止none/算法混淆/JWT自带任意jku/x5u；通过固定issuer发现/JWKS缓存取公钥，签名key轮换保留覆盖未过期token，时钟偏差参数全局固定且测试。sid指向主库可撤销family/授权会话，签名有效但family撤销依然拒绝。每请求核验用户、客户端、平台、安全版本与family状态；PAT采用独立认证provider，不能按JWT格式失败后任意降级接受未知token。
