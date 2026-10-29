@@ -459,25 +459,35 @@ class SessionApiTest {
         String key = UUID.randomUUID().toString();
         String body = "{\"name\":\"cookie_action_probe\",\"enabled\":true}";
         String departments = scalar("SELECT COUNT(*) FROM sys_dept");
-        mockMvc.perform(post("/api/v1/admin/departments").cookie(session.cookie())
-                        .header("Idempotency-Key", key)
-                        .contentType(MediaType.APPLICATION_JSON).content(body))
+        mockMvc.perform(
+                        post("/api/v1/admin/departments")
+                                .cookie(session.cookie())
+                                .header("Idempotency-Key", key)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("CSRF_INVALID"));
         assertEquals(departments, scalar("SELECT COUNT(*) FROM sys_dept"));
-        mockMvc.perform(post("/api/v1/admin/departments").cookie(session.cookie())
-                        .header("X-CSRF-Token", session.csrf())
-                        .header("Idempotency-Key", key)
-                        .contentType(MediaType.APPLICATION_JSON).content(body))
+        mockMvc.perform(
+                        post("/api/v1/admin/departments")
+                                .cookie(session.cookie())
+                                .header("X-CSRF-Token", session.csrf())
+                                .header("Idempotency-Key", key)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body))
                 .andExpect(status().isCreated());
-        executeSql("DELETE FROM sys_role_permission WHERE permission_code='ptmcp:department:create'");
+        executeSql(
+                "DELETE FROM sys_role_permission WHERE permission_code='ptmcp:department:create'");
         String operations = scalar("SELECT COUNT(*) FROM admin_operation_log");
         departments = scalar("SELECT COUNT(*) FROM sys_dept");
         String replays = scalar("SELECT COUNT(*) FROM api_idempotency");
-        mockMvc.perform(post("/api/v1/admin/departments").cookie(session.cookie())
-                        .header("X-CSRF-Token", session.csrf())
-                        .header("Idempotency-Key", key)
-                        .contentType(MediaType.APPLICATION_JSON).content(body))
+        mockMvc.perform(
+                        post("/api/v1/admin/departments")
+                                .cookie(session.cookie())
+                                .header("X-CSRF-Token", session.csrf())
+                                .header("Idempotency-Key", key)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
         assertEquals(operations, scalar("SELECT COUNT(*) FROM admin_operation_log"));

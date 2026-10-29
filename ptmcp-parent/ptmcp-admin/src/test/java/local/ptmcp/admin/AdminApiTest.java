@@ -16,8 +16,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.mysql.cj.jdbc.exceptions.CommunicationsException;
 
-import local.ptmcp.admin.api.AdminPrincipal;
 import local.ptmcp.admin.api.AdminAction;
+import local.ptmcp.admin.api.AdminPrincipal;
 import local.ptmcp.admin.api.ApiExceptionAdvice;
 import local.ptmcp.admin.api.UserAdminController;
 import local.ptmcp.persistence.org.DelegationScopeResolver;
@@ -57,8 +57,8 @@ import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
-import java.util.List;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -190,6 +190,7 @@ class AdminApiTest {
     @Autowired private DelegationStore delegationStore;
     @Autowired private DelegationScopeResolver delegationScopeResolver;
     @Autowired private IdempotencyRecorder idempotencyRecorder;
+
     @Autowired
     @Qualifier("requestMappingHandlerMapping")
     private RequestMappingHandlerMapping handlerMapping;
@@ -230,7 +231,9 @@ class AdminApiTest {
                 statement.execute("DELETE FROM " + table);
             }
             statement.execute("SET FOREIGN_KEY_CHECKS = 1");
-            AdminActionTestSupport.grant(connection, ADMIN_ID,
+            AdminActionTestSupport.grant(
+                    connection,
+                    ADMIN_ID,
                     AdminActionTestSupport.standardActions().toArray(String[]::new));
         }
     }
@@ -245,36 +248,46 @@ class AdminApiTest {
     @Test
     void adminActionEveryRealRouteHasItsContractedPermission() {
         Map<String, String> actual = new HashMap<>();
-        handlerMapping.getHandlerMethods().forEach((mapping, method) -> {
-            for (String path : mapping.getPatternValues()) {
-                if (!path.startsWith("/api/v1/admin/")) {
-                    continue;
-                }
-                AdminAction action = method.getMethodAnnotation(AdminAction.class);
-                assertNotNull(action, "Missing action for " + path);
-                assertFalse(mapping.getMethodsCondition().getMethods().isEmpty(), path);
-                for (RequestMethod httpMethod : mapping.getMethodsCondition().getMethods()) {
-                    String route = httpMethod.name() + " " + path;
-                    assertEquals(null, actual.put(route, action.value()), "Duplicate " + route);
-                }
-            }
-        });
+        handlerMapping
+                .getHandlerMethods()
+                .forEach(
+                        (mapping, method) -> {
+                            for (String path : mapping.getPatternValues()) {
+                                if (!path.startsWith("/api/v1/admin/")) {
+                                    continue;
+                                }
+                                AdminAction action = method.getMethodAnnotation(AdminAction.class);
+                                assertNotNull(action, "Missing action for " + path);
+                                assertFalse(
+                                        mapping.getMethodsCondition().getMethods().isEmpty(), path);
+                                for (RequestMethod httpMethod :
+                                        mapping.getMethodsCondition().getMethods()) {
+                                    String route = httpMethod.name() + " " + path;
+                                    assertEquals(
+                                            null,
+                                            actual.put(route, action.value()),
+                                            "Duplicate " + route);
+                                }
+                            }
+                        });
         assertEquals(AdminActionTestSupport.ACTION_BY_ROUTE, actual);
     }
 
     @Test
     void adminActionUnannotatedHandlerFailsClosedBeforeSideEffects() throws Exception {
         MissingActionProbe probe = new MissingActionProbe();
-        RequestMappingInfo mapping = RequestMappingInfo.paths("/api/v1/admin/action-test-unannotated")
-                .methods(RequestMethod.POST)
-                .options(handlerMapping.getBuilderConfiguration())
-                .build();
+        RequestMappingInfo mapping =
+                RequestMappingInfo.paths("/api/v1/admin/action-test-unannotated")
+                        .methods(RequestMethod.POST)
+                        .options(handlerMapping.getBuilderConfiguration())
+                        .build();
         handlerMapping.registerMapping(mapping, probe, MissingActionProbe.class.getMethod("write"));
         try {
             String before = adminActionWriteEffects();
-            mockMvc.perform(post("/api/v1/admin/action-test-unannotated")
-                            .header("X-Test-User-Id", ADMIN_ID)
-                            .header("X-Test-Platform-Admin", "true"))
+            mockMvc.perform(
+                            post("/api/v1/admin/action-test-unannotated")
+                                    .header("X-Test-User-Id", ADMIN_ID)
+                                    .header("X-Test-Platform-Admin", "true"))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"))
                     .andExpect(header().string("Cache-Control", "no-store"));
@@ -298,21 +311,26 @@ class AdminApiTest {
         long roleId = actionActorRole("ptmcp:department:create");
         String idempotencyKey = UUID.randomUUID().toString();
         String body = "{\"name\":\"撤权前创建\",\"enabled\":true}";
-        mockMvc.perform(post("/api/v1/admin/departments")
-                        .header("X-Test-User-Id", ADMIN_ID)
-                        .header("X-Test-Platform-Admin", "true")
-                        .header("Idempotency-Key", idempotencyKey)
-                        .contentType("application/json").content(body))
+        mockMvc.perform(
+                        post("/api/v1/admin/departments")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", idempotencyKey)
+                                .contentType("application/json")
+                                .content(body))
                 .andExpect(status().isCreated());
-        try (Connection connection = connect(); Statement statement = connection.createStatement()) {
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
             statement.executeUpdate("DELETE FROM sys_role_permission WHERE role_id=" + roleId);
         }
         String before = adminActionWriteEffects();
-        mockMvc.perform(post("/api/v1/admin/departments")
-                        .header("X-Test-User-Id", ADMIN_ID)
-                        .header("X-Test-Platform-Admin", "true")
-                        .header("Idempotency-Key", idempotencyKey)
-                        .contentType("application/json").content(body))
+        mockMvc.perform(
+                        post("/api/v1/admin/departments")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", idempotencyKey)
+                                .contentType("application/json")
+                                .content(body))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
         assertEquals(before, adminActionWriteEffects());
@@ -323,24 +341,36 @@ class AdminApiTest {
     void adminActionAuditReadDoesNotAllowDecrypt(String permission) throws Exception {
         actionActorRole(permission);
         String before = adminActionWriteEffects();
-        mockMvc.perform(post("/api/v1/admin/audit/11111111-2222-3333-4444-555555555555/decrypt")
-                        .header("X-Test-User-Id", ADMIN_ID)
-                        .header("X-Test-Platform-Admin", "true")
-                        .contentType("application/json")
-                        .content("{\"reason\":\"审计读取权限不得代替解密\",\"fields\":[\"sqlRaw\"]}"))
+        mockMvc.perform(
+                        post("/api/v1/admin/audit/11111111-2222-3333-4444-555555555555/decrypt")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .contentType("application/json")
+                                .content("{\"reason\":\"审计读取权限不得代替解密\",\"fields\":[\"sqlRaw\"]}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
         assertEquals(before, adminActionWriteEffects());
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"users", "departments", "roles", "platforms", "datasources",
-            "delegations", "acl/grants", "operations", "audit"})
+    @ValueSource(
+            strings = {
+                "users",
+                "departments",
+                "roles",
+                "platforms",
+                "datasources",
+                "delegations",
+                "acl/grants",
+                "operations",
+                "audit"
+            })
     void adminActionPlatformMarkerDoesNotGrantList(String resource) throws Exception {
         actionActorRole();
-        mockMvc.perform(get("/api/v1/admin/" + resource)
-                        .header("X-Test-User-Id", ADMIN_ID)
-                        .header("X-Test-Platform-Admin", "true"))
+        mockMvc.perform(
+                        get("/api/v1/admin/" + resource)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
     }
@@ -349,12 +379,13 @@ class AdminApiTest {
     void adminActionPlatformMarkerDoesNotGrantCreate() throws Exception {
         actionActorRole();
         String before = adminActionWriteEffects();
-        mockMvc.perform(post("/api/v1/admin/departments")
-                        .header("X-Test-User-Id", ADMIN_ID)
-                        .header("X-Test-Platform-Admin", "true")
-                        .header("Idempotency-Key", UUID.randomUUID().toString())
-                        .contentType("application/json")
-                        .content("{\"name\":\"缺少动作权限\",\"enabled\":true}"))
+        mockMvc.perform(
+                        post("/api/v1/admin/departments")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", UUID.randomUUID().toString())
+                                .contentType("application/json")
+                                .content("{\"name\":\"缺少动作权限\",\"enabled\":true}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
         assertEquals(before, adminActionWriteEffects());
@@ -364,13 +395,15 @@ class AdminApiTest {
     void adminActionListDoesNotGrantRead() throws Exception {
         long department = createDepartment("功能码目标");
         actionActorRole("ptmcp:department:list");
-        mockMvc.perform(get("/api/v1/admin/departments")
-                        .header("X-Test-User-Id", ADMIN_ID)
-                        .header("X-Test-Platform-Admin", "true"))
+        mockMvc.perform(
+                        get("/api/v1/admin/departments")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
                 .andExpect(status().isOk());
-        mockMvc.perform(get("/api/v1/admin/departments/" + department)
-                        .header("X-Test-User-Id", ADMIN_ID)
-                        .header("X-Test-Platform-Admin", "true"))
+        mockMvc.perform(
+                        get("/api/v1/admin/departments/" + department)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
     }
@@ -379,21 +412,32 @@ class AdminApiTest {
     @ValueSource(strings = {"disabled", "deleted", "permission-removed", "membership-removed"})
     void adminActionRechecksCurrentRole(String revocation) throws Exception {
         long roleId = actionActorRole("ptmcp:department:list");
-        mockMvc.perform(get("/api/v1/admin/departments")
-                        .header("X-Test-User-Id", ADMIN_ID)
-                        .header("X-Test-Platform-Admin", "true"))
+        mockMvc.perform(
+                        get("/api/v1/admin/departments")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
                 .andExpect(status().isOk());
-        try (Connection connection = connect(); Statement statement = connection.createStatement()) {
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
             switch (revocation) {
-                case "disabled" -> statement.executeUpdate("UPDATE sys_role SET status='1' WHERE role_id=" + roleId);
-                case "deleted" -> statement.executeUpdate("UPDATE sys_role SET del_flag='1' WHERE role_id=" + roleId);
-                case "membership-removed" -> statement.executeUpdate("DELETE FROM sys_user_role WHERE role_id=" + roleId);
-                default -> statement.executeUpdate("DELETE FROM sys_role_permission WHERE role_id=" + roleId);
+                case "disabled" ->
+                        statement.executeUpdate(
+                                "UPDATE sys_role SET status='1' WHERE role_id=" + roleId);
+                case "deleted" ->
+                        statement.executeUpdate(
+                                "UPDATE sys_role SET del_flag='1' WHERE role_id=" + roleId);
+                case "membership-removed" ->
+                        statement.executeUpdate(
+                                "DELETE FROM sys_user_role WHERE role_id=" + roleId);
+                default ->
+                        statement.executeUpdate(
+                                "DELETE FROM sys_role_permission WHERE role_id=" + roleId);
             }
         }
-        mockMvc.perform(get("/api/v1/admin/departments")
-                        .header("X-Test-User-Id", ADMIN_ID)
-                        .header("X-Test-Platform-Admin", "true"))
+        mockMvc.perform(
+                        get("/api/v1/admin/departments")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
     }
@@ -402,26 +446,34 @@ class AdminApiTest {
     void adminActionPermissionDependencyFailureDoesNotWrite() throws Exception {
         actionActorRole("ptmcp:department:create");
         String before = adminActionWriteEffects();
-        try (Connection connection = connect(); Statement statement = connection.createStatement()) {
-            statement.execute("RENAME TABLE sys_role_permission TO action_test_unavailable_permission");
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            statement.execute(
+                    "RENAME TABLE sys_role_permission TO action_test_unavailable_permission");
             try {
-                MvcResult result = mockMvc.perform(post("/api/v1/admin/departments")
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true")
-                                .header("Idempotency-Key", UUID.randomUUID().toString())
-                                .contentType("application/json")
-                                .content("{\"name\":\"依赖故障不得落库\",\"enabled\":true}"))
-                        .andExpect(status().isServiceUnavailable())
-                        .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
-                        .andExpect(header().string("Cache-Control", "no-store"))
-                        .andExpect(header().string("X-Content-Type-Options", "nosniff"))
-                        .andReturn();
+                MvcResult result =
+                        mockMvc.perform(
+                                        post("/api/v1/admin/departments")
+                                                .header("X-Test-User-Id", ADMIN_ID)
+                                                .header("X-Test-Platform-Admin", "true")
+                                                .header(
+                                                        "Idempotency-Key",
+                                                        UUID.randomUUID().toString())
+                                                .contentType("application/json")
+                                                .content(
+                                                        "{\"name\":\"依赖故障不得落库\",\"enabled\":true}"))
+                                .andExpect(status().isServiceUnavailable())
+                                .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
+                                .andExpect(header().string("Cache-Control", "no-store"))
+                                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                                .andReturn();
                 String response = result.getResponse().getContentAsString();
                 assertFalse(response.contains("action_test_unavailable_permission"));
                 assertFalse(response.contains("SQLException"));
                 assertEquals(before, adminActionWriteEffects());
             } finally {
-                statement.execute("RENAME TABLE action_test_unavailable_permission TO sys_role_permission");
+                statement.execute(
+                        "RENAME TABLE action_test_unavailable_permission TO sys_role_permission");
             }
         }
     }
@@ -430,18 +482,26 @@ class AdminApiTest {
     @ValueSource(strings = {"status", "roles", "department"})
     void adminActionPlatformGenericEditNeedsChangedFieldAction(String change) throws Exception {
         UserEditFixture fixture = userEditFixture(List.of("ptmcp:user:update"));
-        long department = change.equals("department") ? createDepartment("迁入部门") : fixture.departmentId();
+        long department =
+                change.equals("department") ? createDepartment("迁入部门") : fixture.departmentId();
         actionActorRole("ptmcp:user:update");
         String roles = change.equals("roles") ? "[]" : "[" + fixture.narrowRoleId() + "]";
-        String body = "{\"displayName\":\"平台管理员完整编辑\",\"deptId\":" + department
-                + ",\"enabled\":" + !change.equals("status") + ",\"roleIds\":" + roles + "}";
+        String body =
+                "{\"displayName\":\"平台管理员完整编辑\",\"deptId\":"
+                        + department
+                        + ",\"enabled\":"
+                        + !change.equals("status")
+                        + ",\"roleIds\":"
+                        + roles
+                        + "}";
         UserWriteEffects before = userWriteEffects(fixture.targetId());
-        mockMvc.perform(put("/api/v1/admin/users/" + fixture.targetId())
-                        .header("X-Test-User-Id", ADMIN_ID)
-                        .header("X-Test-Platform-Admin", "true")
-                        .header("If-Match", before.row().version())
-                        .contentType("application/json")
-                        .content(body))
+        mockMvc.perform(
+                        put("/api/v1/admin/users/" + fixture.targetId())
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", before.row().version())
+                                .contentType("application/json")
+                                .content(body))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
         assertEquals(before, userWriteEffects(fixture.targetId()));
@@ -454,12 +514,15 @@ class AdminApiTest {
     }
 
     private String adminActionWriteEffects() throws Exception {
-        try (Connection connection = connect(); Statement statement = connection.createStatement();
-                ResultSet result = statement.executeQuery("SELECT CONCAT_WS('|',"
-                        + "(SELECT COUNT(*) FROM sys_dept), (SELECT COUNT(*) FROM admin_operation_log),"
-                        + "(SELECT COUNT(*) FROM api_idempotency), (SELECT COUNT(*) FROM sys_security_event),"
-                        + "(SELECT COUNT(*) FROM audit_sensitive_access),"
-                        + "(SELECT policy_epoch FROM sys_security_state WHERE singleton_id=1))")) {
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement();
+                ResultSet result =
+                        statement.executeQuery(
+                                "SELECT CONCAT_WS('|',"
+                                        + "(SELECT COUNT(*) FROM sys_dept), (SELECT COUNT(*) FROM admin_operation_log),"
+                                        + "(SELECT COUNT(*) FROM api_idempotency), (SELECT COUNT(*) FROM sys_security_event),"
+                                        + "(SELECT COUNT(*) FROM audit_sensitive_access),"
+                                        + "(SELECT policy_epoch FROM sys_security_state WHERE singleton_id=1))")) {
             assertTrue(result.next());
             return result.getString(1);
         }
@@ -634,7 +697,9 @@ class AdminApiTest {
         long deptId = createDepartment("自增部");
         long selfActor = createUser("esc-admin", "自增管理员", deptId);
         try (Connection connection = connect()) {
-            AdminActionTestSupport.grant(connection, selfActor,
+            AdminActionTestSupport.grant(
+                    connection,
+                    selfActor,
                     AdminActionTestSupport.standardActions().toArray(String[]::new));
         }
         long datasourceId = insertActiveDatasource();
@@ -645,7 +710,8 @@ class AdminApiTest {
                                 .header("X-Test-Platform-Admin", "true")
                                 .header("Idempotency-Key", "grant-esc-" + UUID.randomUUID())
                                 .contentType("application/json")
-                                .content(grantBody("USER", selfActor, datasourceId, "META", "ALLOW"))
+                                .content(
+                                        grantBody("USER", selfActor, datasourceId, "META", "ALLOW"))
                                 .header("If-Match", "0"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("SELF_PRIVILEGE_ESCALATION"));
@@ -1690,6 +1756,48 @@ class AdminApiTest {
                 fixture, "department", "{\"departmentId\":" + destination + "}");
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void genericUserUpdatePreservesUnchangedProfileFields(boolean enabled) throws Exception {
+        UserEditFixture fixture =
+                userEditFixture(List.of("ptmcp:user:update", "ptmcp:user:status"));
+        OrgStore.UserRow original = orgStore.getUser(fixture.targetId());
+        OrgStore.UserRow before =
+                orgStore.updateUser(
+                        original.id(),
+                        original.displayName(),
+                        original.deptId(),
+                        "profile-test@example.invalid",
+                        "12345678901",
+                        "通用编辑保留的合成备注",
+                        null,
+                        null,
+                        original.version(),
+                        ADMIN_ID);
+        mockMvc.perform(
+                        put("/api/v1/admin/users/" + fixture.targetId())
+                                .header("X-Test-User-Id", fixture.delegateId())
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("If-Match", before.version())
+                                .contentType("application/json")
+                                .content(userEditBody(fixture, enabled, null)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("ETag", "\"" + (before.version() + 1) + "\""));
+        assertEquals(
+                new OrgStore.UserRow(
+                        before.id(),
+                        before.username(),
+                        "已编辑",
+                        before.deptId(),
+                        before.email(),
+                        before.phoneNumber(),
+                        before.remark(),
+                        enabled,
+                        before.roleIds(),
+                        before.version() + 1),
+                orgStore.getUser(fixture.targetId()));
+    }
+
     @Test
     void specializedUserStatusPreservesUnchangedProfileFields() throws Exception {
         UserEditFixture fixture = userEditFixture(List.of("ptmcp:user:status"));
@@ -1994,8 +2102,12 @@ class AdminApiTest {
         createUser("roletest-throwaway", "占位用户", rootId);
         long delegate = createUser("roletest-delegate", "角色目录受控员", rootId);
         try (Connection connection = connect()) {
-            AdminActionTestSupport.grant(connection, delegate,
-                    "ptmcp:role:list", "ptmcp:role:read", "ptmcp:role:create");
+            AdminActionTestSupport.grant(
+                    connection,
+                    delegate,
+                    "ptmcp:role:list",
+                    "ptmcp:role:read",
+                    "ptmcp:role:create");
             AdminActionTestSupport.grant(connection, 42L, "ptmcp:role:list");
         }
 
@@ -2084,8 +2196,12 @@ class AdminApiTest {
         createUser("acl-throwaway", "占位用户", rootId);
         long delegate = createUser("acl-delegate", "ACL受控员", rootId);
         try (Connection connection = connect()) {
-            AdminActionTestSupport.grant(connection, delegate, AdminActionTestSupport.standardActions().stream()
-                    .filter(code -> code.startsWith("ptmcp:acl:")).toArray(String[]::new));
+            AdminActionTestSupport.grant(
+                    connection,
+                    delegate,
+                    AdminActionTestSupport.standardActions().stream()
+                            .filter(code -> code.startsWith("ptmcp:acl:"))
+                            .toArray(String[]::new));
         }
         long insideSubject = createUser("acl-inside", "子树内主体", rootId);
         long secondInsideSubject = createUser("acl-inside-two", "子树内主体二", rootId);
@@ -2896,6 +3012,9 @@ class AdminApiTest {
                 .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
 
         // The delegated admin cannot revoke the delegation held in their name.
+        try (Connection connection = connect()) {
+            AdminActionTestSupport.grant(connection, delegate, "ptmcp:delegation:delete");
+        }
         mockMvc.perform(
                         delete("/api/v1/admin/delegations/" + delegationId)
                                 .header("X-Test-User-Id", delegate)

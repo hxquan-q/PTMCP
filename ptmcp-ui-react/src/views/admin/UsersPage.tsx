@@ -22,12 +22,14 @@ import {
   setUserDepartment,
   setUserRoles,
   setUserStatus,
+  resetUserPassword,
   updateUser,
   type DepartmentRow,
   type RoleRow,
   type UserRow,
 } from '../../services/orgPortalApi';
 import { departmentDepth, validateUserForm, type UserFormValues } from './orgForms';
+import { passwordError } from '../me/passwordForm';
 
 export function UsersPage() {
   const [rows, setRows] = useState<UserRow[]>([]);
@@ -39,6 +41,7 @@ export function UsersPage() {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [deleting, setDeleting] = useState<UserRow | null>(null);
+  const [resetting, setResetting] = useState<UserRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
   const debounced = useDebounced(keyword);
@@ -167,6 +170,14 @@ export function UsersPage() {
                     <button className="link" onClick={() => setEditing(r)}>
                       <EditIcon /> 编辑
                     </button>
+                    <button
+                      className="link"
+                      style={{ marginLeft: 10 }}
+                      onClick={() => setResetting(r)}
+                      aria-label={`重置 ${r.displayName || r.username} 的密码`}
+                    >
+                      重置密码
+                    </button>
                     <button className="link" style={{ marginLeft: 10 }} disabled={busy} onClick={() => toggleStatus(r)}>
                       {r.enabled ? '停用' : '启用'}
                     </button>
@@ -195,6 +206,8 @@ export function UsersPage() {
           </table>
         </div>
       </div>
+
+      {resetting ? <ResetPasswordDialog user={resetting} onClose={() => setResetting(null)} onSaved={reload} /> : null}
 
       {creating || editing ? (
         <UserDialog
@@ -385,6 +398,76 @@ function UserDialog({
         </button>
         <button className="btn btn--primary" onClick={submit} disabled={saving || roles.length === 0}>
           {saving ? '保存中…' : user ? '保存修改' : '创建用户'}
+        </button>
+      </div>
+    </Dialog>
+  );
+}
+
+/** 管理员重置用户密码：强度校验 + 两次一致 + 理由 10–500；If-Match 版本门禁。 */
+function ResetPasswordDialog({ user, onClose, onSaved }: { user: UserRow; onClose: () => void; onSaved: () => void }) {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  const submit = async () => {
+    setFormError('');
+    const strength = passwordError(newPassword);
+    if (strength) {
+      setFormError(strength);
+      return;
+    }
+    if (newPassword !== confirm) {
+      setFormError('两次密码不一致。');
+      return;
+    }
+    if (reason.trim().length < 10 || reason.length > 500) {
+      setFormError('请填写10～500字符的重置理由。');
+      return;
+    }
+    setSaving(true);
+    try {
+      await resetUserPassword(user.id, newPassword, reason.trim(), user.version);
+      onSaved();
+      onClose();
+    } catch (e) {
+      const status = (e as { status?: number }).status;
+      if (status === 412) setFormError('该用户已被他人修改，请关闭后重开再试。');
+      else setFormError(e instanceof Error ? e.message : '重置失败，请稍后重试。');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open title={`重置密码 · ${user.displayName || user.username}`} onClose={onClose} width={480}>
+      <Alert kind="warning" title="重置会记录审计理由">
+        新密码仅本次输入，系统不保留明文；重置动作与理由会进入操作审计。
+      </Alert>
+      <Field label="新密码" hint="12～64 个字符，UTF-8 不超过 72 字节">
+        <TextInput value={newPassword} onChange={setNewPassword} type="password" autoComplete="new-password" />
+      </Field>
+      <Field label="确认新密码">
+        <TextInput value={confirm} onChange={setConfirm} type="password" autoComplete="new-password" />
+      </Field>
+      <Field label={`重置理由（${reason.length}/500）`} hint="至少 10 个字符，写入审计">
+        <textarea
+          className="input"
+          style={{ width: '100%', minHeight: 64, resize: 'vertical', fontFamily: 'inherit' }}
+          value={reason}
+          maxLength={500}
+          onChange={(e) => setReason(e.target.value)}
+        />
+      </Field>
+      {formError ? <Alert kind="danger">{formError}</Alert> : null}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
+        <button className="btn btn--secondary" onClick={onClose} disabled={saving}>
+          取消
+        </button>
+        <button className="btn btn--primary" onClick={submit} disabled={saving}>
+          {saving ? '重置中…' : '确认重置'}
         </button>
       </div>
     </Dialog>

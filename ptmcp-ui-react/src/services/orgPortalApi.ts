@@ -148,6 +148,23 @@ export function setUserDepartment(id: string, departmentId: string, version: str
   });
 }
 
+/** 管理员重置用户密码：PUT + If-Match + 幂等键；newPassword/reason 仅入参，响应不回显。 */
+export async function resetUserPassword(
+  id: string,
+  newPassword: string,
+  reason: string,
+  version: string | number,
+  signal?: AbortSignal,
+): Promise<UserRow> {
+  const { data } = await request<UserRow>(`/api/v1/admin/users/${encodeURIComponent(id)}/password`, {
+    method: 'PUT',
+    body: { newPassword, reason },
+    headers: { 'If-Match': etag(version), 'Idempotency-Key': idempotencyKey() },
+    signal,
+  });
+  return data;
+}
+
 export function deleteUser(id: string, version: string | number): Promise<void> {
   return write<void>(`/api/v1/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE', kind: 'delete', version });
 }

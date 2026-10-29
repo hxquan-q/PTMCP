@@ -84,6 +84,23 @@ BUILD SUCCESS/exit0，2026-10-30 04:42:23 +08:00，Admin24+Session1共25项，
 04:47:35的Surefire记录为EOF与Maven shutdown hook；进程和执行句柄均已消失，
 没有完整退出/测试汇总，不计产品失败或组合GREEN。确认无残留构建后，改用独立后台进程重跑同一组合。
 
+恢复核实后台脚本未产生日志，实际重跑在2026-10-30 04:57:05退出1：
+`ptmcp-admin-action-combined-fixture-failure.log`中SecurityState13、Org23通过，
+admin模块123项有1 failure/0 errors/0 skipped。唯一失败是旧委派自撤销夹具未授
+`ptmcp:delegation:delete`，请求被新增入口提前拒绝。仅给该actor补齐真实主库动作角色，
+保留原403/SELF_PRIVILEGE_ESCALATION断言；authz/gateway当轮被跳过，不能计入通过。
+完整重跑`ptmcp-admin-action-combined-final.log`于2026-10-30 05:04:59 +08:00
+BUILD SUCCESS/exit0：SecurityState13、Org23、Admin79、Datasource9、IdentityPassword17、
+Session18、OAuth29、McpHttp1，共189项，0 failures/0 errors/0 skipped。
+独立只读终审实际读取该日志与exit文件，并按e862ed2至当前源码审查58个动作声明、
+主库精确码、默认拒绝、动态动作及CSRF/范围/幂等顺序，未发现新增阻断，可关闭本片旁路。
+评审未执行动态测试；提交前事务内授权重验、最后有效管理员、间接自扩权及解密资源范围仍待独立切片。
+
+下一局部修复：通用用户PUT向存储传入三个null，导致已有email/phoneNumber/remark被清空；
+DTO不支持编辑这些字段，应保留同一If-Match绑定快照内的原值。先增加真实HTTP/MySQL参数化回归，
+分别覆盖普通资料事务和实际停用安全事务，完整比较用户记录及ETag；获得有效RED后再改三个实参。
+本修复不改变DTO或版本/权限合同，不另建架构笔记；沿用现有工作项记录实际结果。
+
 身份组合 GREEN：`ptmcp-identity-combined-green.log` BUILD SUCCESS，78 tests / 0 failures/errors/skipped；
 覆盖双 MySQL 改密恢复13、真实 ADMIN 改密HTTP2、Session8、Org13、SecurityState13、OAuth27及MCP HTTP2。
 Origin 有效 RED 为 `ptmcp-identity-origin-red.log`（8例中1 failure，跨站Origin携合法CSRF错误返回200）；
