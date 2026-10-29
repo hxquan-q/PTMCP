@@ -473,7 +473,13 @@ G1 已完成：`McpResourceMetadata` 由四处部署配置（`resource-uri`、`r
 22项中14 failures、1 error、0 skipped。失败含缺epoch/event、事件故障仍提交、重叠创建双成功、
 丢确认误报DEPENDENCY_UNAVAILABLE、额外借连接、返回竞争撤销的v2及版本/epoch耗尽仍写入。
 唯一error是产品撤销旧valid_to=NULL行时OrgSql.ofInstant(null)抛NPE，不是夹具或基础设施错误；同批补空值兼容。
-7项通过包含操作日志故障回滚与部分既有拒绝行为。修复后GREEN及最终终审尚未完成。
+7项通过包含操作日志故障回滚与部分既有拒绝行为。
+定向GREEN：`delegation-transaction-green.log/.exit`，2026-10-30 07:42:51 +08:00，BUILD SUCCESS/exit0，
+22/22通过，0 failures/errors/skipped。静态复核无新增阻断，并发创建夹具及提交后竞争撤销钩子有效。
+并发撤销仅在入口同时释放，主要覆盖CAS及单次journal；未另加首次领域访问NOWAIT接线或store级确认commit后close故障测试，
+统一事务本身的锁序/清理边界依赖既有SecurityChangeTransactionTest，最终组合与证据终审仍待完成。
+当前Windows/native的358份源码及构建输入SHA-256均一致，清单`delegation-transaction-source-hashes.json`。
+另一窗口共享提交`a178802`已包含本片Java/契约及部分记录；保留该历史，本窗口未执行提交或推送。
 
 前一幂等切片收尾后实际检查：`python scripts/check.py` exit0（145份Markdown/672项链接、62项检查器回归），
 Skill tree/format/archived均exit0（12篇活跃笔记、0篇归档），`git diff --check` exit0；不替代本片验证。

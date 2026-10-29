@@ -168,3 +168,47 @@ test('sensitive write DTOs: resetPassword never leaks old secret, datasource cre
     assert.ok(!('version' in bodies[4]!), 'version must be in If-Match header, not body');
   });
 });
+
+test('platform and client DTOs carry only config fields, never scope or secret state', async () => {
+  await withBodyCapture(async (bodies) => {
+    // createPlatform：6 个配置字段
+    await access
+      .createPlatform({
+        code: 'dto-plat',
+        name: 'DTO平台',
+        tier: 2,
+        catalogMode: 'BLACKLIST',
+        proofMode: 'NONE',
+        status: 'ACTIVE',
+      })
+      .catch(() => undefined);
+    assertExactKeys(bodies[0]!, ['code', 'name', 'tier', 'catalogMode', 'proofMode', 'status'], 'createPlatform');
+    assert.ok(!('scopeVersion' in bodies[0]!), 'createPlatform must not include scopeVersion (server-managed)');
+    assert.ok(!('securityVersion' in bodies[0]!), 'createPlatform must not include securityVersion (server-managed)');
+
+    // updatePlatform：同样 6 个配置字段
+    await access
+      .updatePlatform(
+        '1',
+        {
+          code: 'dto-plat',
+          name: 'DTO改名',
+          tier: 2,
+          catalogMode: 'BLACKLIST',
+          proofMode: 'NONE',
+          status: 'DISABLED',
+        },
+        '99',
+      )
+      .catch(() => undefined);
+    assertExactKeys(bodies[1]!, ['code', 'name', 'tier', 'catalogMode', 'proofMode', 'status'], 'updatePlatform');
+    assert.ok(!('proofConfigured' in bodies[1]!), 'updatePlatform must not include proofConfigured (read-only)');
+
+    // createClient：3 个业务字段，不含 platformId（在 URL 路径中）
+    await access.createClient('1', { name: 'DTO客户端', type: 'CONFIDENTIAL', authMethods: ['client_secret_basic'] }).catch(() => undefined);
+    assertExactKeys(bodies[2]!, ['name', 'type', 'authMethods'], 'createClient');
+    assert.ok(!('platformId' in bodies[2]!), 'createClient must not include platformId (it is in the URL path)');
+    assert.ok(!('clientId' in bodies[2]!), 'createClient must not include clientId (server-assigned)');
+    assert.ok(!('clientSecret' in bodies[2]!), 'createClient must not include clientSecret (server-generated)');
+  });
+});

@@ -89,11 +89,12 @@ gateway进入请求读取/核验安全快照；排队出队时和JDBC执行提�
 admin_delegation是平台管理员给组织授权管理员的管理授权，包含userId、departmentRootId、resourceType/resourceId/generation、allowedActions、validFrom/validTo、status/version。服务端把多个委派分别校验，不能把“委派A的部门”与“委派B的资源”交叉拼出没有授予的新组合。管理命令必须由至少一个完整委派覆盖该命令的所有目标及动作；批量多目标逐项校验，任一失败整个事务不提交。
 
 委派create/revoke复用SecurityChangeTransaction，先锁sys_security_state，再在同连接检查/写入委派；
-行、操作日志、epoch与DELEGATION_CHANGED原子提交。事件固定aggregate_type=ADMIN_DELEGATION，
+行、操作日志、epoch与DELEGATION_CHANGED原子提交。显式create/revoke事件固定aggregate_type=ADMIN_DELEGATION，
 payload仅schemaVersion=1、实际数值ID和本次version。创建在INSERT后同连接读取数据库微秒快照，
 撤销同连接FOR UPDATE校验旧版本/状态/自撤销限制并保留CAS，版本耗尽拒绝SECURITY_STATE_UNAVAILABLE。
 返回本事务快照，不在提交后另开连接读取；commit丢确认返回OPERATION_UNKNOWN且单次调用不重放。
 重叠检查受同一全局锁保护，要求所有委派写方使用此事务，不支持与旧直写代码混跑。
+数据源目标变更的批量撤销在数据源安全事务中执行，不产生本片定义的逐委派ID/version事件。
 此片只保证epoch/事件持久原子性，不代表广播、多副本消费或事务内actor/角色/委派授权重验完成；
 自然到期仍按时间判断，现有业务grant和业务token不随管理委派自动撤销。实际验证见[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
 

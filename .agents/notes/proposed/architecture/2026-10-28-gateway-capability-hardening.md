@@ -312,6 +312,8 @@ FAILED的显式安全重试和SUCCEEDED重放保留，不扩schema、不改OAuth
 仅含实际数值ID、version及schemaVersion=1，不更改事件表结构，不携带委派动作或个人信息。
 创建在同连接INSERT后读取数据库归一化的DATETIME(6)快照，撤销在同连接FOR UPDATE后核版本并保留CAS，
 返回本事务的不可变行；确认丢失返回OPERATION_UNKNOWN，不自动重放。全局锁同时围住重叠检查与插入。
+逐委派ID/version事件限定显式create/revoke；数据源目标变更另在持有全局锁的数据源事务中批量撤销，
+不逐行产生此事件。现有代码只证明事件持久化，未验证发布器、多副本消费或旧直写版本混跑。
 
 保留本地手写事务改动最少，但会复制已有主库检查、锁序与未知提交处理；另加提交后失效通知便于接线，
 却会保留落库成功而epoch/事件缺失的窗口。因此复用已有安全事务，接受委派写入与其他安全变更串行的成本。
@@ -322,7 +324,8 @@ FAILED的显式安全重试和SUCCEEDED重放保留，不扩schema、不改OAuth
 拒绝委派版本或全局epoch耗尽，保留旧valid_to=NULL行的撤销兼容。独立终审针对实际diff与证据。
 旧实现隔离MySQL的22项RED为14 failures、1 error、0 skipped，BUILD FAILURE/exit1；
 包含重叠创建实际双成功和丢确认误报，唯一error来自产品撤销旧valid_to=NULL时空值转换NPE。
-实际修复、GREEN与独立diff终审仍待完成，不把设计评审当终审或通过。
+定向GREEN已22/22通过，BUILD SUCCESS/exit0，无失败/错误/跳过；实际diff静态复核无新增阻断，
+组合验证与独立证据终审仍待完成，不把设计评审当终审或整体通过。
 
 ### 业务授权的部门主体读取
 
