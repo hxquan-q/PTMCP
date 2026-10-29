@@ -4,7 +4,12 @@ import FullScreenIcon from '~icons/ep/full-screen';
 import CloseIcon from '~icons/ep/close';
 import ArrowUpIcon from '~icons/ep/arrow-up';
 import ArrowDownIcon from '~icons/ep/arrow-down';
+import UserIcon from '~icons/ep/user';
+import CoinIcon from '~icons/ep/coin';
+import KeyIcon from '~icons/ep/key';
+import CheckIcon from '~icons/ep/check';
 import PageHeader from '../../../components/common/PageHeader.vue';
+import StatCard from '../../../components/common/StatCard.vue';
 import { useAccessWorkspace } from './useAccessWorkspace';
 import { findResourceSelection } from './resource-tree';
 import type { Grant } from '../../../services/access';
@@ -154,6 +159,12 @@ onBeforeUnmount(() => {
     <ElAlert v-if="pageError" :title="pageError" type="error" :closable="false" show-icon
       ><ElButton :disabled="!subjectId" @click="loadGrants">重新读取规则</ElButton></ElAlert
     >
+    <div class="stat-card-row">
+      <StatCard label="授权主体" :value="filteredSubjects.length" hint="当前主体类型下可管理" :icon="UserIcon" />
+      <StatCard label="资源范围" :value="selectedResource ? 1 : 0" :hint="selectedResource ? '已选资源' : '未选择资源'" :icon="CoinIcon" />
+      <StatCard label="授权规则" :value="grants.length" hint="当前主体已授权规则" :icon="KeyIcon" />
+      <StatCard label="有效权限" :value="preview?.decisions?.length ?? 0" hint="平台范围内计算结果" :icon="CheckIcon" tone="success" />
+    </div>
     <div class="access-workspace" ref="workspaceEl" :class="{ 'is-focus': focusMode }">
       <aside v-if="!focusMode" class="pane subject-pane" :style="subjectColStyle" aria-label="授权主体">
         <header class="pane-head">
@@ -296,8 +307,15 @@ onBeforeUnmount(() => {
           >
             <ElTableColumn label="资源" min-width="150"
               ><template #default="{ row }"
-                ><strong>{{ resourceLabels[row.resourceType as keyof typeof resourceLabels] }}</strong>
-                <div class="muted">ID {{ row.resourceId }} · generation {{ row.resourceGeneration }}</div></template
+                ><div class="ptmcp-cell-lead">
+                  <span class="ptmcp-cell-icon">
+                    <IconEpKey aria-hidden="true" />
+                  </span>
+                  <span class="ptmcp-cell-stack">
+                    <strong>{{ resourceLabels[row.resourceType as keyof typeof resourceLabels] }}</strong>
+                    <span>ID {{ row.resourceId }} · generation {{ row.resourceGeneration }}</span>
+                  </span>
+                </div></template
               ></ElTableColumn
             >
             <ElTableColumn label="规则" min-width="150"

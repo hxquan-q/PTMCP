@@ -31,10 +31,19 @@ watch(() => [props.userId, props.platformId, props.datasourceId, props.ready], r
       action-label="重试"
       @action="retry"
     /><ElSkeleton v-if="loading" :rows="4" animated /><ElTable class="ptmcp-data-table" v-else-if="loaded" :data="rows" aria-label="当前有效资源"
-      ><ElTableColumn prop="resourceType" label="资源类型" min-width="130" /><ElTableColumn
-        prop="resourceId"
-        label="资源 ID"
-        min-width="130" /><ElTableColumn label="META / READ" min-width="160"
+      ><ElTableColumn label="资源类型" min-width="130"
+        ><template #default="{ row }"
+          ><div class="ptmcp-cell-lead">
+            <span class="ptmcp-cell-icon">
+              <IconEpKey aria-hidden="true" />
+            </span>
+            <span class="ptmcp-cell-stack">
+              <strong>{{ row.resourceType }}</strong>
+              <span>{{ row.resourceId }}</span>
+            </span>
+          </div></template
+        ></ElTableColumn
+      ><ElTableColumn prop="resourceId" label="资源 ID" min-width="130" /><ElTableColumn label="META / READ" min-width="160"
         ><template #default="{ row }">{{ row.meta ? '允许' : '拒绝' }} / {{ row.read ? '允许' : '拒绝' }}</template></ElTableColumn
       ><ElTableColumn label="来源规则" min-width="150"
         ><template #default="{ row }"

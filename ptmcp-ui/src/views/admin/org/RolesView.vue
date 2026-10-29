@@ -217,7 +217,15 @@ onMounted(async () => {
       >
         <ElTableColumn prop="key" label="Key" width="160"
           ><template #default="{ row }"
-            ><span class="ptmcp-cell-truncate" :title="row.key">{{ row.key }}</span></template
+            ><div class="ptmcp-cell-lead">
+              <span class="ptmcp-cell-icon">
+                <IconEpKey aria-hidden="true" />
+              </span>
+              <span class="ptmcp-cell-stack">
+                <strong>{{ row.key }}</strong>
+                <span>{{ row.name }} · v{{ row.version }}</span>
+              </span>
+            </div></template
           ></ElTableColumn
         ><ElTableColumn prop="name" label="名称" width="160"
           ><template #default="{ row }"

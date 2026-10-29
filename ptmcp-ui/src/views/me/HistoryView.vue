@@ -149,8 +149,16 @@ onMounted(() => {
         />
         <div v-else-if="items.length" class="ptmcp-table-wrap">
           <ElTable class="ptmcp-data-table" size="small" height="100%" :data="items" row-key="requestId" aria-label="我的查询历史"
-            ><ElTableColumn label="时间" min-width="170"
-              ><template #default="{ row }">{{ formatDate(row.startedAt) }}</template></ElTableColumn
+            ><ElTableColumn label="时间" min-width="200"
+              ><template #default="{ row }"
+                ><div class="ptmcp-cell-lead">
+                  <span class="ptmcp-cell-icon"><IconEpClock aria-hidden="true" /></span
+                  ><span class="ptmcp-cell-stack"
+                    ><strong>{{ formatDate(row.startedAt) }}</strong
+                    ><span>{{ row.requestId }}</span></span
+                  >
+                </div></template
+              ></ElTableColumn
             ><ElTableColumn label="平台 / 数据源" min-width="160"
               ><template #default="{ row }">{{ row.platformId ?? '—' }} / {{ row.datasourceId ?? '—' }}</template></ElTableColumn
             ><ElTableColumn prop="tool" label="工具" width="130" /><ElTableColumn label="脱敏 SQL" min-width="260" show-overflow-tooltip

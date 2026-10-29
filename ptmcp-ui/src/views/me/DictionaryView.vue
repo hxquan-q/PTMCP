@@ -225,13 +225,17 @@ onMounted(() => {
           ><ElTableColumn label="对象" min-width="220"
             ><template #default="{ row }"
               ><button
-                class="object-link"
+                class="link-button ptmcp-cell-lead"
                 type="button"
                 :disabled="!row.authorized"
                 @click="router.push({ name: 'me-dictionary-detail', params: { objectId: row.objectId }, query: { platformId } })"
               >
-                {{ row.tableName }}</button
-              ><span class="subtext">{{ [row.databaseName, row.schemaName].filter(Boolean).join(' / ') }}</span></template
+                <span class="ptmcp-cell-icon"><IconEpDocument aria-hidden="true" /></span
+                ><span class="ptmcp-cell-stack"
+                  ><strong>{{ row.tableName }}</strong
+                  ><span>{{ [row.databaseName, row.schemaName].filter(Boolean).join(' / ') }}</span></span
+                >
+              </button></template
             ></ElTableColumn
           ><ElTableColumn prop="objectType" label="类型" width="100" /><ElTableColumn
             prop="tableComment"
@@ -281,21 +285,26 @@ onMounted(() => {
 .keyword {
   max-width: 360px;
 }
-.object-link {
-  display: block;
-  padding: 0;
+.link-button {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   border: 0;
-  color: var(--ptmcp-accent);
-  background: none;
-  font: inherit;
-  font-weight: 600;
+  padding: 0;
+  background: transparent;
+  color: var(--ptmcp-blue);
   cursor: pointer;
   text-align: left;
 }
-.subtext {
-  display: block;
-  margin-top: 4px;
-  font-size: 12px;
+.link-button:hover strong,
+.link-button:focus-visible strong {
+  text-decoration: underline;
+}
+/* 名称列:icon + 双行文字横排,覆盖 link-button 的纵向堆叠 */
+.link-button.ptmcp-cell-lead {
+  flex-direction: row;
+  align-items: center;
 }
 .mb-4 {
   margin-bottom: 16px;

@@ -236,8 +236,15 @@ function sourceName(id: string | null): string {
             >
             <ElTableColumn label="工具 / 请求" width="150"
               ><template #default="{ row }"
-                ><span class="cell-primary">{{ row.tool }}</span
-                ><span class="cell-secondary" :title="row.requestId">{{ row.requestId }}</span></template
+                ><div class="ptmcp-cell-lead">
+                  <span class="ptmcp-cell-icon">
+                    <IconEpDocument aria-hidden="true" />
+                  </span>
+                  <span class="ptmcp-cell-stack">
+                    <strong>{{ row.tool }}</strong>
+                    <span :title="row.requestId">{{ row.requestId }}</span>
+                  </span>
+                </div></template
               ></ElTableColumn
             >
             <ElTableColumn label="结果" width="120"

@@ -372,7 +372,15 @@ onMounted(async () => {
       >
         <ElTableColumn prop="username" label="用户名" width="160"
           ><template #default="{ row }"
-            ><span class="ptmcp-cell-truncate" :title="row.username">{{ row.username }}</span></template
+            ><div class="ptmcp-cell-lead">
+              <span class="ptmcp-cell-icon">
+                <IconEpUserFilled aria-hidden="true" />
+              </span>
+              <span class="ptmcp-cell-stack">
+                <strong>{{ row.username }}</strong>
+                <span>{{ row.displayName }} · {{ departmentName(row.deptId) }}</span>
+              </span>
+            </div></template
           ></ElTableColumn
         >
         <ElTableColumn prop="displayName" label="显示名称" width="160"

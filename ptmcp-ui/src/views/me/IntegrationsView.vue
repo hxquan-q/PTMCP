@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import PageHeader from '../../components/common/PageHeader.vue';
+import StepWizard from '../../components/common/StepWizard.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { mePortalApi, type PlatformItem, type McpConfig } from '../../services/mePortalApi';
@@ -36,6 +37,12 @@ const clientTypes = [
   { label: 'Claude Code', value: 'CLAUDE_CODE' },
   { label: 'VS Code', value: 'VSCODE' },
 ];
+const wizardStep = ref(0);
+const wizardCanNext = computed(() => {
+  if (wizardStep.value === 0) return !!platformId.value && !platformLoading.value;
+  if (wizardStep.value === 1) return !!config.value && !loading.value;
+  return true;
+});
 
 async function loadPlatforms(append = false): Promise<void> {
   if (platformLoading.value) return;
@@ -109,68 +116,72 @@ onMounted(() => {
       action-label="重新读取"
       @action="platforms.length ? loadConfig() : loadPlatforms()"
     />
-    <ElCard shadow="never" class="portal-card"
-      ><div class="ptmcp-filter-strip">
-        <ElFormItem label="平台"
-          ><ElSelect v-model="platformId" :loading="platformLoading" placeholder="选择平台" class="select"
-            ><ElOption v-for="item in platforms" :key="item.id" :label="`${item.name} · Tier ${item.tier}`" :value="item.id" /><template
-              v-if="nextPlatformCursor"
-              #footer
-              ><ElButton link type="primary" @click="loadPlatforms(true)">加载更多平台</ElButton></template
-            ></ElSelect
-          ></ElFormItem
-        >
-      </div>
-      <h2 class="client-heading">选择客户端</h2>
-      <ElRadioGroup v-model="clientType" class="client-options" aria-label="MCP 客户端">
-        <ElRadio v-for="client in clientTypes" :key="client.value" :value="client.value" border>
-          <span class="client-option"
-            ><span aria-hidden="true" class="client-icon"
-              ><IconEpConnection v-if="client.value === 'WORKBUDDY'" /><IconEpEditPen v-else-if="client.value === 'CURSOR'" /><IconEpCpu
-                v-else-if="client.value === 'CLAUDE_CODE'" /><IconEpMonitor v-else-if="client.value === 'VSCODE'" /><IconEpSetting v-else /></span
-            >{{ client.label }}</span
+    <StepWizard v-model="wizardStep" :steps="['选择平台与客户端', '配置模板', '接入步骤']" :can-next="wizardCanNext" finish-label="完成接入">
+      <template #step-0>
+        <div class="ptmcp-filter-strip">
+          <ElFormItem label="平台"
+            ><ElSelect v-model="platformId" :loading="platformLoading" placeholder="选择平台" class="select"
+              ><ElOption v-for="item in platforms" :key="item.id" :label="`${item.name} · Tier ${item.tier}`" :value="item.id" /><template
+                v-if="nextPlatformCursor"
+                #footer
+                ><ElButton link type="primary" @click="loadPlatforms(true)">加载更多平台</ElButton></template
+              ></ElSelect
+            ></ElFormItem
           >
-        </ElRadio>
-      </ElRadioGroup>
-    </ElCard>
-    <ElCard shadow="never" class="portal-card"
-      ><ElSkeleton v-if="loading" :rows="8" animated /><PageState v-else-if="!config" description="选择平台后加载配置" /><template v-else
-        ><div class="status-row">
-          <div>
-            <span class="label">传输</span><strong>{{ config.transport }}</strong>
-          </div>
-          <div>
-            <span class="label">认证</span><strong>{{ config.authentication.join(' / ') || '待配置' }}</strong>
-          </div>
-          <ElTag type="warning">{{ config.compatibilityStatus === 'UNVERIFIED' ? '待验证' : config.compatibilityStatus }}</ElTag>
         </div>
-        <ElAlert
-          v-if="!config.url || !config.validatedVersion"
-          type="warning"
-          :closable="false"
-          title="部署地址或客户端版本尚未验证，请在人工配置前确认环境。"
-          class="mb-4"
-        />
-        <ElAlert v-if="needsPat" type="warning" :closable="false" title="模板包含凭证占位符" class="mb-4"
-          ><p>使用 PAT 时，先创建 PAT，再在客户端受控凭证设置中替换高亮占位符；使用 OAuth 时由客户端完成授权。</p>
-          <RouterLink to="/me/tokens">前往创建 PAT</RouterLink></ElAlert
+        <h2 class="client-heading">选择客户端</h2>
+        <ElRadioGroup v-model="clientType" class="client-options" aria-label="MCP 客户端">
+          <ElRadio v-for="client in clientTypes" :key="client.value" :value="client.value" border>
+            <span class="client-option"
+              ><span aria-hidden="true" class="client-icon"
+                ><IconEpConnection v-if="client.value === 'WORKBUDDY'" /><IconEpEditPen v-else-if="client.value === 'CURSOR'" /><IconEpCpu
+                  v-else-if="client.value === 'CLAUDE_CODE'" /><IconEpMonitor v-else-if="client.value === 'VSCODE'" /><IconEpSetting v-else /></span
+              >{{ client.label }}</span
+            >
+          </ElRadio>
+        </ElRadioGroup>
+      </template>
+      <template #step-1>
+        <ElSkeleton v-if="loading" :rows="8" animated /><PageState v-else-if="!config" description="返回上一步选择平台后加载配置" /><template v-else
+          ><div class="status-row">
+            <div>
+              <span class="label">传输</span><strong>{{ config.transport }}</strong>
+            </div>
+            <div>
+              <span class="label">认证</span><strong>{{ config.authentication.join(' / ') || '待配置' }}</strong>
+            </div>
+            <ElTag type="warning">{{ config.compatibilityStatus === 'UNVERIFIED' ? '待验证' : config.compatibilityStatus }}</ElTag>
+          </div>
+          <ElAlert
+            v-if="!config.url || !config.validatedVersion"
+            type="warning"
+            :closable="false"
+            title="部署地址或客户端版本尚未验证，请在人工配置前确认环境。"
+            class="mb-4"
+          />
+          <ElAlert v-if="needsPat" type="warning" :closable="false" title="模板包含凭证占位符" class="mb-4"
+            ><p>使用 PAT 时，先创建 PAT，再在客户端受控凭证设置中替换高亮占位符；使用 OAuth 时由客户端完成授权。</p>
+            <RouterLink to="/me/tokens">前往创建 PAT</RouterLink></ElAlert
+          >
+          <div class="code-heading"><span>配置模板</span><ElButton size="small" @click="copyConfig">复制模板</ElButton></div>
+          <pre
+            class="config-block"
+          ><code><template v-for="(part, index) in templateParts" :key="index"><mark v-if="index % 2 === 1">{{ part }}</mark><template v-else>{{ part }}</template></template></code></pre>
+          <p class="muted">
+            验证版本：{{ config.validatedVersion ?? '尚未验证' }}。PAT 仅作为占位符使用。<RouterLink to="/me/tokens">创建和管理 PAT</RouterLink>
+          </p></template
         >
-        <div class="code-heading"><span>配置模板</span><ElButton size="small" @click="copyConfig">复制模板</ElButton></div>
-        <pre
-          class="config-block"
-        ><code><template v-for="(part, index) in templateParts" :key="index"><mark v-if="index % 2 === 1">{{ part }}</mark><template v-else>{{ part }}</template></template></code></pre>
-        <p class="muted">
-          验证版本：{{ config.validatedVersion ?? '尚未验证' }}。PAT 仅作为占位符使用。<RouterLink to="/me/tokens">创建和管理 PAT</RouterLink>
-        </p>
-        <h2>接入步骤</h2>
+      </template>
+      <template #step-2>
+        <h2 class="client-heading">接入步骤</h2>
         <ol class="muted">
           <li>确认平台、服务地址及客户端版本，手动复制配置模板。</li>
           <li>OAuth：在客户端发起登录并核对授权范围；到期或撤销后重新授权。</li>
           <li>PAT：仅在客户端受控凭证设置中替换占位符，不写入共享配置或提交到仓库。</li>
           <li>在客户端检查连接。此页面不执行连接测试或查询，也不承诺未经实测的兼容性。</li>
-        </ol></template
-      ></ElCard
-    >
+        </ol>
+      </template>
+    </StepWizard>
   </section>
 </template>
 

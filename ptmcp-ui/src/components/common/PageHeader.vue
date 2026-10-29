@@ -20,7 +20,7 @@ withDefaults(defineProps<{ title: string; description?: string; titleId?: string
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 .page-header__main {
   min-width: 0;
@@ -34,16 +34,19 @@ withDefaults(defineProps<{ title: string; description?: string; titleId?: string
 .page-header h1 {
   margin: 0;
   color: var(--ptmcp-heading);
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 1.3;
+  /* 设计稿:大标题 24px 粗黑 */
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
   overflow-wrap: anywhere;
 }
 .page-header p {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   color: var(--ptmcp-text-muted);
   font-size: 13px;
   line-height: 1.5;
+  max-width: 72ch;
 }
 .page-header__actions {
   display: flex;

@@ -194,15 +194,23 @@ onMounted(() => {
     </ElForm>
     <p class="helper">PG catalog 仅分组；命名空间缺少可信实时 generation，暂不可选。最多100条，不使用手填 ID 替代当前资源身份。</p>
     <ElTable class="ptmcp-data-table" :data="draft" aria-label="Scope 规则"
-      ><ElTableColumn prop="resourceType" label="资源类型" min-width="140" /><ElTableColumn
-        prop="resourceId"
-        label="资源 ID"
-        min-width="140"
-      /><ElTableColumn prop="resourceGeneration" label="generation" min-width="130" /><ElTableColumn
-        prop="action"
-        label="动作"
-        width="100"
-      /><ElTableColumn label="继承" width="100"
+      ><ElTableColumn label="资源类型" min-width="140"
+        ><template #default="{ row }"
+          ><div class="ptmcp-cell-lead">
+            <span class="ptmcp-cell-icon">
+              <IconEpSetUp aria-hidden="true" />
+            </span>
+            <span class="ptmcp-cell-stack">
+              <strong>{{ row.resourceType }}</strong>
+              <span>{{ row.resourceId }} · {{ row.action }}</span>
+            </span>
+          </div></template
+        ></ElTableColumn
+      ><ElTableColumn prop="resourceId" label="资源 ID" min-width="140" /><ElTableColumn
+        prop="resourceGeneration"
+        label="generation"
+        min-width="130"
+      /><ElTableColumn prop="action" label="动作" width="100" /><ElTableColumn label="继承" width="100"
         ><template #default="{ row }">{{ row.includeDescendants ? '包含子级' : '仅当前' }}</template></ElTableColumn
       ><ElTableColumn label="操作" width="80" align="right"
         ><template #default="{ $index }"

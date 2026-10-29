@@ -3,6 +3,8 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Component 
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
 import { useSessionStore } from '../../stores/session';
 import { errorMessage } from '../../services/http';
+import GlobalSearch, { type SearchResultGroup, type SearchResultItem } from './GlobalSearch.vue';
+import { listDatasources } from '../../services/data';
 
 export interface NavigationItem {
   label: string;
@@ -121,6 +123,33 @@ onUnmounted(() => {
   document.removeEventListener('keydown', handleNavigationKey);
   if (menuOpen.value) document.body.style.overflow = previousOverflow;
 });
+async function globalSearch(query: string): Promise<SearchResultGroup[]> {
+  const keyword = query.trim().toLowerCase();
+  if (!keyword) return [];
+  const groups: SearchResultGroup[] = [];
+  const navItems = visibleItems.value
+    .filter((item) => item.label.toLowerCase().includes(keyword))
+    .slice(0, 6)
+    .map<SearchResultItem>((item) => ({ id: item.to, title: item.label, subtitle: '功能页面', icon: item.icon }));
+  if (navItems.length) groups.push({ label: '功能', items: navItems });
+  if (session.can('ptmcp:datasource:list')) {
+    try {
+      const result = await listDatasources({ keyword: query.trim(), pageSize: 5 });
+      const items = (result.data.items ?? []).map<SearchResultItem>((row) => ({
+        id: `/admin/datasources/${row.id}`,
+        title: row.name,
+        subtitle: `${row.engine} · ${row.databaseName}`,
+      }));
+      if (items.length) groups.push({ label: '数据源', items });
+    } catch {
+      /* 搜索失败静默降级,仅返回导航结果 */
+    }
+  }
+  return groups;
+}
+function onSearchSelect(item: SearchResultItem): void {
+  void router.push(item.id);
+}
 async function logout(): Promise<void> {
   if (loggingOut.value) return;
   loggingOut.value = true;
@@ -150,6 +179,7 @@ async function logout(): Promise<void> {
         <IconEpExpand />
       </button>
       <RouterLink class="workspace-brand" to="/" aria-label="PTMCP 工作台"><strong>PTMCP</strong><span>数据访问管理平台</span></RouterLink>
+      <GlobalSearch :search="globalSearch" @select="onSearchSelect" />
       <div class="workspace-user">
         <div class="workspace-avatar" aria-hidden="true">{{ initials }}</div>
         <div class="workspace-user__text">

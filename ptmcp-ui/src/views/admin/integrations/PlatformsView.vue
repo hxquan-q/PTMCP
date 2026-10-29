@@ -103,7 +103,19 @@ onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearP
       <ElSkeleton v-if="loading && !rows.length" :rows="5" animated />
       <div v-else-if="!error || rows.length" class="ptmcp-table-wrap">
         <ElTable :data="rows" class="ptmcp-data-table empty-table" size="small" height="100%" aria-label="平台目录">
-          <ElTableColumn prop="code" label="Code" min-width="150" />
+          <ElTableColumn label="Code" min-width="150"
+            ><template #default="{ row }"
+              ><div class="ptmcp-cell-lead">
+                <span class="ptmcp-cell-icon">
+                  <IconEpMonitor aria-hidden="true" />
+                </span>
+                <span class="ptmcp-cell-stack">
+                  <strong>{{ row.code }}</strong>
+                  <span>{{ row.name }} · {{ row.tier }}</span>
+                </span>
+              </div></template
+            ></ElTableColumn
+          >
           <ElTableColumn prop="name" label="名称" min-width="170" />
           <ElTableColumn prop="tier" label="Tier" width="90" />
           <ElTableColumn prop="catalogMode" label="目录模式" min-width="120" />

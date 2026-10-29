@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import CursorFooter from '../../../components/common/CursorFooter.vue';
+import DetailDrawer from '../../../components/common/DetailDrawer.vue';
 import PageHeader from '../../../components/common/PageHeader.vue';
 import PageState from '../../../components/common/PageState.vue';
+import StatusBadge from '../../../components/common/StatusBadge.vue';
 import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
@@ -16,6 +18,9 @@ const session = useSessionStore();
 const submitting = ref(false);
 const createError = ref('');
 const dialogVisible = ref(false);
+const detailRow = ref<DatasourceRead | null>(null);
+const detailOpen = ref(false);
+const createStep = ref(0);
 const formRef = ref<FormInstance>();
 const filters = reactive({ keyword: '', engine: '', status: '' });
 const form = reactive<DatasourceWrite>(emptyForm());
@@ -119,11 +124,35 @@ function resetForm(): void {
   Object.assign(form, emptyForm());
   createKey.value = newUuid();
   createError.value = '';
+  createStep.value = 0;
+}
+async function validateStep(fields: (keyof DatasourceWrite)[]): Promise<boolean> {
+  if (!formRef.value) return false;
+  try {
+    await formRef.value.validateField(fields);
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function nextCreateStep(): Promise<void> {
+  // step 0 = 连接信息;step 1 = 归属与资源
+  if (createStep.value === 0) {
+    if (!(await validateStep(['engine', 'host', 'port', 'databaseName', 'username', 'credential']))) return;
+    createStep.value = 1;
+  } else {
+    await submitCreate();
+  }
 }
 function openCreate(): void {
   if (submitting.value || !session.can('ptmcp:datasource:create')) return;
   resetForm();
   dialogVisible.value = true;
+}
+function openDetail(row: DatasourceRead): void {
+  if (!session.can('ptmcp:datasource:read')) return;
+  detailRow.value = row;
+  detailOpen.value = true;
 }
 async function submitCreate(): Promise<void> {
   if (submitting.value || !dialogVisible.value || !session.can('ptmcp:datasource:create')) return;
@@ -238,16 +267,19 @@ onBeforeUnmount(() => {
           table-layout="auto"
           empty-text=""
         >
-          <ElTableColumn prop="name" label="数据源" min-width="210">
+          <ElTableColumn prop="name" label="数据源" min-width="230">
             <template #default="scope">
               <button
-                class="link-button"
+                class="link-button ptmcp-cell-lead"
                 type="button"
                 :disabled="!session.can('ptmcp:datasource:read')"
                 @click="router.push(`/admin/datasources/${scope.row.id}`)"
               >
-                <strong>{{ scope.row.name }}</strong>
-                <small>{{ scope.row.code }} · ID {{ scope.row.id }}</small>
+                <span class="ptmcp-cell-icon" :data-engine="scope.row.engine"><IconEpCoin aria-hidden="true" /></span>
+                <span class="ptmcp-cell-stack">
+                  <strong>{{ scope.row.name }}</strong>
+                  <span>{{ scope.row.code }} · ID {{ scope.row.id }}</span>
+                </span>
               </button>
             </template>
           </ElTableColumn>
@@ -271,12 +303,13 @@ onBeforeUnmount(() => {
           <ElTableColumn label="活动快照" min-width="130"
             ><template #default="scope">{{ scope.row.activeSnapshotId || '待同步' }}</template></ElTableColumn
           >
-          <ElTableColumn label="操作" width="80" align="right" fixed="right">
+          <ElTableColumn label="操作" width="130" align="right" fixed="right">
             <template #default="scope">
               <div class="ptmcp-row-actions">
-                <ElButton v-if="session.can('ptmcp:datasource:read')" link type="primary" @click="router.push(`/admin/datasources/${scope.row.id}`)"
+                <ElButton v-if="session.can('ptmcp:datasource:read')" link type="primary" @click="openDetail(scope.row as DatasourceRead)"
                   >查看</ElButton
                 >
+                <ElButton v-if="session.can('ptmcp:datasource:read')" link @click="router.push(`/admin/datasources/${scope.row.id}`)">管理</ElButton>
               </div>
             </template>
           </ElTableColumn>
@@ -290,6 +323,38 @@ onBeforeUnmount(() => {
       <CursorFooter v-if="loaded || rows.length" :count="rows.length" :has-more="!!nextCursor" :loading="loading" @more="nextPage" />
     </ElCard>
 
+    <DetailDrawer v-model="detailOpen" :title="detailRow?.name ?? ''" :subtitle="`${detailRow?.engine ?? ''} · ${detailRow?.databaseName ?? ''}`">
+      <template #icon>
+        <span class="ptmcp-cell-icon ptmcp-cell-icon--lg" :data-engine="detailRow?.engine"><IconEpCoin aria-hidden="true" /></span>
+      </template>
+      <dl class="drawer-fields">
+        <dt>编码</dt>
+        <dd>{{ detailRow?.code }}</dd>
+        <dt>引擎</dt>
+        <dd>{{ detailRow?.engine }}</dd>
+        <dt>数据库</dt>
+        <dd>{{ detailRow?.databaseName }}</dd>
+        <dt>主机</dt>
+        <dd>{{ detailRow?.host }}:{{ detailRow?.port }}</dd>
+        <dt>生命周期</dt>
+        <dd><StatusBadge domain="lifecycle" :value="detailRow?.status" /></dd>
+        <dt>连接健康</dt>
+        <dd><StatusBadge domain="connection" :value="detailRow?.health" /></dd>
+        <dt>凭据</dt>
+        <dd>{{ detailRow?.credentialConfigured ? '已配置' : '未配置' }}</dd>
+        <dt>最近同步</dt>
+        <dd>{{ formatDate(detailRow?.lastSyncAt) }}</dd>
+        <dt>连接池上限</dt>
+        <dd>{{ detailRow?.poolMax }}</dd>
+        <dt>活动快照</dt>
+        <dd>{{ detailRow?.activeSnapshotId || '待同步' }}</dd>
+      </dl>
+      <template #footer>
+        <ElButton @click="detailOpen = false">关闭</ElButton>
+        <ElButton type="primary" @click="router.push(`/admin/datasources/${detailRow?.id}`)">进入管理</ElButton>
+      </template>
+    </DetailDrawer>
+
     <ElDialog
       v-model="dialogVisible"
       title="新建数据源"
@@ -300,10 +365,16 @@ onBeforeUnmount(() => {
       :show-close="!submitting"
     >
       <ElAlert v-if="createError" type="error" :closable="false" show-icon class="state-alert">{{ createError }}</ElAlert>
+      <ol class="create-steps" aria-hidden="true">
+        <li :data-state="createStep === 0 ? 'active' : 'done'">
+          <span class="create-steps__node"><IconEpCheck v-if="createStep > 0" /><span v-else>1</span></span
+          >连接信息
+        </li>
+        <li class="create-steps__link" :data-state="createStep > 0 ? 'done' : 'todo'" />
+        <li :data-state="createStep === 1 ? 'active' : 'todo'"><span class="create-steps__node">2</span>归属与资源</li>
+      </ol>
       <ElForm ref="formRef" :model="form" :rules="rules" :disabled="submitting" label-position="top" class="datasource-form">
-        <div class="form-grid">
-          <ElFormItem label="编码" prop="code" required><ElInput v-model="form.code" maxlength="64" /></ElFormItem>
-          <ElFormItem label="名称" prop="name" required><ElInput v-model="form.name" maxlength="128" /></ElFormItem>
+        <div v-show="createStep === 0" class="form-grid">
           <ElFormItem label="引擎" prop="engine" required
             ><ElSelect v-model="form.engine"><ElOption label="MySQL" value="MYSQL" /><ElOption label="PostgreSQL" value="POSTGRESQL" /></ElSelect
           ></ElFormItem>
@@ -314,6 +385,10 @@ onBeforeUnmount(() => {
           <ElFormItem label="凭据" prop="credential" required
             ><ElInput v-model="form.credential" type="password" show-password autocomplete="new-password"
           /></ElFormItem>
+        </div>
+        <div v-show="createStep === 1" class="form-grid">
+          <ElFormItem label="编码" prop="code" required><ElInput v-model="form.code" maxlength="64" /></ElFormItem>
+          <ElFormItem label="名称" prop="name" required><ElInput v-model="form.name" maxlength="128" /></ElFormItem>
           <ElFormItem label="连接池上限" prop="poolMax" required
             ><ElInputNumber v-model="form.poolMax" :min="1" :max="8" class="full-width"
           /></ElFormItem>
@@ -325,8 +400,9 @@ onBeforeUnmount(() => {
         <ElAlert type="info" :closable="false">连接凭据只在提交时发送，之后仅显示“已配置”。TLS 固定为 VERIFY_FULL。</ElAlert>
       </ElForm>
       <template #footer
+        ><ElButton v-if="createStep === 1" :disabled="submitting" @click="createStep = 0">上一步</ElButton
         ><ElButton :disabled="submitting" @click="dialogVisible = false">取消</ElButton
-        ><ElButton type="primary" :loading="submitting" @click="submitCreate">创建</ElButton></template
+        ><ElButton type="primary" :loading="submitting" @click="nextCreateStep">{{ createStep === 0 ? '下一步' : '创建' }}</ElButton></template
       >
     </ElDialog>
   </section>
@@ -372,8 +448,59 @@ onBeforeUnmount(() => {
   font-size: 12px;
   font-weight: 400;
 }
+/* 名称列:icon + 双行文字横排,覆盖 link-button 的纵向堆叠 */
+.link-button.ptmcp-cell-lead {
+  flex-direction: row;
+  align-items: center;
+}
 .state-alert {
   margin-bottom: 16px;
+}
+/* 新建向导的两步指示条(与 StepWizard 同视觉:32px 圆点 + 连接线) */
+.create-steps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+  color: var(--ptmcp-text-muted);
+  font-size: 12.5px;
+}
+.create-steps > li[data-state] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.create-steps__node {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--ptmcp-wash);
+  color: var(--ptmcp-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.create-steps > li[data-state='active'] {
+  color: var(--ptmcp-heading);
+  font-weight: 600;
+}
+.create-steps > li[data-state='active'] .create-steps__node,
+.create-steps > li[data-state='done'] .create-steps__node {
+  background: var(--ptmcp-blue);
+  color: #fff;
+}
+.create-steps__link {
+  flex: 1;
+  min-width: 24px;
+  height: 2px;
+  background: var(--ptmcp-border);
+}
+.create-steps__link[data-state='done'] {
+  background: var(--ptmcp-blue);
 }
 .form-grid {
   display: grid;

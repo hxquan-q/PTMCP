@@ -145,27 +145,40 @@ body {
 }
 
 .el-card {
-  --el-card-border-color: var(--ptmcp-border);
+  --el-card-border-color: var(--ptmcp-border-row);
   border-radius: var(--ptmcp-radius-panel);
-  box-shadow: var(--ptmcp-shadow);
+  /* 设计稿：卡片几乎无阴影,靠浅边框与留白分隔 */
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  border-color: var(--ptmcp-border-row);
 }
-/* Apple CTA：主按钮全圆 pill，次按钮 8px；link 无框 */
+/* Apple CTA：主/次按钮统一 8px 圆角矩形(设计稿非 pill),实心蓝主按钮 */
 .el-button {
   font-weight: 600;
   border-radius: var(--ptmcp-radius-control);
 }
 .el-button--primary {
-  border-radius: var(--ptmcp-radius-pill);
-  padding-inline: 18px;
+  border-radius: var(--ptmcp-radius-control);
+  padding-inline: 16px;
 }
 .el-button.is-link {
   border-radius: var(--ptmcp-radius-control);
 }
 .el-table {
-  --el-table-header-bg-color: var(--ptmcp-band);
+  /* 设计稿:表头白底小灰字(非灰底),行间 hairline,行高加大 */
+  --el-table-header-bg-color: transparent;
   --el-table-header-text-color: var(--ptmcp-text-muted);
   --el-table-row-hover-bg-color: var(--ptmcp-hover);
-  --el-table-border-color: var(--ptmcp-border);
+  --el-table-border-color: var(--ptmcp-border-row);
+}
+.el-table th.el-table__cell {
+  font-weight: 500;
+  font-size: 12px;
+  border-bottom: 1px solid var(--ptmcp-border-row);
+}
+.el-table td.el-table__cell {
+  border-bottom: 1px solid var(--ptmcp-border-row);
+  padding-top: 12px;
+  padding-bottom: 12px;
 }
 .el-input__wrapper,
 .el-select__wrapper {
@@ -278,8 +291,10 @@ button:focus-visible,
 }
 .workspace-nav a.is-active {
   background: var(--ptmcp-selected);
-  color: var(--ptmcp-blue-dark);
+  color: var(--ptmcp-blue);
   font-weight: 600;
+  /* 设计稿:选中项左侧 3px 蓝条 */
+  box-shadow: inset 3px 0 0 var(--ptmcp-blue);
 }
 .workspace-nav a.is-active svg {
   color: var(--ptmcp-blue);
@@ -907,4 +922,131 @@ a {
   .ptmcp-fill-card .el-table {
     max-height: 480px;
   }
+}
+
+/* ── 状态 dot(设计稿 ● 启用 / ● 连接正常)────────────────────────────────
+   用法:<span class="ptmcp-status-dot is-success">启用</span>
+   语义:is-success / is-warning / is-danger / is-info / is-processing */
+.ptmcp-status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.ptmcp-status-dot::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
+.ptmcp-status-dot.is-success {
+  color: var(--ptmcp-green);
+}
+.ptmcp-status-dot.is-warning {
+  color: var(--ptmcp-orange);
+}
+.ptmcp-status-dot.is-danger {
+  color: var(--ptmcp-red);
+}
+.ptmcp-status-dot.is-info {
+  color: var(--ptmcp-text-muted);
+}
+/* 进行中/连接态:点带呼吸脉冲 */
+.ptmcp-status-dot.is-processing {
+  color: var(--ptmcp-blue);
+}
+.ptmcp-status-dot.is-processing::before {
+  box-shadow: 0 0 0 0 rgba(0, 113, 227, 0.4);
+  animation: ptmcp-pulse 1.6s ease-out infinite;
+}
+@keyframes ptmcp-pulse {
+  70% {
+    box-shadow: 0 0 0 5px rgba(0, 113, 227, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 113, 227, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ptmcp-status-dot.is-processing::before {
+    animation: none;
+  }
+}
+
+/* ── 表格双行单元格(设计稿:主名 + 次要码/ID)──────────────────────────
+   用法:单元格内 <div class="ptmcp-cell-stack"><strong>主名</strong><span>次码 · ID</span></div> */
+.ptmcp-cell-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.ptmcp-cell-stack > strong,
+.ptmcp-cell-stack > .cell-primary {
+  color: var(--ptmcp-text-strong);
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ptmcp-cell-stack > span,
+.ptmcp-cell-stack > .cell-secondary {
+  color: var(--ptmcp-text-muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 行内实体图标:设计稿彩色引擎/资源 icon(32px 圆角块) */
+.ptmcp-cell-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 8px;
+  background: var(--ptmcp-wash);
+  color: var(--ptmcp-blue);
+  font-size: 16px;
+}
+.ptmcp-cell-lead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+/* 抽屉标题用的大号图标(40px) */
+.ptmcp-cell-icon--lg {
+  width: 40px;
+  height: 40px;
+  font-size: 20px;
+  border-radius: 10px;
+}
+/* 引擎配色:设计稿里 MySQL 橙/PostgreSQL 蓝等彩色实体 icon */
+.ptmcp-cell-icon[data-engine='MYSQL'] {
+  background: #fff7ed;
+  color: #c2410c;
+}
+.ptmcp-cell-icon[data-engine='POSTGRESQL'] {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.ptmcp-cell-icon[data-engine='SQLSERVER'],
+.ptmcp-cell-icon[data-engine='MSSQL'] {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+.ptmcp-cell-icon[data-engine='ORACLE'] {
+  background: #fef2f2;
+  color: #c2410c;
+}
+.ptmcp-cell-icon[data-engine='MONGODB'] {
+  background: #f0fdf4;
+  color: #15803d;
 }

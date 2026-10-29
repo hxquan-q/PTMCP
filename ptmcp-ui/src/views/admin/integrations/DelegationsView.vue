@@ -220,10 +220,19 @@ onMounted(() => {
         @action="retry" /><ElSkeleton v-if="loading" :rows="5" animated />
       <div v-else-if="!error || rows.length" class="ptmcp-table-wrap">
         <ElTable :data="rows" class="ptmcp-data-table" size="small" height="100%" aria-label="委派记录"
-          ><ElTableColumn prop="userId" label="管理员" min-width="120" /><ElTableColumn
-            prop="departmentRootId"
-            label="部门根"
-            min-width="120" /><ElTableColumn label="资源范围" min-width="170"
+          ><ElTableColumn label="管理员" min-width="120"
+            ><template #default="{ row }"
+              ><div class="ptmcp-cell-lead">
+                <span class="ptmcp-cell-icon">
+                  <IconEpLink aria-hidden="true" />
+                </span>
+                <span class="ptmcp-cell-stack">
+                  <strong>{{ row.userId }}</strong>
+                  <span>{{ row.resourceType }}:{{ row.resourceId }} · v{{ row.version }}</span>
+                </span>
+              </div></template
+            ></ElTableColumn
+          ><ElTableColumn prop="departmentRootId" label="部门根" min-width="120" /><ElTableColumn label="资源范围" min-width="170"
             ><template #default="{ row }">{{ row.resourceType }}:{{ row.resourceId }}</template></ElTableColumn
           ><ElTableColumn prop="allowedActions" label="动作" min-width="200" /><ElTableColumn label="有效期（台北）" min-width="260"
             ><template #default="{ row }">{{ formatDate(row.validFrom) }} 至 {{ formatDate(row.validTo) }}</template></ElTableColumn

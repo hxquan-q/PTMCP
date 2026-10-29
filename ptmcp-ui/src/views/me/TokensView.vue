@@ -188,7 +188,17 @@ onMounted(async () => {
       >
       <div v-else class="ptmcp-table-wrap">
         <ElTable class="ptmcp-data-table" size="small" height="100%" :data="tokens" row-key="id" aria-label="PAT 列表"
-          ><ElTableColumn prop="name" label="名称" min-width="160" /><ElTableColumn label="前缀" width="150"
+          ><ElTableColumn label="名称" min-width="200"
+            ><template #default="{ row }"
+              ><div class="ptmcp-cell-lead">
+                <span class="ptmcp-cell-icon"><IconEpKey aria-hidden="true" /></span
+                ><span class="ptmcp-cell-stack"
+                  ><strong>{{ row.name }}</strong
+                  ><span>{{ platformName(row.platformId) }}</span></span
+                >
+              </div></template
+            ></ElTableColumn
+          ><ElTableColumn label="前缀" width="150"
             ><template #default="{ row }"
               ><code>{{ row.prefix }}</code></template
             ></ElTableColumn

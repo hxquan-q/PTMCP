@@ -191,13 +191,18 @@ onBeforeUnmount(() => {
           <ElTableColumn label="对象" min-width="270"
             ><template #default="scope"
               ><button
-                class="link-button"
+                class="link-button ptmcp-cell-lead"
                 type="button"
                 :disabled="!session.can('ptmcp:metadata:read')"
                 @click="openDetail(scope.row as MetadataItem)"
               >
-                <strong>{{ formatObject(scope.row as MetadataItem) }}</strong
-                ><small>{{ scope.row.databaseName }} · ID {{ scope.row.id }} · 命名空间 {{ scope.row.namespaceId }}</small>
+                <span class="ptmcp-cell-icon">
+                  <IconEpDocument aria-hidden="true" />
+                </span>
+                <span class="ptmcp-cell-stack">
+                  <strong>{{ formatObject(scope.row as MetadataItem) }}</strong
+                  ><span>{{ scope.row.databaseName }} · ID {{ scope.row.id }} · 命名空间 {{ scope.row.namespaceId }}</span>
+                </span>
               </button></template
             ></ElTableColumn
           >
@@ -282,6 +287,10 @@ onBeforeUnmount(() => {
   color: var(--ptmcp-text-muted);
   font-size: 12px;
   font-weight: 400;
+}
+.link-button.ptmcp-cell-lead {
+  flex-direction: row;
+  align-items: center;
 }
 .state-alert {
   margin-bottom: 16px;

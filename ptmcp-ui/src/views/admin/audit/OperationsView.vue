@@ -90,8 +90,15 @@ onMounted(() => {
           >
           <ElTableColumn prop="action" label="动作" min-width="180"
             ><template #default="{ row }"
-              ><ElTag size="small" type="info">{{ operationActionText(row.action) }}</ElTag>
-              <span class="action-code">{{ row.action }}</span></template
+              ><div class="ptmcp-cell-lead">
+                <span class="ptmcp-cell-icon">
+                  <IconEpDocument aria-hidden="true" />
+                </span>
+                <span class="ptmcp-cell-stack">
+                  <strong>{{ operationActionText(row.action) }}</strong>
+                  <span>{{ row.action }}</span>
+                </span>
+              </div></template
             ></ElTableColumn
           >
           <ElTableColumn label="聚合" min-width="200"

@@ -73,11 +73,17 @@ onMounted(load);
       >
       <div v-else-if="items.length" class="ptmcp-table-wrap">
         <ElTable :data="items" class="ptmcp-data-table" size="small" height="100%" row-key="id" aria-label="OAuth 授权列表"
-          ><ElTableColumn prop="clientName" label="客户端" min-width="180" /><ElTableColumn
-            prop="platformId"
-            label="平台 ID"
-            width="120"
-          /><ElTableColumn label="授权时间" min-width="180"
+          ><ElTableColumn label="客户端" min-width="200"
+            ><template #default="{ row }"
+              ><div class="ptmcp-cell-lead">
+                <span class="ptmcp-cell-icon"><IconEpLink aria-hidden="true" /></span
+                ><span class="ptmcp-cell-stack"
+                  ><strong>{{ row.clientName }}</strong
+                  ><span>ID {{ row.id }}</span></span
+                >
+              </div></template
+            ></ElTableColumn
+          ><ElTableColumn prop="platformId" label="平台 ID" width="120" /><ElTableColumn label="授权时间" min-width="180"
             ><template #default="{ row }">{{ formatDate(row.issuedAt) }}</template></ElTableColumn
           ><ElTableColumn label="最近使用" min-width="180"
             ><template #default="{ row }">{{ formatDate(row.lastUsedAt) }}</template></ElTableColumn
