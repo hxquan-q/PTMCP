@@ -93,7 +93,7 @@ host/port先做DNS与网络目的地策略验证，拒绝云元数据/loopback�
 | GET /metadata/objects/{id} | metadata:read | →ObjectDetail（物理键、generation、快照version、列定义、字典）；含业务结构需显式管理元数据权限，菜单列举不自动授权查询 |
 | PUT /metadata/objects/{id}/dictionary | metadata:dictionary | DictionaryWrite+If-Match→ObjectDetail；不能修改真实数据库DDL |
 | /users CRUD | user对应动作 | UserWrite→UserDTO；筛选keyword/departmentId/status；不接受外部org树替换；删除逻辑删除并撤销令牌 |
-| PUT /users/{id} | user:update，加实际变更的status/assign-role/move | 完整 UserWrite+If-Match→UserDTO；roleIds缺省保留、按集合比较；委派管理员须自身具备所需功能码，且同一有效委派覆盖全部动作与新旧部门；角色变化时最终整组功能码不得超过该委派，不能跨委派拼接 |
+| PUT /users/{id} | user:update，加实际变更的status/assign-role/move | 完整 UserWrite+If-Match→UserDTO；授权分类快照版本必须等于If-Match，落库保留同版本CAS，冲突不自动重试；roleIds缺省保留、按集合比较；委派管理员须自身具备所需功能码，且同一有效委派覆盖全部动作与新旧部门；角色变化时最终整组功能码不得超过该委派，不能跨委派拼接 |
 | PUT /users/{id}/status | user:status | {status:ACTIVE/DISABLED}+If-Match→UserDTO；不能停用最后一个有效平台管理员 |
 | GET /users/{id}/identity | 平台管理员 | →IdentityState={userId,version,identityState:UNBOUND/READY/CHANGE_PENDING,recoveryRequired}；不返回摘要、目标或操作材料 |
 | PUT /users/{id}/password | user:reset-password，平台管理员 | {newPassword,reason}+If-Match+Idempotency-Key→200 IdentityState；先提权威版本并撤销全部认证，跨库异常保持 Pending，由管理员恢复 |

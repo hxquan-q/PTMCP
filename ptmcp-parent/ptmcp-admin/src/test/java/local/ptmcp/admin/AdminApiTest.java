@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.spy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -14,6 +16,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.mysql.cj.jdbc.exceptions.CommunicationsException;
 
+import local.ptmcp.admin.api.AdminPrincipal;
+import local.ptmcp.admin.api.ApiExceptionAdvice;
+import local.ptmcp.admin.api.UserAdminController;
+import local.ptmcp.persistence.org.IdempotencyRecorder;
 import local.ptmcp.persistence.org.ResourceIds;
 import local.ptmcp.persistence.org.DelegationStore;
 import local.ptmcp.persistence.org.DelegationScopeResolver;
@@ -31,6 +37,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.testcontainers.mysql.MySQLContainer;
 
 import java.security.SecureRandom;
@@ -45,6 +52,11 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Admin org/ACL APIs against the real MySQL schema; identity uses the documented test shim. */
 @SpringBootTest(
@@ -167,6 +179,7 @@ class AdminApiTest {
     @Autowired private OrgStore orgStore;
     @Autowired private DelegationStore delegationStore;
     @Autowired private DelegationScopeResolver delegationScopeResolver;
+    @Autowired private IdempotencyRecorder idempotencyRecorder;
 
     @BeforeEach
     void resetOnlyOwnedData() throws Exception {
@@ -1183,6 +1196,52 @@ class AdminApiTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
         assertEquals(current, orgStore.getUser(fixture.targetId()));
+    }
+
+    @Test
+    void genericUserUpdateCannotAuthorizeAgainstADifferentFutureVersion() throws Exception {
+        UserEditFixture fixture = userEditFixture(List.of("ptmcp:user:update"));
+        OrgStore.UserRow original = orgStore.getUser(fixture.targetId());
+        CountDownLatch snapshotRead = new CountDownLatch(1);
+        CountDownLatch concurrentUpdateCommitted = new CountDownLatch(1);
+        AtomicBoolean intercepted = new AtomicBoolean();
+        OrgStore observedStore = spy(orgStore);
+        doAnswer(invocation -> {
+            OrgStore.UserRow snapshot = (OrgStore.UserRow) invocation.callRealMethod();
+            if (intercepted.compareAndSet(false, true)) {
+                snapshotRead.countDown();
+                assertTrue(concurrentUpdateCommitted.await(15, TimeUnit.SECONDS),
+                        "concurrent status update must commit before authorization continues");
+            }
+            return snapshot;
+        }).when(observedStore).getUser(fixture.targetId());
+        MockMvc isolatedMvc = MockMvcBuilders.standaloneSetup(new UserAdminController(
+                        observedStore, idempotencyRecorder, delegationScopeResolver, delegationStore))
+                .setControllerAdvice(new ApiExceptionAdvice()).build();
+        try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+            var request = executor.submit(() -> isolatedMvc.perform(
+                            put("/api/v1/admin/users/" + fixture.targetId())
+                                    .requestAttr(AdminPrincipal.ATTRIBUTE,
+                                            new AdminPrincipal(fixture.delegateId(), false))
+                                    .header("If-Match", original.version() + 1)
+                                    .contentType("application/json")
+                                    .content(userEditBody(fixture, true, null)))
+                    .andReturn());
+            try {
+                assertTrue(snapshotRead.await(15, TimeUnit.SECONDS),
+                        "controller must capture the original authorization snapshot");
+                OrgStore.UserRow disabled = orgStore.updateUser(original.id(), original.displayName(),
+                        original.deptId(), null, null, null, false, null,
+                        original.version(), ADMIN_ID);
+                assertEquals(original.version() + 1, disabled.version());
+                concurrentUpdateCommitted.countDown();
+                MvcResult result = request.get(15, TimeUnit.SECONDS);
+                assertEquals(409, result.getResponse().getStatus());
+                assertEquals(disabled, orgStore.getUser(fixture.targetId()));
+            } finally {
+                concurrentUpdateCommitted.countDown();
+            }
+        }
     }
 
     private record UserEditFixture(

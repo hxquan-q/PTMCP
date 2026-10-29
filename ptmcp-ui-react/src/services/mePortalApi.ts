@@ -9,6 +9,29 @@ export interface PlatformItem {
   catalogMode: string;
 }
 
+export interface DatasourceItem {
+  type: 'DATASOURCE';
+  id: string;
+  name: string;
+  engine: string;
+  databaseName: string;
+}
+
+/** 个人字典目录行（Vue ObjectSummary 对应）。 */
+export interface DictionaryItem {
+  id: string;
+  platformId?: string;
+  datasourceId: string;
+  databaseName: string;
+  schemaName: string | null;
+  objectName: string;
+  objectType: string;
+  authorized?: boolean;
+  metadataVisible?: boolean;
+  dictionaryTitle?: string | null;
+  generation: string;
+}
+
 export interface AccessContext<T> {
   items: T[];
   nextCursor: string | null;
@@ -41,7 +64,25 @@ export const mePortalApi = {
   accessContext: {
     platforms: (cursor?: string, signal?: AbortSignal) =>
       request<AccessContext<PlatformItem>>(`/api/v1/me/access-context${query({ level: 'PLATFORM', cursor })}`, { signal }),
+    datasources: (platformId: string, cursor?: string, signal?: AbortSignal) =>
+      request<AccessContext<DatasourceItem>>(`/api/v1/me/access-context${query({ level: 'DATASOURCE', platformId, cursor })}`, { signal }),
   },
+  dictionaryList: (
+    params: {
+      platformId?: string;
+      datasourceId?: string;
+      databaseName?: string;
+      schemaName?: string;
+      keyword?: string;
+      cursor?: string;
+      pageSize?: number;
+    } = {},
+    signal?: AbortSignal,
+  ) =>
+    request<{ items: DictionaryItem[]; nextCursor: string | null }>(
+      `/api/v1/me/dictionary${query({ ...params, pageSize: String(params.pageSize ?? 20) })}`,
+      { signal },
+    ),
   mcpConfig: (platformId: string, clientType: string, signal?: AbortSignal): Promise<McpConfig> =>
     request<McpConfig>(`/api/v1/me/mcp-config${query({ platformId, clientType })}`, { signal }),
   dictionaryDetail: <T>(objectId: string, platformId: string, signal?: AbortSignal): Promise<T> =>

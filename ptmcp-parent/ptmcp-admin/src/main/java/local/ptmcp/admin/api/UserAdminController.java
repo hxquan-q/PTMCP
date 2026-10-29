@@ -117,6 +117,10 @@ public class UserAdminController {
                     local.ptmcp.common.error.ErrorCode.INVALID_ARGUMENT);
         }
         OrgStore.UserRow before = orgStore.getUser(id);
+        if (before.version() != expectedVersion) {
+            throw new local.ptmcp.common.error.DomainException(
+                    local.ptmcp.common.error.ErrorCode.VERSION_CONFLICT);
+        }
         scopeGate.requireUserUpdate(request, before, write.deptId(), write.enabled(), write.roleIds());
         UserRead updated =
                 toRead(

@@ -99,6 +99,16 @@ AdminApi26、双库恢复17、Session11、OAuth29、MCP HTTP2；完成时间2026
 首次追加回归漏声明 SQLException，第二次 DST request_id 超出 CHAR(36)，均为夹具错误，
 已补 throws 并使用 UUID；不作为产品行为 RED 或修复通过证据。
 
+有效门禁 RED：`ptmcp-generic-user-put-red-valid.log` BUILD FAILURE/exit1，
+OrgManagementStoreTest 14/14通过（UTC/DST修复）；旧gate下Admin组合编辑14例中12 failures，0 errors/0 skipped。
+分别记录组件结果，不能将整体失败误算为UTC回归失败。
+独立复审发现授权快照未绑定If-Match的High：预填下一版本后与并发停用交错，可绕过status。
+当前先加真实MySQL+MockMvc闩锁回归，暂停控制器读取后的快照，让停用提交后再继续；
+以409及停用后的完整UserRow不变为通过条件，再补快照版本相等检查并保留落库CAS。
+`ptmcp-user-put-future-version-red.log` 已取得有效RED：1 test /1 failure /0 errors /0 skipped，
+预期409实际200。已补before.version与If-Match相等检查，完整AdminApiTest+OrgManagementStoreTest重验中；
+只有实际GREEN与独立复审收敛后才关闭本片。
+
 双库 CAS 首次 GREEN：`ptmcp-identity-cas-green.log`，10 tests / 0 failures/errors/skipped，BUILD SUCCESS。
 独立实际 diff 复审未发现迟到写/提交不明新增高危阻断；发现恢复 hash 长期保留、控制器 epoch 字段错配及并发完成额外 epoch，已补回归和修复，重验进行中。
 有效生命周期/HTTP RED：`ptmcp-identity-http-lifecycle-red.log`，12 tests / 2 failures / 0 errors/skipped；分别为完成未清 hash、应返回200明确版本但仍204旧头。

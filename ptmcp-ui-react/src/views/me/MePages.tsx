@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Badge,
@@ -27,8 +27,8 @@ import {
   type TokenCreated,
   type TokenRow,
 } from '../../services/access';
-import { listDatasources, listMetadata, type DatasourceRead, type MetadataObject } from '../../services/data';
-import { mePortalApi } from '../../services/mePortalApi';
+import type { MetadataObject } from '../../services/data';
+import { mePortalApi, type DatasourceItem, type DictionaryItem, type PlatformItem } from '../../services/mePortalApi';
 import { BackBar } from '../admin/DetailPages';
 
 function fmt(at: string | null | undefined): string {
@@ -36,48 +36,88 @@ function fmt(at: string | null | undefined): string {
 }
 
 export function DictionaryPage() {
-  const [datasources, setDatasources] = useState<DatasourceRead[]>([]);
-  const [objects, setObjects] = useState<MetadataObject[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [platforms, setPlatforms] = useState<PlatformItem[]>([]);
+  const [datasources, setDatasources] = useState<DatasourceItem[]>([]);
+  const [platformId, setPlatformId] = useState('');
+  const [datasourceId, setDatasourceId] = useState('');
   const [keyword, setKeyword] = useState('');
-  const debounced = useDebounced(keyword);
+  const [rows, setRows] = useState<DictionaryItem[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const debounced = useDebounced(keyword, 350);
+
+  useEffect(() => {
+    mePortalApi.accessContext
+      .platforms()
+      .then((ctx) => setPlatforms(ctx.items.filter((p) => p.tier === 3)))
+      .catch(() => setPlatforms([]));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    listDatasources({ pageSize: 100 })
-      .then(async ({ data }) => {
+    mePortalApi.accessContext
+      .datasources(platformId)
+      .then((ctx) => {
         if (cancelled) return;
-        setDatasources(data.items);
-        const all = await Promise.all(
-          data.items.map((d) =>
-            listMetadata({ datasourceId: d.id, pageSize: 200 })
-              .then((p) => p.data.items)
-              .catch(() => [] as MetadataObject[]),
-          ),
-        );
-        if (!cancelled) setObjects(all.flat().filter((o) => o.metadataVisible));
+        setDatasources(ctx.items);
+        setDatasourceId((cur) => (ctx.items.some((d) => d.id === cur) ? cur : ''));
       })
-      .catch(() => undefined)
+      .catch(() => !cancelled && setDatasources([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [platformId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    mePortalApi
+      .dictionaryList({
+        platformId: platformId || undefined,
+        datasourceId: datasourceId || undefined,
+        keyword: debounced.trim() || undefined,
+        pageSize: 20,
+      })
+      .then((p) => {
+        if (cancelled) return;
+        setRows(p.items);
+        setNextCursor(p.nextCursor);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRows([]);
+          setNextCursor(null);
+        }
+      })
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [platformId, datasourceId, debounced]);
 
-  const filtered = useMemo(
-    () =>
-      objects.filter(
-        (o) =>
-          !debounced ||
-          (o.objectName ?? '').toLowerCase().includes(debounced.toLowerCase()) ||
-          (o.tableName ?? '').toLowerCase().includes(debounced.toLowerCase()),
-      ),
-    [objects, debounced],
-  );
+  const loadMore = () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    mePortalApi
+      .dictionaryList({
+        platformId: platformId || undefined,
+        datasourceId: datasourceId || undefined,
+        keyword: debounced.trim() || undefined,
+        cursor: nextCursor,
+        pageSize: 20,
+      })
+      .then((p) => {
+        setRows((prev) => [...prev, ...p.items]);
+        setNextCursor(p.nextCursor);
+      })
+      .catch(() => undefined)
+      .finally(() => setLoadingMore(false));
+  };
 
   return (
     <>
-      <PageHeader title="我的数据字典" description="当前可见的元数据对象与业务字典。" />
+      <PageHeader title="我的数据字典" description="当前账号可见的库表结构与业务字典。" />
       <div className="table-card" style={{ flex: 1, minHeight: 0 }}>
         <div
           style={{
@@ -87,31 +127,52 @@ export function DictionaryPage() {
             padding: '12px 14px',
             borderBottom: '1px solid var(--ptmcp-border)',
             flex: 'none',
+            flexWrap: 'wrap',
           }}
         >
-          <SearchInput value={keyword} onChange={setKeyword} placeholder="搜索对象名或表名…" width={260} />
-          <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>共 {filtered.length} 个对象</span>
+          <Select
+            value={platformId}
+            onChange={(v) => {
+              setPlatformId(v);
+              setDatasourceId('');
+            }}
+            label="平台"
+            width={150}
+            options={[{ value: '', label: '全部平台' }, ...platforms.map((p) => ({ value: p.id, label: p.name }))]}
+          />
+          <Select
+            value={datasourceId}
+            onChange={setDatasourceId}
+            label="数据源"
+            width={150}
+            options={[{ value: '', label: '全部数据源' }, ...datasources.map((d) => ({ value: d.id, label: d.name }))]}
+          />
+          <SearchInput value={keyword} onChange={setKeyword} placeholder="搜索对象名…" width={220} />
+          <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>已加载 {rows.length} 个对象</span>
         </div>
         <div className="table-scroll">
           <table className="data-table">
             <thead>
               <tr>
                 <th>对象</th>
-                <th>所属数据源</th>
                 <th>库 / Schema</th>
                 <th>类型</th>
+                <th>业务标题</th>
+                <th>授权</th>
+                <th style={{ width: 70 }}>操作</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((o) => (
+              {rows.map((o) => (
                 <tr key={o.id}>
                   <td>
                     <span className="cell-stack">
-                      <strong>{o.objectName ?? o.tableName}</strong>
-                      <span>{o.tableComment || `ID ${o.id}`}</span>
+                      <button className="link" onClick={() => (window.location.hash = `/me/dictionary/${encodeURIComponent(o.id)}`)}>
+                        {o.objectName}
+                      </button>
+                      <span>v{o.generation}</span>
                     </span>
                   </td>
-                  <td style={{ color: 'var(--ptmcp-text-muted)' }}>{datasources.find((d) => d.id === o.datasourceId)?.name ?? o.datasourceId}</td>
                   <td style={{ color: 'var(--ptmcp-text-muted)' }}>
                     {o.databaseName}
                     {o.schemaName ? ` / ${o.schemaName}` : ''}
@@ -119,11 +180,32 @@ export function DictionaryPage() {
                   <td>
                     <Badge tone={o.objectType === 'TABLE' ? 'accent' : 'neutral'}>{o.objectType}</Badge>
                   </td>
+                  <td style={{ color: 'var(--ptmcp-text-muted)' }}>{o.dictionaryTitle ?? '—'}</td>
+                  <td>
+                    <StatusDot tone={o.authorized ? 'success' : 'neutral'}>{o.authorized ? '已授权' : '未授权'}</StatusDot>
+                  </td>
+                  <td>
+                    <button className="link" onClick={() => (window.location.hash = `/me/dictionary/${encodeURIComponent(o.id)}`)}>
+                      详情
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {!loading && filtered.length === 0 ? <EmptyState title="暂无可见的字典对象" description="联系管理员授权后在此浏览。" /> : null}
+          {!loading && rows.length === 0 ? <EmptyState title="暂无可见对象" description="调整平台/数据源或关键词后重试。" /> : null}
+        </div>
+        <div className="table-footer" style={{ justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
+            已加载 {rows.length} 个{nextCursor ? ' · 可能还有更多' : ''}
+          </span>
+          {loading ? null : nextCursor ? (
+            <button className="btn btn--secondary" onClick={loadMore} disabled={loadingMore}>
+              {loadingMore ? '加载中…' : '加载更多'}
+            </button>
+          ) : (
+            <span style={{ fontSize: 12, color: 'var(--ptmcp-text-faint)' }}>没有更多了</span>
+          )}
         </div>
       </div>
     </>
