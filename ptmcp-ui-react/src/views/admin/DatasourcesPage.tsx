@@ -14,6 +14,7 @@ import {
   useDebounced,
 } from '../../components/common';
 import { CheckboxIcon, DatabaseIcon, DotsIcon, EditIcon, FilterIcon, PlusIcon } from '../../components/Icons';
+import { fmtTime as fmt, healthOf, statusOf } from './datasourceStatus';
 import { listDatasources, type DatasourceRead } from '../../services/data';
 
 const ENGINE_OPTIONS = [
@@ -31,25 +32,6 @@ const STATUS_OPTIONS = [
   { value: 'DRAFT', label: '草稿' },
   { value: 'DISABLED', label: '禁用' },
 ];
-
-function statusOf(row: DatasourceRead): { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' } {
-  const s = (row.status ?? '').toUpperCase();
-  if (s === 'ENABLED' || s === 'ACTIVE') return { label: '启用', tone: 'success' };
-  if (s === 'DISABLED') return { label: '禁用', tone: 'danger' };
-  if (s === 'DRAFT') return { label: '草稿', tone: 'neutral' };
-  return { label: row.status || '未知', tone: 'neutral' };
-}
-function healthOf(row: DatasourceRead): { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' } {
-  const h = (row.health ?? '').toUpperCase();
-  if (h === 'HEALTHY' || h === 'UP' || h === 'OK') return { label: '连接正常', tone: 'success' };
-  if (h === 'DEGRADED' || h === 'WARN') return { label: '连接异常', tone: 'warning' };
-  if (h === 'DOWN' || h === 'FAIL') return { label: '连接失败', tone: 'danger' };
-  return { label: '连接未知', tone: 'neutral' };
-}
-function fmt(at: string | null): string {
-  if (!at) return '—';
-  return at.slice(0, 16).replace('T', ' ');
-}
 
 export function DatasourcesPage() {
   const [rows, setRows] = useState<DatasourceRead[]>([]);
@@ -174,8 +156,8 @@ export function DatasourcesPage() {
             </thead>
             <tbody>
               {pageRows.map((r) => {
-                const st = statusOf(r);
-                const hl = healthOf(r);
+                const st = statusOf(r.status);
+                const hl = healthOf(r.health);
                 return (
                   <tr key={r.id} className={selected.has(r.id) ? 'is-selected' : undefined}>
                     <td>
@@ -202,10 +184,10 @@ export function DatasourcesPage() {
                     </td>
                     <td style={{ color: 'var(--ptmcp-text-muted)' }}>{r.engine}</td>
                     <td>{r.databaseName}</td>
-                    <td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
                       <StatusDot tone={st.tone}>{st.label}</StatusDot>
                     </td>
-                    <td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
                       <StatusDot tone={hl.tone}>{hl.label}</StatusDot>
                     </td>
                     <td>
@@ -222,9 +204,23 @@ export function DatasourcesPage() {
                     </td>
                     <td style={{ fontVariantNumeric: 'tabular-nums' }}>{r.poolMax}</td>
                     <td style={{ color: 'var(--ptmcp-text-muted)' }}>{r.activeSnapshotId ?? '待同步'}</td>
-                    <td>
-                      <button className="link" onClick={() => (window.location.hash = `/admin/datasources/${encodeURIComponent(r.id)}`)}>
-                        详情
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <button
+                        className="link"
+                        onClick={() => {
+                          setDetail(r);
+                          setDetailTab('base');
+                        }}
+                      >
+                        查看
+                      </button>
+                      <button
+                        className="link"
+                        aria-label={`打开 ${r.name} 详情页`}
+                        style={{ marginLeft: 10, color: 'var(--ptmcp-text-muted)' }}
+                        onClick={() => (window.location.hash = `/admin/datasources/${encodeURIComponent(r.id)}`)}
+                      >
+                        <DotsIcon />
                       </button>
                     </td>
                   </tr>
@@ -249,7 +245,13 @@ export function DatasourcesPage() {
         title={detail?.name}
         subtitle={detail ? `${detail.code} · ID ${detail.id}` : ''}
         icon={detail ? <CellIcon icon={DatabaseIcon} engine={detail.engine} large /> : null}
-        badge={detail ? <Badge tone={statusOf(detail).tone === 'neutral' ? 'neutral' : statusOf(detail).tone}>{statusOf(detail).label}</Badge> : null}
+        badge={
+          detail ? (
+            <Badge tone={statusOf(detail.status).tone === 'neutral' ? 'neutral' : statusOf(detail.status).tone}>
+              {statusOf(detail.status).label}
+            </Badge>
+          ) : null
+        }
         footer={
           <>
             <button className="btn btn--secondary" onClick={() => setDetail(null)}>
@@ -280,11 +282,13 @@ export function DatasourcesPage() {
                   { label: '编码', value: detail.code },
                   { label: '引擎', value: detail.engine },
                   { label: '数据库', value: detail.databaseName },
-                  { label: '状态', value: <StatusDot tone={statusOf(detail).tone}>{statusOf(detail).label}</StatusDot> },
-                  { label: '健康状态', value: <StatusDot tone={healthOf(detail).tone}>{healthOf(detail).label}</StatusDot> },
+                  { label: '状态', value: <StatusDot tone={statusOf(detail.status).tone}>{statusOf(detail.status).label}</StatusDot> },
+                  { label: '健康状态', value: <StatusDot tone={healthOf(detail.health).tone}>{healthOf(detail.health).label}</StatusDot> },
                   { label: '最近同步', value: fmt(detail.lastSyncAt) },
                   { label: '连接池上限', value: detail.poolMax },
                   { label: '活动快照', value: detail.activeSnapshotId ?? '待同步' },
+                  { label: '创建时间', value: fmt(detail.createdAt ?? null) },
+                  { label: '更新时间', value: fmt(detail.updatedAt ?? detail.lastSyncAt ?? null) },
                 ]}
               />
             ) : null}

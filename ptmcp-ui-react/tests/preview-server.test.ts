@@ -33,3 +33,29 @@ test('preview respects abort signals on in-flight requests', async () => {
   abort.abort();
   await assert.rejects(server('/api/v1/admin/audit', { signal: abort.signal }), { name: 'AbortError' });
 });
+
+test('datasource catalogue covers engines, statuses, sync outcomes and timestamps', async () => {
+  const server = createPreviewServer();
+  const page = await (await server('/api/v1/admin/datasources', {})).json();
+  const rows = page.items as Array<Record<string, unknown>>;
+  assert.ok(rows.length >= 6, 'catalogue must keep its demo variety');
+  const engines = new Set(rows.map((row) => row.engine));
+  for (const engine of ['MYSQL', 'POSTGRESQL', 'CLICKHOUSE', 'SQLITE']) assert.ok(engines.has(engine), `${engine} seed missing`);
+  const statuses = new Set(rows.map((row) => row.status));
+  for (const status of ['ACTIVE', 'DRAFT', 'DISABLED']) assert.ok(statuses.has(status), `${status} seed missing`);
+  const healths = new Set(rows.map((row) => row.health));
+  assert.ok(healths.has('DEGRADED'), 'DEGRADED seed missing');
+  assert.ok(healths.has('UNKNOWN'), 'UNKNOWN seed missing');
+  assert.ok(
+    rows.some((row) => row.lastSyncResult === 'FAILED'),
+    'failed-sync seed missing',
+  );
+  assert.ok(
+    rows.some((row) => row.lastSyncResult === 'SUCCEEDED'),
+    'succeeded-sync seed missing',
+  );
+  for (const row of rows) {
+    assert.match(String(row.createdAt), /^\d{4}-\d{2}-\d{2}T/, 'createdAt missing');
+    assert.match(String(row.updatedAt), /^\d{4}-\d{2}-\d{2}T/, 'updatedAt missing');
+  }
+});

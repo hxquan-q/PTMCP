@@ -461,6 +461,90 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
                 .orElse(null);
     }
 
+    /** Revocation lookup deliberately includes tombstones and has no grant-replay side effects. */
+    @Transactional
+    public boolean revokeRefreshForClient(String token, String registeredClientId) {
+        List<String> families =
+                jdbc.queryForList(
+                        "SELECT f.id FROM oauth_refresh_token t JOIN oauth_refresh_family f"
+                                + " ON f.id = t.family_id WHERE t.token_hash = ?"
+                                + " AND f.registered_client_id = ?",
+                        String.class,
+                        OAuthStoreSupport.sha256(token),
+                        registeredClientId);
+        if (families.isEmpty()) {
+            return false;
+        }
+        revokeOwnedFamily(families.getFirst(), registeredClientId);
+        return true;
+    }
+
+    /**
+     * Called only after local signature, issuer, audience and client validation of an access JWT.
+     */
+    @Transactional
+    public void revokeAccessForClient(
+            String familyId,
+            String registeredClientId,
+            long userId,
+            long platformId,
+            long authVersion) {
+        List<String> families =
+                jdbc.queryForList(
+                        "SELECT id FROM oauth_refresh_family WHERE id = ? AND registered_client_id = ?"
+                                + " AND user_id = ? AND platform_id = ? AND auth_version = ?",
+                        String.class,
+                        familyId,
+                        registeredClientId,
+                        userId,
+                        platformId,
+                        authVersion);
+        if (!families.isEmpty()) {
+            revokeOwnedFamily(familyId, registeredClientId);
+        }
+    }
+
+    private void revokeOwnedFamily(String familyId, String registeredClientId) {
+        Long epoch =
+                jdbc.queryForObject(
+                        "SELECT policy_epoch FROM sys_security_state WHERE singleton_id = 1 FOR UPDATE",
+                        Long.class);
+        if (epoch == null || epoch <= 0 || epoch == Long.MAX_VALUE) {
+            throw new IllegalStateException("OAuth security state is unavailable");
+        }
+        List<Long> versions =
+                jdbc.queryForList(
+                        "SELECT version FROM oauth_refresh_family WHERE id = ?"
+                                + " AND registered_client_id = ? AND status = 'ACTIVE' FOR UPDATE",
+                        Long.class,
+                        familyId,
+                        registeredClientId);
+        if (versions.isEmpty()) {
+            return;
+        }
+        revokeFamily(familyId, "CLIENT_REVOKED");
+        jdbc.update(
+                "UPDATE sys_security_state SET policy_epoch = ?,"
+                        + " update_time = UTC_TIMESTAMP(6) WHERE singleton_id = 1",
+                epoch + 1);
+        jdbc.update(
+                "INSERT INTO sys_security_event (event_id, epoch, aggregate_type,"
+                        + " aggregate_id, event_type, payload, occurred_at, create_time, update_time)"
+                        + " VALUES (?, ?, 'REFRESH_FAMILY', ?, 'REFRESH_FAMILY_CHANGED', ?,"
+                        + " UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))",
+                UUID.randomUUID().toString(),
+                epoch + 1,
+                familyId,
+                OAuthStoreSupport.toJson(
+                        Map.of(
+                                "schemaVersion",
+                                1,
+                                "aggregateId",
+                                familyId,
+                                "version",
+                                Math.addExact(versions.getFirst(), 1))));
+    }
+
     @Override
     @Transactional
     public OAuth2Authorization findByToken(String token, OAuth2TokenType tokenType) {

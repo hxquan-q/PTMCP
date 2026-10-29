@@ -20,6 +20,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.mysql.MySQLContainer;
@@ -52,6 +57,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
@@ -119,6 +125,8 @@ class OAuthAuthorizationCodeFlowTest {
     @LocalServerPort private int port;
 
     @Autowired private jakarta.servlet.ServletContext servletContext;
+
+    @Autowired private JwtEncoder jwtEncoder;
 
     @DynamicPropertySource
     static void oauthProperties(DynamicPropertyRegistry registry) {
@@ -745,9 +753,36 @@ class OAuthAuthorizationCodeFlowTest {
                         + Base64.getUrlEncoder().withoutPadding().encodeToString(signature);
         assertEquals(200, revoke(tampered, REFRESH_CLIENT_ID).status());
         assertFamilyActive(family, true);
+        JWTClaimsSet claims = SignedJWT.parse(access).getJWTClaimsSet();
+        for (Map<String, Object> override :
+                List.<Map<String, Object>>of(
+                        Map.of("iss", "https://foreign.example"),
+                        Map.of("aud", List.of("https://foreign.example/mcp")),
+                        Map.of("client_id", PUBLIC_CLIENT_ID),
+                        Map.of("sub", "999"),
+                        Map.of("sid", java.util.UUID.randomUUID().toString()),
+                        Map.of("platform_id", platformId + 1),
+                        Map.of("auth_version", 999L),
+                        Map.of(
+                                "iat", Instant.now().minusSeconds(600),
+                                "nbf", Instant.now().minusSeconds(600),
+                                "exp", Instant.now().minusSeconds(120)),
+                        Map.of("nbf", Instant.now().plusSeconds(120)))) {
+            assertEquals(200, revoke(signedAccess(claims, override), REFRESH_CLIENT_ID).status());
+            assertFamilyActive(family, true);
+        }
         assertEquals(200, revoke(access, REFRESH_CLIENT_ID).status());
         assertFamilyActive(family, false);
         assertEquals(200, revoke(access, REFRESH_CLIENT_ID).status());
+        try (Connection connection = db()) {
+            assertEquals(
+                    1,
+                    scalar(
+                            connection,
+                            "SELECT COUNT(*) FROM sys_security_event"
+                                    + " WHERE aggregate_id = ? AND event_type = 'REFRESH_FAMILY_CHANGED'",
+                            family));
+        }
     }
 
     @Test
@@ -798,6 +833,28 @@ class OAuthAuthorizationCodeFlowTest {
                         "/oauth2/revoke",
                         form(Map.of("token", token, "client_id", clientId)),
                         Map.of());
+    }
+
+    private String signedAccess(JWTClaimsSet original, Map<String, Object> override) {
+        JwtClaimsSet claims =
+                JwtClaimsSet.builder()
+                        .issuer(ISSUER)
+                        .subject(original.getSubject())
+                        .audience(List.of(AUDIENCE))
+                        .issuedAt(Instant.now())
+                        .notBefore(Instant.now())
+                        .expiresAt(Instant.now().plusSeconds(300))
+                        .claim("client_id", original.getClaim("client_id"))
+                        .claim("sid", original.getClaim("sid"))
+                        .claim("platform_id", original.getClaim("platform_id"))
+                        .claim("auth_version", original.getClaim("auth_version"))
+                        .claims(values -> values.putAll(override))
+                        .build();
+        return jwtEncoder
+                .encode(
+                        JwtEncoderParameters.from(
+                                JwsHeader.with(SignatureAlgorithm.RS256).build(), claims))
+                .getTokenValue();
     }
 
     private void assertFamilyActive(String family, boolean active) throws SQLException {

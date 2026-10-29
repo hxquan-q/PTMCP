@@ -78,6 +78,8 @@ export interface DatasourceRead {
   activeSnapshotId: string | null;
   lastSyncAt: string | null;
   lastSyncResult?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
   credentialConfigured: boolean;
   health: string;
 }
