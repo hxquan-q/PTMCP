@@ -5,12 +5,14 @@ import { createDelegation, listDelegations, revokeDelegation, type DelegationRow
 import { listDepartments, listUsers, type DepartmentRow, type UserRow } from '../../services/orgPortalApi';
 import { listDatasources } from '../../services/data';
 import { validateDelegationForm, type DelegationFormValues } from './delegationForm';
+import { useSensitivePermissions } from '../../permissionsContext';
 
 function fmt(at: string | null): string {
   return at ? at.slice(0, 16).replace('T', ' ') : '—';
 }
 
 export function DelegationsPage() {
+  const { can } = useSensitivePermissions();
   const [rows, setRows] = useState<DelegationRow[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [depts, setDepts] = useState<DepartmentRow[]>([]);
@@ -65,7 +67,7 @@ export function DelegationsPage() {
         title="管理委派"
         description="把资源管理权限临时委派给指定用户，到期自动失效。"
         actions={
-          <button className="btn btn--primary" onClick={() => setCreating(true)}>
+          <button className="btn btn--primary" onClick={() => can('delegationCreate') && setCreating(true)} disabled={!can('delegationCreate')}>
             <PlusIcon /> 新建委派
           </button>
         }

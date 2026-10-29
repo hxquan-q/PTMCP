@@ -34,9 +34,15 @@ import javax.sql.DataSource;
  */
 public final class AclDirectory {
     private final DataSource primary;
+    private final boolean departmentInheritance;
 
     public AclDirectory(DataSource primary) {
+        this(primary, true);
+    }
+
+    public AclDirectory(DataSource primary, boolean departmentInheritance) {
         this.primary = Objects.requireNonNull(primary, "primary");
+        this.departmentInheritance = departmentInheritance;
     }
 
     /** One resource's intersected decision for preview purposes. */
@@ -53,37 +59,12 @@ public final class AclDirectory {
 
     public SubjectScope subjectScope(long userId) {
         try (Connection connection = OrgSql.configure(primary)) {
-            Long deptId;
-            try (PreparedStatement statement =
-                    OrgSql.statement(
+            DepartmentSubjectReader.Departments departments =
+                    DepartmentSubjectReader.read(
                             connection,
-                            "SELECT dept_id FROM sys_user_profile WHERE user_id = ?"
-                                    + " AND status = 'ACTIVE'")) {
-                statement.setLong(1, userId);
-                try (ResultSet result = statement.executeQuery()) {
-                    if (!result.next()) {
-                        throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
-                    }
-                    deptId = result.getLong(1);
-                }
-            }
-            Set<Long> deptAncestors = new HashSet<>();
-            try (PreparedStatement statement =
-                    OrgSql.statement(
-                            connection,
-                            "SELECT ancestors FROM sys_dept WHERE dept_id = ?"
-                                    + " AND del_flag = '0'")) {
-                statement.setLong(1, deptId);
-                try (ResultSet result = statement.executeQuery()) {
-                    if (result.next()) {
-                        for (String token : result.getString(1).split(",")) {
-                            if (!token.isBlank() && !"0".equals(token)) {
-                                deptAncestors.add(Long.parseLong(token.trim()));
-                            }
-                        }
-                    }
-                }
-            }
+                            userId,
+                            departmentInheritance,
+                            ErrorCode.RESOURCE_NOT_FOUND);
             Set<Long> roleIds = new HashSet<>();
             try (PreparedStatement statement =
                     OrgSql.statement(
@@ -98,7 +79,8 @@ public final class AclDirectory {
                     }
                 }
             }
-            return new SubjectScope(userId, Set.copyOf(roleIds), deptId, Set.copyOf(deptAncestors));
+            return new SubjectScope(
+                    userId, Set.copyOf(roleIds), departments.deptId(), departments.ancestorIds());
         } catch (SQLException error) {
             throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
@@ -122,7 +104,7 @@ public final class AclDirectory {
                             case "USER" -> subjectId == userId;
                             case "ROLE" -> scope.enabledRoleIds().contains(subjectId);
                             case "DEPT" ->
-                                    subjectId == scope.deptId()
+                                    Objects.equals(subjectId, scope.deptId())
                                             || scope.deptAncestorIds().contains(subjectId);
                             default -> false;
                         };

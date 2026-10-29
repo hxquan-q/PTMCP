@@ -21,6 +21,7 @@ import { CheckboxIcon, DatabaseIcon, DotsIcon, EditIcon, FilterIcon, PlusIcon } 
 import { fmtTime as fmt, healthOf, statusOf } from './datasourceStatus';
 import { dsCreateValidate, emptyDsForm, type DsForm } from './dsForm';
 import { createDatasource } from '../../services/data';
+import { useSensitivePermissions } from '../../permissionsContext';
 import { listDatasources, type DatasourceRead } from '../../services/data';
 
 const ENGINE_OPTIONS = [
@@ -40,6 +41,7 @@ const STATUS_OPTIONS = [
 ];
 
 export function DatasourcesPage() {
+  const { can } = useSensitivePermissions();
   const [rows, setRows] = useState<DatasourceRead[]>([]);
   const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
@@ -86,7 +88,7 @@ export function DatasourcesPage() {
         title="数据源"
         description="管理受控数据连接、健康状态和元数据同步。"
         actions={
-          <button className="btn btn--primary" onClick={() => setCreating(true)}>
+          <button className="btn btn--primary" onClick={() => can('datasourceCreate') && setCreating(true)} disabled={!can('datasourceCreate')}>
             <PlusIcon /> 新建数据源
           </button>
         }

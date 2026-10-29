@@ -1,7 +1,7 @@
 package local.ptmcp.persistence.org;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -1239,7 +1239,12 @@ class OrgManagementStoreTest {
     // ---- directory, preview and escalation ---------------------------------
 
     private record DepartmentFixture(
-            long root, long middle, long direct, long user, long role, long datasource,
+            long root,
+            long middle,
+            long direct,
+            long user,
+            long role,
+            long datasource,
             long platform) {}
 
     private DepartmentFixture departmentFixture() throws Exception {
@@ -1247,8 +1252,10 @@ class OrgManagementStoreTest {
         long middle = orgStore.createDepartment(root, "权威中层", true, 1L).id();
         long direct = orgStore.createDepartment(middle, "直属部门", true, 1L).id();
         long role = orgStore.createRole("subject_reader", "授权角色", true, List.of(), 1L).id();
-        long user = orgStore.createUser(
-                "subject-user", "授权用户", direct, "unused", List.of(role), true, 1L).id();
+        long user =
+                orgStore.createUser(
+                                "subject-user", "授权用户", direct, "unused", List.of(role), true, 1L)
+                        .id();
         long datasource = insertDatasource("subject-source");
         long platform = insertPlatform("subject-platform");
         insertPlatformScope(platform, "DATASOURCE", datasource, "READ");
@@ -1257,15 +1264,30 @@ class OrgManagementStoreTest {
 
     private AclGrantStore.AclGrantRecord subjectGrant(
             String subjectType, long subjectId, long datasource, String effect) {
-        return grantStore.create(new AclGrantStore.AclGrantRecord(
-                0, subjectType, subjectId, "DATASOURCE", datasource, 1, "READ", effect,
-                true, Instant.now().minusSeconds(1), null, "ACTIVE", "合成授权", 1), 1L);
+        return grantStore.create(
+                new AclGrantStore.AclGrantRecord(
+                        0,
+                        subjectType,
+                        subjectId,
+                        "DATASOURCE",
+                        datasource,
+                        1,
+                        "READ",
+                        effect,
+                        true,
+                        Instant.now().minusSeconds(1),
+                        null,
+                        "ACTIVE",
+                        "合成授权",
+                        1),
+                1L);
     }
 
     private void setDepartmentState(long deptId, String status, String deleted) throws Exception {
         try (Connection connection = dataSource.getConnection();
-                PreparedStatement statement = connection.prepareStatement(
-                        "UPDATE sys_dept SET status = ?, del_flag = ? WHERE dept_id = ?")) {
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "UPDATE sys_dept SET status = ?, del_flag = ? WHERE dept_id = ?")) {
             statement.setString(1, status);
             statement.setString(2, deleted);
             statement.setLong(3, deptId);
@@ -1275,8 +1297,9 @@ class OrgManagementStoreTest {
 
     private void setDepartmentParent(long deptId, long parentId) throws Exception {
         try (Connection connection = dataSource.getConnection();
-                PreparedStatement statement = connection.prepareStatement(
-                        "UPDATE sys_dept SET parent_id = ? WHERE dept_id = ?")) {
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "UPDATE sys_dept SET parent_id = ? WHERE dept_id = ?")) {
             statement.setLong(1, parentId);
             statement.setLong(2, deptId);
             assertEquals(1, statement.executeUpdate());
@@ -1285,8 +1308,9 @@ class OrgManagementStoreTest {
 
     private void setUserDepartment(long userId, long deptId) throws Exception {
         try (Connection connection = dataSource.getConnection();
-                PreparedStatement statement = connection.prepareStatement(
-                        "UPDATE sys_user_profile SET dept_id = ? WHERE user_id = ?")) {
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "UPDATE sys_user_profile SET dept_id = ? WHERE user_id = ?")) {
             statement.setLong(1, deptId);
             statement.setLong(2, userId);
             assertEquals(1, statement.executeUpdate());
@@ -1294,9 +1318,19 @@ class OrgManagementStoreTest {
     }
 
     private AclDirectory.ResourceDecision departmentPreview(DepartmentFixture fixture) {
-        return directory.preview(fixture.user(), fixture.platform(), List.of(
-                ResourceIds.encode(ResourceIds.Type.DATASOURCE, fixture.datasource())),
-                Instant.now()).getFirst();
+        return departmentPreview(directory, fixture);
+    }
+
+    private AclDirectory.ResourceDecision departmentPreview(
+            AclDirectory source, DepartmentFixture fixture) {
+        return source.preview(
+                        fixture.user(),
+                        fixture.platform(),
+                        List.of(
+                                ResourceIds.encode(
+                                        ResourceIds.Type.DATASOURCE, fixture.datasource())),
+                        Instant.now())
+                .getFirst();
     }
 
     @ParameterizedTest
@@ -1308,8 +1342,9 @@ class OrgManagementStoreTest {
         subjectGrant("DEPT", fixture.root(), fixture.datasource(), "DENY");
         subjectGrant("DEPT", foreign, fixture.datasource(), "ALLOW");
         try (Connection connection = dataSource.getConnection();
-                PreparedStatement statement = connection.prepareStatement(
-                        "UPDATE sys_dept SET ancestors = ? WHERE dept_id = ?")) {
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "UPDATE sys_dept SET ancestors = ? WHERE dept_id = ?")) {
             statement.setString(1, "foreign-department".equals(cache) ? "0," + foreign : cache);
             statement.setLong(2, fixture.direct());
             assertEquals(1, statement.executeUpdate());
@@ -1317,9 +1352,17 @@ class OrgManagementStoreTest {
         AuthorizationReader reader = new AuthorizationReader(dataSource);
         Set<Long> expected = Set.of(fixture.root(), fixture.middle());
         assertAll(
-                () -> assertEquals(expected, reader.loadSubjectScope(fixture.user(), true).deptAncestorIds()),
-                () -> assertEquals(expected, directory.subjectScope(fixture.user()).deptAncestorIds()),
-                () -> assertFalse(departmentPreview(fixture).read(), "the real root DENY must survive cache corruption"));
+                () ->
+                        assertEquals(
+                                expected,
+                                reader.loadSubjectScope(fixture.user(), true).deptAncestorIds()),
+                () ->
+                        assertEquals(
+                                expected, directory.subjectScope(fixture.user()).deptAncestorIds()),
+                () ->
+                        assertFalse(
+                                departmentPreview(fixture).read(),
+                                "the real root DENY must survive cache corruption"));
     }
 
     @ParameterizedTest
@@ -1331,11 +1374,12 @@ class OrgManagementStoreTest {
         for (long dept : all) {
             subjectGrant("DEPT", dept, fixture.datasource(), "ALLOW");
         }
-        long inactive = switch (node) {
-            case "ROOT" -> fixture.root();
-            case "MIDDLE" -> fixture.middle();
-            default -> fixture.direct();
-        };
+        long inactive =
+                switch (node) {
+                    case "ROOT" -> fixture.root();
+                    case "MIDDLE" -> fixture.middle();
+                    default -> fixture.direct();
+                };
         setDepartmentState(inactive, status, deleted);
         Set<Long> expected = new java.util.HashSet<>(all);
         expected.remove(inactive);
@@ -1345,13 +1389,31 @@ class OrgManagementStoreTest {
         AuthorizationReader reader = new AuthorizationReader(dataSource);
         assertAll(
                 () -> assertEquals(direct, reader.loadSubjectScope(fixture.user(), true).deptId()),
-                () -> assertEquals(ancestors, reader.loadSubjectScope(fixture.user(), true).deptAncestorIds()),
+                () ->
+                        assertEquals(
+                                ancestors,
+                                reader.loadSubjectScope(fixture.user(), true).deptAncestorIds()),
                 () -> assertEquals(direct, directory.subjectScope(fixture.user()).deptId()),
-                () -> assertEquals(ancestors, directory.subjectScope(fixture.user()).deptAncestorIds()),
-                () -> assertEquals(expected, reader.loadGrants(fixture.user(), reader.loadSubjectScope(fixture.user(), true))
-                        .stream().map(AuthorizationReader.AclGrant::subjectId).collect(java.util.stream.Collectors.toSet())),
-                () -> assertEquals(expected, directory.activeGrants(fixture.user()).stream()
-                        .map(local.ptmcp.common.authz.GrantRow::subjectId).collect(java.util.stream.Collectors.toSet())),
+                () ->
+                        assertEquals(
+                                ancestors,
+                                directory.subjectScope(fixture.user()).deptAncestorIds()),
+                () ->
+                        assertEquals(
+                                expected,
+                                reader
+                                        .loadGrants(
+                                                fixture.user(),
+                                                reader.loadSubjectScope(fixture.user(), true))
+                                        .stream()
+                                        .map(AuthorizationReader.AclGrant::subjectId)
+                                        .collect(java.util.stream.Collectors.toSet())),
+                () ->
+                        assertEquals(
+                                expected,
+                                directory.activeGrants(fixture.user()).stream()
+                                        .map(local.ptmcp.common.authz.GrantRow::subjectId)
+                                        .collect(java.util.stream.Collectors.toSet())),
                 () -> assertTrue(departmentPreview(fixture).read()));
     }
 
@@ -1365,8 +1427,14 @@ class OrgManagementStoreTest {
         setDepartmentState(fixture.middle(), status, deleted);
         AuthorizationReader reader = new AuthorizationReader(dataSource);
         assertAll(
-                () -> assertEquals(Set.of(fixture.root()), reader.loadSubjectScope(fixture.user(), true).deptAncestorIds()),
-                () -> assertEquals(Set.of(fixture.root()), directory.subjectScope(fixture.user()).deptAncestorIds()),
+                () ->
+                        assertEquals(
+                                Set.of(fixture.root()),
+                                reader.loadSubjectScope(fixture.user(), true).deptAncestorIds()),
+                () ->
+                        assertEquals(
+                                Set.of(fixture.root()),
+                                directory.subjectScope(fixture.user()).deptAncestorIds()),
                 () -> assertFalse(departmentPreview(fixture).read()));
     }
 
@@ -1377,27 +1445,58 @@ class OrgManagementStoreTest {
         DepartmentFixture fixture = departmentFixture();
         long direct = withAncestor ? fixture.direct() : fixture.root();
         setUserDepartment(fixture.user(), direct);
-        AclGrantStore.AclGrantRecord user = subjectGrant("USER", fixture.user(), fixture.datasource(), "ALLOW");
-        AclGrantStore.AclGrantRecord role = subjectGrant("ROLE", fixture.role(), fixture.datasource(), "ALLOW");
+        AclGrantStore.AclGrantRecord user =
+                subjectGrant("USER", fixture.user(), fixture.datasource(), "ALLOW");
+        AclGrantStore.AclGrantRecord role =
+                subjectGrant("ROLE", fixture.role(), fixture.datasource(), "ALLOW");
         subjectGrant("DEPT", direct, fixture.datasource(), "ALLOW");
         setDepartmentState(direct, status, deleted);
         Set<Long> ancestors = withAncestor ? Set.of(fixture.root(), fixture.middle()) : Set.of();
         AuthorizationReader reader = new AuthorizationReader(dataSource);
         assertAll(
                 () -> assertNull(reader.loadSubjectScope(fixture.user(), true).deptId()),
-                () -> assertEquals(ancestors, reader.loadSubjectScope(fixture.user(), true).deptAncestorIds()),
+                () ->
+                        assertEquals(
+                                ancestors,
+                                reader.loadSubjectScope(fixture.user(), true).deptAncestorIds()),
                 () -> assertNull(directory.subjectScope(fixture.user()).deptId()),
-                () -> assertEquals(ancestors, directory.subjectScope(fixture.user()).deptAncestorIds()),
-                () -> assertEquals(Set.of(user.id(), role.id()), reader.loadGrants(fixture.user(), reader.loadSubjectScope(fixture.user(), true))
-                        .stream().map(AuthorizationReader.AclGrant::grantId).collect(java.util.stream.Collectors.toSet())),
-                () -> assertEquals(Set.of(user.id(), role.id()), directory.activeGrants(fixture.user()).stream()
-                        .map(local.ptmcp.common.authz.GrantRow::grantId).collect(java.util.stream.Collectors.toSet())),
+                () ->
+                        assertEquals(
+                                ancestors,
+                                directory.subjectScope(fixture.user()).deptAncestorIds()),
+                () ->
+                        assertEquals(
+                                Set.of(user.id(), role.id()),
+                                reader
+                                        .loadGrants(
+                                                fixture.user(),
+                                                reader.loadSubjectScope(fixture.user(), true))
+                                        .stream()
+                                        .map(AuthorizationReader.AclGrant::grantId)
+                                        .collect(java.util.stream.Collectors.toSet())),
+                () ->
+                        assertEquals(
+                                Set.of(user.id(), role.id()),
+                                directory.activeGrants(fixture.user()).stream()
+                                        .map(local.ptmcp.common.authz.GrantRow::grantId)
+                                        .collect(java.util.stream.Collectors.toSet())),
                 () -> assertTrue(departmentPreview(fixture).read()),
-                () -> assertEquals(Set.of(user.id(), role.id()), Set.copyOf(departmentPreview(fixture).sourceGrantIds())));
+                () ->
+                        assertEquals(
+                                Set.of(user.id(), role.id()),
+                                Set.copyOf(departmentPreview(fixture).sourceGrantIds())));
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"SELF", "CYCLE", "MISSING_PARENT", "MISSING_DIRECT", "NEGATIVE_PARENT", "DEPTH_65"})
+    @ValueSource(
+            strings = {
+                "SELF",
+                "CYCLE",
+                "MISSING_PARENT",
+                "MISSING_DIRECT",
+                "NEGATIVE_PARENT",
+                "DEPTH_65"
+            })
     void departmentSubjectsRejectIncompleteOrCyclicAuthority(String corruption) throws Exception {
         DepartmentFixture fixture = departmentFixture();
         subjectGrant("USER", fixture.user(), fixture.datasource(), "ALLOW");
@@ -1411,8 +1510,8 @@ class OrgManagementStoreTest {
                 try (Connection connection = dataSource.getConnection();
                         Statement statement = connection.createStatement()) {
                     statement.execute("SET FOREIGN_KEY_CHECKS = 0");
-                    try (PreparedStatement delete = connection.prepareStatement(
-                            "DELETE FROM sys_dept WHERE dept_id = ?")) {
+                    try (PreparedStatement delete =
+                            connection.prepareStatement("DELETE FROM sys_dept WHERE dept_id = ?")) {
                         delete.setLong(1, fixture.direct());
                         assertEquals(1, delete.executeUpdate());
                     } finally {
@@ -1429,11 +1528,140 @@ class OrgManagementStoreTest {
             }
         }
         AuthorizationReader reader = new AuthorizationReader(dataSource);
+        AclDirectory directOnly = new AclDirectory(dataSource, false);
         assertAll(
-                () -> assertEquals(ErrorCode.SECURITY_STATE_UNAVAILABLE, codeOf(() -> reader.loadSubjectScope(fixture.user(), true))),
-                () -> assertEquals(ErrorCode.SECURITY_STATE_UNAVAILABLE, codeOf(() -> reader.loadSubjectScope(fixture.user(), false))),
-                () -> assertEquals(ErrorCode.SECURITY_STATE_UNAVAILABLE, codeOf(() -> directory.subjectScope(fixture.user()))),
-                () -> assertEquals(ErrorCode.SECURITY_STATE_UNAVAILABLE, codeOf(() -> departmentPreview(fixture))));
+                () ->
+                        assertEquals(
+                                ErrorCode.SECURITY_STATE_UNAVAILABLE,
+                                codeOf(() -> reader.loadSubjectScope(fixture.user(), true))),
+                () ->
+                        assertEquals(
+                                ErrorCode.SECURITY_STATE_UNAVAILABLE,
+                                codeOf(() -> reader.loadSubjectScope(fixture.user(), false))),
+                () ->
+                        assertEquals(
+                                ErrorCode.SECURITY_STATE_UNAVAILABLE,
+                                codeOf(() -> directory.subjectScope(fixture.user()))),
+                () ->
+                        assertEquals(
+                                ErrorCode.SECURITY_STATE_UNAVAILABLE,
+                                codeOf(() -> departmentPreview(fixture))),
+                () ->
+                        assertEquals(
+                                ErrorCode.SECURITY_STATE_UNAVAILABLE,
+                                codeOf(() -> directOnly.subjectScope(fixture.user()))),
+                () ->
+                        assertEquals(
+                                ErrorCode.SECURITY_STATE_UNAVAILABLE,
+                                codeOf(() -> directOnly.activeGrants(fixture.user()))),
+                () ->
+                        assertEquals(
+                                ErrorCode.SECURITY_STATE_UNAVAILABLE,
+                                codeOf(() -> departmentPreview(directOnly, fixture))));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"0,0", "1,0", "0,1"})
+    void departmentSubjectsHonorDisabledInheritanceInAllDirectoryReads(
+            String status, String deleted) throws Exception {
+        DepartmentFixture fixture = departmentFixture();
+        AclGrantStore.AclGrantRecord user =
+                subjectGrant("USER", fixture.user(), fixture.datasource(), "ALLOW");
+        AclGrantStore.AclGrantRecord role =
+                subjectGrant("ROLE", fixture.role(), fixture.datasource(), "ALLOW");
+        AclGrantStore.AclGrantRecord direct =
+                subjectGrant("DEPT", fixture.direct(), fixture.datasource(), "ALLOW");
+        subjectGrant("DEPT", fixture.middle(), fixture.datasource(), "ALLOW");
+        subjectGrant("DEPT", fixture.root(), fixture.datasource(), "DENY");
+        setDepartmentState(fixture.direct(), status, deleted);
+        boolean activeDirect = "0".equals(status) && "0".equals(deleted);
+        Set<Long> expected =
+                activeDirect
+                        ? Set.of(user.id(), role.id(), direct.id())
+                        : Set.of(user.id(), role.id());
+        AclDirectory directOnly = new AclDirectory(dataSource, false);
+        AuthorizationReader reader = new AuthorizationReader(dataSource);
+        assertAll(
+                () ->
+                        assertEquals(
+                                activeDirect ? fixture.direct() : null,
+                                directOnly.subjectScope(fixture.user()).deptId()),
+                () ->
+                        assertTrue(
+                                directOnly
+                                        .subjectScope(fixture.user())
+                                        .deptAncestorIds()
+                                        .isEmpty()),
+                () ->
+                        assertEquals(
+                                expected,
+                                directOnly.activeGrants(fixture.user()).stream()
+                                        .map(local.ptmcp.common.authz.GrantRow::grantId)
+                                        .collect(java.util.stream.Collectors.toSet())),
+                () ->
+                        assertEquals(
+                                expected,
+                                reader
+                                        .loadGrants(
+                                                fixture.user(),
+                                                reader.loadSubjectScope(fixture.user(), false))
+                                        .stream()
+                                        .map(AuthorizationReader.AclGrant::grantId)
+                                        .collect(java.util.stream.Collectors.toSet())),
+                () -> assertTrue(departmentPreview(directOnly, fixture).read()),
+                () ->
+                        assertEquals(
+                                expected,
+                                Set.copyOf(
+                                        departmentPreview(directOnly, fixture).sourceGrantIds())),
+                () -> assertFalse(departmentPreview(fixture).read()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"MISSING", "DISABLED"})
+    void departmentSubjectsPreserveUnavailableUserErrors(String state) throws Exception {
+        DepartmentFixture fixture = departmentFixture();
+        long userId = "MISSING".equals(state) ? 9_999_999L : fixture.user();
+        if ("DISABLED".equals(state)) {
+            try (Connection connection = dataSource.getConnection();
+                    PreparedStatement statement =
+                            connection.prepareStatement(
+                                    "UPDATE sys_user_profile SET status = 'DISABLED' WHERE user_id = ?")) {
+                statement.setLong(1, userId);
+                assertEquals(1, statement.executeUpdate());
+            }
+        }
+        AuthorizationReader reader = new AuthorizationReader(dataSource);
+        for (boolean inheritance : new boolean[] {true, false}) {
+            AclDirectory source = new AclDirectory(dataSource, inheritance);
+            assertAll(
+                    () ->
+                            assertEquals(
+                                    ErrorCode.TOKEN_INVALID,
+                                    codeOf(() -> reader.loadSubjectScope(userId, inheritance))),
+                    () ->
+                            assertEquals(
+                                    ErrorCode.RESOURCE_NOT_FOUND,
+                                    codeOf(() -> source.subjectScope(userId))),
+                    () ->
+                            assertEquals(
+                                    ErrorCode.RESOURCE_NOT_FOUND,
+                                    codeOf(() -> source.activeGrants(userId))),
+                    () ->
+                            assertEquals(
+                                    ErrorCode.RESOURCE_NOT_FOUND,
+                                    codeOf(
+                                            () ->
+                                                    source.preview(
+                                                            userId,
+                                                            fixture.platform(),
+                                                            List.of(
+                                                                    ResourceIds.encode(
+                                                                            ResourceIds.Type
+                                                                                    .DATASOURCE,
+                                                                            fixture.datasource())),
+                                                            Instant.now()))));
+        }
     }
 
     @Test
@@ -1449,13 +1677,31 @@ class OrgManagementStoreTest {
         subjectGrant("USER", fixture.user(), fixture.datasource(), "ALLOW");
         subjectGrant("DEPT", fixture.root(), fixture.datasource(), "DENY");
         AuthorizationReader reader = new AuthorizationReader(dataSource);
+        AclDirectory directOnly = new AclDirectory(dataSource, false);
         long direct = leaf;
         assertAll(
                 () -> assertEquals(direct, reader.loadSubjectScope(fixture.user(), true).deptId()),
-                () -> assertEquals(ancestors, reader.loadSubjectScope(fixture.user(), true).deptAncestorIds()),
-                () -> assertEquals(ancestors, directory.subjectScope(fixture.user()).deptAncestorIds()),
-                () -> assertTrue(reader.loadSubjectScope(fixture.user(), false).deptAncestorIds().isEmpty()),
-                () -> assertFalse(departmentPreview(fixture).read()));
+                () ->
+                        assertEquals(
+                                ancestors,
+                                reader.loadSubjectScope(fixture.user(), true).deptAncestorIds()),
+                () ->
+                        assertEquals(
+                                ancestors,
+                                directory.subjectScope(fixture.user()).deptAncestorIds()),
+                () ->
+                        assertTrue(
+                                reader.loadSubjectScope(fixture.user(), false)
+                                        .deptAncestorIds()
+                                        .isEmpty()),
+                () -> assertFalse(departmentPreview(fixture).read()),
+                () ->
+                        assertTrue(
+                                directOnly
+                                        .subjectScope(fixture.user())
+                                        .deptAncestorIds()
+                                        .isEmpty()),
+                () -> assertTrue(departmentPreview(directOnly, fixture).read()));
     }
 
     @Test

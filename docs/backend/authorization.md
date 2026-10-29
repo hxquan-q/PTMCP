@@ -10,7 +10,9 @@
 
 ## 2. 主体展开与动作关系
 
-主体集合S(user)包括：本人USER；sys_user_role中的有效ROLE（status=0、del_flag=0）；直属有效DEPT；配置明确启用部门继承时的所有有效上级DEPT。部门树从parent_id权威边重建/校验，无环；ancestors只能缓存；每个祖先的停用/删除会阻断该祖先授予，不能为了性能跳过状态。继承开关变化提升policy_epoch。岗位不进入一期表ACL。
+主体集合S(user)包括：本人USER；sys_user_role中的有效ROLE（status=0、del_flag=0）；直属有效DEPT；配置明确启用部门继承时的所有有效上级DEPT。部门树从parent_id权威边重建/校验，无环；ancestors只能缓存。每个部门只在自身status=0、del_flag=0时贡献主体；停用/软删某节点只排除该节点，继续检查其上有效祖先，不能连同上级DENY截断。直属无效时deptId为空，USER与有效ROLE仍参与。继承开关变化提升policy_epoch。岗位不进入一期表ACL。
+
+业务授权读取以活动sys_user_profile为锚点，在单条有界递归查询内校验直属归属和parent_id链，statement超时5秒。最多64个实际节点（含直属），仅parent_id=0为正常根；自环、多节点环、缺直属、非零缺父、负父ID或需要第65节点均拒绝SECURITY_STATE_UNAVAILABLE，不能返回部分主体。继承关闭仍校验完整链，但只贡献有效直属部门，这是对旧读取路径的可用性收紧。当前AuthorizationReader和AclDirectory共用DepartmentSubjectReader；AclDirectory单参构造器及生产网关均默认继承，布尔构造器用于显式关闭且统一作用于scope、grants与preview。本片不提供部署开关/开关变更epoch，不证明角色、grants、平台范围等跨语句整体快照一致，也不代表管理委派或部门写树校验已完成。验证状态见[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
 
 对每条grant先验证主体有效、目标世代有效、状态ACTIVE，按树展开include_descendants，再按UTC时刻t选择valid_from<=t且(valid_to为空或t<valid_to)。时间区间半开[valid_from,valid_to)，没有“当天结束”模糊语义。
 

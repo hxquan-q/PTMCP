@@ -1,7 +1,7 @@
 package local.ptmcp.gateway.mcp;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -158,19 +158,22 @@ class ToolPermissionDenyTest {
     private static void seedDepartmentUser() throws Exception {
         try (Connection connection = PRIMARY.getConnection();
                 Statement statement = connection.createStatement()) {
-            statement.execute("INSERT INTO sys_dept (dept_id,parent_id,ancestors,dept_name,status,del_flag,create_time,update_time) VALUES"
-                    + " (101,0,'0','root','0','0',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6)),"
-                    + " (102,101,'0,101','middle','0','0',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6)),"
-                    + " (103,102,'0,101,102','direct','0','0',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
-            statement.execute("INSERT INTO sys_user_profile (user_id,dept_id,display_name,password_hash,status,create_time,update_time)"
-                    + " VALUES (101,103,'department-user','unused','ACTIVE',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
+            statement.execute(
+                    "INSERT INTO sys_dept (dept_id,parent_id,ancestors,dept_name,status,del_flag,create_time,update_time) VALUES"
+                            + " (101,0,'0','root','0','0',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6)),"
+                            + " (102,101,'0,101','middle','0','0',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6)),"
+                            + " (103,102,'0,101,102','direct','0','0',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
+            statement.execute(
+                    "INSERT INTO sys_user_profile (user_id,dept_id,display_name,password_hash,status,create_time,update_time)"
+                            + " VALUES (101,103,'department-user','unused','ACTIVE',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
         }
     }
 
     private static void clearDepartmentUser() throws Exception {
         try (Connection connection = PRIMARY.getConnection();
                 Statement statement = connection.createStatement()) {
-            statement.execute("DELETE FROM acl_grant WHERE subject_type = 'DEPT' AND subject_id IN (101,102,103)");
+            statement.execute(
+                    "DELETE FROM acl_grant WHERE subject_type = 'DEPT' AND subject_id IN (101,102,103)");
             statement.execute("DELETE FROM sys_user_profile WHERE user_id = 101");
             statement.execute("DELETE FROM sys_dept WHERE dept_id IN (101,102,103)");
         }
@@ -178,11 +181,12 @@ class ToolPermissionDenyTest {
 
     private static void departmentGrant(long deptId, String effect) throws Exception {
         try (Connection connection = PRIMARY.getConnection();
-                PreparedStatement statement = connection.prepareStatement(
-                        "INSERT INTO acl_grant (subject_type,subject_id,resource_type,resource_id,resource_generation,action,effect,"
-                                + "include_descendants,valid_from,status,reason,create_time,update_time,created_by,updated_by)"
-                                + " VALUES ('DEPT',?,'DATASOURCE',1,1,'READ',?,1,UTC_TIMESTAMP(6),'ACTIVE','department regression',"
-                                + "UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),1,1)")) {
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "INSERT INTO acl_grant (subject_type,subject_id,resource_type,resource_id,resource_generation,action,effect,"
+                                        + "include_descendants,valid_from,status,reason,create_time,update_time,created_by,updated_by)"
+                                        + " VALUES ('DEPT',?,'DATASOURCE',1,1,'READ',?,1,UTC_TIMESTAMP(6),'ACTIVE','department regression',"
+                                        + "UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),1,1)")) {
             statement.setLong(1, deptId);
             statement.setString(2, effect);
             statement.executeUpdate();
@@ -202,15 +206,20 @@ class ToolPermissionDenyTest {
             seedDepartmentUser();
             departmentGrant(deptId, "ALLOW");
             try (Connection connection = PRIMARY.getConnection();
-                    PreparedStatement statement = connection.prepareStatement(
-                            "UPDATE sys_dept SET status = ?, del_flag = ? WHERE dept_id = ?")) {
+                    PreparedStatement statement =
+                            connection.prepareStatement(
+                                    "UPDATE sys_dept SET status = ?, del_flag = ? WHERE dept_id = ?")) {
                 statement.setString(1, status);
                 statement.setString(2, deleted);
                 statement.setLong(3, deptId);
                 statement.executeUpdate();
             }
-            assertFalse(departmentSession(true).decide(1).read(), "inactive department cannot contribute READ");
-            assertFalse(departmentSession(false).decide(1).read(), "disabling inheritance must still filter the direct department");
+            assertFalse(
+                    departmentSession(true).decide(1).read(),
+                    "inactive department cannot contribute READ");
+            assertFalse(
+                    departmentSession(false).decide(1).read(),
+                    "disabling inheritance must still filter the direct department");
         } finally {
             clearDepartmentUser();
         }
@@ -224,14 +233,19 @@ class ToolPermissionDenyTest {
             departmentGrant(101, "DENY");
             departmentGrant(103, "ALLOW");
             try (Connection connection = PRIMARY.getConnection();
-                    PreparedStatement statement = connection.prepareStatement(
-                            "UPDATE sys_dept SET status = ?, del_flag = ? WHERE dept_id = 102")) {
+                    PreparedStatement statement =
+                            connection.prepareStatement(
+                                    "UPDATE sys_dept SET status = ?, del_flag = ? WHERE dept_id = 102")) {
                 statement.setString(1, status);
                 statement.setString(2, deleted);
                 statement.executeUpdate();
             }
-            assertFalse(departmentSession(true).decide(1).read(), "active root DENY survives an inactive intermediate node");
-            assertTrue(departmentSession(false).decide(1).read(), "explicitly disabled inheritance leaves the direct ALLOW");
+            assertFalse(
+                    departmentSession(true).decide(1).read(),
+                    "active root DENY survives an inactive intermediate node");
+            assertTrue(
+                    departmentSession(false).decide(1).read(),
+                    "explicitly disabled inheritance leaves the direct ALLOW");
         } finally {
             clearDepartmentUser();
         }
@@ -246,13 +260,20 @@ class ToolPermissionDenyTest {
             try (Connection connection = PRIMARY.getConnection();
                     Statement statement = connection.createStatement()) {
                 switch (corruption) {
-                    case "SELF" -> statement.execute("UPDATE sys_dept SET parent_id = 103 WHERE dept_id = 103");
-                    case "CYCLE" -> statement.execute("UPDATE sys_dept SET parent_id = 103 WHERE dept_id = 101");
-                    default -> statement.execute("UPDATE sys_dept SET parent_id = 9999999 WHERE dept_id = 101");
+                    case "SELF" ->
+                            statement.execute(
+                                    "UPDATE sys_dept SET parent_id = 103 WHERE dept_id = 103");
+                    case "CYCLE" ->
+                            statement.execute(
+                                    "UPDATE sys_dept SET parent_id = 103 WHERE dept_id = 101");
+                    default ->
+                            statement.execute(
+                                    "UPDATE sys_dept SET parent_id = 9999999 WHERE dept_id = 101");
                 }
             }
             for (boolean inheritance : new boolean[] {true, false}) {
-                DomainException failure = assertThrows(DomainException.class, () -> departmentSession(inheritance));
+                DomainException failure =
+                        assertThrows(DomainException.class, () -> departmentSession(inheritance));
                 assertEquals(ErrorCode.SECURITY_STATE_UNAVAILABLE, failure.errorCode());
             }
         } finally {

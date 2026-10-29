@@ -4,6 +4,7 @@ import { CloseIcon, EditIcon, PlusIcon } from '../../components/Icons';
 import { request } from '../../services/http';
 import { createRole, deleteRole, listRoles, updateRole, type RoleRow } from '../../services/orgPortalApi';
 import { validateRoleForm, type RoleFormValues } from './roleForm';
+import { useSensitivePermissions } from '../../permissionsContext';
 
 interface SessionInfo {
   userId: string;
@@ -18,6 +19,7 @@ async function getSession(signal?: AbortSignal): Promise<SessionInfo> {
 }
 
 export function RolesPage() {
+  const { can } = useSensitivePermissions();
   const [rows, setRows] = useState<RoleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -76,7 +78,7 @@ export function RolesPage() {
         title="角色管理"
         description="角色定义、成员数与权限码。"
         actions={
-          <button className="btn btn--primary" onClick={() => setCreating(true)}>
+          <button className="btn btn--primary" onClick={() => can('roleCreate') && setCreating(true)} disabled={!can('roleCreate')}>
             <PlusIcon /> 新建角色
           </button>
         }
@@ -186,7 +188,7 @@ export function RolesPage() {
             <button
               className="btn btn--primary"
               style={{ background: 'var(--ptmcp-red)' }}
-              disabled={busy}
+              disabled={busy || !can('roleDelete')}
               onClick={async () => {
                 if (!deleting) return;
                 setBusy(true);

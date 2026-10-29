@@ -29,7 +29,6 @@ import javax.sql.DataSource;
 public final class AuthorizationReader {
     private static final int STATEMENT_SECONDS = 5;
     private static final int MAX_SUBJECT_IDS = 500;
-    private static final int MAX_DEPT_HOPS = 64;
 
     private final DataSource primary;
 
@@ -90,12 +89,10 @@ public final class AuthorizationReader {
         try (Connection connection = openRead()) {
             Set<Long> roles = new LinkedHashSet<>();
             readRoles(connection, userId, roles);
-            Long deptId = readUserDept(connection, userId);
-            Set<Long> ancestors = new LinkedHashSet<>();
-            if (deptId != null && departmentInheritance) {
-                readAncestors(connection, deptId, ancestors);
-            }
-            return new SubjectScopeData(roles, deptId, ancestors);
+            DepartmentSubjectReader.Departments departments =
+                    DepartmentSubjectReader.read(
+                            connection, userId, departmentInheritance, ErrorCode.TOKEN_INVALID);
+            return new SubjectScopeData(roles, departments.deptId(), departments.ancestorIds());
         } catch (SQLException error) {
             throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
@@ -224,52 +221,6 @@ public final class AuthorizationReader {
             try (ResultSet result = statement.executeQuery()) {
                 while (result.next()) {
                     roles.add(result.getLong(1));
-                }
-            }
-        }
-    }
-
-    private static Long readUserDept(Connection connection, long userId) throws SQLException {
-        try (PreparedStatement statement =
-                statement(
-                        connection,
-                        "SELECT dept_id FROM sys_user_profile WHERE user_id = ? AND status ="
-                                + " 'ACTIVE'")) {
-            statement.setLong(1, userId);
-            try (ResultSet result = statement.executeQuery()) {
-                if (!result.next()) {
-                    throw new DomainException(ErrorCode.TOKEN_INVALID);
-                }
-                long deptId = result.getLong(1);
-                return result.wasNull() ? null : deptId;
-            }
-        }
-    }
-
-    private static void readAncestors(Connection connection, long deptId, Set<Long> ancestors)
-            throws SQLException {
-        long current = deptId;
-        for (int hop = 0; hop < MAX_DEPT_HOPS; hop++) {
-            try (PreparedStatement statement =
-                    statement(
-                            connection,
-                            "SELECT parent_id, status, del_flag FROM sys_dept WHERE dept_id = ?")) {
-                statement.setLong(1, current);
-                try (ResultSet result = statement.executeQuery()) {
-                    if (!result.next()) {
-                        return;
-                    }
-                    long parent = result.getLong(1);
-                    if (parent <= 0) {
-                        return;
-                    }
-                    if ("0".equals(result.getString(2)) && "0".equals(result.getString(3))) {
-                        ancestors.add(parent);
-                    }
-                    if (parent == current) {
-                        return;
-                    }
-                    current = parent;
                 }
             }
         }

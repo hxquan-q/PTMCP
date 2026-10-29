@@ -30,8 +30,10 @@ import {
 } from '../../services/orgPortalApi';
 import { departmentDepth, validateUserForm, type UserFormValues } from './orgForms';
 import { passwordError } from '../me/passwordForm';
+import { useSensitivePermissions } from '../../permissionsContext';
 
 export function UsersPage() {
+  const { can } = useSensitivePermissions();
   const [rows, setRows] = useState<UserRow[]>([]);
   const [roles, setRoles] = useState<RoleRow[]>([]);
   const [depts, setDepts] = useState<DepartmentRow[]>([]);
@@ -99,7 +101,7 @@ export function UsersPage() {
         title="用户"
         description="账号、角色分配与启停状态。"
         actions={
-          <button className="btn btn--primary" onClick={() => setCreating(true)}>
+          <button className="btn btn--primary" onClick={() => can('userCreate') && setCreating(true)} disabled={!can('userCreate')}>
             <PlusIcon /> 新建用户
           </button>
         }
@@ -237,7 +239,7 @@ export function UsersPage() {
             <button
               className="btn btn--primary"
               style={{ background: 'var(--ptmcp-red)' }}
-              disabled={busy}
+              disabled={busy || !can('userDelete')}
               onClick={async () => {
                 if (!deleting) return;
                 setBusy(true);

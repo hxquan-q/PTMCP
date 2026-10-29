@@ -241,6 +241,10 @@ MOVE操作日志保留仅descendantsMoved的原结构，不把历史名称重新
 一次有界查询增加最多64节点的固定读取成本，换取同一语句内完整可校验的链。
 这一片不修委派范围、部门写树防环、提交前actor重验或部门epoch/event；整体策略快照一致性
 也不能仅由部门链的单语句读取证明。先以真实MySQL授权/预览及网关决策反例获得RED再实施。
+当前实现位于persistence/org/DepartmentSubjectReader，AuthorizationReader与AclDirectory共用；
+原网关逐跳读取和预览ancestors解析已移除，AclDirectory(dataSource, false)统一关闭三个入口的继承。
+有效RED分别为网关12例11失败、持久层21例20失败；组合GREEN及实现独立终审仍待，
+因此本总提案保持proposed，不以这一个切片表示全部网关缺口落地。
 
 ### 参考机制及迁移边界
 

@@ -66,6 +66,13 @@ wrapper 未设置 executable，使用 bash 调用，不改文件权限。已有�
 继承关闭仍校验完整链但只贡献直属主体（可用性收紧），不增加部署开关或epoch切换实现。
 先补真实MySQL缓存污染、状态组合、合法64层/非法链及网关决定回归，获得有效RED后实施。
 独立只读设计核阅已提出上述边界与null直属部门预览要求，实际实现和GREEN仍待复核。
+有效RED：`department-subject-gateway-red.log` BUILD FAILURE/exit1，2026-10-30 05:50:04 +08:00，
+12 tests/11 failures/0 errors/0 skipped；证明停用节点仍授予READ、中层停用漏根DENY及非法链被接受。
+持久层首轮21 errors来自测试roleKey夹具连字符，不计产品RED；修正后
+`department-subject-red2.log` BUILD FAILURE/exit1，2026-10-30 05:53:54 +08:00，
+21 tests/20 failures/0 errors/0 skipped，覆盖缓存污染、各节点状态、缺父/缺直属/环/超深。
+共享读取器及null安全比较已实施，补充继承关闭所有Directory入口和无效用户错误映射兼容测试，
+正在隔离Testcontainers运行Org全量、AdminApi及MCP权限组合；实际GREEN与独立终审尚待。
 上一片根检查已重新实际执行，python scripts/check.py与git diff --check均exit0，62项检查器回归通过。
 
 当前切片：所有admin handler显式声明功能码，统一MVC入口默认拒绝未声明/无功能码请求；
