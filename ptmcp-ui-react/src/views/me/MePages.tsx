@@ -894,6 +894,7 @@ export function SecurityPage() {
               try {
                 await changePassword(pwForm.oldPassword, pwForm.newPassword);
                 setPwForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
+                window.dispatchEvent(new CustomEvent('ptmcp:password-changed'));
               } catch (e) {
                 setPwError(e instanceof Error ? e.message : '修改失败，请稍后重试。');
               } finally {

@@ -143,6 +143,24 @@ gateway只完成编译、没有运行MCP HTTP测试，不能把该项计作通�
 `ptmcp-admin-scope-dependency-red.log`取得有效RED：1 test/1 failure/0 errors/0 skipped，
 2026-10-30 03:55:05 +08:00，权限表不可用时旧会话仍成功创建部门（预期503、实际201）。
 该例使用隔离MySQL临时重命名权限表并在finally恢复，不影响开发库。
+最终GREEN：`ptmcp-admin-scope-green.log` BUILD SUCCESS/exit0，2026-10-30 03:59:53 +08:00；
+Org23、Admin43、Session17、OAuth29、McpHttpBoundary1，共113 tests，0失败/错误/跳过。
+本次实际运行了MCP HTTP边界测试，补齐上一启停组合误写类名后的遗漏；该类实际只有1例，不能按预计数量登记。
+独立只读终审实际核阅日志和四份源码，未发现新增阻断，登录时缓存平台管理员资格的缺口关闭；
+复审未重复构建，同请求重复解析/下游异常传播仅静态核验。Spotless仅调整SessionApiTest排版并已回拷。
+提交前actor重验、最后有效管理员、共享限流/供应与多副本仍未完成。
+
+当前切片：封闭用户专用status/roles/department写接口的委派拼接与快照漂移。
+三端点绑定单次读取的profile.version与If-Match，不自动追新；status保留联系方式与备注。
+操作者自身功能码与同一有效委派相交，迁移的两部门、赋角最终整组码均由同一个委派覆盖。
+专用动作不额外索取user:update；通用PUT沿用按实际变化组合动作的既定合同。
+先建立真实MySQL/Servlet拒绝且完整记录不变、未来If-Match并发以及合法命令回归，再实现和独立复审。
+本片不扩大为事务内actor/角色定义重验、最后管理员或平台管理员逐动作码，这些仍是后续安全切片。
+有效RED：`ptmcp-user-specialized-red.log` BUILD FAILURE/exit1，2026-10-30 04:05:44 +08:00，
+11 tests/10 failures/0 errors/0 skipped；六个权限拒绝反例均实际200，三项真实MySQL闩锁并发预期409实际200，
+启停例真实清空email/phone/remark。仅对应专用动作、不要求user:update的合法流程原本通过。
+实现复用命令级单委派算法，专用三端点单快照绑定If-Match；原有正向用例补齐真实actor功能角色，
+越界迁移用例改用当前版本，防止旧夹具的过期If-Match掩盖范围断言，不改变生产绕过或测试期望。
 
 双库 CAS 首次 GREEN：`ptmcp-identity-cas-green.log`，10 tests / 0 failures/errors/skipped，BUILD SUCCESS。
 独立实际 diff 复审未发现迟到写/提交不明新增高危阻断；发现恢复 hash 长期保留、控制器 epoch 字段错配及并发完成额外 epoch，已补回归和修复，重验进行中。

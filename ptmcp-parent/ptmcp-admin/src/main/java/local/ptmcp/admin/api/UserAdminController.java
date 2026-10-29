@@ -116,11 +116,7 @@ public class UserAdminController {
             throw new local.ptmcp.common.error.DomainException(
                     local.ptmcp.common.error.ErrorCode.INVALID_ARGUMENT);
         }
-        OrgStore.UserRow before = orgStore.getUser(id);
-        if (before.version() != expectedVersion) {
-            throw new local.ptmcp.common.error.DomainException(
-                    local.ptmcp.common.error.ErrorCode.VERSION_CONFLICT);
-        }
+        OrgStore.UserRow before = currentUser(id, expectedVersion);
         scopeGate.requireUserUpdate(
                 request, before, write.deptId(), write.enabled(), write.roleIds());
         UserRead updated =
@@ -143,20 +139,21 @@ public class UserAdminController {
     public ResponseEntity<UserRead> setStatus(
             @PathVariable long id, @RequestBody UserStatusWrite write, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
-        scopeGate.requireUserAction(request, orgStore.getUser(id).deptId(), "ptmcp:user:status");
         if (!"ACTIVE".equals(write.status()) && !"DISABLED".equals(write.status())) {
             throw new local.ptmcp.common.error.DomainException(
                     local.ptmcp.common.error.ErrorCode.INVALID_ARGUMENT);
         }
+        OrgStore.UserRow before = currentUser(id, expectedVersion);
+        scopeGate.requireUserStatus(request, before);
         UserRead updated =
                 toRead(
                         orgStore.updateUser(
                                 id,
-                                orgStore.getUser(id).displayName(),
-                                orgStore.getUser(id).deptId(),
-                                null,
-                                null,
-                                null,
+                                before.displayName(),
+                                before.deptId(),
+                                before.email(),
+                                before.phoneNumber(),
+                                before.remark(),
                                 "ACTIVE".equals(write.status()),
                                 null,
                                 expectedVersion,
@@ -168,14 +165,12 @@ public class UserAdminController {
     public ResponseEntity<UserRead> setRoles(
             @PathVariable long id, @RequestBody UserWrite write, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
-        OrgStore.UserRow rolesTarget = orgStore.getUser(id);
-        scopeGate.requireUserAction(request, rolesTarget.deptId(), "ptmcp:user:assign-role");
-        scopeGate.requireRoleAssignment(request, rolesTarget.deptId(), write.roleIds());
         if (write.roleIds() == null) {
             throw new local.ptmcp.common.error.DomainException(
                     local.ptmcp.common.error.ErrorCode.INVALID_ARGUMENT);
         }
-        OrgStore.UserRow current = orgStore.getUser(id);
+        OrgStore.UserRow current = currentUser(id, expectedVersion);
+        scopeGate.requireRoleAssignment(request, current, write.roleIds());
         UserRead updated =
                 toRead(
                         orgStore.updateUser(
@@ -198,15 +193,12 @@ public class UserAdminController {
             @RequestBody UserDepartmentWrite write,
             HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
-        scopeGate.requireUserAction(request, orgStore.getUser(id).deptId(), "ptmcp:user:move");
-        if (write.departmentId() != null) {
-            scopeGate.requireUserAction(request, write.departmentId(), "ptmcp:user:move");
-        }
         if (write.departmentId() == null) {
             throw new local.ptmcp.common.error.DomainException(
                     local.ptmcp.common.error.ErrorCode.INVALID_ARGUMENT);
         }
-        OrgStore.UserRow current = orgStore.getUser(id);
+        OrgStore.UserRow current = currentUser(id, expectedVersion);
+        scopeGate.requireUserMove(request, current, write.departmentId());
         UserRead updated =
                 toRead(
                         orgStore.updateUser(
@@ -221,6 +213,15 @@ public class UserAdminController {
                                 expectedVersion,
                                 actorId(request)));
         return ResponseEntity.ok().eTag(IfMatch.etag(updated.version())).body(updated);
+    }
+
+    private OrgStore.UserRow currentUser(long id, long expectedVersion) {
+        OrgStore.UserRow current = orgStore.getUser(id);
+        if (current.version() != expectedVersion) {
+            throw new local.ptmcp.common.error.DomainException(
+                    local.ptmcp.common.error.ErrorCode.VERSION_CONFLICT);
+        }
+        return current;
     }
 
     private static long actorId(HttpServletRequest request) {

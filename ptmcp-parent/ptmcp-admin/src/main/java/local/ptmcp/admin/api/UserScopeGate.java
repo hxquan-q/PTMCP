@@ -40,10 +40,6 @@ public final class UserScopeGate {
             boolean enabled,
             List<Long> roleIds) {
         Set<Long> requestedRoles = roleIds == null ? null : checkedRoleIds(roleIds);
-        AdminPrincipal principal = AdminPrincipal.require(request);
-        if (principal.platformAdmin()) {
-            return;
-        }
         boolean rolesChanged =
                 requestedRoles != null && !requestedRoles.equals(Set.copyOf(before.roleIds()));
         Set<String> actions = new HashSet<>();
@@ -57,6 +53,42 @@ public final class UserScopeGate {
         if (rolesChanged) {
             actions.add("ptmcp:user:assign-role");
         }
+        requireCommand(
+                request, before.deptId(), targetDeptId, actions,
+                rolesChanged ? requestedRoles : null);
+    }
+
+    public void requireUserStatus(HttpServletRequest request, OrgStore.UserRow before) {
+        requireCommand(
+                request, before.deptId(), before.deptId(), Set.of("ptmcp:user:status"), null);
+    }
+
+    public void requireRoleAssignment(
+            HttpServletRequest request, OrgStore.UserRow before, List<Long> roleIds) {
+        if (roleIds == null) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
+        requireCommand(
+                request, before.deptId(), before.deptId(), Set.of("ptmcp:user:assign-role"),
+                checkedRoleIds(roleIds));
+    }
+
+    public void requireUserMove(
+            HttpServletRequest request, OrgStore.UserRow before, long targetDeptId) {
+        requireCommand(
+                request, before.deptId(), targetDeptId, Set.of("ptmcp:user:move"), null);
+    }
+
+    private void requireCommand(
+            HttpServletRequest request,
+            long sourceDeptId,
+            long targetDeptId,
+            Set<String> actions,
+            Set<Long> requestedRoles) {
+        AdminPrincipal principal = AdminPrincipal.require(request);
+        if (principal.platformAdmin()) {
+            return;
+        }
         if (!delegationStore.permissionsOf(principal.userId()).containsAll(actions)) {
             throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
         }
@@ -69,7 +101,7 @@ public final class UserScopeGate {
                                         resolver.covers(
                                                 delegation,
                                                 DelegationScopeResolver.Target.department(
-                                                        before.deptId()),
+                                                        sourceDeptId),
                                                 null,
                                                 now))
                         .filter(
@@ -84,7 +116,7 @@ public final class UserScopeGate {
         if (candidates.isEmpty()) {
             throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
         }
-        if (rolesChanged) {
+        if (requestedRoles != null) {
             Set<String> assignedCodes = new HashSet<>();
             for (long roleId : requestedRoles) {
                 assignedCodes.addAll(orgStore.getRole(roleId).permissionCodes());
@@ -105,48 +137,6 @@ public final class UserScopeGate {
             }
         }
         return unique;
-    }
-
-    /**
-     * PRD cross-scope role guard (AC-02): a delegated admin may only assign roles whose permission
-     * codes stay inside the delegation's action set. A role carrying management codes beyond the
-     * delegation would silently escalate the subject past the delegated boundary. Platform admins
-     * are unrestricted.
-     */
-    public void requireRoleAssignment(
-            HttpServletRequest request, long targetDeptId, java.util.List<Long> roleIds) {
-        AdminPrincipal principal = AdminPrincipal.require(request);
-        if (principal.platformAdmin() || roleIds == null || roleIds.isEmpty()) {
-            return;
-        }
-        List<DelegationScopeResolver.EffectiveDelegation> delegations = effective(principal);
-        java.util.Set<String> delegatedActions =
-                resolver.effectiveActions(principal.userId(), java.time.Instant.now());
-        for (long roleId : roleIds) {
-            List<String> codes;
-            try {
-                codes = orgStore.getRole(roleId).permissionCodes();
-            } catch (DomainException error) {
-                throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
-            }
-            boolean withinDelegation =
-                    codes.stream()
-                            .filter(code -> code.startsWith("ptmcp:"))
-                            .allMatch(delegatedActions::contains);
-            boolean subjectCovered =
-                    delegations.stream()
-                            .anyMatch(
-                                    delegation ->
-                                            resolver.covers(
-                                                    delegation,
-                                                    DelegationScopeResolver.Target.department(
-                                                            targetDeptId),
-                                                    null,
-                                                    java.time.Instant.now()));
-            if (!withinDelegation || !subjectCovered) {
-                throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
-            }
-        }
     }
 
     /** Platform admins see all users; delegated admins only users inside their subtree. */
@@ -175,12 +165,6 @@ public final class UserScopeGate {
     /** Read: the target user's department must sit inside the delegation subtree. */
     public void requireUserAccess(HttpServletRequest request, long targetDeptId) {
         requireCovered(request, targetDeptId, null);
-    }
-
-    /** Write: subtree coverage plus the exact capability code (e.g. ptmcp:user:update). */
-    public void requireUserAction(
-            HttpServletRequest request, long targetDeptId, String capability) {
-        requireCovered(request, targetDeptId, capability);
     }
 
     private void requireCovered(HttpServletRequest request, long targetDeptId, String action) {

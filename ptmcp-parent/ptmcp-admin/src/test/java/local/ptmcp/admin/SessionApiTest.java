@@ -372,7 +372,9 @@ class SessionApiTest {
         Session session = login("bob", PASSWORD);
         String expiresAt = assertSessionScope(session, false, null);
         String index = sessionIndexSnapshot(BOB);
-        long roleId = Long.parseLong(scalar("SELECT role_id FROM sys_role WHERE role_key = 'portal-user'"));
+        long roleId =
+                Long.parseLong(
+                        scalar("SELECT role_id FROM sys_role WHERE role_key = 'portal-user'"));
         addUserRole(BOB, roleId);
         assertSessionScope(session, true, expiresAt);
         assertEquals(index, sessionIndexSnapshot(BOB));
@@ -409,7 +411,10 @@ class SessionApiTest {
                             .andReturn();
             assertFalse(result.getResponse().getContentAsString().contains("sys_role_permission"));
             assertFalse(result.getResponse().getContentAsString().contains("SQLException"));
-            assertEquals("0", scalar("SELECT COUNT(*) FROM sys_dept WHERE dept_name = 'scope_failure_probe'"));
+            assertEquals(
+                    "0",
+                    scalar(
+                            "SELECT COUNT(*) FROM sys_dept WHERE dept_name = 'scope_failure_probe'"));
             assertEquals(operations, scalar("SELECT COUNT(*) FROM admin_operation_log"));
             assertEquals(index, sessionIndexSnapshot(ALICE));
         } finally {
@@ -443,8 +448,7 @@ class SessionApiTest {
                         .andReturn();
         JsonNode data = json(me);
         assertEquals(
-                expected,
-                data.get("permissions").toString().contains("\"ptmcp:platform:scope\""));
+                expected, data.get("permissions").toString().contains("\"ptmcp:platform:scope\""));
         String expiresAt = data.get("expiresAt").asString();
         if (originalExpiresAt != null) {
             assertEquals(originalExpiresAt, expiresAt);
@@ -463,11 +467,13 @@ class SessionApiTest {
         return scalar(
                 "SELECT CONCAT_WS('|', HEX(session_hash), auth_version, version,"
                         + " issued_at, expires_at, revoked_at) FROM web_session_index"
-                        + " WHERE kind = 'ADMIN' AND user_id = " + userId);
+                        + " WHERE kind = 'ADMIN' AND user_id = "
+                        + userId);
     }
 
     private static void executeSql(String sql) throws SQLException {
-        try (Connection connection = connect(); Statement statement = connection.createStatement()) {
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
             statement.execute(sql);
         }
     }

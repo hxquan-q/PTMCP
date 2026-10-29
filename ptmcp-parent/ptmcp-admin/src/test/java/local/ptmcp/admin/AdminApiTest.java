@@ -793,6 +793,16 @@ class AdminApiTest {
         // Delegate the subtree with user codes to a (distinct) delegated admin.
         createUser("userscope-throwaway", "占位二", insideId);
         long delegate = createUser("userscope-admin", "受控用户管理员", insideId);
+        long delegateRole =
+                orgStore.createRole(
+                                "user_scope_delegate", "用户管理功能", true,
+                                List.of("ptmcp:user:update", "ptmcp:user:status",
+                                        "ptmcp:user:assign-role", "ptmcp:user:move"), ADMIN_ID)
+                        .id();
+        OrgStore.UserRow delegateProfile = orgStore.getUser(delegate);
+        orgStore.updateUser(
+                delegate, delegateProfile.displayName(), delegateProfile.deptId(),
+                null, null, null, null, List.of(delegateRole), delegateProfile.version(), ADMIN_ID);
         mockMvc.perform(
                         post("/api/v1/admin/delegations")
                                 .header("X-Test-User-Id", ADMIN_ID)
@@ -932,7 +942,7 @@ class AdminApiTest {
                         put("/api/v1/admin/users/" + insideUser + "/department")
                                 .header("X-Test-User-Id", delegate)
                                 .header("X-Test-Platform-Admin", "false")
-                                .header("If-Match", "3")
+                                .header("If-Match", orgStore.getUser(insideUser).version())
                                 .contentType("application/json")
                                 .content("{\"departmentId\":" + outsideId + "}"))
                 .andExpect(status().isForbidden());
@@ -1333,6 +1343,234 @@ class AdminApiTest {
             } finally {
                 concurrentUpdateCommitted.countDown();
             }
+        }
+    }
+
+    @Test
+    void specializedUserStatusRequiresActorCapability() throws Exception {
+        assertSpecializedActorCapability("status", "ptmcp:user:status", "{\"status\":\"DISABLED\"}");
+    }
+
+    @Test
+    void specializedUserRolesRequiresActorCapability() throws Exception {
+        assertSpecializedActorCapability("roles", "ptmcp:user:assign-role", "{\"roleIds\":[]}");
+    }
+
+    @Test
+    void specializedUserDepartmentRequiresActorCapability() throws Exception {
+        assertSpecializedActorCapability("department", "ptmcp:user:move", null);
+    }
+
+    private void assertSpecializedActorCapability(String endpoint, String action, String body)
+            throws Exception {
+        UserEditFixture fixture = userEditFixture(List.of(action));
+        if (body == null) {
+            long destination =
+                    orgStore.createDepartment(fixture.departmentId(), "迁入子部门", true, ADMIN_ID).id();
+            body = "{\"departmentId\":" + destination + "}";
+        }
+        try (Connection connection = connect();
+                PreparedStatement delete =
+                        connection.prepareStatement(
+                                "DELETE rp FROM sys_role_permission rp JOIN sys_user_role ur ON ur.role_id=rp.role_id"
+                                        + " WHERE ur.user_id=? AND rp.permission_code=?")) {
+            delete.setLong(1, fixture.delegateId());
+            delete.setString(2, action);
+            assertEquals(1, delete.executeUpdate());
+        }
+        assertSpecializedEditDenied(fixture, endpoint, body);
+    }
+
+    @Test
+    void specializedUserRolesCannotUseUnrelatedDelegationToBroadenRoleLimit() throws Exception {
+        UserEditFixture fixture = userEditFixture(List.of("ptmcp:user:assign-role"));
+        long unrelated = createDepartment("无关委派范围");
+        addEditDelegation(fixture, unrelated, List.of("ptmcp:user:status"));
+        assertSpecializedEditDenied(
+                fixture, "roles", "{\"roleIds\":[" + fixture.broadRoleId() + "]}");
+    }
+
+    @Test
+    void specializedUserRolesCannotCombineRoleCodesFromCoveringDelegations() throws Exception {
+        UserEditFixture fixture =
+                userEditFixture(List.of("ptmcp:user:assign-role", "ptmcp:user:update"));
+        long ancestor = createDepartment("双委派祖先");
+        orgStore.moveDepartment(fixture.departmentId(), ancestor, 1, ADMIN_ID);
+        addEditDelegation(fixture, ancestor, List.of("ptmcp:user:status"));
+        long combinedRole =
+                orgStore.createRole(
+                                "combined_codes", "合并功能角色", true,
+                                List.of("ptmcp:user:update", "ptmcp:user:status"), ADMIN_ID)
+                        .id();
+        assertSpecializedEditDenied(fixture, "roles", "{\"roleIds\":[" + combinedRole + "]}");
+    }
+
+    @Test
+    void specializedUserDepartmentCannotCombineTwoDelegationSubtrees() throws Exception {
+        UserEditFixture fixture = userEditFixture(List.of("ptmcp:user:move"));
+        long destination = createDepartment("独立迁入委派");
+        addEditDelegation(fixture, destination, List.of("ptmcp:user:move"));
+        assertSpecializedEditDenied(
+                fixture, "department", "{\"departmentId\":" + destination + "}");
+    }
+
+    @Test
+    void specializedUserStatusPreservesUnchangedProfileFields() throws Exception {
+        UserEditFixture fixture = userEditFixture(List.of("ptmcp:user:status"));
+        OrgStore.UserRow original = orgStore.getUser(fixture.targetId());
+        OrgStore.UserRow before =
+                orgStore.updateUser(
+                        original.id(), original.displayName(), original.deptId(),
+                        "status-test@example.invalid", "12345678901", "启停保留的合成备注",
+                        null, null, original.version(), ADMIN_ID);
+        performSpecializedEdit(fixture, "status", "{\"status\":\"DISABLED\"}")
+                .andExpect(status().isOk())
+                .andExpect(header().string("ETag", "\"" + (before.version() + 1) + "\""));
+        assertEquals(
+                new OrgStore.UserRow(
+                        before.id(), before.username(), before.displayName(), before.deptId(),
+                        before.email(), before.phoneNumber(), before.remark(), false,
+                        before.roleIds(), before.version() + 1),
+                orgStore.getUser(fixture.targetId()));
+    }
+
+    @Test
+    void specializedUserCommandsDoNotRequireProfileUpdateCapability() throws Exception {
+        UserEditFixture fixture =
+                userEditFixture(
+                        List.of("ptmcp:user:status", "ptmcp:user:assign-role", "ptmcp:user:move"));
+        try (Connection connection = connect();
+                PreparedStatement delete =
+                        connection.prepareStatement(
+                                "DELETE rp FROM sys_role_permission rp JOIN sys_user_role ur ON ur.role_id=rp.role_id"
+                                        + " WHERE ur.user_id=? AND rp.permission_code='ptmcp:user:update'")) {
+            delete.setLong(1, fixture.delegateId());
+            assertEquals(1, delete.executeUpdate());
+        }
+        performSpecializedEdit(fixture, "status", "{\"status\":\"DISABLED\"}")
+                .andExpect(status().isOk());
+        assertFalse(orgStore.getUser(fixture.targetId()).enabled());
+        performSpecializedEdit(fixture, "roles", "{\"roleIds\":[]}")
+                .andExpect(status().isOk());
+        assertTrue(orgStore.getUser(fixture.targetId()).roleIds().isEmpty());
+        long destination =
+                orgStore.createDepartment(fixture.departmentId(), "合法迁入部门", true, ADMIN_ID).id();
+        performSpecializedEdit(fixture, "department", "{\"departmentId\":" + destination + "}")
+                .andExpect(status().isOk());
+        assertEquals(destination, orgStore.getUser(fixture.targetId()).deptId());
+    }
+
+    @Test
+    void specializedUserStatusRejectsFutureVersionAfterConcurrentMove() throws Exception {
+        assertSpecializedFutureVersionRejected("status", "{\"status\":\"DISABLED\"}");
+    }
+
+    @Test
+    void specializedUserRolesRejectsFutureVersionAfterConcurrentMove() throws Exception {
+        assertSpecializedFutureVersionRejected("roles", "{\"roleIds\":[]}");
+    }
+
+    @Test
+    void specializedUserDepartmentRejectsFutureVersionAfterConcurrentMove() throws Exception {
+        assertSpecializedFutureVersionRejected("department", null);
+    }
+
+    private void assertSpecializedFutureVersionRejected(String endpoint, String body)
+            throws Exception {
+        UserEditFixture fixture =
+                userEditFixture(
+                        List.of("ptmcp:user:status", "ptmcp:user:assign-role", "ptmcp:user:move"));
+        OrgStore.UserRow original = orgStore.getUser(fixture.targetId());
+        long outside = createDepartment("并发移出范围");
+        String requestBody =
+                body == null ? "{\"departmentId\":" + fixture.departmentId() + "}" : body;
+        CountDownLatch snapshotRead = new CountDownLatch(1);
+        CountDownLatch concurrentMoveCommitted = new CountDownLatch(1);
+        AtomicBoolean intercepted = new AtomicBoolean();
+        OrgStore observedStore = spy(orgStore);
+        doAnswer(
+                        invocation -> {
+                            OrgStore.UserRow snapshot =
+                                    (OrgStore.UserRow) invocation.callRealMethod();
+                            if (intercepted.compareAndSet(false, true)) {
+                                snapshotRead.countDown();
+                                assertTrue(
+                                        concurrentMoveCommitted.await(15, TimeUnit.SECONDS),
+                                        "concurrent move must commit before authorization continues");
+                            }
+                            return snapshot;
+                        })
+                .when(observedStore)
+                .getUser(fixture.targetId());
+        MockMvc isolatedMvc =
+                MockMvcBuilders.standaloneSetup(
+                                new UserAdminController(
+                                        observedStore, idempotencyRecorder,
+                                        delegationScopeResolver, delegationStore))
+                        .setControllerAdvice(new ApiExceptionAdvice())
+                        .build();
+        try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+            var request =
+                    executor.submit(
+                            () -> isolatedMvc.perform(
+                                            put("/api/v1/admin/users/" + fixture.targetId() + "/" + endpoint)
+                                                    .requestAttr(
+                                                            AdminPrincipal.ATTRIBUTE,
+                                                            new AdminPrincipal(fixture.delegateId(), false))
+                                                    .header("If-Match", original.version() + 1)
+                                                    .contentType("application/json")
+                                                    .content(requestBody))
+                                    .andReturn());
+            try {
+                assertTrue(snapshotRead.await(15, TimeUnit.SECONDS));
+                orgStore.updateUser(
+                        original.id(), "并发迁移后的资料", outside,
+                        "concurrent@example.invalid", "12345678901", "并发更新的合成备注",
+                        null, null, original.version(), ADMIN_ID);
+                UserWriteEffects committed = userWriteEffects(fixture.targetId());
+                concurrentMoveCommitted.countDown();
+                MvcResult result = request.get(15, TimeUnit.SECONDS);
+                assertEquals(409, result.getResponse().getStatus());
+                assertTrue(result.getResponse().getContentAsString().contains("VERSION_CONFLICT"));
+                assertEquals(committed, userWriteEffects(fixture.targetId()));
+            } finally {
+                concurrentMoveCommitted.countDown();
+            }
+        }
+    }
+
+    private org.springframework.test.web.servlet.ResultActions performSpecializedEdit(
+            UserEditFixture fixture, String endpoint, String body) throws Exception {
+        return mockMvc.perform(
+                put("/api/v1/admin/users/" + fixture.targetId() + "/" + endpoint)
+                        .header("X-Test-User-Id", fixture.delegateId())
+                        .header("X-Test-Platform-Admin", "false")
+                        .header("If-Match", orgStore.getUser(fixture.targetId()).version())
+                        .contentType("application/json")
+                        .content(body));
+    }
+
+    private void assertSpecializedEditDenied(UserEditFixture fixture, String endpoint, String body)
+            throws Exception {
+        UserWriteEffects before = userWriteEffects(fixture.targetId());
+        performSpecializedEdit(fixture, endpoint, body)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+        assertEquals(before, userWriteEffects(fixture.targetId()));
+    }
+
+    private record UserWriteEffects(OrgStore.UserRow row, long epoch, long events, long operations) {}
+
+    private UserWriteEffects userWriteEffects(long targetId) throws Exception {
+        OrgStore.UserRow row = orgStore.getUser(targetId);
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery(
+                        "SELECT (SELECT policy_epoch FROM sys_security_state WHERE singleton_id=1),"
+                                + " (SELECT COUNT(*) FROM sys_security_event),"
+                                + " (SELECT COUNT(*) FROM admin_operation_log)")) {
+            assertTrue(result.next());
+            return new UserWriteEffects(row, result.getLong(1), result.getLong(2), result.getLong(3));
         }
     }
 

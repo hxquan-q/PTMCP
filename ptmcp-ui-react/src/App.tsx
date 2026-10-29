@@ -307,6 +307,18 @@ export function App() {
     }
   }, [sessionState, navigate]);
 
+  /* 改密成功即视为全会话失效：立即回登录页（不等下一次 401）。 */
+  useEffect(() => {
+    const onPasswordChanged = () => {
+      setReturnTo(safeReturnTo(path));
+      setSession(null);
+      setSessionState('anonymous');
+      setExpiredNote('密码已修改，全部会话已失效，请用新密码重新登录。');
+    };
+    window.addEventListener('ptmcp:password-changed', onPasswordChanged);
+    return () => window.removeEventListener('ptmcp:password-changed', onPasswordChanged);
+  }, [path]);
+
   useEffect(
     () =>
       onSessionExpired(() => {
