@@ -240,7 +240,7 @@ class AuditRecoveryWorkerTest {
 
     private static AuditStart start() {
         return new AuditStart(
-                UUID.randomUUID(), 1L, 1L, "list_tables", null, null,
+                UUID.randomUUID(), 1L, 1L, "list_databases_and_tables", null, null,
                 Instant.now().minus(10, ChronoUnit.MINUTES).truncatedTo(ChronoUnit.MICROS));
     }
 

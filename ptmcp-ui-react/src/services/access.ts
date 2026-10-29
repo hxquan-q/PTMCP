@@ -318,6 +318,22 @@ export async function getAudit(requestId: string, signal?: AbortSignal): Promise
   return data;
 }
 
+export interface AuditDecryptResult {
+  sqlRaw?: string;
+  sqlFinal?: string;
+  expiresAt: string;
+}
+
+/** 审计解密：需理由（10–500 字符）与至少一个字段；明文仅短时可见，到期自动清除。 */
+export async function decryptAudit(requestId: string, reason: string, fields: string[], signal?: AbortSignal): Promise<AuditDecryptResult> {
+  const { data } = await request<AuditDecryptResult>(`/api/v1/admin/audit/${encodeURIComponent(requestId)}/decrypt`, {
+    method: 'POST',
+    body: { reason, fields },
+    signal,
+  });
+  return data;
+}
+
 /* 个人门户 */
 export function listMyTokens(signal?: AbortSignal): Promise<Page<TokenRow>> {
   return getPage('/api/v1/me/tokens?pageSize=100', signal);

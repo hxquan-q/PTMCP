@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Badge, Dialog, DrawerFields, EmptyState, Field, PageHeader, Select, StatusDot, TextInput } from '../../components/common';
-import { getAudit, getJob, testDatasource, type AuditRow, type JobRow } from '../../services/access';
+import { getAudit, getJob, decryptAudit, testDatasource, type AuditDecryptResult, type AuditRow, type JobRow } from '../../services/access';
+import { LockIcon } from '../../components/Icons';
 import {
   DataRequestError,
   deleteDatasource,
@@ -155,6 +156,7 @@ export function JobDetailPage({ id }: { id: string }) {
 
 /* ─── 审计详情:/admin/audit/{requestId} ─── */
 export function AuditDetailPage({ id }: { id: string }) {
+  const [decryptOpen, setDecryptOpen] = useState(false);
   const [row, setRow] = useState<AuditRow | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -212,7 +214,12 @@ export function AuditDetailPage({ id }: { id: string }) {
           />
           {row.sqlMasked ? (
             <div style={{ marginTop: 14 }}>
-              <strong style={{ display: 'block', fontSize: 12, color: 'var(--ptmcp-text-muted)', marginBottom: 6 }}>SQL(脱敏)</strong>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <strong style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>SQL（脱敏）</strong>
+                <button className="btn btn--secondary" onClick={() => setDecryptOpen(true)}>
+                  <LockIcon /> 解密查看
+                </button>
+              </div>
               <pre
                 style={{
                   margin: 0,
@@ -230,6 +237,7 @@ export function AuditDetailPage({ id }: { id: string }) {
               >
                 {row.sqlMasked}
               </pre>
+              <AuditDecryptDialog open={decryptOpen} requestId={row.requestId} onClose={() => setDecryptOpen(false)} />
             </div>
           ) : null}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginTop: 14 }}>
@@ -959,5 +967,146 @@ export function DatasourceDetailPage({ id }: { id: string }) {
         </Dialog>
       ) : null}
     </>
+  );
+}
+
+/** 审计解密弹窗：理由（10–500）+ 字段选择；明文 30s 倒计时后自动清除（aria-live 播报）。 */
+export function AuditDecryptDialog({ open, requestId, onClose }: { open: boolean; requestId: string; onClose: () => void }) {
+  const [reason, setReason] = useState('');
+  const [fields, setFields] = useState<string[]>(['sqlRaw']);
+  const [result, setResult] = useState<AuditDecryptResult | null>(null);
+  const [remaining, setRemaining] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const valid = reason.trim().length >= 10 && reason.length <= 500 && fields.length > 0;
+
+  // 到期倒计时：到 0 自动清除明文（组件卸载/关闭时同样丢弃）
+  useEffect(() => {
+    if (!result) return;
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((new Date(result.expiresAt).getTime() - Date.now()) / 1000));
+      setRemaining(left);
+      if (left === 0) setResult(null);
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [result]);
+
+  const reset = () => {
+    setReason('');
+    setFields(['sqlRaw']);
+    setResult(null);
+    setError('');
+  };
+
+  const submit = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const data = await decryptAudit(requestId, reason.trim(), fields);
+      setResult(data);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : '解密失败，请稍后重试。');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      title="审计记录解密"
+      onClose={() => {
+        reset();
+        onClose();
+      }}
+      width={640}
+      footer={
+        result ? (
+          <button
+            className="btn btn--secondary"
+            onClick={() => {
+              reset();
+              onClose();
+            }}
+          >
+            关闭并清除明文
+          </button>
+        ) : (
+          <>
+            <button className="btn btn--secondary" onClick={reset} disabled={loading}>
+              重置
+            </button>
+            <button className="btn btn--primary" onClick={submit} disabled={loading || !valid}>
+              {loading ? '解密中…' : '确认解密'}
+            </button>
+          </>
+        )
+      }
+    >
+      <Alert kind="warning" title="操作将被审计">
+        解密属于敏感访问，需要填写排查理由（10～500 字符），系统记录访问人、理由与字段；明文仅短时可见，到期自动清除。
+      </Alert>
+      <Field label={`排查理由（${reason.length}/500）`} hint="至少 10 个字符">
+        <textarea
+          className="input"
+          style={{ width: '100%', minHeight: 72, resize: 'vertical', fontFamily: 'inherit' }}
+          value={reason}
+          maxLength={500}
+          disabled={loading || !!result}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="例如：用户反馈工单 #123 查询被拒，需核对实际执行的 SQL 与 guard 重写差异。"
+        />
+      </Field>
+      <Field label="解密字段">
+        <div style={{ display: 'flex', gap: 16 }}>
+          {['sqlRaw', 'sqlFinal'].map((field) => (
+            <label key={field} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={fields.includes(field)}
+                disabled={loading || !!result}
+                onChange={() => setFields((s) => (s.includes(field) ? s.filter((f) => f !== field) : [...s, field]))}
+              />
+              <code>{field}</code>
+              <span style={{ color: 'var(--ptmcp-text-muted)' }}>{field === 'sqlRaw' ? '原始请求' : '执行语句'}</span>
+            </label>
+          ))}
+        </div>
+      </Field>
+      {error ? <Alert kind="danger">{error}</Alert> : null}
+      {result ? (
+        <div role="status" aria-live="polite">
+          <p style={{ margin: '0 0 8px', fontSize: 12.5, color: 'var(--ptmcp-text-muted)' }}>
+            明文已解锁。剩余 {remaining} 秒，到期自动清除（expiresAt：{result.expiresAt}）。
+          </p>
+          {(['sqlRaw', 'sqlFinal'] as const).map((field) =>
+            result[field] ? (
+              <div key={field} style={{ marginTop: 8 }}>
+                <strong style={{ display: 'block', fontSize: 12, color: 'var(--ptmcp-text-muted)', marginBottom: 4 }}>{field}</strong>
+                <pre
+                  style={{
+                    margin: 0,
+                    padding: '12px 14px',
+                    background: 'var(--ptmcp-chrome)',
+                    border: '1px solid var(--ptmcp-border)',
+                    borderRadius: 8,
+                    fontSize: 12.5,
+                    lineHeight: 1.6,
+                    whiteSpace: 'pre-wrap',
+                    overflow: 'auto',
+                    fontFamily: "ui-monospace, 'SF Mono', Consolas, monospace",
+                  }}
+                >
+                  {result[field]}
+                </pre>
+              </div>
+            ) : null,
+          )}
+        </div>
+      ) : null}
+    </Dialog>
   );
 }

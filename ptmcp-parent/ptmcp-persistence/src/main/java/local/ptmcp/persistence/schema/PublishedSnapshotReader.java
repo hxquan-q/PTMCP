@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import javax.sql.DataSource;
 
@@ -108,6 +109,90 @@ public final class PublishedSnapshotReader {
             String comment,
             boolean primaryKey,
             String foreignKeyJson) {}
+
+    /** Administrative text, never instructions. Ownership/audit identities are not exposed. */
+    public record DictionaryEntry(
+            String title, String description, long version, boolean descriptionTruncated) {}
+
+    /**
+     * Reads only the server-selected objects after the caller has authorized the entire batch.
+     * Dictionary keys must still exist in the same published snapshot. Descriptions are bounded at
+     * the database boundary; the gateway applies its smaller UTF-8 and aggregate output budgets.
+     */
+    public Map<Long, Map<String, DictionaryEntry>> loadDictionaries(
+            Published expected, Set<Long> authorizedObjectIds) {
+        Objects.requireNonNull(expected, "expected");
+        List<Long> ids = authorizedObjectIds.stream().sorted().toList();
+        Set<Long> snapshotIds =
+                expected.namespaces().stream()
+                        .flatMap(namespace -> namespace.objects().stream())
+                        .map(TableObject::id)
+                        .collect(java.util.stream.Collectors.toSet());
+        if (!expected.usable()
+                || ids.isEmpty()
+                || ids.size() > 20
+                || !snapshotIds.containsAll(ids)) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
+        try (Connection connection = primaryMetadata.getConnection()) {
+            connection.setReadOnly(true);
+            connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+            connection.setAutoCommit(false);
+            try {
+                Head current = readHead(connection, expected.datasourceId());
+                if (current == null || current.snapshotId() != expected.snapshotId()) {
+                    throw new DomainException(ErrorCode.SCHEMA_STALE);
+                }
+                if (current.configVersion() != expected.configVersion()
+                        || current.resourceVersion() != expected.resourceVersion()) {
+                    throw new DomainException(ErrorCode.RESOURCE_VERSION_CHANGED);
+                }
+                String placeholders =
+                        String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
+                String sql =
+                        "SELECT bd.object_id, bd.column_norm, bd.title,"
+                                + " LEFT(bd.description, 2048), bd.version, CHAR_LENGTH(bd.description) > 2048"
+                                + " FROM business_dictionary bd JOIN snapshot_object so ON so.object_id = bd.object_id"
+                                + " JOIN resource_object ro ON ro.id = bd.object_id AND ro.status = 'ACTIVE'"
+                                + " JOIN resource_namespace rn ON rn.id = ro.namespace_id AND rn.status = 'ACTIVE'"
+                                + " LEFT JOIN resource_column rc ON rc.snapshot_id = so.snapshot_id"
+                                + " AND rc.object_id = bd.object_id AND rc.column_norm = bd.column_norm"
+                                + " WHERE so.snapshot_id = ? AND rn.datasource_id = ? AND bd.object_id IN ("
+                                + placeholders
+                                + ") AND (bd.column_norm = '' OR rc.column_norm IS NOT NULL)"
+                                + " ORDER BY bd.object_id, bd.column_norm";
+                Map<Long, Map<String, DictionaryEntry>> dictionaries = new LinkedHashMap<>();
+                try (PreparedStatement query = statement(connection, sql)) {
+                    query.setLong(1, expected.snapshotId());
+                    query.setLong(2, expected.datasourceId());
+                    for (int index = 0; index < ids.size(); index++) {
+                        query.setLong(index + 3, ids.get(index));
+                    }
+                    try (ResultSet rows = query.executeQuery()) {
+                        while (rows.next()) {
+                            dictionaries
+                                    .computeIfAbsent(
+                                            rows.getLong(1), ignored -> new LinkedHashMap<>())
+                                    .put(
+                                            rows.getString(2),
+                                            new DictionaryEntry(
+                                                    rows.getString(3),
+                                                    rows.getString(4),
+                                                    rows.getLong(5),
+                                                    rows.getBoolean(6)));
+                        }
+                    }
+                }
+                Map<Long, Map<String, DictionaryEntry>> immutable = new LinkedHashMap<>();
+                dictionaries.forEach((key, value) -> immutable.put(key, Map.copyOf(value)));
+                return Map.copyOf(immutable);
+            } finally {
+                connection.rollback();
+            }
+        } catch (SQLException error) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+    }
 
     public Published load(long datasourceId) {
         if (datasourceId <= 0) {
