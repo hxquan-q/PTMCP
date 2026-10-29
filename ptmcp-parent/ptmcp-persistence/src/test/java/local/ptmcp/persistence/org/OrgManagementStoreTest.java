@@ -35,6 +35,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Set;
+import java.util.TimeZone;
 
 import javax.sql.DataSource;
 
@@ -865,6 +866,55 @@ class OrgManagementStoreTest {
                                 now)
                         .allowGrantIds()
                         .get(0));
+    }
+
+    @Test
+    void delegationUtcWindowsIgnoreJvmTimezoneAndKeepHalfOpenBoundaries() throws Exception {
+        long department = orgStore.createDepartment(null, "UTC委派部", true, 1L).id();
+        orgStore.createUser("utc-placeholder", "占位", department, "unused", List.of(), true, 1L);
+        long delegate = orgStore.createUser("utc-delegate", "委派人", department,
+                "unused", List.of(), true, 1L).id();
+        Instant from = Instant.parse("2026-03-08T06:59:59.123456Z");
+        Instant to = Instant.parse("2026-03-08T07:00:59.123456Z");
+        List<String> actions = List.of("ptmcp:user:update");
+        TimeZone original = TimeZone.getDefault();
+        try {
+            int index = 0;
+            for (String zone : List.of("UTC", "Asia/Taipei", "America/New_York")) {
+                TimeZone.setDefault(TimeZone.getTimeZone(zone));
+                long source = insertDatasource("utc-window-" + index++);
+                DelegationStore.DelegationRow stored = delegationStore.create(1L,
+                        "utc-window-" + zone,
+                        new DelegationStore.DelegationDraft(delegate, department, "DATASOURCE",
+                                source, actions, from, to), Set.copyOf(actions));
+                assertEquals(from, stored.validFrom(), zone);
+                assertEquals(to, stored.validTo(), zone);
+                DelegationStore.DelegationRow adjacent = delegationStore.create(1L,
+                        "utc-adjacent-" + zone,
+                        new DelegationStore.DelegationDraft(delegate, department, "DATASOURCE",
+                                source, actions, to, to.plusSeconds(60)), Set.copyOf(actions));
+                assertEquals(to, adjacent.validFrom(), zone);
+                assertEquals(ErrorCode.DUPLICATE_GRANT, codeOf(() -> delegationStore.create(1L,
+                        "utc-overlap-" + zone,
+                        new DelegationStore.DelegationDraft(delegate, department, "DATASOURCE",
+                                source, actions, to.minusNanos(1000), to.plusSeconds(30)),
+                        Set.copyOf(actions))), zone);
+                for (Instant boundary : List.of(
+                        Instant.parse("2026-03-08T02:30:00.123456Z"),
+                        Instant.parse("2026-11-01T01:30:00.123456Z"))) {
+                    // These UTC digits fall into New York's gap/overlap if treated as local time.
+                    DelegationStore.DelegationRow dst = delegationStore.create(1L,
+                            java.util.UUID.randomUUID().toString(),
+                            new DelegationStore.DelegationDraft(delegate, department, "DATASOURCE",
+                                    source, actions, boundary, boundary.plusSeconds(3600)),
+                            Set.copyOf(actions));
+                    assertEquals(boundary, dst.validFrom(), zone);
+                    assertEquals(boundary.plusSeconds(3600), dst.validTo(), zone);
+                }
+            }
+        } finally {
+            TimeZone.setDefault(original);
+        }
     }
 
     @Test

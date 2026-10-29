@@ -287,19 +287,27 @@ export function listJobs(params?: { datasourceId?: string; pageSize?: number; si
   return getPage(`/api/v1/admin/jobs?${q}`, params?.signal);
 }
 
-export function listAudit(params?: {
+export interface AuditQuery {
+  userId?: string;
+  platformId?: string;
+  datasourceId?: string;
+  tool?: string;
   result?: string;
   verdict?: string;
-  datasourceId?: string;
+  errorCode?: string;
+  from?: string;
+  to?: string;
+  cursor?: string;
   pageSize?: number;
-  signal?: AbortSignal;
-}): Promise<Page<AuditRow>> {
-  const q = new URLSearchParams({ pageSize: String(params?.pageSize ?? 100) });
-  for (const k of ['result', 'verdict', 'datasourceId'] as const) {
-    const v = params?.[k];
+}
+
+export function listAudit(params: AuditQuery = {}, signal?: AbortSignal): Promise<Page<AuditRow>> {
+  const q = new URLSearchParams({ pageSize: String(params.pageSize ?? 20) });
+  for (const k of ['userId', 'platformId', 'datasourceId', 'tool', 'result', 'verdict', 'errorCode', 'from', 'to', 'cursor'] as const) {
+    const v = params[k];
     if (v) q.set(k, v);
   }
-  return getPage(`/api/v1/admin/audit?${q}`, params?.signal);
+  return getPage(`/api/v1/admin/audit?${q}`, signal);
 }
 
 /* 触发一次数据源连通性测试,返回落库的 TEST 任务(含真实 state)。可选 draft 让服务端按内存中的表单(而非已落库行)验证。 */

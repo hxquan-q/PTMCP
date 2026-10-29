@@ -5,10 +5,13 @@ import jakarta.servlet.http.HttpServletRequest;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.persistence.org.DelegationScopeResolver;
+import local.ptmcp.persistence.org.DelegationStore;
 import local.ptmcp.persistence.org.OrgStore;
 
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Delegation-aware gate for the users console, mirroring {@link DepartmentScopeGate}: platform
@@ -20,10 +23,75 @@ import java.util.List;
 public final class UserScopeGate {
     private final DelegationScopeResolver resolver;
     private final OrgStore orgStore;
+    private final DelegationStore delegationStore;
 
-    public UserScopeGate(DelegationScopeResolver resolver, OrgStore orgStore) {
+    public UserScopeGate(
+            DelegationScopeResolver resolver, OrgStore orgStore, DelegationStore delegationStore) {
         this.resolver = resolver;
         this.orgStore = orgStore;
+        this.delegationStore = delegationStore;
+    }
+
+    /** A complete user edit must fit one delegation, including every changed restricted field. */
+    public void requireUserUpdate(
+            HttpServletRequest request,
+            OrgStore.UserRow before,
+            long targetDeptId,
+            boolean enabled,
+            List<Long> roleIds) {
+        Set<Long> requestedRoles = roleIds == null ? null : checkedRoleIds(roleIds);
+        AdminPrincipal principal = AdminPrincipal.require(request);
+        if (principal.platformAdmin()) {
+            return;
+        }
+        boolean rolesChanged =
+                requestedRoles != null && !requestedRoles.equals(Set.copyOf(before.roleIds()));
+        Set<String> actions = new HashSet<>();
+        actions.add("ptmcp:user:update");
+        if (before.deptId() != targetDeptId) {
+            actions.add("ptmcp:user:move");
+        }
+        if (before.enabled() != enabled) {
+            actions.add("ptmcp:user:status");
+        }
+        if (rolesChanged) {
+            actions.add("ptmcp:user:assign-role");
+        }
+        if (!delegationStore.permissionsOf(principal.userId()).containsAll(actions)) {
+            throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
+        }
+        Instant now = Instant.now();
+        List<DelegationScopeResolver.EffectiveDelegation> candidates =
+                resolver.effectiveDelegations(principal.userId(), now).stream()
+                        .filter(delegation -> delegation.allowedActions().containsAll(actions))
+                        .filter(delegation -> resolver.covers(delegation,
+                                DelegationScopeResolver.Target.department(before.deptId()), null, now))
+                        .filter(delegation -> resolver.covers(delegation,
+                                DelegationScopeResolver.Target.department(targetDeptId), null, now))
+                        .toList();
+        if (candidates.isEmpty()) {
+            throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
+        }
+        if (rolesChanged) {
+            Set<String> assignedCodes = new HashSet<>();
+            for (long roleId : requestedRoles) {
+                assignedCodes.addAll(orgStore.getRole(roleId).permissionCodes());
+            }
+            if (candidates.stream().noneMatch(
+                    delegation -> delegation.allowedActions().containsAll(assignedCodes))) {
+                throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
+            }
+        }
+    }
+
+    private static Set<Long> checkedRoleIds(List<Long> roleIds) {
+        Set<Long> unique = new HashSet<>();
+        for (Long id : roleIds) {
+            if (id == null || id <= 0 || !unique.add(id)) {
+                throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+            }
+        }
+        return unique;
     }
 
     /**

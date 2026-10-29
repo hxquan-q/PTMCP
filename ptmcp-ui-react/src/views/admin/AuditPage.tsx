@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Badge, EmptyState, PageHeader, Select, StatusDot, Tabs } from '../../components/common';
+import { Badge, EmptyState, PageHeader, Select, StatusDot, Tabs, TextInput } from '../../components/common';
 import { listAudit, listJobs, type AuditRow, type JobRow } from '../../services/access';
 import { listDatasources, type DatasourceRead } from '../../services/data';
+import { mePortalApi, type PlatformItem } from '../../services/mePortalApi';
 
 function fmt(at: string | null | undefined): string {
   return at ? at.slice(0, 19).replace('T', ' ') : '—';
@@ -21,12 +22,44 @@ export function AuditPage({
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [datasources, setDatasources] = useState<DatasourceRead[]>([]);
   const [loading, setLoading] = useState(true);
-  const [resultFilter, setResultFilter] = useState('');
+  const [platforms, setPlatforms] = useState<PlatformItem[]>([]);
+  const [filters, setFilters] = useState({
+    userId: '',
+    platformId: '',
+    datasourceId: '',
+    tool: '',
+    result: '',
+    verdict: '',
+    errorCode: '',
+    from: '',
+    to: '',
+  });
+  const [quickId, setQuickId] = useState('');
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [queryTick, setQueryTick] = useState(0);
+  const setF = (key: keyof typeof filters) => (v: string) => setFilters((f) => ({ ...f, [key]: v }));
+  const queryParams = () => ({
+    userId: filters.userId || undefined,
+    platformId: filters.platformId || undefined,
+    datasourceId: filters.datasourceId || undefined,
+    tool: filters.tool || undefined,
+    result: filters.result || undefined,
+    verdict: filters.verdict || undefined,
+    errorCode: filters.errorCode || undefined,
+    from: filters.from ? `${filters.from}T00:00:00Z` : undefined,
+    to: filters.to ? `${filters.to}T23:59:59Z` : undefined,
+    pageSize: 20,
+  });
 
   useEffect(() => {
     let cancelled = false;
     listDatasources({ pageSize: 100 })
       .then(({ data }) => !cancelled && setDatasources(data.items))
+      .catch(() => undefined);
+    mePortalApi.accessContext
+      .platforms()
+      .then((ctx) => !cancelled && setPlatforms(ctx.items))
       .catch(() => undefined);
     return () => {
       cancelled = true;
@@ -37,9 +70,18 @@ export function AuditPage({
     let cancelled = false;
     setLoading(true);
     if (tab === 'audit') {
-      listAudit({ result: resultFilter || undefined, pageSize: 200 })
-        .then((p) => !cancelled && setAudit(p.items))
-        .catch(() => !cancelled && setAudit([]))
+      listAudit(queryParams())
+        .then((p) => {
+          if (cancelled) return;
+          setAudit(p.items);
+          setNextCursor(p.nextCursor);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setAudit([]);
+            setNextCursor(null);
+          }
+        })
         .finally(() => !cancelled && setLoading(false));
     } else {
       listJobs({ pageSize: 200 })
@@ -50,7 +92,7 @@ export function AuditPage({
     return () => {
       cancelled = true;
     };
-  }, [tab, resultFilter]);
+  }, [tab, queryTick]);
 
   const dsName = useMemo(() => {
     const m = new Map(datasources.map((d) => [d.id, d.name]));
@@ -70,10 +112,51 @@ export function AuditPage({
             active={tab}
             onChange={setTab}
           />
-          {tab === 'audit' ? (
+        </div>
+        {tab === 'audit' ? (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '12px 14px',
+              borderBottom: '1px solid var(--ptmcp-border)',
+              flex: 'none',
+              flexWrap: 'wrap',
+            }}
+          >
+            <TextInput value={filters.userId} onChange={setF('userId')} placeholder="用户 ID" />
             <Select
-              value={resultFilter}
-              onChange={setResultFilter}
+              value={filters.platformId}
+              onChange={setF('platformId')}
+              label="平台"
+              width={130}
+              options={[{ value: '', label: '全部平台' }, ...platforms.map((p) => ({ value: p.id, label: p.name }))]}
+            />
+            <Select
+              value={filters.datasourceId}
+              onChange={setF('datasourceId')}
+              label="数据源"
+              width={130}
+              options={[{ value: '', label: '全部数据源' }, ...datasources.map((d) => ({ value: d.id, label: d.name }))]}
+            />
+            <Select
+              value={filters.tool}
+              onChange={setF('tool')}
+              label="工具"
+              width={110}
+              options={[
+                { value: '', label: '全部工具' },
+                { value: 'query', label: 'query' },
+                { value: 'catalog', label: 'catalog' },
+                { value: 'schema', label: 'schema' },
+              ]}
+            />
+            <Select
+              value={filters.result}
+              onChange={setF('result')}
+              label="结果"
+              width={110}
               options={[
                 { value: '', label: '全部结果' },
                 { value: 'SUCCESS', label: '成功' },
@@ -81,8 +164,44 @@ export function AuditPage({
                 { value: 'ERROR', label: '失败' },
               ]}
             />
-          ) : null}
-        </div>
+            <Select
+              value={filters.verdict}
+              onChange={setF('verdict')}
+              label="判定"
+              width={110}
+              options={[
+                { value: '', label: '全部判定' },
+                { value: 'ALLOW', label: '允许' },
+                { value: 'DENY', label: '拒绝' },
+              ]}
+            />
+            <TextInput value={filters.errorCode} onChange={setF('errorCode')} placeholder="错误码" />
+            <TextInput value={filters.from} onChange={setF('from')} type="date" />
+            <span style={{ color: 'var(--ptmcp-text-faint)' }}>→</span>
+            <TextInput value={filters.to} onChange={setF('to')} type="date" />
+            <button className="btn btn--secondary" onClick={() => setQueryTick((t) => t + 1)}>
+              查询
+            </button>
+            <button
+              className="btn btn--secondary"
+              onClick={() => {
+                setFilters({ userId: '', platformId: '', datasourceId: '', tool: '', result: '', verdict: '', errorCode: '', from: '', to: '' });
+                setQueryTick((t) => t + 1);
+              }}
+            >
+              重置
+            </button>
+            <span style={{ flex: 1 }} />
+            <TextInput value={quickId} onChange={setQuickId} placeholder="按 requestId 定位" />
+            <button
+              className="btn btn--secondary"
+              disabled={!quickId.trim()}
+              onClick={() => (window.location.hash = `/admin/audit/${encodeURIComponent(quickId.trim())}`)}
+            >
+              查看
+            </button>
+          </div>
+        ) : null}
         <div className="table-scroll">
           {tab === 'audit' ? (
             <table className="data-table">
@@ -169,9 +288,37 @@ export function AuditPage({
               </tbody>
             </table>
           )}
-          {!loading && tab === 'audit' && audit.length === 0 ? <EmptyState title="暂无审计记录" /> : null}
+          {!loading && tab === 'audit' && audit.length === 0 ? <EmptyState title="暂无审计记录" description="调整筛选条件后重试。" /> : null}
           {!loading && tab === 'jobs' && jobs.length === 0 ? <EmptyState title="暂无任务记录" /> : null}
         </div>
+        {tab === 'audit' ? (
+          <div className="table-footer" style={{ justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
+              已加载 {audit.length} 条{nextCursor ? ' · 可能还有更多' : ''}
+            </span>
+            {loading ? null : nextCursor ? (
+              <button
+                className="btn btn--secondary"
+                disabled={loadingMore}
+                onClick={() => {
+                  if (!nextCursor || loadingMore) return;
+                  setLoadingMore(true);
+                  listAudit({ ...queryParams(), cursor: nextCursor })
+                    .then((p) => {
+                      setAudit((prev) => [...prev, ...p.items]);
+                      setNextCursor(p.nextCursor);
+                    })
+                    .catch(() => undefined)
+                    .finally(() => setLoadingMore(false));
+                }}
+              >
+                {loadingMore ? '加载中…' : '加载更多'}
+              </button>
+            ) : (
+              <span style={{ fontSize: 12, color: 'var(--ptmcp-text-faint)' }}>没有更多了</span>
+            )}
+          </div>
+        ) : null}
       </div>
     </>
   );

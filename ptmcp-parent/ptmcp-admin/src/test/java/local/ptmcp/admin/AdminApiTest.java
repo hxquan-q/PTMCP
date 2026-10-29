@@ -16,6 +16,7 @@ import com.mysql.cj.jdbc.exceptions.CommunicationsException;
 
 import local.ptmcp.persistence.org.ResourceIds;
 import local.ptmcp.persistence.org.DelegationStore;
+import local.ptmcp.persistence.org.DelegationScopeResolver;
 import local.ptmcp.persistence.org.OrgStore;
 
 import org.flywaydb.core.Flyway;
@@ -165,6 +166,7 @@ class AdminApiTest {
     @Autowired private MockMvc mockMvc;
     @Autowired private OrgStore orgStore;
     @Autowired private DelegationStore delegationStore;
+    @Autowired private DelegationScopeResolver delegationScopeResolver;
 
     @BeforeEach
     void resetOnlyOwnedData() throws Exception {
@@ -1023,6 +1025,32 @@ class AdminApiTest {
     }
 
     @Test
+    void genericUserUpdateAllowsOneAncestorDelegationToCoverWholeCommand() throws Exception {
+        UserEditFixture fixture = userEditFixture(List.of("ptmcp:user:update",
+                "ptmcp:user:move", "ptmcp:user:status", "ptmcp:user:assign-role"));
+        long destination = orgStore.createDepartment(fixture.departmentId(), "祖先下迁入部门",
+                true, ADMIN_ID).id();
+        long replacement = orgStore.createRole("edit_replacement", "可赋新角色", true,
+                List.of("ptmcp:user:update"), ADMIN_ID).id();
+        OrgStore.UserRow before = orgStore.getUser(fixture.targetId());
+        mockMvc.perform(
+                        put("/api/v1/admin/users/" + fixture.targetId())
+                                .header("X-Test-User-Id", fixture.delegateId())
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("If-Match", before.version())
+                                .contentType("application/json")
+                                .content(userEditBody(fixture, false, "[" + replacement + "]")
+                                        .replace("\"deptId\":" + fixture.departmentId(),
+                                                "\"deptId\":" + destination)))
+                .andExpect(status().isOk());
+        OrgStore.UserRow after = orgStore.getUser(fixture.targetId());
+        assertEquals(destination, after.deptId());
+        assertEquals(List.of(replacement), after.roleIds());
+        assertFalse(after.enabled());
+        assertEquals(before.version() + 1, after.version());
+    }
+
+    @Test
     void genericUserUpdateRequiresActorCapabilityAlongsideDelegation() throws Exception {
         UserEditFixture fixture =
                 userEditFixture(List.of("ptmcp:user:update", "ptmcp:user:move"));
@@ -1039,7 +1067,9 @@ class AdminApiTest {
     void genericUserUpdateCannotCombineDelegationsForDifferentActions() throws Exception {
         UserEditFixture fixture =
                 userEditFixture(List.of("ptmcp:user:update", "ptmcp:user:move"));
-        addEditDelegation(fixture, fixture.departmentId(), List.of("ptmcp:user:status"));
+        long ancestor = createDepartment("动作拆分祖先");
+        orgStore.moveDepartment(fixture.departmentId(), ancestor, 1, ADMIN_ID);
+        addEditDelegation(fixture, ancestor, List.of("ptmcp:user:status"));
         assertGenericEditDenied(fixture, false, null);
     }
 
@@ -1069,7 +1099,7 @@ class AdminApiTest {
         UserEditFixture fixture = userEditFixture(List.of("ptmcp:user:update",
                 "ptmcp:user:move", "ptmcp:user:assign-role"));
         addEditDelegation(fixture, createDepartment("无关范围"),
-                List.of("ptmcp:platform:scope"));
+                List.of("ptmcp:user:status"));
         assertGenericEditDenied(fixture, true, "[" + fixture.broadRoleId() + "]");
     }
 
@@ -1121,6 +1151,40 @@ class AdminApiTest {
                 java.util.Set.copyOf(actions));
     }
 
+    @Test
+    void genericUserUpdateRejectsInvalidRoleIdsWithoutWriting() throws Exception {
+        UserEditFixture fixture = userEditFixture(List.of("ptmcp:user:update"));
+        OrgStore.UserRow before = orgStore.getUser(fixture.targetId());
+        for (String roles : List.of("[null]", "[0]", "[-1]")) {
+            mockMvc.perform(put("/api/v1/admin/users/" + fixture.targetId())
+                            .header("X-Test-User-Id", fixture.delegateId())
+                            .header("X-Test-Platform-Admin", "false")
+                            .header("If-Match", before.version())
+                            .contentType("application/json")
+                            .content(userEditBody(fixture, true, roles)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("INVALID_ARGUMENT"));
+            assertEquals(before, orgStore.getUser(fixture.targetId()));
+        }
+    }
+
+    @Test
+    void genericUserUpdateDoesNotRetryAnOutdatedSnapshot() throws Exception {
+        UserEditFixture fixture = userEditFixture(List.of("ptmcp:user:update"));
+        OrgStore.UserRow original = orgStore.getUser(fixture.targetId());
+        OrgStore.UserRow current = orgStore.updateUser(original.id(), "并发更新资料",
+                original.deptId(), null, null, null, null, null, original.version(), ADMIN_ID);
+        mockMvc.perform(put("/api/v1/admin/users/" + fixture.targetId())
+                        .header("X-Test-User-Id", fixture.delegateId())
+                        .header("X-Test-Platform-Admin", "false")
+                        .header("If-Match", original.version())
+                        .contentType("application/json")
+                        .content(userEditBody(fixture, true, null)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
+        assertEquals(current, orgStore.getUser(fixture.targetId()));
+    }
+
     private record UserEditFixture(
             long departmentId, long datasourceId, long delegateId, long targetId,
             long narrowRoleId, long broadRoleId) {}
@@ -1134,23 +1198,27 @@ class AdminApiTest {
         long narrow = orgStore.createRole("edit_narrow", "资料角色", true,
                 List.of("ptmcp:user:update"), ADMIN_ID).id();
         long broad = orgStore.createRole("edit_broad", "平台角色", true,
-                List.of("ptmcp:platform:scope"), ADMIN_ID).id();
+                List.of("ptmcp:user:status"), ADMIN_ID).id();
         long actorRole = orgStore.createRole("edit_actor", "功能角色", true,
                 List.of("ptmcp:user:update", "ptmcp:user:move", "ptmcp:user:status",
-                        "ptmcp:user:assign-role", "ptmcp:platform:scope"), ADMIN_ID).id();
+                        "ptmcp:user:assign-role"), ADMIN_ID).id();
         OrgStore.UserRow actor = orgStore.getUser(delegate);
         orgStore.updateUser(delegate, actor.displayName(), department, null, null, null,
                 null, List.of(actorRole), actor.version(), ADMIN_ID);
         OrgStore.UserRow current = orgStore.getUser(target);
         orgStore.updateUser(target, current.displayName(), department, null, null, null,
                 null, List.of(narrow), current.version(), ADMIN_ID);
-        delegationStore.create(
+        DelegationStore.DelegationRow assigned = delegationStore.create(
                 ADMIN_ID,
                 UUID.randomUUID().toString(),
                 new DelegationStore.DelegationDraft(
                         delegate, department, "DATASOURCE", datasource, actions,
                         Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600)),
                 java.util.Set.copyOf(actions));
+        assertTrue(!assigned.validFrom().isAfter(Instant.now())
+                        && assigned.validTo().isAfter(Instant.now()),
+                "fixture delegation must currently be effective: " + assigned);
+        assertEquals(1, delegationScopeResolver.effectiveDelegations(delegate, Instant.now()).size());
         return new UserEditFixture(department, datasource, delegate, target, narrow, broad);
     }
 

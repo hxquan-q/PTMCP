@@ -84,10 +84,20 @@ AdminApi26、双库恢复17、Session11、OAuth29、MCP HTTP2；完成时间2026
 自助改密 begin 前绑定缺口关闭。复审未重复执行动态测试；UNBOUND 供应仍未完成。
 
 当前切片：封闭通用用户 PUT 绕过专用 status/roles 权限的入口。
-通用编辑始终要求当前部门的 user:update；实际启停、角色整组变化、部门迁移分别复用对应动作与范围检查，
+通用编辑始终要求 user:update；实际启停、角色整组变化、部门迁移分别追加对应动作，
+同一个有效委派必须覆盖整条命令的所有动作与新旧部门，角色上限不跨委派取并集；另核 actor 自身功能码。
 原值随完整 DTO 回传不额外索取 status/assign-role/move。角色按集合比较；缺省 roleIds 表示保留。
 先用真实 MySQL + Servlet 边界建立拒绝且 profile/roles/version 不变的反例，再验证合法资料编辑与授权变更。
-本片不声称修复角色定义/委派并发、登录时平台管理员快照或启停撤证；这些继续后续闭环。
+本片不声称修复专用接口旧门禁、平台管理员逐动作码、业务权限自扩张、角色定义/委派并发、
+登录时平台管理员快照或启停撤证；这些继续后续闭环。
+首次13例被委派窗口时区偏移遮住，不能作权限旁路 RED；
+`ptmcp-generic-user-put-fixture.log` 13 failures/0 errors 明确复现新短期委派在UTC往返后偏移8小时。
+先修 DelegationStore 的 DATETIME 写入/重叠查询，直接绑定 UTC LocalDateTime，
+增加 UTC、Asia/Taipei、America/New_York（跨DST）的精确微秒与半开区间回归，再回到权限 RED。
+不自动改存量委派时间；若旧版本曾部署，需基于来源核对并由管理员撤销/重建受影响委派。
+时区复审确认四处直接绑定与 UTC 读取契约一致；回归含纽约 spring gap/秋季重叠数字的精确往返。
+首次追加回归漏声明 SQLException，第二次 DST request_id 超出 CHAR(36)，均为夹具错误，
+已补 throws 并使用 UUID；不作为产品行为 RED 或修复通过证据。
 
 双库 CAS 首次 GREEN：`ptmcp-identity-cas-green.log`，10 tests / 0 failures/errors/skipped，BUILD SUCCESS。
 独立实际 diff 复审未发现迟到写/提交不明新增高危阻断；发现恢复 hash 长期保留、控制器 epoch 字段错配及并发完成额外 epoch，已补回归和修复，重验进行中。

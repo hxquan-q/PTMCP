@@ -3,6 +3,7 @@ package local.ptmcp.admin.api;
 import jakarta.servlet.http.HttpServletRequest;
 
 import local.ptmcp.persistence.org.DelegationScopeResolver;
+import local.ptmcp.persistence.org.DelegationStore;
 import local.ptmcp.persistence.org.IdempotencyRecorder;
 import local.ptmcp.persistence.org.OrgStore;
 
@@ -32,10 +33,11 @@ public class UserAdminController {
     public UserAdminController(
             OrgStore orgStore,
             IdempotencyRecorder idempotency,
-            DelegationScopeResolver scopeResolver) {
+            DelegationScopeResolver scopeResolver,
+            DelegationStore delegationStore) {
         this.orgStore = orgStore;
         this.idempotency = idempotency;
-        this.scopeGate = new UserScopeGate(scopeResolver, orgStore);
+        this.scopeGate = new UserScopeGate(scopeResolver, orgStore, delegationStore);
     }
 
     public record UserWrite(
@@ -110,15 +112,12 @@ public class UserAdminController {
     public ResponseEntity<UserRead> update(
             @PathVariable long id, @RequestBody UserWrite write, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
-        scopeGate.requireUserAccess(request, orgStore.getUser(id).deptId());
-        if (write.deptId() != null) {
-            // Moves stay inside the delegated subtree on both sides.
-            scopeGate.requireUserAction(request, write.deptId(), "ptmcp:user:move");
-        }
         if (write.displayName() == null || write.deptId() == null || write.enabled() == null) {
             throw new local.ptmcp.common.error.DomainException(
                     local.ptmcp.common.error.ErrorCode.INVALID_ARGUMENT);
         }
+        OrgStore.UserRow before = orgStore.getUser(id);
+        scopeGate.requireUserUpdate(request, before, write.deptId(), write.enabled(), write.roleIds());
         UserRead updated =
                 toRead(
                         orgStore.updateUser(

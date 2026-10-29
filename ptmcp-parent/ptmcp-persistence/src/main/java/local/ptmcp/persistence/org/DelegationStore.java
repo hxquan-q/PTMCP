@@ -8,7 +8,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -211,8 +210,8 @@ public final class DelegationStore {
                     statement.setLong(4, draft.resourceId());
                     statement.setLong(5, generation);
                     statement.setString(6, actionsJson(actions));
-                    statement.setTimestamp(7, Timestamp.valueOf(from));
-                    statement.setTimestamp(8, Timestamp.valueOf(to));
+                    statement.setObject(7, from);
+                    statement.setObject(8, to);
                     statement.setLong(9, actorId);
                     statement.setLong(10, actorId);
                     statement.executeUpdate();
@@ -436,8 +435,8 @@ public final class DelegationStore {
             statement.setString(3, draft.resourceType());
             statement.setLong(4, draft.resourceId());
             statement.setLong(5, generation);
-            statement.setTimestamp(6, Timestamp.valueOf(to));
-            statement.setTimestamp(7, Timestamp.valueOf(from));
+            statement.setObject(6, to);
+            statement.setObject(7, from);
             try (ResultSet result = statement.executeQuery()) {
                 if (result.next()) {
                     throw new DomainException(ErrorCode.DUPLICATE_GRANT);
