@@ -4,7 +4,7 @@ import java.io.Serializable;
 import java.security.Principal;
 
 /** Minimal resource-owner identity; never carries a password, token or ORM entity. */
-public record AsPrincipal(long userId, String loginName, String displayName)
+public record AsPrincipal(long userId, String loginName, String displayName, long authVersion)
         implements Principal, Serializable {
 
     @Override

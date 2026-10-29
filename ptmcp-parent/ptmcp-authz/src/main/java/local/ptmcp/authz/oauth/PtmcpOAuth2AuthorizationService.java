@@ -1,5 +1,9 @@
 package local.ptmcp.authz.oauth;
 
+import local.ptmcp.common.error.DomainException;
+import local.ptmcp.persistence.security.UserSecurityStore;
+import org.springframework.jdbc.core.ConnectionCallback;
+
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -195,13 +199,16 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
         if (familyId == null && code != null) {
             familyId = UUID.randomUUID().toString();
         }
-        long authVersion =
-                existing != null
-                        ? existing.authVersion()
-                        : attributeLong(
-                                authorization,
-                                OAuthAttributes.AUTH_VERSION,
-                                OAuthAttributes.INITIAL_AUTH_VERSION);
+        long authVersion = existing != null ? existing.authVersion() : account.authVersion();
+        try {
+            UserSecurityStore.State subject = jdbc.execute((ConnectionCallback<UserSecurityStore.State>) connection -> UserSecurityStore.read(connection, account.userId(), true));
+            UserSecurityStore.requireReady(subject, authVersion);
+            if (account.authVersion() != authVersion) {
+                throw invalidGrant();
+            }
+        } catch (DomainException unavailable) {
+            throw invalidGrant();
+        }
 
         Set<String> scopes = new LinkedHashSet<>(authorization.getAuthorizedScopes());
         if (scopes.isEmpty() && request != null && request.getScopes() != null) {
@@ -734,7 +741,7 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
                 new AsPrincipal(
                         row.userId() == null ? 0L : row.userId(),
                         row.principalName(),
-                        row.displayName());
+                        row.displayName(), row.authVersion());
         Authentication principal =
                 UsernamePasswordAuthenticationToken.authenticated(
                         account, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));

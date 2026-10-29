@@ -120,12 +120,12 @@ public final class SecurityStateReader {
         try (PreparedStatement statement =
                 statement(
                         connection,
-                        "SELECT MAX(auth_version) FROM oauth_refresh_family "
-                                + "WHERE user_id = ? AND status = 'ACTIVE'")) {
+                        "SELECT auth_version FROM sys_user_security "
+                                + "WHERE user_id = ? AND identity_state = 'READY'")) {
             statement.setLong(1, userId);
             try (ResultSet result = statement.executeQuery()) {
                 long version = result.next() ? result.getLong(1) : 0;
-                return Map.of(userId, result.wasNull() ? 0L : version);
+                return Map.of(userId, version);
             }
         }
     }

@@ -153,10 +153,25 @@ export interface MetadataObject {
     description?: string;
     ownerUserId?: string | null;
     version?: string;
-    columns?: { name: string; displayName?: string; description?: string; sensitiveTags?: string[] }[];
+    columns?: { name?: string; columnName?: string; displayName?: string; title?: string; description?: string; sensitiveTags?: string[] }[];
   };
   foreignKeys?: { name: string; columns: string[]; refObjectName?: string; refColumns?: string[] }[];
   foreignKeysRestricted?: boolean;
+}
+
+export interface DictionaryWrite {
+  title: string;
+  description: string;
+  ownerUserId: string | null;
+  columns: Array<{ columnName: string; title: string; description: string }>;
+}
+
+export async function updateDictionary(id: string, body: DictionaryWrite, etag: string, idempotencyKey?: string): Promise<ApiResult<MetadataObject>> {
+  return adaptedRequest<MetadataObject & { id: string | number }, MetadataObject>(
+    `/api/v1/admin/metadata/objects/${encodeURIComponent(id)}/dictionary`,
+    { method: 'PUT', body, etag, idempotencyKey },
+    adaptMetadataObject,
+  );
 }
 
 export interface MetadataPage {
@@ -171,6 +186,17 @@ function adaptMetadataObject(dto: MetadataObject & { id: string | number }): Met
     datasourceId: identifier(dto.datasourceId as string | number),
     namespaceId: identifier(dto.namespaceId as string | number),
     generation: String(dto.generation),
+    // 字典列读模型统一为 name/displayName；写入 DTO（columnName/title）在服务端保存，读取时归一。
+    dictionary: dto.dictionary
+      ? {
+          ...dto.dictionary,
+          columns: (dto.dictionary.columns ?? []).map((column) => ({
+            name: column.name ?? (column as { columnName?: string }).columnName ?? '',
+            displayName: column.displayName ?? column.title ?? '',
+            description: column.description ?? '',
+          })),
+        }
+      : dto.dictionary,
   };
 }
 

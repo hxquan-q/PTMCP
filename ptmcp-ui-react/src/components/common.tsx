@@ -111,12 +111,14 @@ export function TextInput({
   placeholder,
   type,
   disabled,
+  maxLength,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   type?: string;
   disabled?: boolean;
+  maxLength?: number;
 }) {
   return (
     <input
@@ -125,6 +127,7 @@ export function TextInput({
       type={type ?? 'text'}
       value={value}
       disabled={disabled}
+      maxLength={maxLength}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
     />

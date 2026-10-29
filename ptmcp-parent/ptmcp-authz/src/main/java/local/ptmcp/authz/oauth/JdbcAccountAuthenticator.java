@@ -1,5 +1,8 @@
 package local.ptmcp.authz.oauth;
 
+import local.ptmcp.common.error.DomainException;
+import local.ptmcp.persistence.security.UserSecurityStore;
+
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.AuthenticationServiceException;
@@ -44,7 +47,20 @@ public final class JdbcAccountAuthenticator implements AccountAuthenticator {
             return Optional.empty();
         }
         List<AccountRow> rows;
+        UserSecurityStore.State state;
         try {
+            // Capture the credential version BEFORE reading the host hash. Rechecking after
+            // validation cannot safely attach a new version to an old-password result.
+            List<Long> bindings = jdbc.queryForList("SELECT user_id FROM sys_user_login_name WHERE normalized_name = ?", Long.class, normalized);
+            if (bindings.size() != 1) {
+                verifyPassword(fakeHash, rawPassword);
+                return Optional.empty();
+            }
+            state = new UserSecurityStore(jdbc.getDataSource()).read(bindings.getFirst());
+            if (!state.ready()) {
+                verifyPassword(fakeHash, rawPassword);
+                return Optional.empty();
+            }
             rows =
                     jdbc.query(
                             SELECT_USER,
@@ -57,7 +73,7 @@ public final class JdbcAccountAuthenticator implements AccountAuthenticator {
                                             rs.getString("status"),
                                             rs.getString("del_flag")),
                             normalized);
-        } catch (DataAccessException failure) {
+        } catch (DataAccessException | DomainException failure) {
             throw new AuthenticationServiceException("Account store unavailable", failure);
         }
         if (rows.isEmpty()) {
@@ -74,7 +90,7 @@ public final class JdbcAccountAuthenticator implements AccountAuthenticator {
             return Optional.empty();
         }
         return Optional.of(
-                new AuthenticatedAccount(row.userId(), row.loginName(), row.displayName()));
+                new AuthenticatedAccount(row.userId(), row.loginName(), row.displayName(), state.authVersion()));
     }
 
     static String normalize(String loginName) {
