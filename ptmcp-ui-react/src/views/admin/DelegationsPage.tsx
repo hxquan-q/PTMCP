@@ -6,6 +6,7 @@ import { listDepartments, listUsers, type DepartmentRow, type UserRow } from '..
 import { listDatasources } from '../../services/data';
 import { validateDelegationForm, type DelegationFormValues } from './delegationForm';
 import { useSensitivePermissions } from '../../permissionsContext';
+import { showToast } from '../../toast';
 
 function fmt(at: string | null): string {
   return at ? at.slice(0, 16).replace('T', ' ') : '—';
@@ -56,7 +57,10 @@ export function DelegationsPage() {
   const revoke = (id: string) => {
     setRevokingId(id);
     revokeDelegation(id)
-      .then(() => setReloadTick((t) => t + 1))
+      .then(() => {
+        setReloadTick((t) => t + 1);
+        showToast('委派已撤销');
+      })
       .catch(() => undefined)
       .finally(() => setRevokingId(''));
   };
@@ -283,6 +287,7 @@ function DelegationDialog({
         validTo: `${values.validTo}:00Z`,
       });
       onSaved();
+      showToast('委派已创建');
     } catch (e) {
       setFormError((e as Error).message || '创建失败，请稍后重试。');
     } finally {

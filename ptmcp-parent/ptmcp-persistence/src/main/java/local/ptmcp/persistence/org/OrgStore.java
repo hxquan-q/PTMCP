@@ -12,7 +12,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -71,22 +70,10 @@ public final class OrgStore {
             Long parentId, String name, boolean enabled, long actorId) {
         OrgSql.requireText(name, 30);
         OrgSql.requireActor(actorId);
-        try (Connection connection = OrgSql.configure(primary)) {
-            connection.setAutoCommit(false);
-            try {
-                String ancestors;
-                long storedParent;
-                if (parentId == null) {
-                    ancestors = "";
-                    storedParent = 0L;
-                } else {
-                    DepartmentRow parent = lockDepartment(connection, parentId);
-                    ancestors =
-                            parent.ancestors().isEmpty()
-                                    ? String.valueOf(parent.id())
-                                    : parent.ancestors() + "," + parent.id();
-                    storedParent = parent.id();
-                }
+        return new SecurityChangeTransaction(primary)
+                .executeReturning(connection -> {
+                DepartmentTree tree = DepartmentTree.lock(connection);
+                String ancestors = tree.createAncestors(parentId);
                 long id;
                 try (PreparedStatement statement =
                         OrgSql.statement(
@@ -94,13 +81,15 @@ public final class OrgStore {
                                 "INSERT INTO sys_dept (parent_id, ancestors, dept_name, status, del_flag,"
                                         + " create_time, update_time) VALUES (?, ?, ?, ?, '0', ?, ?)",
                                 Statement.RETURN_GENERATED_KEYS)) {
-                    statement.setLong(1, storedParent);
+                    statement.setLong(1, parentId == null ? 0L : parentId);
                     statement.setString(2, ancestors);
                     statement.setString(3, name);
                     statement.setString(4, enabled ? "0" : "1");
                     statement.setObject(5, OrgSql.nowUtc());
                     statement.setObject(6, OrgSql.nowUtc());
-                    statement.executeUpdate();
+                    if (statement.executeUpdate() != 1) {
+                        throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+                    }
                     id = generatedKey(statement);
                 }
                 writeOperationLog(
@@ -110,19 +99,10 @@ public final class OrgStore {
                         "DEPARTMENT",
                         id,
                         "{\"name\":\"" + name + "\",\"enabled\":" + enabled + "}");
-                connection.commit();
-                return getDepartment(id);
-            } catch (SQLException | RuntimeException failure) {
-                try {
-                    connection.rollback();
-                } catch (SQLException ignored) {
-                    // Never mask the in-flight failure with a rollback error.
-                }
-                throw failure;
-            }
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
-        }
+                DepartmentRow created = new DepartmentRow(id, parentId, name, enabled, 1, ancestors);
+                return new SecurityChangeTransaction.Outcome<>(created, departmentEvent(id, 1));
+                })
+                .value();
     }
 
     public DepartmentRow updateDepartment(
@@ -172,33 +152,16 @@ public final class OrgStore {
             Function<DepartmentRow, DepartmentFields> fieldsFor) {
         OrgSql.requireActor(actorId);
         requireVersion(expectedVersion);
-        try (Connection connection = OrgSql.configure(primary)) {
-            connection.setAutoCommit(false);
-            try {
-                DepartmentRow self = lockDepartment(connection, id);
+        return new SecurityChangeTransaction(primary)
+                .executeReturning(connection -> {
+                DepartmentTree tree = DepartmentTree.lock(connection);
+                DepartmentRow self = tree.requireActive(id);
                 if (self.version() != expectedVersion) {
                     throw new DomainException(ErrorCode.VERSION_CONFLICT);
                 }
                 DepartmentFields fields = fieldsFor.apply(self);
-                boolean moved = !Objects.equals(self.parentId(), fields.parentId());
-                String newAncestors = self.ancestors();
-                if (moved) {
-                    if (fields.parentId() == null) {
-                        newAncestors = "";
-                    } else {
-                        if (fields.parentId() == id) {
-                            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
-                        }
-                        DepartmentRow parent = lockDepartment(connection, fields.parentId());
-                        if (ancestorChain(parent.ancestors(), parent.id()).contains(id)) {
-                            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
-                        }
-                        newAncestors =
-                                parent.ancestors().isEmpty()
-                                        ? String.valueOf(parent.id())
-                                        : parent.ancestors() + "," + parent.id();
-                    }
-                }
+                DepartmentTree.Mutation plan = tree.planChange(self, fields.parentId());
+                String newAncestors = plan.ancestors();
                 try (PreparedStatement statement =
                         OrgSql.statement(
                                 connection,
@@ -216,8 +179,8 @@ public final class OrgStore {
                         throw new DomainException(ErrorCode.VERSION_CONFLICT);
                     }
                 }
-                int descendantsMoved =
-                        moved ? rebuildDepartmentDescendants(connection, id, newAncestors) : 0;
+                rebuildDepartmentDescendants(connection, plan.descendants());
+                int descendantsMoved = plan.descendants().size();
                 writeOperationLog(
                         connection,
                         actorId,
@@ -243,63 +206,47 @@ public final class OrgStore {
                                 fields.enabled(),
                                 expectedVersion + 1,
                                 newAncestors);
-                connection.commit();
-                return updated;
-            } catch (SQLException | RuntimeException failure) {
-                try {
-                    connection.rollback();
-                } catch (SQLException rollbackError) {
-                    failure.addSuppressed(rollbackError);
-                }
-                throw failure;
-            }
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
-        }
+                return new SecurityChangeTransaction.Outcome<>(updated, departmentEvent(id, updated.version()));
+                })
+                .value();
     }
 
-    private static int rebuildDepartmentDescendants(
-            Connection connection, long id, String newAncestors) throws SQLException {
-        String newPrefix = newAncestors.isEmpty() ? String.valueOf(id) : newAncestors + "," + id;
-        Map<Long, String> descendants = new LinkedHashMap<>();
-        try (PreparedStatement statement =
-                OrgSql.statement(
-                        connection,
-                        "SELECT dept_id, ancestors FROM sys_dept"
-                                + " WHERE del_flag = '0' AND dept_id <> ?")) {
-            statement.setLong(1, id);
-            try (ResultSet result = statement.executeQuery()) {
-                while (result.next()) {
-                    long otherId = result.getLong(1);
-                    String chain = result.getString(2);
-                    if (ancestorChain(chain, otherId).contains(id)) {
-                        descendants.put(otherId, chain);
-                    }
-                }
-            }
-        }
-        for (Map.Entry<Long, String> descendant : descendants.entrySet()) {
+    private static void rebuildDepartmentDescendants(
+            Connection connection, List<DepartmentTree.CacheUpdate> descendants) throws SQLException {
+        for (DepartmentTree.CacheUpdate descendant : descendants) {
             try (PreparedStatement statement =
                     OrgSql.statement(
                             connection,
                             "UPDATE sys_dept SET ancestors = ?, version = version + 1,"
-                                    + " update_time = ? WHERE dept_id = ?")) {
-                statement.setString(1, rebuildChain(descendant.getValue(), id, newPrefix));
+                                    + " update_time = ? WHERE dept_id = ? AND version = ?")) {
+                statement.setString(1, descendant.ancestors());
                 statement.setObject(2, OrgSql.nowUtc());
-                statement.setLong(3, descendant.getKey());
-                statement.executeUpdate();
+                statement.setLong(3, descendant.id());
+                statement.setLong(4, descendant.expectedVersion());
+                if (statement.executeUpdate() != 1) {
+                    throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                }
             }
         }
-        return descendants.size();
+    }
+
+    private static SecurityEvent departmentEvent(long id, long version) {
+        return new SecurityEvent(UUID.randomUUID(), SecurityEvent.Kind.DEPARTMENT_CHANGED,
+                new SecurityEvent.NumericId(id), version);
     }
 
     public void deleteDepartment(long id, long expectedVersion, long actorId) {
         OrgSql.requireActor(actorId);
         requireVersion(expectedVersion);
-        try (Connection connection = OrgSql.configure(primary)) {
-            connection.setAutoCommit(false);
-            try {
-                lockDepartment(connection, id);
+        new SecurityChangeTransaction(primary)
+                .executeReturning(connection -> {
+                DepartmentTree tree = DepartmentTree.lock(connection);
+                DepartmentRow self = tree.requireActive(id);
+                if (self.version() != expectedVersion) {
+                    throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                }
+                tree.path(id);
+                long nextVersion = DepartmentTree.nextVersion(self.version());
                 try (PreparedStatement children =
                                 OrgSql.statement(
                                         connection,
@@ -328,7 +275,7 @@ public final class OrgStore {
                         OrgSql.statement(
                                 connection,
                                 "UPDATE sys_dept SET del_flag = '1', version = version + 1,"
-                                        + " update_time = ? WHERE dept_id = ? AND version = ?")) {
+                                        + " update_time = ? WHERE dept_id = ? AND version = ? AND del_flag = '0'")) {
                     statement.setObject(1, OrgSql.nowUtc());
                     statement.setLong(2, id);
                     statement.setLong(3, expectedVersion);
@@ -337,18 +284,8 @@ public final class OrgStore {
                     }
                 }
                 writeOperationLog(connection, actorId, "DEPARTMENT_DELETE", "DEPARTMENT", id, null);
-                connection.commit();
-            } catch (SQLException | RuntimeException failure) {
-                try {
-                    connection.rollback();
-                } catch (SQLException ignored) {
-                    // Never mask the in-flight failure with a rollback error.
-                }
-                throw failure;
-            }
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
-        }
+                return new SecurityChangeTransaction.Outcome<Void>(null, departmentEvent(id, nextVersion));
+                });
     }
 
     public List<DepartmentRow> listDepartments() {
@@ -1045,22 +982,6 @@ public final class OrgStore {
 
     // ---- internal ----------------------------------------------------------
 
-    private DepartmentRow lockDepartment(Connection connection, long id) throws SQLException {
-        try (PreparedStatement statement =
-                OrgSql.statement(
-                        connection,
-                        "SELECT dept_id, parent_id, dept_name, status, version, ancestors"
-                                + " FROM sys_dept WHERE dept_id = ? AND del_flag = '0' FOR UPDATE")) {
-            statement.setLong(1, id);
-            try (ResultSet result = statement.executeQuery()) {
-                if (!result.next()) {
-                    throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
-                }
-                return departmentRow(result);
-            }
-        }
-    }
-
     private void lockRole(Connection connection, long id) throws SQLException {
         try (PreparedStatement statement =
                 OrgSql.statement(
@@ -1222,28 +1143,6 @@ public final class OrgStore {
                 }
             }
         }
-    }
-
-    private static Set<Long> ancestorChain(String ancestors, long selfId) {
-        Set<Long> chain = new HashSet<>();
-        if (ancestors != null && !ancestors.isEmpty()) {
-            Arrays.stream(ancestors.split(","))
-                    .filter(token -> !token.isBlank() && !"0".equals(token))
-                    .map(Long::parseLong)
-                    .forEach(chain::add);
-        }
-        return chain;
-    }
-
-    private static String rebuildChain(String chain, long movedId, String newPrefix) {
-        List<String> tokens = new ArrayList<>(Arrays.asList(chain.split(",")));
-        int position = tokens.indexOf(String.valueOf(movedId));
-        List<String> tail = position >= 0 ? tokens.subList(position + 1, tokens.size()) : List.of();
-        String rebuilt = newPrefix;
-        for (String token : tail) {
-            rebuilt = rebuilt.isEmpty() ? token : rebuilt + "," + token;
-        }
-        return rebuilt;
     }
 
     private static List<String> normalizedCodes(List<String> codes) {

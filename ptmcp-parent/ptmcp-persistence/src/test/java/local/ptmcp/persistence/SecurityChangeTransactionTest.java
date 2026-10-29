@@ -382,6 +382,34 @@ class SecurityChangeTransactionTest {
     }
 
     @Test
+    void returningCallbackCommitsValueAndEventTogether() throws Exception {
+        SecurityEvent event = event(UUID.randomUUID(), 2);
+        String value = "repository-result";
+        var committed = transaction().executeReturning(connection -> {
+            assertGlobalRowLocked();
+            changeRow(connection);
+            return new SecurityChangeTransaction.Outcome<>(value, event);
+        });
+        assertEquals(value, committed.value());
+        assertEquals(event.eventId(), committed.receipt().eventId());
+        assertEquals(2, committed.receipt().epoch());
+        assertFalse(committed.receipt().cleanupFailed());
+        assertState(2, 2, 1);
+    }
+
+    @Test
+    void missingCallbackResultOrEventRollsBackRepositoryWork() throws Exception {
+        for (boolean missingResult : List.of(true, false)) {
+            assertSanitized(assertThrows(DomainException.class, () ->
+                transaction().executeReturning(connection -> {
+                    changeRow(connection);
+                    return missingResult ? null : new SecurityChangeTransaction.Outcome<>("value", null);
+                })), ErrorCode.INVALID_ARGUMENT);
+            assertState(1, 1, 0);
+        }
+    }
+
+    @Test
     void illegalInputCannotAcquireConnection() {
         AtomicInteger acquisitions = new AtomicInteger();
         var tx = new SecurityChangeTransaction(source(connection -> connection, acquisitions));
@@ -427,7 +455,8 @@ class SecurityChangeTransactionTest {
                                         new SecurityEvent.UuidId(UUID.randomUUID()),
                                         1),
                         () -> tx.execute(null, connection -> changeRow(connection)),
-                        () -> tx.execute(event(UUID.randomUUID(), 2), null))) {
+                        () -> tx.execute(event(UUID.randomUUID(), 2), null),
+                        () -> tx.executeReturning(null))) {
             assertSanitized(
                     assertThrows(DomainException.class, invalid::run), ErrorCode.INVALID_ARGUMENT);
         }

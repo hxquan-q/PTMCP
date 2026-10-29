@@ -242,7 +242,10 @@ export function TokensPage() {
   const revoke = (id: string) => {
     setRevokingId(id);
     revokeToken(id)
-      .then(load)
+      .then(() => {
+        load();
+        showToast('令牌已撤销');
+      })
       .catch(() => undefined)
       .finally(() => setRevokingId(''));
   };
@@ -529,7 +532,10 @@ export function AuthorizationsPage() {
   const revoke = (id: string) => {
     setRevokingId(id);
     revokeAuthorization(id)
-      .then(load)
+      .then(() => {
+        load();
+        showToast('授权已撤销');
+      })
       .catch(() => undefined)
       .finally(() => setRevokingId(''));
   };

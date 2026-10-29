@@ -1226,6 +1226,7 @@ function DictionaryEditor({
       setDraft(null);
       setConflict(null);
       onSaved(data, nextEtag);
+      showToast('字典已保存');
     } catch (err) {
       if (err instanceof DataRequestError && err.status === 412) {
         try {

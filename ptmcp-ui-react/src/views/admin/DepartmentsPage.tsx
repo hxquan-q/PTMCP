@@ -11,6 +11,7 @@ import {
   type UserRow,
 } from '../../services/orgPortalApi';
 import { departmentDepth, departmentDescendants, validateDeptForm, type DeptFormValues } from './orgForms';
+import { showToast } from '../../toast';
 
 export function DepartmentsPage() {
   const [rows, setRows] = useState<DepartmentRow[]>([]);
@@ -170,6 +171,7 @@ export function DepartmentsPage() {
                 setBusy(true);
                 try {
                   await deleteDepartment(deleting.id, deleting.version);
+                  showToast('部门已删除');
                   setDeleting(null);
                   reload();
                 } finally {
@@ -222,6 +224,7 @@ function DeptDialog({ dept, all, onClose, onSaved }: { dept: DepartmentRow | nul
       if (dept) await updateDepartment(dept.id, { name: values.name.trim(), parentId: values.parentId, enabled: values.enabled }, dept.version);
       else await createDepartment({ name: values.name.trim(), parentId: values.parentId, enabled: values.enabled });
       onSaved();
+      showToast('部门已保存');
       onClose();
     } catch (e) {
       const status = (e as { status?: number }).status;

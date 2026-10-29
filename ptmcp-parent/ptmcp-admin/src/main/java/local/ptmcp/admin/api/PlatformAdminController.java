@@ -250,14 +250,9 @@ public class PlatformAdminController {
             @PathVariable long id,
             @RequestBody(required = false) byte[] body,
             HttpServletRequest request) {
-        System.out.println("SCOPE-PUT-DEBUG entered");
         long expectedVersion = IfMatch.requireVersion(request);
-        System.out.println("SCOPE-PUT-DEBUG version=" + expectedVersion);
         AdminPrincipal principal = ManagementScope.requirePlatformAdminPrincipal(request);
         ScopeWrite write = StrictJson.parse(body, ScopeWrite.class);
-        System.out.println(
-                "SCOPE-PUT-DEBUG parsed items="
-                        + (write.items() == null ? -1 : write.items().size()));
         List<PlatformAdminService.ScopeRule> rules =
                 write.items() == null
                         ? List.of()

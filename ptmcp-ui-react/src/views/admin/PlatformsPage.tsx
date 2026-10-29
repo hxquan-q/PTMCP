@@ -19,6 +19,7 @@ import {
 } from '../../services/access';
 import { scopeChangeText, scopeChanges, scopeKey, scopeRuleText } from './scopeDiff';
 import { useSensitivePermissions } from '../../permissionsContext';
+import { showToast } from '../../toast';
 
 const TIER_LABEL: Record<number, string> = { 1: '一级', 2: '二级', 3: '三级' };
 const CATALOG_MODES = ['BLACKLIST', 'WHITELIST', 'FULL'];
@@ -396,6 +397,7 @@ function PlatformDialog({
       if (editing) await updatePlatform(editing.id, body, editing.version);
       else await createPlatform(body);
       onSaved();
+      showToast('平台已保存');
     } catch (e) {
       const status = (e as { status?: number }).status;
       if (status === 412) setConflict('该平台已被他人修改，请关闭后重试。');

@@ -24,7 +24,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.mysql.MySQLContainer;
 
@@ -43,11 +45,13 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 import javax.sql.DataSource;
 
@@ -978,17 +982,170 @@ class OrgManagementStoreTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"CREATE", "EDIT", "UPDATE", "MOVE", "DELETE"})
-    void departmentWritesRejectDamagedCurrentPaths(String command) throws Exception {
+    @MethodSource("departmentPathDefects")
+    void departmentWritesRejectDamagedCurrentPaths(String command, String defect) throws Exception {
         long root = orgStore.createDepartment(null, "坏链根", true, 1).id();
-        OrgStore.DepartmentRow target = orgStore.createDepartment(root, "目标", true, 1);
+        long targetId = orgStore.createDepartment(root, "目标", true, 1).id();
         long destination = orgStore.createDepartment(null, "有效目的地", true, 1).id();
-        setDepartmentParent(root, 9_999_999);
+        OrgStore.DepartmentRow target = orgStore.getDepartment(damageDepartmentPath(defect, root, targetId));
         DepartmentWriteSnapshot before = departmentWriteSnapshot();
         assertAll(
                 () -> assertEquals(ErrorCode.SECURITY_STATE_UNAVAILABLE,
                         codeOf(() -> departmentMutation(command, orgStore, target, destination))),
                 () -> assertEquals(before, departmentWriteSnapshot()));
+    }
+
+    private static Stream<Arguments> departmentPathDefects() {
+        return departmentCommandPathDefects("CREATE", "EDIT", "UPDATE", "MOVE", "DELETE");
+    }
+
+    private static Stream<Arguments> departmentDestinationPathDefects() {
+        return departmentCommandPathDefects("EDIT", "MOVE");
+    }
+
+    private static Stream<Arguments> departmentCommandPathDefects(String... commands) {
+        return Stream.of(commands)
+                .flatMap(command -> Stream.of("SELF", "CYCLE", "MISSING_PARENT", "NEGATIVE_PARENT", "DEPTH_65")
+                        .map(defect -> Arguments.of(command, defect)));
+    }
+
+    private long damageDepartmentPath(String defect, long root, long target) throws SQLException {
+        switch (defect) {
+            case "SELF" -> setDepartmentParent(root, root);
+            case "CYCLE" -> setDepartmentParent(root, target);
+            case "MISSING_PARENT" -> setDepartmentParent(root, 9_999_999);
+            case "NEGATIVE_PARENT" -> setDepartmentParent(root, -1);
+            case "DEPTH_65" -> {
+                for (int depth = 2; depth < 65; depth++) target = insertRawDepartment(null, target);
+            }
+            default -> throw new AssertionError(defect);
+        }
+        return target;
+    }
+
+    @ParameterizedTest
+    @MethodSource("departmentPathDefects")
+    void departmentWritesIgnoreUnrelatedDamagedBranches(String command, String defect) throws Exception {
+        long root = orgStore.createDepartment(null, "有效根", true, 1).id();
+        OrgStore.DepartmentRow target = orgStore.createDepartment(root, "有效目标", true, 1);
+        long destination = orgStore.createDepartment(null, "有效目的地", true, 1).id();
+        long brokenRoot = orgStore.createDepartment(null, "无关坏根", true, 1).id();
+        long brokenChild = orgStore.createDepartment(brokenRoot, "无关坏子", true, 1).id();
+        damageDepartmentPath(defect, brokenRoot, brokenChild);
+        assertDoesNotThrow(() -> departmentMutation(command, orgStore, target, destination));
+    }
+
+    @ParameterizedTest
+    @MethodSource("departmentDestinationPathDefects")
+    void departmentMoveAndEditRejectDamagedDestinations(String command, String defect) throws Exception {
+        OrgStore.DepartmentRow target = orgStore.createDepartment(null, "有效目标", true, 1);
+        long root = orgStore.createDepartment(null, "坏目的根", true, 1).id();
+        long child = orgStore.createDepartment(root, "坏目的子", true, 1).id();
+        long destination = damageDepartmentPath(defect, root, child);
+        DepartmentWriteSnapshot before = departmentWriteSnapshot();
+        assertAll(
+                () -> assertEquals(ErrorCode.SECURITY_STATE_UNAVAILABLE,
+                        codeOf(() -> departmentMutation(command, orgStore, target, destination))),
+                () -> assertEquals(before, departmentWriteSnapshot()));
+    }
+
+    @Test
+    void departmentUpdateRepairsOwnCacheAcrossDeletedParentWithoutChangingTheParent() throws Exception {
+        long root = orgStore.createDepartment(null, "真实根", true, 1).id();
+        long parent = orgStore.createDepartment(root, "软删父", true, 1).id();
+        long target = orgStore.createDepartment(parent, "目标", true, 1).id();
+        setDepartmentState(parent, "1", "1");
+        setDepartmentCache(target, "not-a-number");
+        OrgStore.DepartmentRow updated = orgStore.updateDepartment(target, "更新资料", true, 1, 1);
+        assertEquals(root + "," + parent, updated.ancestors());
+        assertEquals(1, statusScalar("SELECT version FROM sys_dept WHERE dept_id=?", parent));
+    }
+
+    @Test
+    void departmentMoveRejectsPreexistingOverdeepDescendantBeforeChangingAnyRow() throws Exception {
+        long target = orgStore.createDepartment(null, "损坏深树根", true, 1).id();
+        long leaf = target;
+        for (int depth = 1; depth < 65; depth++) leaf = insertRawDepartment(null, leaf);
+        long destination = orgStore.createDepartment(null, "目的根", true, 1).id();
+        DepartmentWriteSnapshot before = departmentWriteSnapshot();
+        assertAll(
+                () -> assertEquals(ErrorCode.SECURITY_STATE_UNAVAILABLE,
+                        codeOf(() -> orgStore.moveDepartment(target, destination, 1, 1))),
+                () -> assertEquals(before, departmentWriteSnapshot()));
+    }
+
+    @Test
+    void departmentMoveRejectsCacheOverflowInDescendantEvenWhenTargetFits() throws Exception {
+        long parent = 0;
+        for (int index = 0; index < 25; index++) {
+            parent = insertRawDepartment(1_000_000_000_000_000_000L + index, parent);
+        }
+        long target = orgStore.createDepartment(null, "移动根", true, 1).id();
+        orgStore.createDepartment(target, "缓存溢出后代", true, 1);
+        long destination = parent;
+        DepartmentWriteSnapshot before = departmentWriteSnapshot();
+        assertAll(
+                () -> assertEquals(ErrorCode.INVALID_ARGUMENT,
+                        codeOf(() -> orgStore.moveDepartment(target, destination, 1, 1))),
+                () -> assertEquals(before, departmentWriteSnapshot()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"TARGET", "DESCENDANT"})
+    void departmentMoveRejectsExhaustedVersionWithoutEffects(String exhausted) throws Exception {
+        long target = orgStore.createDepartment(null, "待移动根", true, 1).id();
+        long leaf = orgStore.createDepartment(target, "后代", true, 1).id();
+        long destination = orgStore.createDepartment(null, "目的根", true, 1).id();
+        statusExecute("UPDATE sys_dept SET version=? WHERE dept_id=?", Long.MAX_VALUE,
+                "TARGET".equals(exhausted) ? target : leaf);
+        long expectedVersion = "TARGET".equals(exhausted) ? Long.MAX_VALUE : 1;
+        DepartmentWriteSnapshot before = departmentWriteSnapshot();
+        assertAll(
+                () -> assertEquals(ErrorCode.SECURITY_STATE_UNAVAILABLE,
+                        codeOf(() -> orgStore.moveDepartment(target, destination, expectedVersion, 1))),
+                () -> assertEquals(before, departmentWriteSnapshot()));
+    }
+
+    @Test
+    void concurrentCrossMovesRecheckLockedAuthorityAndCannotCreateCycle() throws Exception {
+        long left = orgStore.createDepartment(null, "左根", true, 1).id();
+        long right = orgStore.createDepartment(null, "右根", true, 1).id();
+        DepartmentWriteSnapshot before = departmentWriteSnapshot();
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch resume = new CountDownLatch(1);
+        OrgStore racing = new OrgStore(statusFaultDataSource(null, false,
+                () -> awaitStatusRace(ready, resume)));
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> moveOutcome(racing, left, right));
+            var second = executor.submit(() -> moveOutcome(racing, right, left));
+            try {
+                assertTrue(ready.await(10, TimeUnit.SECONDS));
+            } finally {
+                resume.countDown();
+            }
+            ErrorCode firstOutcome = first.get(15, TimeUnit.SECONDS);
+            ErrorCode secondOutcome = second.get(15, TimeUnit.SECONDS);
+            assertTrue(firstOutcome == null && secondOutcome == ErrorCode.INVALID_ARGUMENT
+                    || secondOutcome == null && firstOutcome == ErrorCode.INVALID_ARGUMENT);
+        }
+        DepartmentWriteSnapshot after = departmentWriteSnapshot();
+        assertAll(
+                () -> assertEquals(before.epoch() + 1, after.epoch()),
+                () -> assertEquals(before.events().size() + 1, after.events().size()),
+                () -> assertEquals(before.operations().size() + 1, after.operations().size()));
+        OrgStore.DepartmentRow leftRow = orgStore.getDepartment(left);
+        OrgStore.DepartmentRow rightRow = orgStore.getDepartment(right);
+        assertTrue(leftRow.parentId() == null && Objects.equals(rightRow.parentId(), left)
+                || rightRow.parentId() == null && Objects.equals(leftRow.parentId(), right));
+    }
+
+    private static ErrorCode moveOutcome(OrgStore store, long target, long parent) {
+        try {
+            store.moveDepartment(target, parent, 1, 1);
+            return null;
+        } catch (DomainException error) {
+            return error.errorCode();
+        }
     }
 
     @Test
@@ -1069,6 +1226,9 @@ class OrgManagementStoreTest {
         long root = orgStore.createDepartment(null, "原根", true, 1).id();
         OrgStore.DepartmentRow target = orgStore.createDepartment(root, "目标", true, 1);
         long destination = orgStore.createDepartment(null, "目的根", true, 1).id();
+        if ("EDIT".equals(command) || "MOVE".equals(command)) {
+            orgStore.createDepartment(target.id(), "必须回滚的后代", true, 1);
+        }
         DepartmentWriteSnapshot before = departmentWriteSnapshot();
         OrgStore failing = new OrgStore(statusFaultDataSource("INSERT INTO sys_security_event", false));
         assertAll(
@@ -1083,6 +1243,8 @@ class OrgManagementStoreTest {
         long root = orgStore.createDepartment(null, "原根", true, 1).id();
         OrgStore.DepartmentRow target = orgStore.createDepartment(root, "目标", true, 1);
         long destination = orgStore.createDepartment(null, "目的根", true, 1).id();
+        boolean subtree = "EDIT".equals(command) || "MOVE".equals(command);
+        if (subtree) orgStore.createDepartment(target.id(), "必须只提交一次的后代", true, 1);
         DepartmentWriteSnapshot before = departmentWriteSnapshot();
         OrgStore uncertain = new OrgStore(statusFaultDataSource(null, true));
         assertEquals(ErrorCode.OPERATION_UNKNOWN,
@@ -1092,7 +1254,7 @@ class OrgManagementStoreTest {
                 () -> assertEquals(before.epoch() + 1, after.epoch()),
                 () -> assertEquals(before.events().size() + 1, after.events().size()),
                 () -> assertEquals(before.operations().size() + 1, after.operations().size()),
-                () -> assertEquals("CREATE".equals(command) ? 4 : 3, after.departments().size()));
+                () -> assertEquals("CREATE".equals(command) || subtree ? 4 : 3, after.departments().size()));
     }
 
     @ParameterizedTest
