@@ -99,6 +99,9 @@ final class DepartmentTree {
         List<Long> currentPath = path(self.id());
         nextVersion(self.version());
         boolean moved = !Objects.equals(self.parentId(), parentId);
+        if (moved) {
+            validateDescendants(self.id());
+        }
         List<Long> parents = moved
                 ? parentPath(parentId)
                 : currentPath.subList(0, currentPath.size() - 1);
@@ -111,25 +114,33 @@ final class DepartmentTree {
         }
 
         List<CacheUpdate> descendants = new ArrayList<>();
-        Set<Long> visited = new HashSet<>();
-        visited.add(self.id());
         ArrayDeque<PlannedNode> pending = new ArrayDeque<>();
         List<Long> selfPath = append(parents, self.id());
         enqueueChildren(pending, self.id(), selfPath);
         while (!pending.isEmpty()) {
             PlannedNode planned = pending.removeFirst();
             OrgStore.DepartmentRow row = planned.node().row();
-            if (!visited.add(row.id())) {
-                throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
-            }
-            // Reject pre-existing damaged paths separately from an invalid proposed destination.
-            path(row.id());
-            nextVersion(row.version());
             descendants.add(
                     new CacheUpdate(row.id(), row.version(), proposedCache(planned.parents())));
             enqueueChildren(pending, row.id(), append(planned.parents(), row.id()));
         }
         return new Mutation(ancestors, List.copyOf(descendants));
+    }
+
+    /** Validate all existing rows before checking any proposed depth or cache length. */
+    private void validateDescendants(long id) {
+        Set<Long> visited = new HashSet<>();
+        visited.add(id);
+        ArrayDeque<Node> pending = new ArrayDeque<>(children.getOrDefault(id, List.of()));
+        while (!pending.isEmpty()) {
+            OrgStore.DepartmentRow row = pending.removeFirst().row();
+            if (!visited.add(row.id())) {
+                throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+            }
+            path(row.id());
+            nextVersion(row.version());
+            pending.addAll(children.getOrDefault(row.id(), List.of()));
+        }
     }
 
     private List<Long> parentPath(Long parentId) {

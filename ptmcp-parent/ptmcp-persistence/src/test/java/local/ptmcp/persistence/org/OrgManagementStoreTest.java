@@ -1009,7 +1009,7 @@ class OrgManagementStoreTest {
                         .map(defect -> Arguments.of(command, defect)));
     }
 
-    private long damageDepartmentPath(String defect, long root, long target) throws SQLException {
+    private long damageDepartmentPath(String defect, long root, long target) throws Exception {
         switch (defect) {
             case "SELF" -> setDepartmentParent(root, root);
             case "CYCLE" -> setDepartmentParent(root, target);

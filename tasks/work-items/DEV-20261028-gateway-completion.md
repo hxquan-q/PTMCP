@@ -126,6 +126,19 @@ Skill三项检查均exit0（12份活跃笔记、0份归档）；python scripts/c
 先补真实MySQL失败反例、事件故障回滚、各命令全局锁顺序及提交丢确认，再实施并组合验证。
 本片不包含事务内actor/委派重验、整子树授权、间接自扩权或部门容量验收；后续不得随此片记为完成。
 
+有效RED：`department-tree-red.log`于2026-10-30 06:41:28 +08:00 BUILD FAILURE/exit1，
+33 tests /33 failures /0 errors /0 skipped，暴露缓存驱动写集、防环/深度与epoch/event、
+故障回滚、丢确认错误码和缺少全局锁。随后补充坏链五类×五命令、无关坏分支不阻断、
+目的链、软删父资料更新、版本上限、后代缓存溢出及并发互移，扩展用例不冒充已先跑RED。
+首GREEN `department-tree-green.log`于06:47:10退出1，夹具damageDepartmentPath漏声明Exception，
+4处编译错误，未运行测试。修正夹具后`department-tree-green2.log`于06:52:39退出1：
+SecurityState13、SecurityChangeTransaction16通过，Org163仅1 failure/0 errors/0 skipped；
+坏旧树65层的预期STATE实际INVALID_ARGUMENT，完整写快照保持不变。
+已改为移动先完整BFS校验全部旧后代，再规划新父链/深度/缓存，重跑`department-tree-green3.log`进行中。
+独立只读评审已核两阶段代码与前述实际失败，未发现新增静态阻断；最终组合证据仍待核。
+删除仍仅检查直接未删子部门/直属用户，用户创建/换部门未共用该全局围栏，
+本片不关闭并发成员引用和跨软删桥的删除引用完整性，也不声明外部直写安全或容量达标。
+
 当前切片：所有admin handler显式声明功能码，统一MVC入口默认拒绝未声明/无功能码请求；
 平台管理员不能绕过端点动作，通用用户PUT仍按实际变化补status/assign-role/move。
 身份状态读复用user:read，操作日志复用audit:list，原文访问轨迹复用audit:read，解密单独audit:decrypt。

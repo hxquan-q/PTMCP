@@ -151,6 +151,14 @@ Refresh 事务统一先锁sys_security_state单行，再锁sys_user_security，�
 
 主库隔离级别与锁策略在实现时固定；事务不允许跨业务库。安全快照读取使用新建主库短事务的一致快照，权威时间保守取快照起始；不可使用滞后读副本，不能用RR事务二读epoch证明没有其他事务并发提交，执行前复查需新事务/current read。唯一键与CHECK是最后约束，不以应用先查询代替。所有安全写固定锁顺序sys_security_state→sys_user_security（多用户按ID）→平台/客户端/主体聚合（按类型+ID）→family（按ID）→refresh token（按generation/hash）→细表；没有用到的层跳过但不可反向获取。普通审计写不获取安全全局锁。事务只在元库，锁内不发网络请求，迁移前用并发改密/刷新/撤销死锁测试锁定实现。
 
+部门写命令复用上述安全事务，锁sys_security_state后按dept_id读取全部sys_dept行并FOR UPDATE，
+以parent_id校验相关旧链/移动子树及目的链。移动包含软删后代的缓存重建与版本CAS；缓存不是权威边。
+所有旧后代先验完整链及版本，再规划新深度与现有ancestors VARCHAR(500)长度，失败在DML前拒绝。
+部门行、操作日志、epoch及DEPARTMENT_CHANGED同事务；创建的可信回调返回Outcome(value,event)，
+事件使用实际生成ID和version1，仅在确认commit后返回Committed(value,receipt)，丢确认不重放。
+全表锁快照的成本随部门数量增加，尚无容量结论；用户创建/换部门等其他写方未共用此围栏，
+不能据此推断部门删除的引用完整性或提交前操作者授权重验已完成。实际验证见[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
+
 ## 8. 生命周期、归档和迁移验收
 
 配置/主体软删除保留 ID，不级联删除历史审计；关联表以 RESTRICT 或服务领域检查，禁止随用户删除审计。资源 DROP/重建用新 generation/object_id，旧 grant 标 stale/revoked，不靠名字重新授权。无可靠物理身份的引擎，在快照检测到删除/重建/定义不确定时收紧到需管理员重新确认；不能凭同名表无变化证明未重建。
