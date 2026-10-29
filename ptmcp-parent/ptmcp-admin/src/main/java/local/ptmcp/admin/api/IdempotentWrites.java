@@ -16,9 +16,9 @@ import java.security.NoSuchAlgorithmException;
 import java.util.function.Supplier;
 
 /**
- * Idempotency-Key wrapper for admin POST actions. A replay returns the recorded status and body
- * with {@code Idempotent-Replay: true}; a failed attempt releases its lease so the caller can retry
- * with the same key.
+ * Idempotency-Key wrapper for admin write actions. A replay returns the recorded status and body
+ * with {@code Idempotent-Replay: true}. Once dispatched, a failed attempt retains its intent:
+ * an exception cannot prove that the action had no committed or external side effects.
  */
 final class IdempotentWrites {
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -51,21 +51,29 @@ final class IdempotentWrites {
         try {
             response = action.get();
         } catch (RuntimeException failure) {
-            release(recorder, actorId, routeKey, idempotencyKey);
-            throw failure;
+            markUnknown(recorder, actorId, routeKey, idempotencyKey);
+            if (failure instanceof DomainException domain) {
+                throw domain;
+            }
+            throw new DomainException(ErrorCode.OPERATION_UNKNOWN);
         }
-        byte[] body =
-                response.getBody() == null
-                        ? new byte[0]
-                        : JSON.writeValueAsString(response.getBody())
-                                .getBytes(StandardCharsets.UTF_8);
-        recorder.completeSucceeded(
-                actorId, routeKey, idempotencyKey, body, response.getStatusCode().value());
-        HttpHeaders headers = new HttpHeaders();
-        headers.putAll(response.getHeaders());
-        headers.remove(HttpHeaders.CONTENT_LENGTH);
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        return ResponseEntity.status(response.getStatusCode()).headers(headers).body(body);
+        try {
+            byte[] body =
+                    response.getBody() == null
+                            ? new byte[0]
+                            : JSON.writeValueAsString(response.getBody())
+                                    .getBytes(StandardCharsets.UTF_8);
+            recorder.completeSucceeded(
+                    actorId, routeKey, idempotencyKey, body, response.getStatusCode().value());
+            HttpHeaders headers = new HttpHeaders();
+            headers.putAll(response.getHeaders());
+            headers.remove(HttpHeaders.CONTENT_LENGTH);
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            return ResponseEntity.status(response.getStatusCode()).headers(headers).body(body);
+        } catch (RuntimeException failure) {
+            markUnknown(recorder, actorId, routeKey, idempotencyKey);
+            throw new DomainException(ErrorCode.OPERATION_UNKNOWN);
+        }
     }
 
     /** Optimistic-concurrency headers are part of the request intent for recovery actions. */
@@ -86,12 +94,12 @@ final class IdempotentWrites {
         return execute(recorder, actorId, routeKey, key, intent, action);
     }
 
-    private static void release(
+    private static void markUnknown(
             IdempotencyRecorder recorder, long actorId, String routeKey, String key) {
         try {
-            recorder.completeFailed(actorId, routeKey, key);
+            recorder.completeUnknown(actorId, routeKey, key);
         } catch (RuntimeException ignored) {
-            // Preserve the original failure; the lease expires on its own.
+            // An unmarked RUNNING intent still blocks retries after expiry. Never release it.
         }
     }
 

@@ -26,6 +26,14 @@ requestId 由服务端每次实际调用生成，不接受外部覆盖；REST �
 
 POST 创建/启动任务/撤销/解密动作使用 Idempotency-Key（客户端随机UUID，同一意图重试复用），24小时窗口，服务端原子记录(actor,route,keyHash,payloadHash)。相同key/不同body为422 IDEMPOTENCY_KEY_REUSED；处理中重复409 OPERATION_IN_PROGRESS；已成功返回原资源结果并标 Idempotent-Replay:true；未知结局409 OPERATION_UNKNOWN，不重做。外部副作用“连接测试/同步”用job状态消除重试歧义。PAT/客户端secret只展示一次，重复key仅返回resource元数据和TOKEN_ALREADY_CREATED，不重放secret；请求丢失需撤销旧资源后重新创建新意图。普通PUT/DELETE本身幂等仍需If-Match；OAuth code/refresh严格一次消费，完全不采用此REST幂等机制；MCP SQL无自动幂等重放保证。
 
+当前管理幂等包装一旦分派业务action，任何运行时异常都保留请求占位并尽力标记UNKNOWN；
+不能用领域错误码证明无副作用。领域拒绝首响沿用原有码，未分类异常及成功后的序列化/响应记录故障
+统一409 OPERATION_UNKNOWN。UNKNOWN和过期RUNNING均不删除、不重占，24小时只表示最小保留；
+过期RUNNING仍允许原执行者完成。标记失败保留RUNNING，标记UNKNOWN不得覆盖已提交的SUCCEEDED。
+纯MVC/认证/JSON前置拒绝不占键；只有明确证明无副作用或整笔回滚的调用者才能显式释放。
+该行为不提供未知结局的自动解除/清理，也不允许用新key声称原意图未执行。
+本片真实MySQL/Servlet故障验证状态见[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
+
 ## 2. 权限码与管理范围
 
 上述 R<T> 仅用于管理/个人 REST（含会话端点）。HTTP 状态保留 401/403/404/409/422/429/503 等真实语义，不能全部改成 200；正文 code 是业务码，不冒充 HTTP 状态。异常过滤器和控制器使用同一映射；代理非 JSON 错误由前端通用错误路径处理。MCP JSON-RPC、OAuth token/发现/错误均不包 R<T>。

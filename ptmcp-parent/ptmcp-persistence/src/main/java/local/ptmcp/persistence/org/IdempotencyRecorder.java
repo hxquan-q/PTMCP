@@ -15,10 +15,11 @@ import javax.sql.DataSource;
 
 /**
  * Idempotency-Key lease over {@code api_idempotency}. One lease per (actor, route, key hash): a
- * fresh key occupies a RUNNING row with a 24 hour expiry, a matching replayed request returns the
+ * fresh key occupies a RUNNING row with a 24 hour minimum retention, a matching replay returns the
  * recorded response, a different body under the same key is {@code IDEMPOTENCY_KEY_REUSED}, and a
- * still-running lease is {@code OPERATION_IN_PROGRESS}. A FAILED lease is deleted so the retry can
- * occupy a fresh one.
+ * still-running lease is {@code OPERATION_IN_PROGRESS}. UNKNOWN and expired RUNNING intents block
+ * retries with {@code OPERATION_UNKNOWN}; expiry does not prove an action failed. Only a FAILED
+ * lease, explicitly known to have no side effects, can be replaced.
  */
 public final class IdempotencyRecorder {
     private static final long LEASE_HOURS = 24;
@@ -87,6 +88,10 @@ public final class IdempotencyRecorder {
                     if ("RUNNING".equals(state) && expiresAt != null && expiresAt.isAfter(now)) {
                         throw new DomainException(ErrorCode.OPERATION_IN_PROGRESS);
                     }
+                    if (!"FAILED".equals(state)) {
+                        // Preserve expired RUNNING so its original owner can still finish.
+                        throw new DomainException(ErrorCode.OPERATION_UNKNOWN);
+                    }
                     try (PreparedStatement delete =
                             OrgSql.statement(
                                     connection,
@@ -143,6 +148,25 @@ public final class IdempotencyRecorder {
         }
     }
 
+    /** Records uncertainty without overwriting a success whose acknowledgement may be lost. */
+    public void completeUnknown(long actorId, String routeKey, String idempotencyKey) {
+        try (Connection connection = OrgSql.configure(primary);
+                PreparedStatement statement =
+                        OrgSql.statement(
+                                connection,
+                                "UPDATE api_idempotency SET state = 'UNKNOWN'"
+                                        + " WHERE actor_id = ? AND route_key = ? AND key_hash = ?"
+                                        + " AND state = 'RUNNING'")) {
+            statement.setLong(1, actorId);
+            statement.setString(2, routeKey);
+            statement.setBytes(3, sha256(idempotencyKey));
+            statement.executeUpdate();
+        } catch (SQLException error) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+    }
+
+    /** Release only when the caller can prove no side effects or a complete rollback. */
     public void completeFailed(long actorId, String routeKey, String idempotencyKey) {
         try (Connection connection = OrgSql.configure(primary);
                 PreparedStatement statement =

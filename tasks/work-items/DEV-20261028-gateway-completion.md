@@ -149,7 +149,7 @@ git diff --check与Skill的tree/format/archived三项检查均exit0（12份笔�
 可能重复创建；本片store级测试仅证明单次调用不自动重放，不能声称HTTP UNKNOWN闭环。
 树写片工程验证已完成，HTTP同key重试作为下一片实施。
 
-当前实施切片：管理写请求的UNKNOWN幂等保护（API §2、FR-07/16/17、TC-API/ASVS错误与审计边界）。
+当前实施切片：管理写请求的UNKNOWN幂等保护（API §1、FR-07/16/17、TC-API/ASVS错误与审计边界）。
 通用IdempotentWrites一旦调用action，RuntimeException不能证明未执行，不再自动completeFailed；
 保留原领域错误首响以兼容现有业务拒绝，未分类异常及成功后的序列化/结果记录故障映射OPERATION_UNKNOWN。
 尝试仅将RUNNING改为UNKNOWN，不能覆盖SUCCEEDED，标记失败也不得删除占位。
@@ -159,7 +159,12 @@ occupy先比较摘要，UNKNOWN/未知状态及过期RUNNING拒绝重占；过�
 范围包含共享wrapper的现有改密PUT/retry，不新增OAuth/MCP/普通PUT/DELETE的幂等协议，
 不处理一次性secret重放或人工解除；未来引入清理/重占前必须补owner代次，不能删除未知墓碑。
 验证先以真实MySQL+Servlet建立commit丢确认、序列化/完成记录故障、过期在途及同key并发的RED，
-再最小实现、相关API/身份回归与独立只读终审；当前该片未执行，不提前记为通过。
+再最小实现、相关API/身份回归与独立只读终审。
+有效RED：`idempotency-store-red.log/.exit`为4 tests/4 failures/0 errors/0 skipped、exit1，
+2026-10-30 07:11:46 +08:00；`idempotency-http-red.log/.exit`为13 tests/12 failures/0 errors/0 skipped、
+exit1，2026-10-30 07:13:52 +08:00。真实commit后丢确认的同key请求创建了两行；
+UNKNOWN/过期RUNNING被重新占用，完成记录故障误返503，未分类/序列化异常未脱敏归类。
+未过期在途请求的重复拒绝原本通过；当前进行最小修复，GREEN及独立终审尚未完成。
 
 当前切片：所有admin handler显式声明功能码，统一MVC入口默认拒绝未声明/无功能码请求；
 平台管理员不能绕过端点动作，通用用户PUT仍按实际变化补status/assign-role/move。

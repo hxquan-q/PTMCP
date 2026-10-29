@@ -1803,6 +1803,61 @@ class OrgManagementStoreTest {
         assertEquals(IdempotencyRecorder.State.OCCUPIED, retried.state());
     }
 
+    @ParameterizedTest
+    @CsvSource({"UNKNOWN,false", "UNKNOWN,true", "RUNNING,true"})
+    void idempotencyUncertainIntentIsNeverReoccupied(String state, boolean expired)
+            throws Exception {
+        String route = "uncertain.create";
+        String key = "uncertain-key";
+        byte[] request = digest("uncertain-body");
+        idempotency.occupy(1, route, key, request);
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "UPDATE api_idempotency SET state=?,create_time=UTC_TIMESTAMP(6)-INTERVAL 2 DAY,"
+                                        + " expires_at=UTC_TIMESTAMP(6)+INTERVAL ? DAY")) {
+            statement.setString(1, state);
+            statement.setInt(2, expired ? -1 : 1);
+            assertEquals(1, statement.executeUpdate());
+        }
+        assertEquals(
+                ErrorCode.IDEMPOTENCY_KEY_REUSED,
+                codeOf(() -> idempotency.occupy(1, route, key, digest("other-body"))));
+        assertEquals(
+                ErrorCode.OPERATION_UNKNOWN,
+                codeOf(() -> idempotency.occupy(1, route, key, request)));
+        try (Connection connection = dataSource.getConnection();
+                Statement statement = connection.createStatement();
+                ResultSet result =
+                        statement.executeQuery("SELECT state,request_hash FROM api_idempotency")) {
+            assertTrue(result.next());
+            assertEquals(state, result.getString(1));
+            assertTrue(java.util.Arrays.equals(request, result.getBytes(2)));
+            assertFalse(result.next());
+        }
+    }
+
+    @Test
+    void idempotencyOriginalOwnerCanCompleteExpiredRunningIntent() throws Exception {
+        byte[] request = digest("slow-request");
+        idempotency.occupy(1, "slow.create", "slow-key", request);
+        try (Connection connection = dataSource.getConnection();
+                Statement statement = connection.createStatement()) {
+            statement.executeUpdate(
+                    "UPDATE api_idempotency SET create_time=UTC_TIMESTAMP(6)-INTERVAL 2 DAY,"
+                            + " expires_at=UTC_TIMESTAMP(6)-INTERVAL 1 DAY");
+        }
+        assertEquals(
+                ErrorCode.OPERATION_UNKNOWN,
+                codeOf(() -> idempotency.occupy(1, "slow.create", "slow-key", request)));
+        byte[] response = "{\"id\":99}".getBytes(StandardCharsets.UTF_8);
+        idempotency.completeSucceeded(1, "slow.create", "slow-key", response, 201);
+        IdempotencyRecorder.OccupyResult replay =
+                idempotency.occupy(1, "slow.create", "slow-key", request);
+        assertEquals(IdempotencyRecorder.State.REPLAY, replay.state());
+        assertTrue(java.util.Arrays.equals(response, replay.replay().responseBody()));
+    }
+
     // ---- directory, preview and escalation ---------------------------------
 
     private record DepartmentFixture(

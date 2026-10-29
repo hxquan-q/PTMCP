@@ -3,6 +3,7 @@ package local.ptmcp.admin;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.spy;
@@ -20,7 +21,10 @@ import local.ptmcp.admin.api.AdminAction;
 import local.ptmcp.admin.api.AdminPrincipal;
 import local.ptmcp.admin.api.ApiExceptionAdvice;
 import local.ptmcp.admin.api.DepartmentAdminController;
+import local.ptmcp.admin.api.IdempotentWriteTestSupport;
 import local.ptmcp.admin.api.UserAdminController;
+import local.ptmcp.common.error.DomainException;
+import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.persistence.org.DelegationScopeResolver;
 import local.ptmcp.persistence.org.DelegationStore;
 import local.ptmcp.persistence.org.IdempotencyRecorder;
@@ -38,16 +42,22 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 import org.testcontainers.mysql.MySQLContainer;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -68,6 +78,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
+
+import javax.sql.DataSource;
 
 /** Admin org/ACL APIs against the real MySQL schema; identity uses the documented test shim. */
 @SpringBootTest(
@@ -191,6 +204,10 @@ class AdminApiTest {
     @Autowired private DelegationStore delegationStore;
     @Autowired private DelegationScopeResolver delegationScopeResolver;
     @Autowired private IdempotencyRecorder idempotencyRecorder;
+
+    @Autowired
+    @Qualifier("adminDataSource")
+    private DataSource primary;
 
     @Autowired
     @Qualifier("requestMappingHandlerMapping")
@@ -3286,6 +3303,420 @@ class AdminApiTest {
                 assertEquals(1, result.getInt(1));
             }
         }
+    }
+
+    @Test
+    void departmentCreateDoesNotRepeatAfterRealCommitAcknowledgementLoss() throws Exception {
+        OrgStore uncertainStore = new OrgStore(idempotencyFaultSource(true, null, null));
+        MockMvc isolatedMvc = idempotentDepartmentMvc(uncertainStore, idempotencyRecorder);
+        for (int attempt = 0; attempt < 2; attempt++) {
+            isolatedMvc
+                    .perform(idempotentDepartmentRequest("lost-department-ack", "lost-ack"))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("OPERATION_UNKNOWN"));
+        }
+        assertEquals(1, departmentCount("lost-ack"));
+        assertEquals("UNKNOWN", idempotencyState("lost-department-ack"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void departmentSuccessRecordingFailureNeverRepeatsTheAction(boolean updateCommitted)
+            throws Exception {
+        String prefix = "UPDATE api_idempotency SET state = 'SUCCEEDED'";
+        IdempotencyRecorder uncertainRecorder =
+                new IdempotencyRecorder(
+                        idempotencyFaultSource(
+                                false,
+                                updateCommitted ? null : prefix,
+                                updateCommitted ? prefix : null));
+        MockMvc isolatedMvc = idempotentDepartmentMvc(orgStore, uncertainRecorder);
+        isolatedMvc
+                .perform(idempotentDepartmentRequest("response-ack", "response-ack"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("OPERATION_UNKNOWN"))
+                .andExpect(jsonPath("$.retryable").value(false));
+        if (updateCommitted) {
+            assertEquals("SUCCEEDED", idempotencyState("response-ack"));
+            isolatedMvc
+                    .perform(idempotentDepartmentRequest("response-ack", "response-ack"))
+                    .andExpect(status().isCreated())
+                    .andExpect(header().string("Idempotent-Replay", "true"))
+                    .andExpect(jsonPath("$.name").value("response-ack"));
+        } else {
+            assertEquals("UNKNOWN", idempotencyState("response-ack"));
+            isolatedMvc
+                    .perform(idempotentDepartmentRequest("response-ack", "response-ack"))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("OPERATION_UNKNOWN"));
+        }
+        assertEquals(1, departmentCount("response-ack"));
+    }
+
+    @Test
+    void departmentUnknownMarkerFailureDoesNotReleaseEvenAnExpiredRunningKey() throws Exception {
+        IdempotencyRecorder unavailableRecorder =
+                new IdempotencyRecorder(
+                        idempotencyFaultSource(false, "UPDATE api_idempotency SET state =", null));
+        MockMvc isolatedMvc = idempotentDepartmentMvc(orgStore, unavailableRecorder);
+        isolatedMvc
+                .perform(idempotentDepartmentRequest("marker-failed", "marker-failed"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("OPERATION_UNKNOWN"));
+        assertEquals("RUNNING", idempotencyState("marker-failed"));
+        expireDepartmentIntent("marker-failed");
+        DepartmentWriteEffects beforeRetry = departmentWriteEffects();
+        isolatedMvc
+                .perform(idempotentDepartmentRequest("marker-failed", "marker-failed"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("OPERATION_UNKNOWN"));
+        assertEquals(beforeRetry, departmentWriteEffects());
+        assertEquals(1, departmentCount("marker-failed"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void departmentDuplicateInFlightDoesNotExecuteAndOriginalCanFinish(boolean expired)
+            throws Exception {
+        CountDownLatch actionStarted = new CountDownLatch(1);
+        CountDownLatch finishAction = new CountDownLatch(1);
+        AtomicBoolean first = new AtomicBoolean(true);
+        AtomicInteger actions = new AtomicInteger();
+        OrgStore observed = spy(orgStore);
+        doAnswer(
+                        invocation -> {
+                            actions.incrementAndGet();
+                            if (first.compareAndSet(true, false)) {
+                                actionStarted.countDown();
+                                assertTrue(finishAction.await(15, TimeUnit.SECONDS));
+                            }
+                            return invocation.callRealMethod();
+                        })
+                .when(observed)
+                .createDepartment(null, "in-flight", true, ADMIN_ID);
+        MockMvc isolatedMvc = idempotentDepartmentMvc(observed, idempotencyRecorder);
+        try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+            var original =
+                    executor.submit(
+                            () ->
+                                    isolatedMvc
+                                            .perform(
+                                                    idempotentDepartmentRequest(
+                                                            "in-flight-key", "in-flight"))
+                                            .andReturn());
+            try {
+                assertTrue(actionStarted.await(15, TimeUnit.SECONDS));
+                if (expired) expireDepartmentIntent("in-flight-key");
+                MvcResult duplicate =
+                        isolatedMvc
+                                .perform(idempotentDepartmentRequest("in-flight-key", "in-flight"))
+                                .andReturn();
+                finishAction.countDown();
+                MvcResult completed = original.get(15, TimeUnit.SECONDS);
+                assertEquals(409, duplicate.getResponse().getStatus());
+                assertTrue(
+                        duplicate
+                                .getResponse()
+                                .getContentAsString()
+                                .contains(expired ? "OPERATION_UNKNOWN" : "OPERATION_IN_PROGRESS"));
+                assertEquals(201, completed.getResponse().getStatus());
+                assertEquals(1, actions.get());
+                assertEquals(1, departmentCount("in-flight"));
+                isolatedMvc
+                        .perform(idempotentDepartmentRequest("in-flight-key", "in-flight"))
+                        .andExpect(status().isCreated())
+                        .andExpect(header().string("Idempotent-Replay", "true"))
+                        .andExpect(
+                                result ->
+                                        assertEquals(
+                                                completed.getResponse().getContentAsString(),
+                                                result.getResponse().getContentAsString()));
+            } finally {
+                finishAction.countDown();
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"UNKNOWN", "EXPIRED_RUNNING"})
+    void departmentUncertainIntentStillRejectsDifferentPayload(String state) throws Exception {
+        String body = "{\"name\":\"uncertain-payload\",\"enabled\":true}";
+        idempotencyRecorder.occupy(
+                ADMIN_ID,
+                "departments.create",
+                "uncertain-payload",
+                MessageDigest.getInstance("SHA-256").digest(body.getBytes(StandardCharsets.UTF_8)));
+        if (state.equals("EXPIRED_RUNNING")) {
+            expireDepartmentIntent("uncertain-payload");
+        } else {
+            try (Connection connection = connect();
+                    Statement statement = connection.createStatement()) {
+                statement.executeUpdate("UPDATE api_idempotency SET state='UNKNOWN'");
+            }
+        }
+        mockMvc.perform(
+                        idempotentDepartmentRequest("uncertain-payload", "uncertain-payload")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("OPERATION_UNKNOWN"));
+        mockMvc.perform(
+                        idempotentDepartmentRequest("uncertain-payload", "different-payload")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSED"));
+        assertEquals(0, departmentCount("uncertain-payload"));
+        assertEquals(0, departmentCount("different-payload"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"INVALID_ARGUMENT", "VERSION_CONFLICT", "DEPENDENCY_UNAVAILABLE"})
+    void idempotentDomainFailureCodeDoesNotProveNoCommittedSideEffect(String errorCode)
+            throws Exception {
+        AtomicInteger actions = new AtomicInteger();
+        Supplier<ResponseEntity<Object>> action =
+                () -> {
+                    actions.incrementAndGet();
+                    orgStore.createDepartment(null, "before-domain-error", true, ADMIN_ID);
+                    throw new DomainException(ErrorCode.valueOf(errorCode));
+                };
+        assertEquals(
+                ErrorCode.valueOf(errorCode),
+                assertThrows(
+                                DomainException.class,
+                                () ->
+                                        IdempotentWriteTestSupport.execute(
+                                                idempotencyRecorder,
+                                                ADMIN_ID,
+                                                "probe.domain",
+                                                "domain-key",
+                                                new byte[0],
+                                                action))
+                        .errorCode());
+        assertEquals(
+                ErrorCode.OPERATION_UNKNOWN,
+                assertThrows(
+                                DomainException.class,
+                                () ->
+                                        IdempotentWriteTestSupport.execute(
+                                                idempotencyRecorder,
+                                                ADMIN_ID,
+                                                "probe.domain",
+                                                "domain-key",
+                                                new byte[0],
+                                                action))
+                        .errorCode());
+        assertEquals(1, actions.get());
+        assertEquals(1, departmentCount("before-domain-error"));
+    }
+
+    @Test
+    void idempotentUnclassifiedFailureIsSanitizedAndCannotRepeatCommittedAction() throws Exception {
+        AtomicInteger actions = new AtomicInteger();
+        Supplier<ResponseEntity<Object>> action =
+                () -> {
+                    actions.incrementAndGet();
+                    orgStore.createDepartment(null, "before-runtime-error", true, ADMIN_ID);
+                    throw new IllegalStateException("private fixture diagnostic");
+                };
+        for (int attempt = 0; attempt < 2; attempt++) {
+            DomainException error =
+                    assertThrows(
+                            DomainException.class,
+                            () ->
+                                    IdempotentWriteTestSupport.execute(
+                                            idempotencyRecorder,
+                                            ADMIN_ID,
+                                            "probe.runtime",
+                                            "runtime-key",
+                                            new byte[0],
+                                            action));
+            assertEquals(ErrorCode.OPERATION_UNKNOWN, error.errorCode());
+            assertEquals(null, error.getCause());
+            assertFalse(error.toString().contains("private fixture"));
+        }
+        assertEquals(1, actions.get());
+        assertEquals(1, departmentCount("before-runtime-error"));
+    }
+
+    @Test
+    void idempotentSerializationFailureCannotRepeatAnAlreadySuccessfulAction() throws Exception {
+        AtomicInteger actions = new AtomicInteger();
+        Supplier<ResponseEntity<UnserializableBody>> action =
+                () -> {
+                    actions.incrementAndGet();
+                    orgStore.createDepartment(null, "before-serialization", true, ADMIN_ID);
+                    return ResponseEntity.status(201).body(new UnserializableBody());
+                };
+        for (int attempt = 0; attempt < 2; attempt++) {
+            DomainException error =
+                    assertThrows(
+                            DomainException.class,
+                            () ->
+                                    IdempotentWriteTestSupport.execute(
+                                            idempotencyRecorder,
+                                            ADMIN_ID,
+                                            "probe.serialization",
+                                            "serialization-key",
+                                            new byte[0],
+                                            action));
+            assertEquals(ErrorCode.OPERATION_UNKNOWN, error.errorCode());
+            assertEquals(null, error.getCause());
+        }
+        assertEquals(1, actions.get());
+        assertEquals(1, departmentCount("before-serialization"));
+    }
+
+    public static final class UnserializableBody {
+        public String getValue() {
+            throw new IllegalStateException("private fixture diagnostic");
+        }
+    }
+
+    private MockMvc idempotentDepartmentMvc(OrgStore store, IdempotencyRecorder recorder) {
+        return MockMvcBuilders.standaloneSetup(
+                        new DepartmentAdminController(store, recorder, delegationScopeResolver))
+                .setControllerAdvice(new ApiExceptionAdvice())
+                .build();
+    }
+
+    private static MockHttpServletRequestBuilder idempotentDepartmentRequest(
+            String key, String name) {
+        return post("/api/v1/admin/departments")
+                .requestAttr(AdminPrincipal.ATTRIBUTE, new AdminPrincipal(ADMIN_ID, true))
+                .header("Idempotency-Key", key)
+                .contentType("application/json")
+                .content("{\"name\":\"" + name + "\",\"enabled\":true}");
+    }
+
+    private int departmentCount(String name) throws SQLException {
+        try (Connection connection = connect();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "SELECT COUNT(*) FROM sys_dept WHERE dept_name=?")) {
+            statement.setString(1, name);
+            try (ResultSet rows = statement.executeQuery()) {
+                assertTrue(rows.next());
+                return rows.getInt(1);
+            }
+        }
+    }
+
+    private String idempotencyState(String key) throws Exception {
+        try (Connection connection = connect();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "SELECT state FROM api_idempotency WHERE actor_id=? AND route_key=? AND key_hash=?")) {
+            bindDepartmentIntent(statement, key);
+            try (ResultSet rows = statement.executeQuery()) {
+                assertTrue(rows.next());
+                return rows.getString(1);
+            }
+        }
+    }
+
+    private void expireDepartmentIntent(String key) throws Exception {
+        try (Connection connection = connect();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "UPDATE api_idempotency SET create_time=UTC_TIMESTAMP(6)-INTERVAL 2 DAY,"
+                                        + " expires_at=UTC_TIMESTAMP(6)-INTERVAL 1 DAY"
+                                        + " WHERE actor_id=? AND route_key=? AND key_hash=?")) {
+            bindDepartmentIntent(statement, key);
+            assertEquals(1, statement.executeUpdate());
+        }
+    }
+
+    private static void bindDepartmentIntent(PreparedStatement statement, String key)
+            throws Exception {
+        statement.setLong(1, ADMIN_ID);
+        statement.setString(2, "departments.create");
+        statement.setBytes(
+                3,
+                MessageDigest.getInstance("SHA-256").digest(key.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    /** All SQL and commits reach the owned server; only the surrounding acknowledgement fails. */
+    private DataSource idempotencyFaultSource(
+            boolean loseCommitAck, String beforeSql, String afterSql) {
+        return (DataSource)
+                Proxy.newProxyInstance(
+                        DataSource.class.getClassLoader(),
+                        new Class<?>[] {DataSource.class},
+                        (proxy, method, args) -> {
+                            try {
+                                Object value = method.invoke(primary, args);
+                                if (!(value instanceof Connection connection)) return value;
+                                return Proxy.newProxyInstance(
+                                        Connection.class.getClassLoader(),
+                                        new Class<?>[] {Connection.class},
+                                        (connectionProxy, connectionMethod, connectionArgs) -> {
+                                            try {
+                                                Object result =
+                                                        connectionMethod.invoke(
+                                                                connection, connectionArgs);
+                                                if (loseCommitAck
+                                                        && connectionMethod
+                                                                .getName()
+                                                                .equals("commit"))
+                                                    throw new SQLException(
+                                                            "synthetic lost commit acknowledgement");
+                                                if (result instanceof PreparedStatement statement
+                                                        && connectionMethod
+                                                                .getName()
+                                                                .equals("prepareStatement")) {
+                                                    String sql = (String) connectionArgs[0];
+                                                    boolean before =
+                                                            beforeSql != null
+                                                                    && sql.startsWith(beforeSql);
+                                                    boolean after =
+                                                            afterSql != null
+                                                                    && sql.startsWith(afterSql);
+                                                    if (before || after)
+                                                        return Proxy.newProxyInstance(
+                                                                PreparedStatement.class
+                                                                        .getClassLoader(),
+                                                                new Class<?>[] {
+                                                                    PreparedStatement.class
+                                                                },
+                                                                (statementProxy,
+                                                                        statementMethod,
+                                                                        statementArgs) -> {
+                                                                    try {
+                                                                        boolean execute =
+                                                                                statementMethod
+                                                                                        .getName()
+                                                                                        .equals(
+                                                                                                "executeUpdate");
+                                                                        if (before && execute)
+                                                                            throw new SQLException(
+                                                                                    "synthetic write failure");
+                                                                        Object written =
+                                                                                statementMethod
+                                                                                        .invoke(
+                                                                                                statement,
+                                                                                                statementArgs);
+                                                                        if (after && execute)
+                                                                            throw new SQLException(
+                                                                                    "synthetic lost write acknowledgement");
+                                                                        return written;
+                                                                    } catch (
+                                                                            InvocationTargetException
+                                                                                    failure) {
+                                                                        throw failure.getCause();
+                                                                    }
+                                                                });
+                                                }
+                                                return result;
+                                            } catch (InvocationTargetException failure) {
+                                                throw failure.getCause();
+                                            }
+                                        });
+                            } catch (InvocationTargetException failure) {
+                                throw failure.getCause();
+                            }
+                        });
     }
 
     @Test

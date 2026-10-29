@@ -156,8 +156,9 @@ Refresh 事务统一先锁sys_security_state单行，再锁sys_user_security，�
 所有旧后代先验完整链及版本，再规划新深度与现有ancestors VARCHAR(500)长度，失败在DML前拒绝。
 部门行、操作日志、epoch及DEPARTMENT_CHANGED同事务；创建的可信回调返回Outcome(value,event)，
 事件使用实际生成ID和version1，仅在确认commit后返回Committed(value,receipt)，事务单次调用丢确认不重放。
-HTTP幂等包装对UNKNOWN仍释放请求键，同键重试可能重复创建，尚未满足api_idempotency的UNKNOWN合同；
-后续须保留未知结局并以真实commit丢确认后的HTTP重试验证，不能从store级测试推断端到端保护。
+HTTP包装在action分派后失败保留请求键，尽力仅RUNNING→UNKNOWN；UNKNOWN及过期RUNNING不重占，
+过期行保持RUNNING以允许原执行者完成，完成记录丢确认不能覆写已提交的SUCCEEDED。
+24小时仅为最小保留，未来删除墓碑、人工解除或重占须另有owner代次防护；不能从store级测试推断HTTP结果。
 全表锁快照的成本随部门数量增加，尚无容量结论；用户创建/换部门等其他写方未共用此围栏，
 不能据此推断部门删除的引用完整性或提交前操作者授权重验已完成。实际验证见[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
 
