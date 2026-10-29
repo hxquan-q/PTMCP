@@ -605,6 +605,122 @@ class AdminApiTest {
     }
 
     @Test
+    void departmentFullUpdateRejectsInvalidNameWithoutMovingSubtree() throws Exception {
+        DepartmentEditFixture fixture = departmentEditFixture();
+        List<OrgStore.DepartmentRow> before = orgStore.listDepartments();
+        String writesBefore = adminActionWriteEffects();
+
+        mockMvc.perform(departmentEditRequest(fixture, 1, " "))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ARGUMENT"));
+
+        assertEquals(before, orgStore.listDepartments());
+        assertEquals(writesBefore, adminActionWriteEffects());
+    }
+
+    @Test
+    void departmentFullUpdateRollsBackMoveAndDescendantsWhenLogFails() throws Exception {
+        DepartmentEditFixture fixture = departmentEditFixture();
+        List<OrgStore.DepartmentRow> before = orgStore.listDepartments();
+        String writesBefore = adminActionWriteEffects();
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            statement.execute(
+                    "ALTER TABLE admin_operation_log ADD CONSTRAINT department_edit_log_fault"
+                            + " CHECK (action <> 'DEPARTMENT_UPDATE')");
+        }
+        try {
+            mockMvc.perform(departmentEditRequest(fixture, 1, "已移动编辑"))
+                    .andExpect(status().isServiceUnavailable())
+                    .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"));
+
+            assertEquals(before, orgStore.listDepartments());
+            assertEquals(writesBefore, adminActionWriteEffects());
+        } finally {
+            try (Connection connection = connect();
+                    Statement statement = connection.createStatement()) {
+                statement.execute("ALTER TABLE admin_operation_log DROP CHECK department_edit_log_fault");
+            }
+        }
+    }
+
+    @Test
+    void departmentFullUpdateCommitsMoveAndFieldsWithOneVersionAndOneLog() throws Exception {
+        DepartmentEditFixture fixture = departmentEditFixture();
+        mockMvc.perform(departmentEditRequest(fixture, 1, "已移动编辑"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("ETag", "\"2\""))
+                .andExpect(jsonPath("$.version").value(2))
+                .andExpect(jsonPath("$.parentId").value(fixture.destinationId()))
+                .andExpect(jsonPath("$.name").value("已移动编辑"))
+                .andExpect(jsonPath("$.enabled").value(false));
+
+        assertEquals(
+                new OrgStore.DepartmentRow(
+                        fixture.childId(),
+                        fixture.destinationId(),
+                        "已移动编辑",
+                        false,
+                        2,
+                        String.valueOf(fixture.destinationId())),
+                orgStore.getDepartment(fixture.childId()));
+        assertEquals(
+                new OrgStore.DepartmentRow(
+                        fixture.grandchildId(),
+                        fixture.childId(),
+                        "孙级",
+                        true,
+                        2,
+                        fixture.destinationId() + "," + fixture.childId()),
+                orgStore.getDepartment(fixture.grandchildId()));
+        try (Connection connection = connect();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "SELECT action FROM admin_operation_log WHERE aggregate_type='DEPARTMENT'"
+                                        + " AND aggregate_id=? AND action<>'DEPARTMENT_CREATE'")) {
+            statement.setLong(1, fixture.childId());
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                assertEquals("DEPARTMENT_UPDATE", result.getString(1));
+                assertFalse(result.next(), "one full PUT is one recorded command");
+            }
+        }
+
+        List<OrgStore.DepartmentRow> committed = orgStore.listDepartments();
+        String writesCommitted = adminActionWriteEffects();
+        mockMvc.perform(departmentEditRequest(fixture, 1, "迟到写入"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
+        assertEquals(committed, orgStore.listDepartments());
+        assertEquals(writesCommitted, adminActionWriteEffects());
+    }
+
+    private DepartmentEditFixture departmentEditFixture() {
+        long source = orgStore.createDepartment(null, "原父级", true, ADMIN_ID).id();
+        long destination = orgStore.createDepartment(null, "新父级", true, ADMIN_ID).id();
+        long child = orgStore.createDepartment(source, "子级", true, ADMIN_ID).id();
+        long grandchild = orgStore.createDepartment(child, "孙级", true, ADMIN_ID).id();
+        return new DepartmentEditFixture(destination, child, grandchild);
+    }
+
+    private static org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder
+            departmentEditRequest(DepartmentEditFixture fixture, long version, String name) {
+        return put("/api/v1/admin/departments/" + fixture.childId())
+                .header("X-Test-User-Id", ADMIN_ID)
+                .header("X-Test-Platform-Admin", "true")
+                .header("If-Match", version)
+                .contentType("application/json")
+                .content(
+                        "{\"parentId\":"
+                                + fixture.destinationId()
+                                + ",\"name\":\""
+                                + name
+                                + "\",\"enabled\":false}");
+    }
+
+    private record DepartmentEditFixture(long destinationId, long childId, long grandchildId) {}
+
+    @Test
     void roleAndUserLifecycleWithDuplicateKey() throws Exception {
         String body =
                 mockMvc.perform(

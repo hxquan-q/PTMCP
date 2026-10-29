@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, EmptyState, PageHeader, Select, StatusDot, Tabs, TextInput } from '../../components/common';
 import { listAudit, listOperations, type AuditRow, type OperationRow } from '../../services/access';
 import { OPERATION_AGGREGATE_TYPES, operationActionText, operationAggregateText } from '../../services/operationLabels';
+import { forgetAuditQuery, recallAuditQuery, rememberAuditQuery } from './auditQueryMemory';
 import { listDatasources, type DatasourceRead } from '../../services/data';
 import { mePortalApi, type PlatformItem } from '../../services/mePortalApi';
 
@@ -19,27 +20,25 @@ export function AuditPage({
   description?: string;
 }) {
   const [tab, setTab] = useState(initialTab);
-  const [audit, setAudit] = useState<AuditRow[]>([]);
+  const [initialMemory] = useState(() => {
+    const memory = recallAuditQuery();
+    forgetAuditQuery();
+    return memory;
+  });
+
   const [operations, setOperations] = useState<OperationRow[]>([]);
   const [opsCursor, setOpsCursor] = useState<string | null>(null);
   const [opsUnavailable, setOpsUnavailable] = useState(false);
   const [aggregateFilter, setAggregateFilter] = useState('');
   const [datasources, setDatasources] = useState<DatasourceRead[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialMemory);
   const [platforms, setPlatforms] = useState<PlatformItem[]>([]);
-  const [filters, setFilters] = useState({
-    userId: '',
-    platformId: '',
-    datasourceId: '',
-    tool: '',
-    result: '',
-    verdict: '',
-    errorCode: '',
-    from: '',
-    to: '',
-  });
-  const [quickId, setQuickId] = useState('');
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [filters, setFilters] = useState(
+    initialMemory?.filters ?? { userId: '', platformId: '', datasourceId: '', tool: '', result: '', verdict: '', errorCode: '', from: '', to: '' },
+  );
+  const [quickId, setQuickId] = useState(initialMemory?.quickId ?? '');
+  const [nextCursor, setNextCursor] = useState<string | null>(initialMemory?.nextCursor ?? null);
+  const [audit, setAudit] = useState<AuditRow[]>(initialMemory?.rows ?? []);
   const [loadingMore, setLoadingMore] = useState(false);
   const [queryTick, setQueryTick] = useState(0);
   const setF = (key: keyof typeof filters) => (v: string) => setFilters((f) => ({ ...f, [key]: v }));
@@ -56,6 +55,8 @@ export function AuditPage({
     pageSize: 20,
   });
 
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const firstRunRef = useRef(true);
   useEffect(() => {
     let cancelled = false;
     listDatasources({ pageSize: 100 })
@@ -71,6 +72,17 @@ export function AuditPage({
   }, []);
 
   useEffect(() => {
+    // 有恢复记忆（详情往返）则首跑跳过取数，行/筛选已在初始 state 中
+    if (firstRunRef.current) {
+      firstRunRef.current = false;
+      if (initialMemory) {
+        if (initialMemory.scrollTop > 0)
+          window.setTimeout(() => {
+            if (tableScrollRef.current) tableScrollRef.current.scrollTop = initialMemory.scrollTop;
+          }, 0);
+        return;
+      }
+    }
     let cancelled = false;
     setLoading(true);
     if (tab === 'audit') {
@@ -107,7 +119,7 @@ export function AuditPage({
     return () => {
       cancelled = true;
     };
-  }, [tab, queryTick, aggregateFilter]);
+  }, [tab, queryTick, aggregateFilter, initialMemory]);
 
   const dsName = useMemo(() => {
     const m = new Map(datasources.map((d) => [d.id, d.name]));
@@ -220,13 +232,22 @@ export function AuditPage({
             <button
               className="btn btn--secondary"
               disabled={!quickId.trim()}
-              onClick={() => (window.location.hash = `/admin/audit/${encodeURIComponent(quickId.trim())}`)}
+              onClick={() => {
+                rememberAuditQuery({
+                  filters: { ...filters },
+                  rows: audit,
+                  nextCursor,
+                  quickId: quickId.trim(),
+                  scrollTop: tableScrollRef.current?.scrollTop ?? 0,
+                });
+                window.location.hash = `/admin/audit/${encodeURIComponent(quickId.trim())}`;
+              }}
             >
               查看
             </button>
           </div>
         ) : null}
-        <div className="table-scroll">
+        <div className="table-scroll" ref={tableScrollRef}>
           {tab === 'audit' ? (
             <table className="data-table">
               <thead>
@@ -264,7 +285,19 @@ export function AuditPage({
                       )}
                     </td>
                     <td>
-                      <button className="link" onClick={() => (window.location.hash = `/admin/audit/${encodeURIComponent(r.requestId)}`)}>
+                      <button
+                        className="link"
+                        onClick={() => {
+                          rememberAuditQuery({
+                            filters: { ...filters },
+                            rows: audit,
+                            nextCursor,
+                            quickId,
+                            scrollTop: tableScrollRef.current?.scrollTop ?? 0,
+                          });
+                          window.location.hash = `/admin/audit/${encodeURIComponent(r.requestId)}`;
+                        }}
+                      >
                         详情
                       </button>
                     </td>

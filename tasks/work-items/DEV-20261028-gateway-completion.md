@@ -100,6 +100,25 @@ Session18、OAuth29、McpHttp1，共189项，0 failures/0 errors/0 skipped。
 DTO不支持编辑这些字段，应保留同一If-Match绑定快照内的原值。先增加真实HTTP/MySQL参数化回归，
 分别覆盖普通资料事务和实际停用安全事务，完整比较用户记录及ETag；获得有效RED后再改三个实参。
 本修复不改变DTO或版本/权限合同，不另建架构笔记；沿用现有工作项记录实际结果。
+已取得有效RED：`ptmcp-user-profile-red.log`于2026-10-30 05:08:42 +08:00退出1，
+2 tests /2 failures /0 errors /0 skipped；两条HTTP均成功并正确更新姓名/状态/version，
+但完整UserRow对比显示三项资料变成null。只把通用update的三个实参改为同一before快照原值，
+保留currentUser版本绑定、动态动作检查与存储CAS。
+`ptmcp-user-profile-green.log`于2026-10-30 05:12:59 +08:00 BUILD SUCCESS/exit0，
+Admin81、Org23共104项，0 failures/0 errors/0 skipped。
+独立只读复核已读取实际RED/GREEN日志并审查同一If-Match快照、存储CAS与两个参数化流程，
+未发现新增阻断；未执行动态测试，结论只覆盖联系方式保留。
+随后根`python scripts/check.py`退出0，62项检查器回归通过；`git diff --check`退出0。
+
+下一切片：部门完整PUT原子性。当前先moveDepartment提交，再updateDepartment提交；
+名称校验或第二次SQL/日志失败会留下已移动的子树。目标为一个OrgStore命令、一个If-Match、
+一次目标版本增长，同事务提交父边/资料/后代缓存/操作日志；现有单独编辑与移动复用内部路径。
+先以真实Servlet/MySQL覆盖无效名称、操作日志故障、成功移动编辑及旧版本冲突，再最小修复。
+本片不改变DTO与端点动作码，不覆盖parent_id权威树/整子树委派/提交前操作者重验、
+自扩权或部门epoch/event；这些已知缺口保留，不能据本片称部门权限闭环通过。
+首次部门RED执行3项，2个有效failure分别证明无效名称后子树已移动、成功PUT版本误增两次；
+日志故障项在创建触发器时因测试用户缺SUPER失败，未执行行为断言，不计有效RED。
+故障改用仅本次隔离库的临时CHECK约束拒绝更新日志，不提升用户权限或修改共享数据库配置，重跑后再实施。
 
 身份组合 GREEN：`ptmcp-identity-combined-green.log` BUILD SUCCESS，78 tests / 0 failures/errors/skipped；
 覆盖双 MySQL 改密恢复13、真实 ADMIN 改密HTTP2、Session8、Org13、SecurityState13、OAuth27及MCP HTTP2。
