@@ -115,8 +115,10 @@ ADMIN与AS继续独立Cookie/CSRF域，AS会话增加主库索引、绝对8小�
 宿主身份库可独立部署，不能把元库事务和宿主写入描述为原子。改密先在元库置 CHANGE_PENDING、
 提升authVersion并撤销全部域，明确提交后才写宿主；仅对应operation ID可在确认宿主成功后CAS恢复READY。
 失败或提交结果不明保持拒绝登录/换码/刷新；重试不能用新操作覆盖未收敛操作。
-待落地的宿主并发围栏需要覆盖写入与元库完成之间的窗口，避免迟到旧写覆盖新hash；
-仅元库READY CAS不足以保护宿主。优先核验宿主单用户锁/expected-hash CAS的实际边界并补双库故障测试。
+宿主并发围栏采用 expected-hash CAS，旧摘要和独立目标 BCrypt 随 operation 不可变持久化；
+更新为零时同事务 current read 核对目标 hash 与 active。相较于 GET_LOCK，其正确性不依赖跨库阶段的连接存活；
+仅元库 READY CAS 不能保护宿主，仍拒绝。具体状态、迟到写证明和迁移边界见
+[ADR-0011](../../../../docs/architecture/adr/0011-跨库身份变更与权威版本.md)，真实双 MySQL 故障测试正在实施。
 共享主库限流作为Redis不可用时的持久依据，避免本地Map被多副本绕过；账号与IP均计数，成功只清账号。
 本段为当前实施方向，尚未作为完整身份闭环通过。
 

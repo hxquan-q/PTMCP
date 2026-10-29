@@ -11,30 +11,48 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Objects;
+
 import javax.sql.DataSource;
 
 /** The host owns sys_user; this adapter never creates or migrates its schema. */
 public final class HostIdentityStore {
     private final DataSource identity;
-    public HostIdentityStore(DataSource identity) { this.identity = Objects.requireNonNull(identity); }
 
-    public record Account(long userId, String loginName, String displayName, String hash, boolean active) {
-        @Override public String toString() { return "HostAccount[redacted]"; }
+    public HostIdentityStore(DataSource identity) {
+        this.identity = Objects.requireNonNull(identity, "identity");
+    }
+
+    public record Account(
+            long userId, String loginName, String displayName, String hash, boolean active) {
+        @Override
+        public String toString() {
+            return "HostAccount[redacted]";
+        }
     }
 
     public Account read(long userId) {
         try (Connection connection = identity.getConnection()) {
             return read(connection, userId, false);
-        } catch (SQLException failure) { throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE); }
+        } catch (SQLException failure) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
     }
 
-    private static Account read(Connection connection, long userId, boolean lock) throws SQLException {
-        try (PreparedStatement statement = statement(connection,
-                "SELECT user_name,nick_name,password,status,del_flag FROM sys_user WHERE user_id=?" + (lock ? " FOR UPDATE" : ""))) {
+    private static Account read(Connection connection, long userId, boolean lock)
+            throws SQLException {
+        try (PreparedStatement statement =
+                statement(
+                        connection,
+                        "SELECT user_name,nick_name,password,status,del_flag FROM sys_user WHERE user_id=?"
+                                + (lock ? " FOR UPDATE" : ""))) {
             statement.setLong(1, userId);
             try (ResultSet result = statement.executeQuery()) {
                 if (!result.next()) return null;
-                return new Account(userId,result.getString(1),result.getString(2),result.getString(3),
+                return new Account(
+                        userId,
+                        result.getString(1),
+                        result.getString(2),
+                        result.getString(3),
                         "0".equals(result.getString(4)) && "0".equals(result.getString(5)));
             }
         }
@@ -42,41 +60,124 @@ public final class HostIdentityStore {
 
     /** A late operation can only replace its own captured predecessor, never a newer hash. */
     public void compareAndSetHash(long userId, byte[] expected, String target) {
+        if (userId <= 0
+                || expected == null
+                || expected.length != 32
+                || target == null
+                || target.isBlank()
+                || target.length() > 100) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
+        Connection connection = null;
+        boolean started = false;
         boolean commitAttempted = false;
-        try (Connection connection = identity.getConnection()) {
+        boolean committed = false;
+        DomainException failure = null;
+        try {
+            connection = identity.getConnection();
+            if (!connection.getAutoCommit())
+                throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+            connection.setReadOnly(false);
             connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+            try (PreparedStatement query =
+                            statement(
+                                    connection,
+                                    "SELECT @@global.read_only,@@global.super_read_only");
+                    ResultSet result = query.executeQuery()) {
+                if (!result.next() || result.getBoolean(1) || result.getBoolean(2))
+                    throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+            }
+            try (PreparedStatement setting =
+                    statement(connection, "SET SESSION innodb_lock_wait_timeout=5")) {
+                setting.executeUpdate();
+            }
             connection.setAutoCommit(false);
-            try {
-                int updated;
-                try (PreparedStatement statement = statement(connection,
-                        "UPDATE sys_user SET password=? WHERE user_id=? AND status='0' AND del_flag='0'"
-                        + " AND UNHEX(SHA2(password,256))=?")) {
-                    statement.setString(1,target); statement.setLong(2,userId); statement.setBytes(3,expected);
-                    updated=statement.executeUpdate();
+            started = true;
+            int updated;
+            try (PreparedStatement update =
+                    statement(
+                            connection,
+                            "UPDATE sys_user SET password=? WHERE user_id=? AND status='0' AND del_flag='0' AND UNHEX(SHA2(password,256))=?")) {
+                update.setString(1, target);
+                update.setLong(2, userId);
+                update.setBytes(3, expected);
+                updated = update.executeUpdate();
+            }
+            if (updated != 1) {
+                // A current read under the same transaction also serializes concurrent finishers.
+                Account current = read(connection, userId, true);
+                if (updated != 0
+                        || current == null
+                        || !current.active()
+                        || !Objects.equals(current.hash(), target)) {
+                    throw new DomainException(ErrorCode.VERSION_CONFLICT);
                 }
-                if (updated != 1) {
-                    Account current=read(connection,userId,true);
-                    if (current == null || !current.active() || !Objects.equals(current.hash(),target)) {
-                        throw new DomainException(ErrorCode.VERSION_CONFLICT);
+            }
+            commitAttempted = true;
+            connection.commit();
+            committed = true;
+        } catch (SQLException error) {
+            failure =
+                    new DomainException(
+                            commitAttempted
+                                    ? ErrorCode.OPERATION_UNKNOWN
+                                    : ErrorCode.DEPENDENCY_UNAVAILABLE);
+        } catch (RuntimeException error) {
+            failure =
+                    new DomainException(
+                            commitAttempted
+                                    ? ErrorCode.OPERATION_UNKNOWN
+                                    : error instanceof DomainException domain
+                                            ? domain.errorCode()
+                                            : ErrorCode.DEPENDENCY_UNAVAILABLE);
+        } finally {
+            if (connection != null) {
+                if (started && !committed) {
+                    try {
+                        connection.rollback();
+                    } catch (SQLException | RuntimeException error) {
+                        failure = new DomainException(ErrorCode.OPERATION_UNKNOWN);
                     }
                 }
-                commitAttempted = true;
-                connection.commit();
-            } catch (SQLException | RuntimeException failure) {
-                try { connection.rollback(); } catch (SQLException ignored) { /* Preserve the outcome. */ }
-                throw failure;
+                try {
+                    connection.close();
+                } catch (SQLException | RuntimeException error) {
+                    // A confirmed commit remains confirmed. Discard without replaying the write.
+                    try {
+                        connection.abort(Runnable::run);
+                    } catch (SQLException | RuntimeException ignored) {
+                        /* No infrastructure details cross this seam. */
+                    }
+                }
             }
-        } catch (SQLException failure) {
-            throw new DomainException(commitAttempted ? ErrorCode.OPERATION_UNKNOWN : ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
+        if (failure != null) throw failure;
     }
 
     public static byte[] fingerprint(String hash) {
-        if (hash == null || hash.isBlank()) throw new DomainException(ErrorCode.AUTHENTICATION_FAILED);
-        try { return MessageDigest.getInstance("SHA-256").digest(hash.getBytes(StandardCharsets.UTF_8)); }
-        catch (NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
+        if (hash == null || hash.isBlank())
+            throw new DomainException(ErrorCode.AUTHENTICATION_FAILED);
+        try {
+            return MessageDigest.getInstance("SHA-256")
+                    .digest(hash.getBytes(StandardCharsets.UTF_8));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException(impossible);
+        }
     }
-    private static PreparedStatement statement(Connection connection,String sql) throws SQLException {
-        PreparedStatement result=connection.prepareStatement(sql); result.setQueryTimeout(5); return result;
+
+    private static PreparedStatement statement(Connection connection, String sql)
+            throws SQLException {
+        PreparedStatement result = connection.prepareStatement(sql);
+        try {
+            result.setQueryTimeout(5);
+            return result;
+        } catch (SQLException | RuntimeException failure) {
+            try {
+                result.close();
+            } catch (SQLException | RuntimeException ignored) {
+                /* Preserve the original failure. */
+            }
+            throw failure;
+        }
     }
 }

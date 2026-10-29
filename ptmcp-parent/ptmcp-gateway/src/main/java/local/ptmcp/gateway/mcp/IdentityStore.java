@@ -103,7 +103,7 @@ final class IdentityStore {
                         statement(
                                 connection,
                                 "SELECT f.user_id, f.platform_id, f.auth_version, f.status,"
-                                        + " f.registered_client_id, f.absolute_expires_at,"
+                                        + " c.client_id, f.absolute_expires_at,"
                                         + " f.idle_expires_at, p.status, u.status, c.status"
                                         + " FROM oauth_refresh_family f"
                                         + " LEFT JOIN platform_registry p ON p.id = f.platform_id"

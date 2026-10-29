@@ -219,6 +219,10 @@ export async function getMetadataObject(id: string, signal?: AbortSignal): Promi
   return adaptedRequest(`/api/v1/admin/metadata/objects/${encodeURIComponent(id)}`, { signal }, adaptMetadataObject);
 }
 
+export async function createDatasource(body: DatasourceWrite): Promise<ApiResult<DatasourceRead>> {
+  return dataRequest<DatasourceRead>('/api/v1/admin/datasources', { method: 'POST', body });
+}
+
 /* ─── 数据源读写契约:乐观并发,PUT/DELETE 必须携带 If-Match ─── */
 
 export interface DatasourceWrite {

@@ -22,6 +22,7 @@ import {
 } from '../../adapters/edit-conflict';
 import type { ConflictDifference } from '../../adapters/edit-conflict';
 import { updateDictionary, type DictionaryWrite } from '../../services/data';
+import { dsForm, dsValidate, type DsForm } from './dsForm';
 import { EditIcon, LockIcon } from '../../components/Icons';
 import { ApiError } from '../../services/http';
 import { newUuid } from '../../services/uuid';
@@ -413,36 +414,6 @@ export function MetadataDetailPage({ id }: { id: string }) {
 }
 
 /* ─── 数据源详情:/admin/datasources/{id} — 编辑表单 + 乐观并发 ─── */
-interface DsForm {
-  code: string;
-  name: string;
-  engine: string;
-  host: string;
-  port: number;
-  databaseName: string;
-  username: string;
-  credential: string;
-  tlsMode: 'VERIFY_FULL';
-  poolMax: number;
-  status: string;
-}
-
-function dsForm(value: DatasourceRead): DsForm {
-  return {
-    code: value.code,
-    name: value.name,
-    engine: value.engine,
-    host: value.host,
-    port: value.port,
-    databaseName: value.databaseName,
-    username: value.username,
-    credential: '',
-    tlsMode: 'VERIFY_FULL',
-    poolMax: value.poolMax,
-    status: value.status,
-  };
-}
-
 function dsStatusTone(status: string): 'success' | 'warning' | 'danger' | 'neutral' {
   const s = status.toUpperCase();
   return s === 'ACTIVE' || s === 'ENABLED' ? 'success' : s === 'DISABLED' ? 'danger' : 'neutral';
@@ -459,22 +430,6 @@ function dsHealthLabel(health: string): string {
       : h === 'DOWN' || h === 'FAIL'
         ? '连接失败'
         : '连接未知';
-}
-
-function dsValidate(form: DsForm): Record<string, string> {
-  const errs: Record<string, string> = {};
-  if (!form.name.trim()) errs.name = '请输入名称';
-  else if (form.name.length > 128) errs.name = '名称最多128字符';
-  if (!form.host.trim()) errs.host = '请输入主机';
-  else if (form.host.length > 253) errs.host = '主机最多253字符';
-  if (!form.databaseName.trim()) errs.databaseName = '请输入数据库名';
-  else if (form.databaseName.length > 128) errs.databaseName = '数据库名最多128字符';
-  if (!form.username.trim()) errs.username = '请输入用户名';
-  else if (form.username.length > 128) errs.username = '用户名最多128字符';
-  if (form.credential.length > 1024) errs.credential = '连接凭据最多1024字符';
-  if (!Number.isInteger(form.port) || form.port < 1 || form.port > 65535) errs.port = '端口必须为1～65535';
-  if (!Number.isInteger(form.poolMax) || form.poolMax < 1 || form.poolMax > 8) errs.poolMax = '连接池上限必须为1～8';
-  return errs;
 }
 
 export function DatasourceDetailPage({ id }: { id: string }) {

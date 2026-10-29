@@ -20,7 +20,10 @@
 
 ADMIN和AS session最长8小时，不因页面轮询无限续期；成功登录轮换session ID防固定会话。会话携带userId/authVersion/issuedAt/expiresAt，主库索引与权威状态配合撤销，Redis只是内容缓存。GET /api/v1/session/csrf建立同源预会话，返回csrfToken；登录、改密、注销与任何写需X-CSRF-Token且Origin同源。AS表单登录/同意由独立过滤链生成和校验其CSRF，不接受admin token替代。Cookie Domain最小化、不对整个企业顶级域共享；跨站部署须先ADR确定CSRF与SameSite，不能简单改SameSite=None后跳过校验。
 
-用户主动改密或管理员重置：同一主库事务更新password/auth_version，撤销ADMIN/AS session、所有OAuth family与PAT，写security_event。正常改密不把账号status改DISABLED。停用/删除同样撤销但改变status/del_flag；重新启用也不能恢复旧令牌，必须重新登录/授权。
+用户主动改密或管理员重置采用[ADR-0011](../architecture/adr/0011-跨库身份变更与权威版本.md)的可恢复协议：
+元库先原子提升权威版本、置 CHANGE_PENDING 并撤销 ADMIN/AS、OAuth family 与 PAT，提交确认后才执行宿主 expected-hash CAS，
+宿主提交确认后仅当前 operation 可恢复 READY。Pending 不允许登录、签发或刷新；失败与提交不明通过管理员恢复入口重试持久目标，
+不能超时放行或用新密码覆盖未收敛操作。该协议替代原同库原子改密假设；正常改密不把账号status改DISABLED。停用/删除同样撤销但改变status/del_flag；重新启用也不能恢复旧令牌，必须重新登录/授权。
 
 ## 3. 平台Tier与每请求来源证明
 

@@ -98,15 +98,12 @@ final class PatJwtAuthentication implements McpAuthentication {
         }
         IdentityStore.FamilyRecord family = identities.findFamily(familyId)
                 .orElseThrow(() -> new DomainException(ErrorCode.TOKEN_REVOKED));
-        {
-                            if (family.authVersion() != identity.authVersion()
-                                    || !"ACTIVE".equals(family.status())
-                                    || !family.withinWindow()
-                                    || !family.platformActive()
-                                    || !family.userActive()
-                                    || !family.clientActive()) {
-                                throw new DomainException(ErrorCode.TOKEN_REVOKED);
-                            }
+        if (family.authVersion() != identity.authVersion()
+                || family.userId()!=identity.userId() || family.platformId()!=identity.platformId()
+                || !java.util.Objects.equals(family.clientId(),identity.clientId())
+                || !"ACTIVE".equals(family.status()) || !family.withinWindow()
+                || !family.platformActive() || !family.userActive() || !family.clientActive()) {
+            throw new DomainException(ErrorCode.TOKEN_REVOKED);
         }
         return new McpIdentity(
                 identity.userId(),
@@ -197,7 +194,8 @@ final class PatJwtAuthentication implements McpAuthentication {
                 || !family.clientActive()
                 || family.userId() != userId
                 || family.platformId() != platformId
-                || family.authVersion() != authVersion) {
+                || family.authVersion() != authVersion
+                || !java.util.Objects.equals(family.clientId(),jwt.getClaimAsString("client_id"))) {
             throw new DomainException(ErrorCode.TOKEN_REVOKED);
         }
         SecuritySnapshot snapshot =

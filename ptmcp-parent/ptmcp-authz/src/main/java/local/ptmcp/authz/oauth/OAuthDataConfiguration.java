@@ -36,6 +36,7 @@ import javax.sql.DataSource;
 public class OAuthDataConfiguration {
 
     @Bean
+    @org.springframework.context.annotation.Primary
     public DataSource oauthDataSource(AuthzDataSourceProperties datasource) {
         if (datasource.url() == null || datasource.url().isBlank()) {
             throw new IllegalStateException(
@@ -91,8 +92,10 @@ public class OAuthDataConfiguration {
     }
 
     @Bean
-    public AccountAuthenticator accountAuthenticator(JdbcTemplate oauthJdbcTemplate) {
-        return new JdbcAccountAuthenticator(oauthJdbcTemplate, new BCryptPasswordEncoder());
+    public AccountAuthenticator accountAuthenticator(JdbcTemplate oauthJdbcTemplate,
+            @org.springframework.beans.factory.annotation.Qualifier("authzIdentityDataSource")
+            org.springframework.beans.factory.ObjectProvider<DataSource> identity) {
+        return new JdbcAccountAuthenticator(oauthJdbcTemplate, identity.getIfAvailable(oauthJdbcTemplate::getDataSource), new BCryptPasswordEncoder());
     }
 
     @Bean

@@ -2,6 +2,7 @@ package local.ptmcp.authz.oauth;
 
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.persistence.security.UserSecurityStore;
+import local.ptmcp.persistence.security.HostIdentityStore;
 
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -21,17 +22,17 @@ import java.util.Optional;
  */
 public final class JdbcAccountAuthenticator implements AccountAuthenticator {
     private static final int BCRYPT_MAX_BYTES = 72;
-    private static final String SELECT_USER =
-            "SELECT u.user_id, u.user_name, u.nick_name, u.password, u.status, u.del_flag "
-                    + "FROM sys_user u JOIN sys_user_login_name n ON n.user_id = u.user_id "
-                    + "WHERE n.normalized_name = ?";
-
     private final JdbcTemplate jdbc;
+    private final HostIdentityStore host;
     private final PasswordEncoder passwordEncoder;
     private final String fakeHash;
 
     public JdbcAccountAuthenticator(JdbcTemplate jdbc, PasswordEncoder passwordEncoder) {
+        this(jdbc, jdbc.getDataSource(), passwordEncoder);
+    }
+    public JdbcAccountAuthenticator(JdbcTemplate jdbc, javax.sql.DataSource identity, PasswordEncoder passwordEncoder) {
         this.jdbc = jdbc;
+        this.host = new HostIdentityStore(identity);
         this.passwordEncoder = passwordEncoder;
         this.fakeHash = passwordEncoder.encode(randomSecret());
     }
@@ -46,7 +47,7 @@ public final class JdbcAccountAuthenticator implements AccountAuthenticator {
             verifyPassword("", rawPassword);
             return Optional.empty();
         }
-        List<AccountRow> rows;
+        HostIdentityStore.Account row;
         UserSecurityStore.State state;
         try {
             // Capture the credential version BEFORE reading the host hash. Rechecking after
@@ -61,28 +62,16 @@ public final class JdbcAccountAuthenticator implements AccountAuthenticator {
                 verifyPassword(fakeHash, rawPassword);
                 return Optional.empty();
             }
-            rows =
-                    jdbc.query(
-                            SELECT_USER,
-                            (rs, index) ->
-                                    new AccountRow(
-                                            rs.getLong("user_id"),
-                                            rs.getString("user_name"),
-                                            rs.getString("nick_name"),
-                                            rs.getString("password"),
-                                            rs.getString("status"),
-                                            rs.getString("del_flag")),
-                            normalized);
+            row = host.read(bindings.getFirst());
         } catch (DataAccessException | DomainException failure) {
             throw new AuthenticationServiceException("Account store unavailable", failure);
         }
-        if (rows.isEmpty()) {
+        if (row == null) {
             verifyPassword(fakeHash, rawPassword);
             return Optional.empty();
         }
-        AccountRow row = rows.getFirst();
-        boolean passwordMatches = verifyPassword(row.password(), rawPassword);
-        boolean enabled = "0".equals(row.status()) && "0".equals(row.delFlag());
+        boolean passwordMatches = verifyPassword(row.hash(), rawPassword);
+        boolean enabled = row.active();
         if (!passwordMatches
                 || !enabled
                 || !passwordWithinLimit
@@ -124,11 +113,4 @@ public final class JdbcAccountAuthenticator implements AccountAuthenticator {
         return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(value);
     }
 
-    private record AccountRow(
-            long userId,
-            String loginName,
-            String displayName,
-            String password,
-            String status,
-            String delFlag) {}
 }

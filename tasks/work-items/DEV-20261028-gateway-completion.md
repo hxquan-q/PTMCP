@@ -60,6 +60,15 @@ wrapper 未设置 executable，使用 bash 调用，不改文件权限。已有�
 
 ## 结果与证据
 
+身份版本定向 GREEN：`ptmcp-identity-version-green.log` BUILD SUCCESS（2026-10-30 01:20:25 +08:00），
+SecurityStateTest 13/13、OAuthAuthorizationCodeFlowTest 27/27，0失败/错误/跳过。
+仅覆盖当时版本，后续跨库改密、独立宿主读取和 JWT family 绑定仍须重验。
+改密有效 RED：`ptmcp-identity-pending-red-real.log` 2 tests / 2 failures / 0 errors / 0 skipped：
+返回 epoch21 而非 profile6，宿主写失败后仍 READY。前两次被格式检查挡住，不计产品 RED。
+当前切片按[ADR-0011](../../docs/architecture/adr/0011-跨库身份变更与权威版本.md)完成 V12 expected-hash CAS、
+恢复接口、真实双 MySQL 并发/提交不明回归；身份闭环、G3～G5/G7 仍未完成。
+
+
 2026-10-29 OAuth 资源切片 RED 已实际复现：
 `OAuthPropertiesTest` 9 例中 8 failures，非法 URI 被接受；
 `OAuthAuthorizationCodeFlowTest` 真实 HTTP/MySQL 16 例中 3 failures（0 errors/0 skipped），

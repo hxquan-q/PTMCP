@@ -12,6 +12,7 @@ CREATE TABLE identity_password_change (
     update_time DATETIME(6) NOT NULL,
     PRIMARY KEY (operation_id),
     KEY idx_identity_change_user (user_id, status),
+    UNIQUE KEY uk_identity_change_profile (user_id, profile_version),
     CONSTRAINT chk_identity_change_status CHECK (status IN ('PENDING','COMPLETED')),
     CONSTRAINT chk_identity_change_versions CHECK (user_id > 0 AND auth_version > 0 AND profile_version > 0),
     CONSTRAINT fk_identity_change_user FOREIGN KEY (user_id) REFERENCES sys_user_security(user_id)
