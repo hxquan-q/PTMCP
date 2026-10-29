@@ -136,15 +136,30 @@ SecurityState13、SecurityChangeTransaction16通过，Org163仅1 failure/0 error
 坏旧树65层的预期STATE实际INVALID_ARGUMENT，完整写快照保持不变。
 已改为移动先完整BFS校验全部旧后代，再规划新父链/深度/缓存。
 最终组合`department-tree-green3.log/.exit`于2026-10-30 06:59:31 +08:00 BUILD SUCCESS/exit0：
-SecurityState13、SecurityChangeTransaction16、Org163、Admin98、MCP12，共302 tests /0 failures /0 errors /0 skipped。
+SecurityState13、SecurityChangeTransaction16、Org163、Admin98、ToolPermissionDeny12，共302 tests /0 failures /0 errors /0 skipped。
 7份格式化Java回拷Windows并SHA-256逐一MATCH，证据为`department-tree-green3-source-hashes.json`。
 日志与哈希位于专属WSL的`/tmp/ptmcp-root-backend-workspace`，仅含隔离夹具，未验证业务/生产环境。
-独立只读评审已核两阶段代码与前述实际失败，无新增静态阻断；最终日志/源码终审及根检查待完成。
+独立只读终审亲核有效RED、GREEN2及最终GREEN3/exit，并重算7份文件的Windows/native/证据哈希，
+逐项一致，无新增阻断；复审未运行动态测试或修改文件。最后12项为工具权限拒绝回归，不是MCP HTTP端到端。
+源码同步后的python scripts/check.py退出0，145份Markdown/671项本地链接及62项检查器回归通过；
+git diff --check与Skill的tree/format/archived三项检查均exit0（12份笔记、0份归档）。
 删除仍仅检查直接未删子部门/直属用户，用户创建/换部门未共用该全局围栏，
 本片不关闭并发成员引用和跨软删桥的删除引用完整性，也不声明外部直写安全或容量达标。
 独立只读复核另发现HTTP幂等包装对OPERATION_UNKNOWN仍释放key，真实commit丢确认后同key再POST
 可能重复创建；本片store级测试仅证明单次调用不自动重放，不能声称HTTP UNKNOWN闭环。
-树写片验证完成后接续UNKNOWN保留/过期RUNNING收窄及真实HTTP同key重试切片。
+树写片工程验证已完成，HTTP同key重试作为下一片实施。
+
+当前实施切片：管理写请求的UNKNOWN幂等保护（API §2、FR-07/16/17、TC-API/ASVS错误与审计边界）。
+通用IdempotentWrites一旦调用action，RuntimeException不能证明未执行，不再自动completeFailed；
+保留原领域错误首响以兼容现有业务拒绝，未分类异常及成功后的序列化/结果记录故障映射OPERATION_UNKNOWN。
+尝试仅将RUNNING改为UNKNOWN，不能覆盖SUCCEEDED，标记失败也不得删除占位。
+occupy先比较摘要，UNKNOWN/未知状态及过期RUNNING拒绝重占；过期RUNNING不改终态，
+允许仍在执行的原请求最终记录成功。SUCCEEDED仍重放，明确无副作用的显式completeFailed调用仍可释放。
+24小时是最小保留窗口，不是未知结果可重新执行的依据；现有表已支持UNKNOWN，不改历史迁移。
+范围包含共享wrapper的现有改密PUT/retry，不新增OAuth/MCP/普通PUT/DELETE的幂等协议，
+不处理一次性secret重放或人工解除；未来引入清理/重占前必须补owner代次，不能删除未知墓碑。
+验证先以真实MySQL+Servlet建立commit丢确认、序列化/完成记录故障、过期在途及同key并发的RED，
+再最小实现、相关API/身份回归与独立只读终审；当前该片未执行，不提前记为通过。
 
 当前切片：所有admin handler显式声明功能码，统一MVC入口默认拒绝未声明/无功能码请求；
 平台管理员不能绕过端点动作，通用用户PUT仍按实际变化补status/assign-role/move。

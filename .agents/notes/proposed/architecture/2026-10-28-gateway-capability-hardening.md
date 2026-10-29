@@ -270,8 +270,31 @@ descendantsMoved按实际重建行数计数。伪造包含目标ID的外部分�
 各树命令epoch/event回滚、全局锁顺序及双向并发移动的结果见既有网关收尾工作项；
 初始33项RED与后续扩展测试分开记录，不声称扩展后的全部用例均先执行过RED。
 扩展组合以`department-tree-green3.log/.exit`于2026-10-30 06:59:31 +08:00完成：
-真实MySQL/Servlet/MCP共302项，零失败/错误/跳过，7份格式化源码回拷后哈希与测试目录一致。
+真实MySQL/Servlet及工具权限拒绝回归共302项，零失败/错误/跳过，7份格式化源码回拷后哈希与测试目录一致。
+独立只读终审重算三处哈希并核读实际日志，无新增阻断，未重复运行动态测试。
 该证据只关闭权威写树和安全事务切片，整体提案及上述授权、HTTP幂等边界继续保留。
+
+### HTTP写请求的UNKNOWN幂等保护
+
+数据库已提交但回包丢失时，错误不是失败回滚的证明。现有wrapper对任意RuntimeException删除RUNNING，
+recorder又将UNKNOWN或过期RUNNING重新占用，能让同一创建意图再执行。成功后的序列化/响应记录故障也有同类风险。
+本片承接API §2既有“不重做未知结局”合同，保留请求摘要与If-Match意图绑定、成功重放前权限校验。
+
+计划在action分派后对全部运行时失败保留占位，尽力RUNNING→UNKNOWN；领域拒绝首响继续使用原有码，
+未分类异常和已返回成功后的响应处理异常用OPERATION_UNKNOWN，不向客户端暴露异常文本。
+不能依据INVALID_ARGUMENT/VERSION_CONFLICT等码自动释放：跨库改密可先提交PENDING/撤证再在宿主写入时拒绝。
+保留completeFailed供已证明无副作用/完整回滚的显式调用者，纯MVC/鉴权/JSON前置拒绝不占键。
+代价是部分action内的确定拒绝也保留UNKNOWN，牺牲同键重试便利；若要恢复，需把校验前移或传递明确无副作用证据，
+不能补一个错误码白名单。整体事务与响应同库提交能消除此间隙，但现有supplier含跨库、网络和任务提交，
+本片采用保守占位，避免把这些副作用包入元库长事务。
+
+occupy先核payload hash，异payload仍422；UNKNOWN和未知状态不删除，过期RUNNING返回UNKNOWN但保留RUNNING，
+使原执行者还能最终完成。completeUnknown只改RUNNING，不覆盖已经提交的SUCCEEDED；标记写失败仍保留RUNNING，
+过期也不能重做。24小时仅为最小保留，不证明失败；未来墓碑清理、人工解除或重占必须另设计owner代次和迟到完成防护。
+FAILED的显式安全重试和SUCCEEDED重放保留，不扩schema、不改OAuth/MCP一次消费，也不扩大普通PUT/DELETE适用面；
+现有共享wrapper的身份改密PUT仍纳入兼容验证。一次性secret策略独立待补，不在本片伪称完成。
+验证使用隔离MySQL与Servlet真实提交/故障代理、序列化失败、完成记录确认丢失、过期在途及同键并发，
+并核对领域拒绝兼容、异摘要422和权限重验；当前为待实施方案，结果续记原工作项。
 
 ### 业务授权的部门主体读取
 

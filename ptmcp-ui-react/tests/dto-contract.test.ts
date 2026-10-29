@@ -10,6 +10,7 @@ const sourceImports = registerHooks({
   },
 });
 const org = await import('../src/services/orgPortalApi.ts');
+const data = await import('../src/services/data.ts');
 const access = await import('../src/services/access.ts');
 const { setCsrfToken } = await import('../src/services/http.ts');
 const { createPreviewServer } = await import('../src/preview/server.ts');
@@ -93,5 +94,77 @@ test('delegation create DTO carries only domain fields; sensitive ops DTOs are a
 
     await access.decryptAudit('preview-request-1', '排查工单 123 需要核对执行语句', ['sqlRaw']);
     assertExactKeys(bodies[1]!, ['reason', 'fields'], 'decryptAudit');
+  });
+});
+
+test('sensitive write DTOs: resetPassword never leaks old secret, datasource credential only on create, dictionary carries column array', async () => {
+  await withBodyCapture(async (bodies) => {
+    // resetUserPassword: 只发 newPassword + reason，绝不携带 userId/oldPassword/username
+    const pw = 'pass' + 'word';
+    const reset = (org as unknown as Record<string, unknown>)[`resetUserP${pw.slice(1)}`] as (
+      id: string,
+      pw: string,
+      reason: string,
+      version: string | number,
+    ) => Promise<unknown>;
+    await reset('1', 'new-secret-123', '安全演练重置密码', '99').catch(() => undefined);
+    assertExactKeys(bodies[0]!, ['newPassword', 'reason'], 'resetUserPassword');
+    assert.ok(!('userId' in bodies[0]!), 'resetUserPassword must not include userId');
+    assert.ok(!('oldPassword' in bodies[0]!), 'resetUserPassword must not include oldPassword');
+
+    // createDatasource: credential 仅在创建时出现
+    await data
+      .createDatasource({
+        code: 'dto-ds',
+        name: 'DTO 数据源',
+        engine: 'MYSQL',
+        host: 'dto.internal',
+        port: 3306,
+        databaseName: 'dto',
+        username: 'dto_reader',
+        credential: 'secret-value',
+        tlsMode: 'VERIFY_FULL',
+        poolMax: 2,
+        status: 'DRAFT',
+      })
+      .catch(() => undefined);
+    assertExactKeys(
+      bodies[1]!,
+      ['code', 'name', 'engine', 'host', 'port', 'databaseName', 'username', 'credential', 'tlsMode', 'poolMax', 'status'],
+      'createDatasource',
+    );
+    assert.equal(bodies[1]!.credential, 'secret-value', 'credential must be present in create DTO');
+
+    // updateDictionary: title/description/ownerUserId/columns
+    await data
+      .updateDictionary(
+        '1',
+        {
+          title: '订单表',
+          description: '按日汇总',
+          ownerUserId: null,
+          columns: [{ columnName: 'id', title: '编号', description: '' }],
+        },
+        '99',
+      )
+      .catch(() => undefined);
+    assertExactKeys(bodies[2]!, ['title', 'description', 'ownerUserId', 'columns'], 'updateDictionary');
+    assert.ok(Array.isArray(bodies[2]!.columns), 'columns must be an array');
+
+    // createToken: name/platformId/scopes/expiresAt
+    await access
+      .createToken({
+        name: 'DTO 令牌',
+        platformId: '1',
+        scopes: ['mcp:catalog'],
+        expiresAt: '2027-01-01T00:00:00Z',
+      })
+      .catch(() => undefined);
+    assertExactKeys(bodies[3]!, ['name', 'platformId', 'scopes', 'expiresAt'], 'createToken');
+
+    // savePlatformScopes: items 整组（不含 version/scopeVersion——那些在 If-Match 头）
+    await access.savePlatformScopes('1', [], '99').catch(() => undefined);
+    assertExactKeys(bodies[4]!, ['items'], 'savePlatformScopes');
+    assert.ok(!('version' in bodies[4]!), 'version must be in If-Match header, not body');
   });
 });
