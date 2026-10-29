@@ -71,37 +71,40 @@ public final class OrgStore {
         OrgSql.requireText(name, 30);
         OrgSql.requireActor(actorId);
         return new SecurityChangeTransaction(primary)
-                .executeReturning(connection -> {
-                DepartmentTree tree = DepartmentTree.lock(connection);
-                String ancestors = tree.createAncestors(parentId);
-                long id;
-                try (PreparedStatement statement =
-                        OrgSql.statement(
-                                connection,
-                                "INSERT INTO sys_dept (parent_id, ancestors, dept_name, status, del_flag,"
-                                        + " create_time, update_time) VALUES (?, ?, ?, ?, '0', ?, ?)",
-                                Statement.RETURN_GENERATED_KEYS)) {
-                    statement.setLong(1, parentId == null ? 0L : parentId);
-                    statement.setString(2, ancestors);
-                    statement.setString(3, name);
-                    statement.setString(4, enabled ? "0" : "1");
-                    statement.setObject(5, OrgSql.nowUtc());
-                    statement.setObject(6, OrgSql.nowUtc());
-                    if (statement.executeUpdate() != 1) {
-                        throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
-                    }
-                    id = generatedKey(statement);
-                }
-                writeOperationLog(
-                        connection,
-                        actorId,
-                        "DEPARTMENT_CREATE",
-                        "DEPARTMENT",
-                        id,
-                        "{\"name\":\"" + name + "\",\"enabled\":" + enabled + "}");
-                DepartmentRow created = new DepartmentRow(id, parentId, name, enabled, 1, ancestors);
-                return new SecurityChangeTransaction.Outcome<>(created, departmentEvent(id, 1));
-                })
+                .executeReturning(
+                        connection -> {
+                            DepartmentTree tree = DepartmentTree.lock(connection);
+                            String ancestors = tree.createAncestors(parentId);
+                            long id;
+                            try (PreparedStatement statement =
+                                    OrgSql.statement(
+                                            connection,
+                                            "INSERT INTO sys_dept (parent_id, ancestors, dept_name, status, del_flag,"
+                                                    + " create_time, update_time) VALUES (?, ?, ?, ?, '0', ?, ?)",
+                                            Statement.RETURN_GENERATED_KEYS)) {
+                                statement.setLong(1, parentId == null ? 0L : parentId);
+                                statement.setString(2, ancestors);
+                                statement.setString(3, name);
+                                statement.setString(4, enabled ? "0" : "1");
+                                statement.setObject(5, OrgSql.nowUtc());
+                                statement.setObject(6, OrgSql.nowUtc());
+                                if (statement.executeUpdate() != 1) {
+                                    throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+                                }
+                                id = generatedKey(statement);
+                            }
+                            writeOperationLog(
+                                    connection,
+                                    actorId,
+                                    "DEPARTMENT_CREATE",
+                                    "DEPARTMENT",
+                                    id,
+                                    "{\"name\":\"" + name + "\",\"enabled\":" + enabled + "}");
+                            DepartmentRow created =
+                                    new DepartmentRow(id, parentId, name, enabled, 1, ancestors);
+                            return new SecurityChangeTransaction.Outcome<>(
+                                    created, departmentEvent(id, 1));
+                        })
                 .value();
     }
 
@@ -153,66 +156,70 @@ public final class OrgStore {
         OrgSql.requireActor(actorId);
         requireVersion(expectedVersion);
         return new SecurityChangeTransaction(primary)
-                .executeReturning(connection -> {
-                DepartmentTree tree = DepartmentTree.lock(connection);
-                DepartmentRow self = tree.requireActive(id);
-                if (self.version() != expectedVersion) {
-                    throw new DomainException(ErrorCode.VERSION_CONFLICT);
-                }
-                DepartmentFields fields = fieldsFor.apply(self);
-                DepartmentTree.Mutation plan = tree.planChange(self, fields.parentId());
-                String newAncestors = plan.ancestors();
-                try (PreparedStatement statement =
-                        OrgSql.statement(
-                                connection,
-                                "UPDATE sys_dept SET parent_id = ?, ancestors = ?, dept_name = ?,"
-                                        + " status = ?, version = version + 1, update_time = ?"
-                                        + " WHERE dept_id = ? AND version = ? AND del_flag = '0'")) {
-                    statement.setLong(1, fields.parentId() == null ? 0L : fields.parentId());
-                    statement.setString(2, newAncestors);
-                    statement.setString(3, fields.name());
-                    statement.setString(4, fields.enabled() ? "0" : "1");
-                    statement.setObject(5, OrgSql.nowUtc());
-                    statement.setLong(6, id);
-                    statement.setLong(7, expectedVersion);
-                    if (statement.executeUpdate() != 1) {
-                        throw new DomainException(ErrorCode.VERSION_CONFLICT);
-                    }
-                }
-                rebuildDepartmentDescendants(connection, plan.descendants());
-                int descendantsMoved = plan.descendants().size();
-                writeOperationLog(
-                        connection,
-                        actorId,
-                        action,
-                        "DEPARTMENT",
-                        id,
-                        "DEPARTMENT_MOVE".equals(action)
-                                ? "{\"descendantsMoved\":" + descendantsMoved + "}"
-                                : "{\"name\":\""
-                                        + fields.name()
-                                        + "\",\"enabled\":"
-                                        + fields.enabled()
-                                        + ",\"parentId\":"
-                                        + fields.parentId()
-                                        + ",\"descendantsMoved\":"
-                                        + descendantsMoved
-                                        + "}");
-                DepartmentRow updated =
-                        new DepartmentRow(
-                                id,
-                                fields.parentId(),
-                                fields.name(),
-                                fields.enabled(),
-                                expectedVersion + 1,
-                                newAncestors);
-                return new SecurityChangeTransaction.Outcome<>(updated, departmentEvent(id, updated.version()));
-                })
+                .executeReturning(
+                        connection -> {
+                            DepartmentTree tree = DepartmentTree.lock(connection);
+                            DepartmentRow self = tree.requireActive(id);
+                            if (self.version() != expectedVersion) {
+                                throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                            }
+                            DepartmentFields fields = fieldsFor.apply(self);
+                            DepartmentTree.Mutation plan = tree.planChange(self, fields.parentId());
+                            String newAncestors = plan.ancestors();
+                            try (PreparedStatement statement =
+                                    OrgSql.statement(
+                                            connection,
+                                            "UPDATE sys_dept SET parent_id = ?, ancestors = ?, dept_name = ?,"
+                                                    + " status = ?, version = version + 1, update_time = ?"
+                                                    + " WHERE dept_id = ? AND version = ? AND del_flag = '0'")) {
+                                statement.setLong(
+                                        1, fields.parentId() == null ? 0L : fields.parentId());
+                                statement.setString(2, newAncestors);
+                                statement.setString(3, fields.name());
+                                statement.setString(4, fields.enabled() ? "0" : "1");
+                                statement.setObject(5, OrgSql.nowUtc());
+                                statement.setLong(6, id);
+                                statement.setLong(7, expectedVersion);
+                                if (statement.executeUpdate() != 1) {
+                                    throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                                }
+                            }
+                            rebuildDepartmentDescendants(connection, plan.descendants());
+                            int descendantsMoved = plan.descendants().size();
+                            writeOperationLog(
+                                    connection,
+                                    actorId,
+                                    action,
+                                    "DEPARTMENT",
+                                    id,
+                                    "DEPARTMENT_MOVE".equals(action)
+                                            ? "{\"descendantsMoved\":" + descendantsMoved + "}"
+                                            : "{\"name\":\""
+                                                    + fields.name()
+                                                    + "\",\"enabled\":"
+                                                    + fields.enabled()
+                                                    + ",\"parentId\":"
+                                                    + fields.parentId()
+                                                    + ",\"descendantsMoved\":"
+                                                    + descendantsMoved
+                                                    + "}");
+                            DepartmentRow updated =
+                                    new DepartmentRow(
+                                            id,
+                                            fields.parentId(),
+                                            fields.name(),
+                                            fields.enabled(),
+                                            expectedVersion + 1,
+                                            newAncestors);
+                            return new SecurityChangeTransaction.Outcome<>(
+                                    updated, departmentEvent(id, updated.version()));
+                        })
                 .value();
     }
 
     private static void rebuildDepartmentDescendants(
-            Connection connection, List<DepartmentTree.CacheUpdate> descendants) throws SQLException {
+            Connection connection, List<DepartmentTree.CacheUpdate> descendants)
+            throws SQLException {
         for (DepartmentTree.CacheUpdate descendant : descendants) {
             try (PreparedStatement statement =
                     OrgSql.statement(
@@ -231,61 +238,72 @@ public final class OrgStore {
     }
 
     private static SecurityEvent departmentEvent(long id, long version) {
-        return new SecurityEvent(UUID.randomUUID(), SecurityEvent.Kind.DEPARTMENT_CHANGED,
-                new SecurityEvent.NumericId(id), version);
+        return new SecurityEvent(
+                UUID.randomUUID(),
+                SecurityEvent.Kind.DEPARTMENT_CHANGED,
+                new SecurityEvent.NumericId(id),
+                version);
     }
 
     public void deleteDepartment(long id, long expectedVersion, long actorId) {
         OrgSql.requireActor(actorId);
         requireVersion(expectedVersion);
         new SecurityChangeTransaction(primary)
-                .executeReturning(connection -> {
-                DepartmentTree tree = DepartmentTree.lock(connection);
-                DepartmentRow self = tree.requireActive(id);
-                if (self.version() != expectedVersion) {
-                    throw new DomainException(ErrorCode.VERSION_CONFLICT);
-                }
-                tree.path(id);
-                long nextVersion = DepartmentTree.nextVersion(self.version());
-                try (PreparedStatement children =
-                                OrgSql.statement(
-                                        connection,
-                                        "SELECT COUNT(*) FROM sys_dept WHERE parent_id = ?"
-                                                + " AND del_flag = '0'");
-                        PreparedStatement members =
-                                OrgSql.statement(
-                                        connection,
-                                        "SELECT COUNT(*) FROM sys_user_profile WHERE dept_id = ?")) {
-                    children.setLong(1, id);
-                    try (ResultSet result = children.executeQuery()) {
-                        result.next();
-                        if (result.getLong(1) > 0) {
-                            throw new DomainException(ErrorCode.REFERENCES_EXIST);
-                        }
-                    }
-                    members.setLong(1, id);
-                    try (ResultSet result = members.executeQuery()) {
-                        result.next();
-                        if (result.getLong(1) > 0) {
-                            throw new DomainException(ErrorCode.REFERENCES_EXIST);
-                        }
-                    }
-                }
-                try (PreparedStatement statement =
-                        OrgSql.statement(
-                                connection,
-                                "UPDATE sys_dept SET del_flag = '1', version = version + 1,"
-                                        + " update_time = ? WHERE dept_id = ? AND version = ? AND del_flag = '0'")) {
-                    statement.setObject(1, OrgSql.nowUtc());
-                    statement.setLong(2, id);
-                    statement.setLong(3, expectedVersion);
-                    if (statement.executeUpdate() != 1) {
-                        throw new DomainException(ErrorCode.VERSION_CONFLICT);
-                    }
-                }
-                writeOperationLog(connection, actorId, "DEPARTMENT_DELETE", "DEPARTMENT", id, null);
-                return new SecurityChangeTransaction.Outcome<Void>(null, departmentEvent(id, nextVersion));
-                });
+                .executeReturning(
+                        connection -> {
+                            DepartmentTree tree = DepartmentTree.lock(connection);
+                            DepartmentRow self = tree.requireActive(id);
+                            if (self.version() != expectedVersion) {
+                                throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                            }
+                            tree.path(id);
+                            long nextVersion = DepartmentTree.nextVersion(self.version());
+                            try (PreparedStatement children =
+                                            OrgSql.statement(
+                                                    connection,
+                                                    "SELECT COUNT(*) FROM sys_dept WHERE parent_id = ?"
+                                                            + " AND del_flag = '0'");
+                                    PreparedStatement members =
+                                            OrgSql.statement(
+                                                    connection,
+                                                    "SELECT COUNT(*) FROM sys_user_profile WHERE dept_id = ?")) {
+                                children.setLong(1, id);
+                                try (ResultSet result = children.executeQuery()) {
+                                    result.next();
+                                    if (result.getLong(1) > 0) {
+                                        throw new DomainException(ErrorCode.REFERENCES_EXIST);
+                                    }
+                                }
+                                members.setLong(1, id);
+                                try (ResultSet result = members.executeQuery()) {
+                                    result.next();
+                                    if (result.getLong(1) > 0) {
+                                        throw new DomainException(ErrorCode.REFERENCES_EXIST);
+                                    }
+                                }
+                            }
+                            try (PreparedStatement statement =
+                                    OrgSql.statement(
+                                            connection,
+                                            "UPDATE sys_dept SET del_flag = '1', version = version + 1,"
+                                                    + " update_time = ? WHERE dept_id = ? AND version = ? AND del_flag = '0'")) {
+                                statement.setObject(1, OrgSql.nowUtc());
+                                statement.setLong(2, id);
+                                statement.setLong(3, expectedVersion);
+                                if (statement.executeUpdate() != 1) {
+                                    throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                                }
+                            }
+                            writeOperationLog(
+                                    connection,
+                                    actorId,
+                                    "DEPARTMENT_DELETE",
+                                    "DEPARTMENT",
+                                    id,
+                                    null);
+                            return new SecurityChangeTransaction.Outcome<Void>(
+                                    null, departmentEvent(id, nextVersion));
+                        });
     }
 
     public List<DepartmentRow> listDepartments() {

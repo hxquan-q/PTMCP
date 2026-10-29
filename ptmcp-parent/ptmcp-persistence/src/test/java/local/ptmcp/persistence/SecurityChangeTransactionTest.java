@@ -385,11 +385,14 @@ class SecurityChangeTransactionTest {
     void returningCallbackCommitsValueAndEventTogether() throws Exception {
         SecurityEvent event = event(UUID.randomUUID(), 2);
         String value = "repository-result";
-        var committed = transaction().executeReturning(connection -> {
-            assertGlobalRowLocked();
-            changeRow(connection);
-            return new SecurityChangeTransaction.Outcome<>(value, event);
-        });
+        var committed =
+                transaction()
+                        .executeReturning(
+                                connection -> {
+                                    assertGlobalRowLocked();
+                                    changeRow(connection);
+                                    return new SecurityChangeTransaction.Outcome<>(value, event);
+                                });
         assertEquals(value, committed.value());
         assertEquals(event.eventId(), committed.receipt().eventId());
         assertEquals(2, committed.receipt().epoch());
@@ -400,11 +403,20 @@ class SecurityChangeTransactionTest {
     @Test
     void missingCallbackResultOrEventRollsBackRepositoryWork() throws Exception {
         for (boolean missingResult : List.of(true, false)) {
-            assertSanitized(assertThrows(DomainException.class, () ->
-                transaction().executeReturning(connection -> {
-                    changeRow(connection);
-                    return missingResult ? null : new SecurityChangeTransaction.Outcome<>("value", null);
-                })), ErrorCode.INVALID_ARGUMENT);
+            assertSanitized(
+                    assertThrows(
+                            DomainException.class,
+                            () ->
+                                    transaction()
+                                            .executeReturning(
+                                                    connection -> {
+                                                        changeRow(connection);
+                                                        return missingResult
+                                                                ? null
+                                                                : new SecurityChangeTransaction
+                                                                        .Outcome<>("value", null);
+                                                    })),
+                    ErrorCode.INVALID_ARGUMENT);
             assertState(1, 1, 0);
         }
     }

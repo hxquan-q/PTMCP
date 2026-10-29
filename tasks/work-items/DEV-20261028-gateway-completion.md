@@ -122,7 +122,7 @@ Skill三项检查均exit0（12份活跃笔记、0份归档）；python scripts/c
 （含软删行）并提升版本，伪外部分支不写。现有损坏链拒绝SECURITY_STATE_UNAVAILABLE；
 命令造成环、总深度超64或缓存超VARCHAR(500)拒绝INVALID_ARGUMENT且无提交，不截断。
 复用SecurityChangeTransaction增加类型化命令结果/事件回调，创建使用真实生成ID，
-每个部门命令将行/版本/操作日志、epoch和DEPARTMENT_CHANGED同事务提交，丢确认保持UNKNOWN不重放。
+每个部门命令将行/版本/操作日志、epoch和DEPARTMENT_CHANGED同事务提交，丢确认保持UNKNOWN且事务单次调用不重放。
 先补真实MySQL失败反例、事件故障回滚、各命令全局锁顺序及提交丢确认，再实施并组合验证。
 本片不包含事务内actor/委派重验、整子树授权、间接自扩权或部门容量验收；后续不得随此片记为完成。
 
@@ -134,10 +134,17 @@ Skill三项检查均exit0（12份活跃笔记、0份归档）；python scripts/c
 4处编译错误，未运行测试。修正夹具后`department-tree-green2.log`于06:52:39退出1：
 SecurityState13、SecurityChangeTransaction16通过，Org163仅1 failure/0 errors/0 skipped；
 坏旧树65层的预期STATE实际INVALID_ARGUMENT，完整写快照保持不变。
-已改为移动先完整BFS校验全部旧后代，再规划新父链/深度/缓存，重跑`department-tree-green3.log`进行中。
-独立只读评审已核两阶段代码与前述实际失败，未发现新增静态阻断；最终组合证据仍待核。
+已改为移动先完整BFS校验全部旧后代，再规划新父链/深度/缓存。
+最终组合`department-tree-green3.log/.exit`于2026-10-30 06:59:31 +08:00 BUILD SUCCESS/exit0：
+SecurityState13、SecurityChangeTransaction16、Org163、Admin98、MCP12，共302 tests /0 failures /0 errors /0 skipped。
+7份格式化Java回拷Windows并SHA-256逐一MATCH，证据为`department-tree-green3-source-hashes.json`。
+日志与哈希位于专属WSL的`/tmp/ptmcp-root-backend-workspace`，仅含隔离夹具，未验证业务/生产环境。
+独立只读评审已核两阶段代码与前述实际失败，无新增静态阻断；最终日志/源码终审及根检查待完成。
 删除仍仅检查直接未删子部门/直属用户，用户创建/换部门未共用该全局围栏，
 本片不关闭并发成员引用和跨软删桥的删除引用完整性，也不声明外部直写安全或容量达标。
+独立只读复核另发现HTTP幂等包装对OPERATION_UNKNOWN仍释放key，真实commit丢确认后同key再POST
+可能重复创建；本片store级测试仅证明单次调用不自动重放，不能声称HTTP UNKNOWN闭环。
+树写片验证完成后接续UNKNOWN保留/过期RUNNING收窄及真实HTTP同key重试切片。
 
 当前切片：所有admin handler显式声明功能码，统一MVC入口默认拒绝未声明/无功能码请求；
 平台管理员不能绕过端点动作，通用用户PUT仍按实际变化补status/assign-role/move。

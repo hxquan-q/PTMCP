@@ -102,9 +102,8 @@ final class DepartmentTree {
         if (moved) {
             validateDescendants(self.id());
         }
-        List<Long> parents = moved
-                ? parentPath(parentId)
-                : currentPath.subList(0, currentPath.size() - 1);
+        List<Long> parents =
+                moved ? parentPath(parentId) : currentPath.subList(0, currentPath.size() - 1);
         if (parents.contains(self.id())) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
