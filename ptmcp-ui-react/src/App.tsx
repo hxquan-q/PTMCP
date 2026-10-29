@@ -35,11 +35,19 @@ import {
   SecurityPage,
   TokensPage,
 } from './views/me/MePages';
-import { AuditDetailPage, DatasourceDetailPage, JobDetailPage, MetadataDetailPage } from './views/admin/DetailPages';
+import {
+  AuditDetailPage,
+  DatasourceDetailPage,
+  JobDetailPage,
+  MetadataDetailPage,
+  PlatformDetailPage,
+  RoleDetailPage,
+  UserDetailPage,
+} from './views/admin/DetailPages';
 import { LoginPage } from './views/auth/LoginPage';
 import { getSession, logout, type SessionInfo } from './services/session';
 import { onSessionExpired } from './services/http';
-import { filterNavGroups, resolveRoute, safeReturnTo, type PermissionedNavGroup } from './navigation';
+import { ADMIN_ROUTE_PERMISSIONS, filterNavGroups, resolveRoute, safeReturnTo, type PermissionedNavGroup } from './navigation';
 
 /* 轻量 hash 路由:#/me/integrations、#/admin/datasources … */
 function useHashRoute(): [string, (path: string) => void] {
@@ -117,7 +125,7 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/datasources',
-    permission: 'ptmcp:datasource:read',
+    permission: ADMIN_ROUTE_PERMISSIONS['/admin/datasources'].read,
     navKey: 'admin-datasources',
     prefix: true,
     breadcrumb: <>管理控制台 &nbsp;›&nbsp; 数据源 &nbsp;›&nbsp; 详情</>,
@@ -181,6 +189,33 @@ const ROUTES: RouteDef[] = [
     element: () => <PlatformsPage />,
   },
   {
+    path: '/admin/users',
+    navKey: 'admin-users',
+    prefix: true,
+    permission: ADMIN_ROUTE_PERMISSIONS['/admin/users'].read,
+    breadcrumb: <>管理控制台 &nbsp;›&nbsp; 用户 &nbsp;›&nbsp; 用户详情</>,
+    realm: 'admin',
+    element: (id?: string) => <UserDetailPage id={decodeURIComponent(id ?? '')} />,
+  },
+  {
+    path: '/admin/roles',
+    navKey: 'admin-roles',
+    prefix: true,
+    permission: ADMIN_ROUTE_PERMISSIONS['/admin/roles'].read,
+    breadcrumb: <>管理控制台 &nbsp;›&nbsp; 角色管理 &nbsp;›&nbsp; 角色详情</>,
+    realm: 'admin',
+    element: (id?: string) => <RoleDetailPage id={decodeURIComponent(id ?? '')} />,
+  },
+  {
+    path: '/admin/platforms',
+    navKey: 'admin-platforms',
+    prefix: true,
+    permission: ADMIN_ROUTE_PERMISSIONS['/admin/platforms'].read,
+    breadcrumb: <>管理控制台 &nbsp;›&nbsp; 平台与客户端 &nbsp;›&nbsp; 平台详情</>,
+    realm: 'admin',
+    element: (id?: string) => <PlatformDetailPage id={decodeURIComponent(id ?? '')} />,
+  },
+  {
     path: '/admin/audit',
     permission: 'ptmcp:audit:list',
     navKey: 'admin-audit',
@@ -190,7 +225,7 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/audit',
-    permission: 'ptmcp:audit:read',
+    permission: ADMIN_ROUTE_PERMISSIONS['/admin/audit'].read,
     navKey: 'admin-audit',
     prefix: true,
     breadcrumb: <>管理控制台 &nbsp;›&nbsp; 审计记录 &nbsp;›&nbsp; 详情</>,
@@ -207,7 +242,7 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/jobs',
-    permission: 'ptmcp:job:read',
+    permission: ADMIN_ROUTE_PERMISSIONS['/admin/jobs'].read,
     navKey: 'admin-jobs',
     prefix: true,
     breadcrumb: <>管理控制台 &nbsp;›&nbsp; 操作日志 &nbsp;›&nbsp; 任务详情</>,
@@ -216,7 +251,7 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/metadata',
-    permission: 'ptmcp:metadata:read',
+    permission: ADMIN_ROUTE_PERMISSIONS['/admin/metadata'].read,
     navKey: 'admin-metadata',
     prefix: true,
     breadcrumb: <>管理控制台 &nbsp;›&nbsp; 元数据与字典 &nbsp;›&nbsp; 详情</>,

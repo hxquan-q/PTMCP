@@ -146,7 +146,9 @@ export function UsersPage() {
                 <tr key={r.id}>
                   <td>
                     <span className="cell-stack">
-                      <strong>{r.displayName || r.username}</strong>
+                      <button className="link" onClick={() => (window.location.hash = `/admin/users/${encodeURIComponent(r.id)}`)}>
+                        {r.displayName || r.username}
+                      </button>
                       <span>
                         {r.username} · ID {r.id}
                       </span>

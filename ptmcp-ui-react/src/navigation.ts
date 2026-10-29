@@ -34,3 +34,14 @@ export function resolveRoute<R extends ResolvableRoute>(path: string, routes: R[
 export function safeReturnTo(path: string, fallback = '/'): string {
   return /^\/(?:admin|me)(?:\/|\?|$)/.test(path) && !path.includes('\\') && [...path].every((ch) => ch.charCodeAt(0) >= 32) ? path : fallback;
 }
+
+/** 详情/列表路由的读权限（App 路由定义消费同源常量，防漂移）。 */
+export const ADMIN_ROUTE_PERMISSIONS = {
+  '/admin/datasources': { list: 'ptmcp:datasource:list', read: 'ptmcp:datasource:read' },
+  '/admin/metadata': { list: 'ptmcp:metadata:list', read: 'ptmcp:metadata:read' },
+  '/admin/jobs': { list: 'ptmcp:audit:list', read: 'ptmcp:job:read' },
+  '/admin/users': { list: 'ptmcp:user:list', read: 'ptmcp:user:read' },
+  '/admin/roles': { list: 'ptmcp:role:list', read: 'ptmcp:role:read' },
+  '/admin/platforms': { list: 'ptmcp:platform:list', read: 'ptmcp:platform:read' },
+  '/admin/audit': { list: 'ptmcp:audit:list', read: 'ptmcp:audit:read' },
+} as const;

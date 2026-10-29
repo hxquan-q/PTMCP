@@ -105,18 +105,11 @@ public class DepartmentAdminController {
             @PathVariable long id, @RequestBody DepartmentWrite write, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
         scopeGate.requireDepartmentAction(request, id, "ptmcp:department:update");
-        DepartmentRead current = toRead(orgStore.getDepartment(id));
-        DepartmentRead updated;
-        if (write.parentId() == null
-                ? current.parentId() != null
-                : !write.parentId().equals(current.parentId())) {
-            orgStore.moveDepartment(id, write.parentId(), expectedVersion, actorId(request));
-            expectedVersion = current.version() + 1;
-        }
-        updated =
+        DepartmentRead updated =
                 toRead(
-                        orgStore.updateDepartment(
+                        orgStore.editDepartment(
                                 id,
+                                write.parentId(),
                                 write.name(),
                                 write.enabled(),
                                 expectedVersion,

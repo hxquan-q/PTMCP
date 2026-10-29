@@ -137,7 +137,9 @@ export function PlatformsPage() {
                   <tr key={p.id}>
                     <td>
                       <span className="cell-stack">
-                        <strong>{p.name}</strong>
+                        <button className="link" onClick={() => (window.location.hash = `/admin/platforms/${encodeURIComponent(p.id)}`)}>
+                          {p.name}
+                        </button>
                         <span>
                           {p.code} · ID {p.id}
                         </span>

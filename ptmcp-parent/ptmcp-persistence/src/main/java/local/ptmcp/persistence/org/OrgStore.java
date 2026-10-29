@@ -21,6 +21,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 import javax.sql.DataSource;
@@ -127,35 +128,123 @@ public final class OrgStore {
     public DepartmentRow updateDepartment(
             long id, String name, boolean enabled, long expectedVersion, long actorId) {
         OrgSql.requireText(name, 30);
+        return changeDepartment(
+                id,
+                expectedVersion,
+                actorId,
+                "DEPARTMENT_UPDATE",
+                self -> new DepartmentFields(self.parentId(), name, enabled));
+    }
+
+    public DepartmentRow editDepartment(
+            long id,
+            Long parentId,
+            String name,
+            boolean enabled,
+            long expectedVersion,
+            long actorId) {
+        OrgSql.requireText(name, 30);
+        return changeDepartment(
+                id,
+                expectedVersion,
+                actorId,
+                "DEPARTMENT_UPDATE",
+                self -> new DepartmentFields(parentId, name, enabled));
+    }
+
+    public DepartmentRow moveDepartment(
+            long id, Long newParentId, long expectedVersion, long actorId) {
+        return changeDepartment(
+                id,
+                expectedVersion,
+                actorId,
+                "DEPARTMENT_MOVE",
+                self -> new DepartmentFields(newParentId, self.name(), self.enabled()));
+    }
+
+    private record DepartmentFields(Long parentId, String name, boolean enabled) {}
+
+    private DepartmentRow changeDepartment(
+            long id,
+            long expectedVersion,
+            long actorId,
+            String action,
+            Function<DepartmentRow, DepartmentFields> fieldsFor) {
         OrgSql.requireActor(actorId);
         requireVersion(expectedVersion);
         try (Connection connection = OrgSql.configure(primary)) {
             connection.setAutoCommit(false);
             try {
+                DepartmentRow self = lockDepartment(connection, id);
+                if (self.version() != expectedVersion) {
+                    throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                }
+                DepartmentFields fields = fieldsFor.apply(self);
+                boolean moved = !Objects.equals(self.parentId(), fields.parentId());
+                String newAncestors = self.ancestors();
+                if (moved) {
+                    if (fields.parentId() == null) {
+                        newAncestors = "";
+                    } else {
+                        if (fields.parentId() == id) {
+                            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+                        }
+                        DepartmentRow parent = lockDepartment(connection, fields.parentId());
+                        if (ancestorChain(parent.ancestors(), parent.id()).contains(id)) {
+                            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+                        }
+                        newAncestors =
+                                parent.ancestors().isEmpty()
+                                        ? String.valueOf(parent.id())
+                                        : parent.ancestors() + "," + parent.id();
+                    }
+                }
                 try (PreparedStatement statement =
                         OrgSql.statement(
                                 connection,
-                                "UPDATE sys_dept SET dept_name = ?, status = ?, version = version + 1,"
-                                        + " update_time = ? WHERE dept_id = ? AND version = ?"
-                                        + " AND del_flag = '0'")) {
-                    statement.setString(1, name);
-                    statement.setString(2, enabled ? "0" : "1");
-                    statement.setObject(3, OrgSql.nowUtc());
-                    statement.setLong(4, id);
-                    statement.setLong(5, expectedVersion);
+                                "UPDATE sys_dept SET parent_id = ?, ancestors = ?, dept_name = ?,"
+                                        + " status = ?, version = version + 1, update_time = ?"
+                                        + " WHERE dept_id = ? AND version = ? AND del_flag = '0'")) {
+                    statement.setLong(1, fields.parentId() == null ? 0L : fields.parentId());
+                    statement.setString(2, newAncestors);
+                    statement.setString(3, fields.name());
+                    statement.setString(4, fields.enabled() ? "0" : "1");
+                    statement.setObject(5, OrgSql.nowUtc());
+                    statement.setLong(6, id);
+                    statement.setLong(7, expectedVersion);
                     if (statement.executeUpdate() != 1) {
-                        throw conflictOrMissing(connection, id);
+                        throw new DomainException(ErrorCode.VERSION_CONFLICT);
                     }
                 }
+                int descendantsMoved =
+                        moved ? rebuildDepartmentDescendants(connection, id, newAncestors) : 0;
                 writeOperationLog(
                         connection,
                         actorId,
-                        "DEPARTMENT_UPDATE",
+                        action,
                         "DEPARTMENT",
                         id,
-                        "{\"name\":\"" + name + "\",\"enabled\":" + enabled + "}");
+                        "DEPARTMENT_MOVE".equals(action)
+                                ? "{\"descendantsMoved\":" + descendantsMoved + "}"
+                                : "{\"name\":\""
+                                        + fields.name()
+                                        + "\",\"enabled\":"
+                                        + fields.enabled()
+                                        + ",\"parentId\":"
+                                        + fields.parentId()
+                                        + ",\"descendantsMoved\":"
+                                        + descendantsMoved
+                                        + "}");
+                DepartmentRow updated =
+                        new DepartmentRow(
+                                id,
+                                fields.parentId(),
+                                fields.name(),
+                                fields.enabled(),
+                                expectedVersion + 1,
+                                newAncestors);
                 connection.commit();
-                return getDepartment(id);
+                return updated;
             } catch (SQLException | RuntimeException failure) {
                 try {
                     connection.rollback();
@@ -169,102 +258,39 @@ public final class OrgStore {
         }
     }
 
-    public DepartmentRow moveDepartment(
-            long id, Long newParentId, long expectedVersion, long actorId) {
-        OrgSql.requireActor(actorId);
-        requireVersion(expectedVersion);
-        try (Connection connection = OrgSql.configure(primary)) {
-            connection.setAutoCommit(false);
-            try {
-                DepartmentRow self = lockDepartment(connection, id);
-                String newAncestors;
-                long storedParent;
-                if (newParentId == null) {
-                    newAncestors = "";
-                    storedParent = 0L;
-                } else {
-                    if (newParentId == id) {
-                        throw new DomainException(ErrorCode.INVALID_ARGUMENT);
-                    }
-                    DepartmentRow parent = lockDepartment(connection, newParentId);
-                    if (ancestorChain(parent.ancestors(), parent.id()).contains(id)) {
-                        throw new DomainException(ErrorCode.INVALID_ARGUMENT);
-                    }
-                    newAncestors =
-                            parent.ancestors().isEmpty()
-                                    ? String.valueOf(parent.id())
-                                    : parent.ancestors() + "," + parent.id();
-                    storedParent = parent.id();
-                }
-                String oldAncestors = self.ancestors();
-                try (PreparedStatement statement =
-                        OrgSql.statement(
-                                connection,
-                                "UPDATE sys_dept SET parent_id = ?, ancestors = ?, version = version + 1,"
-                                        + " update_time = ? WHERE dept_id = ? AND version = ?")) {
-                    statement.setLong(1, storedParent);
-                    statement.setString(2, newAncestors);
-                    statement.setObject(3, OrgSql.nowUtc());
-                    statement.setLong(4, id);
-                    statement.setLong(5, expectedVersion);
-                    if (statement.executeUpdate() != 1) {
-                        throw new DomainException(ErrorCode.VERSION_CONFLICT);
-                    }
-                }
-                String newPrefix =
-                        newAncestors.isEmpty() ? String.valueOf(id) : newAncestors + "," + id;
-                List<long[]> descendants = new ArrayList<>();
-                List<String> chains = new ArrayList<>();
-                try (PreparedStatement statement =
-                        OrgSql.statement(
-                                connection,
-                                "SELECT dept_id, ancestors FROM sys_dept"
-                                        + " WHERE del_flag = '0' AND dept_id <> ?")) {
-                    statement.setLong(1, id);
-                    try (ResultSet result = statement.executeQuery()) {
-                        while (result.next()) {
-                            long otherId = result.getLong(1);
-                            String chain = result.getString(2);
-                            if (ancestorChain(chain, otherId).contains(id)) {
-                                descendants.add(new long[] {otherId});
-                                chains.add(chain);
-                            }
-                        }
-                    }
-                }
-                for (int index = 0; index < descendants.size(); index++) {
-                    String rebuilt = rebuildChain(chains.get(index), id, newPrefix);
-                    try (PreparedStatement statement =
-                            OrgSql.statement(
-                                    connection,
-                                    "UPDATE sys_dept SET ancestors = ?, version = version + 1,"
-                                            + " update_time = ? WHERE dept_id = ?")) {
-                        statement.setString(1, rebuilt);
-                        statement.setObject(2, OrgSql.nowUtc());
-                        statement.setLong(3, descendants.get(index)[0]);
-                        statement.executeUpdate();
-                    }
-                }
-                writeOperationLog(
+    private static int rebuildDepartmentDescendants(
+            Connection connection, long id, String newAncestors) throws SQLException {
+        String newPrefix = newAncestors.isEmpty() ? String.valueOf(id) : newAncestors + "," + id;
+        Map<Long, String> descendants = new LinkedHashMap<>();
+        try (PreparedStatement statement =
+                OrgSql.statement(
                         connection,
-                        actorId,
-                        "DEPARTMENT_MOVE",
-                        "DEPARTMENT",
-                        id,
-                        "{\"descendantsMoved\":" + descendants.size() + "}");
-                connection.commit();
-                return getDepartment(id);
-            } catch (SQLException | RuntimeException failure) {
-                try {
-                    connection.rollback();
-                } catch (SQLException ignored) {
-                    // Never mask the in-flight failure with a rollback error.
+                        "SELECT dept_id, ancestors FROM sys_dept"
+                                + " WHERE del_flag = '0' AND dept_id <> ?")) {
+            statement.setLong(1, id);
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    long otherId = result.getLong(1);
+                    String chain = result.getString(2);
+                    if (ancestorChain(chain, otherId).contains(id)) {
+                        descendants.put(otherId, chain);
+                    }
                 }
-                throw failure;
             }
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
+        for (Map.Entry<Long, String> descendant : descendants.entrySet()) {
+            try (PreparedStatement statement =
+                    OrgSql.statement(
+                            connection,
+                            "UPDATE sys_dept SET ancestors = ?, version = version + 1,"
+                                    + " update_time = ? WHERE dept_id = ?")) {
+                statement.setString(1, rebuildChain(descendant.getValue(), id, newPrefix));
+                statement.setObject(2, OrgSql.nowUtc());
+                statement.setLong(3, descendant.getKey());
+                statement.executeUpdate();
+            }
+        }
+        return descendants.size();
     }
 
     public void deleteDepartment(long id, long expectedVersion, long actorId) {
@@ -1059,20 +1085,6 @@ public final class OrgStore {
                 "0".equals(result.getString(4)),
                 result.getLong(5),
                 result.getString(6));
-    }
-
-    private static DomainException conflictOrMissing(Connection connection, long id)
-            throws SQLException {
-        try (PreparedStatement statement =
-                OrgSql.statement(
-                        connection,
-                        "SELECT 1 FROM sys_dept WHERE dept_id = ? AND del_flag = '0'")) {
-            statement.setLong(1, id);
-            try (ResultSet result = statement.executeQuery()) {
-                return new DomainException(
-                        result.next() ? ErrorCode.VERSION_CONFLICT : ErrorCode.RESOURCE_NOT_FOUND);
-            }
-        }
     }
 
     private static DomainException conflictOrMissingUser(Connection connection, long id)

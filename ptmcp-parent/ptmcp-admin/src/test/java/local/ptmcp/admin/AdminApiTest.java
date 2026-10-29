@@ -639,7 +639,8 @@ class AdminApiTest {
         } finally {
             try (Connection connection = connect();
                     Statement statement = connection.createStatement()) {
-                statement.execute("ALTER TABLE admin_operation_log DROP CHECK department_edit_log_fault");
+                statement.execute(
+                        "ALTER TABLE admin_operation_log DROP CHECK department_edit_log_fault");
             }
         }
     }

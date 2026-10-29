@@ -111,7 +111,7 @@ host/port先做DNS与网络目的地策略验证，拒绝云元数据/loopback�
 | POST /users/{id}/password/retry | user:reset-password，平台管理员 | {}+If-Match+Idempotency-Key→200 IdentityState；只重试持久目标；完成重试不写宿主、不提版本/epoch；不接受新密码；版本与 body 一起绑定幂等摘要 |
 | PUT /users/{id}/roles | user:assign-role | {roleIds:[]}+If-Match→UserDTO；整组替换，最终整组功能码由同一有效委派覆盖，不能逐角色拼接不同委派 |
 | PUT /users/{id}/department | user:move | {departmentId,reason}+If-Match→UserDTO；新旧部门均可管理；更新身份版本与epoch |
-| /departments CRUD | department对应动作 | DepartmentWrite→DepartmentDTO；列表可parentId过滤；删除有子部门/用户409；PUT移动校验整棵子树无环且在范围 |
+| /departments CRUD | department对应动作 | DepartmentWrite→DepartmentDTO；列表可parentId过滤；删除有子部门/用户409；完整PUT以一个If-Match在同一事务写父边、名称、状态、后代路径缓存及一条操作日志，目标版本只增一次，返回本次事务结果；PUT移动校验整棵子树无环且在范围 |
 | /roles CRUD | role对应动作 | RoleWrite→RoleDTO；共享范围外成员的角色仅平台管理员能改；删除有关联成员/ACL则409 |
 | /platforms CRUD | platform对应动作，平台管理员 | PlatformWrite→PlatformDTO；删除前须停用/处理客户端及族；变更信任方式增securityVersion |
 | GET /platforms/{id}/scopes | platform:read | →ScopeRead={items,scopeVersion,version} |

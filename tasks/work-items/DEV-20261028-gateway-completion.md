@@ -119,6 +119,17 @@ Admin81、Org23共104项，0 failures/0 errors/0 skipped。
 首次部门RED执行3项，2个有效failure分别证明无效名称后子树已移动、成功PUT版本误增两次；
 日志故障项在创建触发器时因测试用户缺SUPER失败，未执行行为断言，不计有效RED。
 故障改用仅本次隔离库的临时CHECK约束拒绝更新日志，不提升用户权限或修改共享数据库配置，重跑后再实施。
+有效RED：`department-edit-red-valid.log`于2026-10-30 05:21:58 +08:00 BUILD FAILURE/exit1，
+3 tests /3 failures /0 errors /0 skipped；CHECK已实际触发503，随后完整部门记录比较证明移动残留，
+另两项分别证明非法名称仍移动、成功ETag误为3。此前触发器权限错误保留为夹具失败，不计本次行为RED。
+候选实现把完整PUT收束为editDepartment，由update/move复用内部changeDepartment事务；
+锁内核同一预期版本，一次CAS同时写父边/名称/状态，后代缓存及一条操作日志同连接提交或回滚，
+返回事务内不可变DepartmentRow，不在提交后另读。
+首次组合`department-edit-green.log`于2026-10-30 05:29:17 +08:00 BUILD SUCCESS/exit0，
+Org23+Admin84共107项，0 failures/0 errors/0 skipped，三条原子性回归均通过。
+独立只读复核指出复用路径给MOVE日志附加name，会把既有UPDATE/CREATE的手工JSON限制
+传播至原先只记录计数的MOVE。当前先以历史引号/反斜杠部门名补真实MOVE回归，
+取得候选实现的有效失败后恢复原MOVE日志结构；最终结果及复核另记，不累计重复执行。
 
 身份组合 GREEN：`ptmcp-identity-combined-green.log` BUILD SUCCESS，78 tests / 0 failures/errors/skipped；
 覆盖双 MySQL 改密恢复13、真实 ADMIN 改密HTTP2、Session8、Org13、SecurityState13、OAuth27及MCP HTTP2。

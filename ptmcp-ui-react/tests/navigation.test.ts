@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { filterNavGroups, resolveRoute, safeReturnTo, type PermissionedNavGroup } from '../src/navigation.ts';
+import { ADMIN_ROUTE_PERMISSIONS } from '../src/navigation.ts';
 
 const groups: PermissionedNavGroup[] = [
   {
@@ -58,4 +59,15 @@ test('safeReturnTo only accepts in-app admin/me paths without control characters
   assert.equal(safeReturnTo('/admin/a\u0000b'), '/');
   assert.equal(safeReturnTo('/other'), '/');
   assert.equal(safeReturnTo('/admin/x', '/me/integrations'), '/admin/x');
+});
+
+test('admin detail routes resolve with read permissions', () => {
+  for (const [basePath, perms] of Object.entries(ADMIN_ROUTE_PERMISSIONS)) {
+    const routes = [{ path: basePath }, { path: basePath, prefix: true, permission: perms.read }];
+    const list = resolveRoute(basePath, routes);
+    assert.equal(list.match, 'exact');
+    const detail = resolveRoute(`${basePath}/42`, routes);
+    assert.equal(detail.match, 'prefix', `${basePath}/42 must resolve as a detail route`);
+    assert.equal(detail.route?.permission, perms.read);
+  }
 });

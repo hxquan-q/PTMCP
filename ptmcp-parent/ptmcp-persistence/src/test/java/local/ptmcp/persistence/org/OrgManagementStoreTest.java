@@ -1,5 +1,6 @@
 package local.ptmcp.persistence.org;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -864,6 +865,48 @@ class OrgManagementStoreTest {
         OrgStore.DepartmentRow movedGrandchild = orgStore.getDepartment(grandchild.id());
         assertEquals(String.valueOf(child.id()), movedGrandchild.ancestors());
         assertEquals(2, movedGrandchild.version(), "descendant rows must be version-bumped");
+    }
+
+    @Test
+    void departmentMovePreservesHistoricalNameAndMoveLogFormat() throws Exception {
+        OrgStore.DepartmentRow root = orgStore.createDepartment(null, "原根", true, 1L);
+        OrgStore.DepartmentRow child = orgStore.createDepartment(root.id(), "子级", false, 1L);
+        OrgStore.DepartmentRow grandchild = orgStore.createDepartment(child.id(), "孙级", true, 1L);
+        String historicalName = "旧\"名称\\路径";
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "UPDATE sys_dept SET dept_name = ? WHERE dept_id = ?")) {
+            statement.setString(1, historicalName);
+            statement.setLong(2, child.id());
+            assertEquals(1, statement.executeUpdate());
+        }
+
+        OrgStore.DepartmentRow moved =
+                assertDoesNotThrow(() -> orgStore.moveDepartment(child.id(), null, 1, 1L));
+        assertEquals(
+                new OrgStore.DepartmentRow(child.id(), null, historicalName, false, 2, ""), moved);
+        assertEquals(moved, orgStore.getDepartment(child.id()));
+        assertEquals(
+                new OrgStore.DepartmentRow(
+                        grandchild.id(), child.id(), "孙级", true, 2, String.valueOf(child.id())),
+                orgStore.getDepartment(grandchild.id()));
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "SELECT action, JSON_LENGTH(after_masked),"
+                                        + " JSON_UNQUOTE(JSON_EXTRACT(after_masked, '$.descendantsMoved'))"
+                                        + " FROM admin_operation_log WHERE aggregate_type='DEPARTMENT'"
+                                        + " AND aggregate_id=? AND action<>'DEPARTMENT_CREATE'")) {
+            statement.setLong(1, child.id());
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                assertEquals("DEPARTMENT_MOVE", result.getString(1));
+                assertEquals(1, result.getInt(2));
+                assertEquals("1", result.getString(3));
+                assertFalse(result.next());
+            }
+        }
     }
 
     @Test

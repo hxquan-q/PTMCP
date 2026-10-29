@@ -117,7 +117,9 @@ export function RolesPage() {
                   <td>
                     <span className="cell-lead">
                       <span className="cell-stack">
-                        <strong style={{ color: 'var(--ptmcp-heading)' }}>{r.name}</strong>
+                        <button className="link" onClick={() => (window.location.hash = `/admin/roles/${encodeURIComponent(r.id)}`)}>
+                          {r.name}
+                        </button>
                         <span>ID {r.id}</span>
                       </span>
                     </span>

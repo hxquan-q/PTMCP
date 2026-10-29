@@ -178,6 +178,11 @@ async function getPage<T>(path: string, signal?: AbortSignal): Promise<Page<T>> 
   return { items: data.items ?? [], nextCursor: data.nextCursor ?? null };
 }
 
+export async function getPlatform(id: string, signal?: AbortSignal): Promise<PlatformRow> {
+  const { data } = await request<PlatformRow>(`/api/v1/admin/platforms/${encodeURIComponent(id)}`, { signal });
+  return data;
+}
+
 export function listPlatforms(params?: { pageSize?: number; cursor?: string; signal?: AbortSignal }): Promise<Page<PlatformRow>> {
   const q = new URLSearchParams({ pageSize: String(params?.pageSize ?? 100) });
   if (params?.cursor) q.set('cursor', params.cursor);
