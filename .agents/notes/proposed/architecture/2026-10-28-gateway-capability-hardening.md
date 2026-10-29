@@ -162,7 +162,8 @@ CHANGE_PENDING拒绝且无副作用，普通资料或相同状态不额外撤证
 
 登录时的platformAdmin不能作为八小时内的授权真源。每个请求在ADMIN索引与权威用户版本核验后，
 从主库的当前成员关系、有效角色与功能码重新判断ptmcp:platform:scope，仅在本请求缓存结果。
-不回写共享会话内容，不更改session ID、CSRF、issuedAt或expiresAt，不因读取权限续期。
+资格解析不回写共享会话内容，不更改session ID、CSRF、issuedAt或expiresAt，不因读取权限续期。
+既有显式CSRF轮换仍更新会话中的CSRF，并可顺带保存本请求资格；下一请求仍必须重新查询主库。
 会话端点返回的platformAdmin与其本次permissions一致，不能出现角色已撤但仍显示平台管理员。
 权限依赖查询失败必须在过滤链默认拒绝并使用既有稳定错误映射，不把异常当作匿名或沿用旧管理员标记。
 

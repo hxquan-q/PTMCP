@@ -132,10 +132,17 @@ gateway只完成编译、没有运行MCP HTTP测试，不能把该项计作通�
 本片独立只读复审已实际核阅最终106项GREEN日志与源码，未发现新增阻断；未重复运行动态测试。
 结论不代替最后有效管理员、供应或完整身份验收。
 
-下一切片：ADMIN平台管理员资格逐请求从当前主库有效角色/成员/功能码重算，仅缓存本请求，
+当前切片：ADMIN平台管理员资格逐请求从当前主库有效角色/成员/功能码重算，仅缓存本请求，
 保留原session ID/CSRF/绝对期限；真实Cookie回归先复现撤成员、停/软删角色、删scope后的旧会话越权，
 再覆盖新授资格与权限依赖故障。权限读取失败须在过滤链拒绝并返回稳定错误。
 本片不代替安全写入事务内actor重验、最后有效管理员保护或多副本会话内容共享。
+首轮`ptmcp-admin-scope-red.log`为6例/6 failures/0 errors/0 skipped；其中5例有效复现撤权后仍为管理员、
+新授资格不生效。故障例被夹具非法角色键400挡住，不计为依赖故障有效RED；
+改用不依赖角色权限表的合法部门创建请求，在旧生产代码上单独补验。过滤器通过既有MVC异常解析器
+映射身份附着阶段的DomainException，设置no-store/nosniff，不捕获下游controller/filter异常。
+`ptmcp-admin-scope-dependency-red.log`取得有效RED：1 test/1 failure/0 errors/0 skipped，
+2026-10-30 03:55:05 +08:00，权限表不可用时旧会话仍成功创建部门（预期503、实际201）。
+该例使用隔离MySQL临时重命名权限表并在finally恢复，不影响开发库。
 
 双库 CAS 首次 GREEN：`ptmcp-identity-cas-green.log`，10 tests / 0 failures/errors/skipped，BUILD SUCCESS。
 独立实际 diff 复审未发现迟到写/提交不明新增高危阻断；发现恢复 hash 长期保留、控制器 epoch 字段错配及并发完成额外 epoch，已补回归和修复，重验进行中。

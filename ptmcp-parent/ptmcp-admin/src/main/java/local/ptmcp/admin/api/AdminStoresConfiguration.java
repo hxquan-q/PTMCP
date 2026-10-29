@@ -32,11 +32,13 @@ import local.ptmcp.persistence.schema.MetadataSyncJobRunner;
 import local.ptmcp.persistence.schema.MetadataSyncJobStore;
 import local.ptmcp.persistence.schema.SchemaSnapshotStore;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import javax.sql.DataSource;
 
@@ -242,9 +244,10 @@ public class AdminStoresConfiguration {
 
     @Bean
     public FilterRegistrationBean<SessionAuthFilter> sessionAuthFilter(
-            AdminSessionService sessions) {
+            AdminSessionService sessions,
+            @Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptions) {
         FilterRegistrationBean<SessionAuthFilter> registration =
-                new FilterRegistrationBean<>(new SessionAuthFilter(sessions));
+                new FilterRegistrationBean<>(new SessionAuthFilter(sessions, exceptions));
         registration.addUrlPatterns("/api/v1/*");
         registration.setOrder(10);
         return registration;

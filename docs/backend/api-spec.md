@@ -54,11 +54,16 @@ POST 创建/启动任务/撤销/解密动作使用 Idempotency-Key（客户端�
 | --- | --- | --- |
 | GET /session/csrf | 可匿名，same-origin | {csrfToken,expiresAt}，绑定短期预会话Cookie；no-store，不通过可跨站脚本公开 |
 | POST /session/login | CSRF；{username,password} | {userId,displayName,expiresAt}；设置 PTMCP_ADMIN_SESSION HttpOnly/Secure/SameSite=Lax Cookie；失败不区分不存在/密码错误，401 AUTHENTICATION_FAILED；5次错误锁10分钟429 LOGIN_LOCKED；成功轮换session和CSRF |
-| GET /session/me | ADMIN Cookie | {userId,username,displayName,department:{id,name},roles:[{id,name}],permissions:[code],managedScopes:[...],expiresAt}；不返回密码/token |
+| GET /session/me | ADMIN Cookie | {userId,username,displayName,department:{id,name},roles:[{id,name}],permissions:[code],managedScopes:[...],platformAdmin,expiresAt}；不返回密码/token |
 | POST /session/logout | Cookie+CSRF；{} | {loggedOut:true}；注销当前会话并清Cookie；无会话仍返回已退出，不可借此查询账户 |
 | PUT /session/password | Cookie+CSRF；{oldPassword,newPassword} | {reauthenticationRequired:true}；BCrypt校验旧密码，新密码12～64字符且UTF-8≤72字节，禁止与旧密码相同；提高auth_version并撤销本人全部ADMIN/AS/OAuth/PAT；完成后清Cookie |
 
 用户名1～30 ASCII字母数字下划线点横线，登录以规范小写查唯一索引；迁移已有账号需显式处理。创建/修改/重置密码统一12～64字符且UTF-8≤72字节，BCrypt沿用若依算法，不能静默截断或引入未定义预哈希。AS登录是独立页面/过滤链与 PTMCP_AS_SESSION，不共享以上cookie。
+
+ADMIN Cookie每次请求均在会话索引/权威版本通过后，从主库当前成员、有效角色及功能码重算平台管理员资格；
+资格解析只缓存本请求，不续期或轮换CSRF。`/session/me`返回的platformAdmin与其本次permissions一致。
+资格依赖不可用时，过滤器在管理操作前返回503 SECURITY_STATE_UNAVAILABLE，带no-store/nosniff。
+此请求入口核验不代替安全写入事务提交前的操作者授权重验。
 
 ## 4. 管理端资源 DTO
 

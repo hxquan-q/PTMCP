@@ -237,7 +237,7 @@ public final class AdminSessionService {
                 roles,
                 permissions,
                 managedScopes(session.userId()),
-                session.platformAdmin(),
+                permissions.contains(PLATFORM_SCOPE_PERMISSION),
                 session.expiresAt());
     }
 
@@ -362,7 +362,23 @@ public final class AdminSessionService {
     }
 
     public boolean platformAdmin(long userId) {
-        return permissions(userId).contains(PLATFORM_SCOPE_PERMISSION);
+        try (Connection connection = primary.getConnection();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "SELECT 1 FROM sys_user_role ur"
+                                        + " JOIN sys_role r ON r.role_id = ur.role_id"
+                                        + " JOIN sys_role_permission rp ON rp.role_id = r.role_id"
+                                        + " WHERE ur.user_id = ? AND r.status = '0'"
+                                        + " AND r.del_flag = '0' AND rp.permission_code = ? LIMIT 1")) {
+            statement.setQueryTimeout(5);
+            statement.setLong(1, userId);
+            statement.setString(2, PLATFORM_SCOPE_PERMISSION);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next();
+            }
+        } catch (SQLException failure) {
+            throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+        }
     }
 
     private SessionEntry resolveSession(HttpServletRequest request) {
@@ -387,7 +403,16 @@ public final class AdminSessionService {
             sessions.remove(key);
             return null;
         }
-        return session;
+        SessionEntry current =
+                new SessionEntry(
+                        session.userId(),
+                        session.authVersion(),
+                        platformAdmin(session.userId()),
+                        session.issuedAt(),
+                        session.expiresAt(),
+                        session.csrfToken());
+        request.setAttribute(SESSION_ATTRIBUTE, current);
+        return current;
     }
 
     private void revokeSessionMemory(HttpServletRequest request) {

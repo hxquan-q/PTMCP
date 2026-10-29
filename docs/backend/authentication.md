@@ -30,7 +30,13 @@ authVersion/identityVersion、ADMIN/AS索引、PAT、OAuth family/authorization�
 同值/普通资料不额外撤证，UNBOUND不因启停变READY，Pending拒绝，提交结果不明返回OPERATION_UNKNOWN。
 真实MySQL的失败回滚、并发版本与106项Org/Admin/Session/OAuth组合结果见
 [网关收尾工作项](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
-这仅证明已验证切片；最后有效管理员并发保护、ADMIN管理员资格逐请求重算、可信账号供应和共享登录限流仍待完成。
+ADMIN会话的管理员资格在每个新请求验证会话索引/权威用户版本后，由主库当前成员关系、有效角色和
+`ptmcp:platform:scope`重算。资格解析只缓存本请求，不回写共享会话，不延长绝对期限或轮换CSRF；
+显式CSRF轮换仍保留既有行为。`/session/me`的platformAdmin与其本次permissions一致。
+权限依赖不可用时，身份附着过滤器使用既有错误映射返回503 SECURITY_STATE_UNAVAILABLE，
+设置no-store/nosniff并停止进入管理操作，不沿用登录时资格。
+这仅证明已验证切片；最后有效管理员并发保护、可信账号供应和共享登录限流仍待完成。
+逐请求核验也不代替安全写入事务提交前的操作者授权重验。
 
 ## 3. 平台Tier与每请求来源证明
 

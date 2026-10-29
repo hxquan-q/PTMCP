@@ -346,6 +346,133 @@ class SessionApiTest {
     }
 
     @Test
+    void platformAdminSessionLosesScopeAfterMembershipRemoval() throws Exception {
+        assertScopeRevokedBy("DELETE FROM sys_user_role WHERE user_id = " + ALICE);
+    }
+
+    @Test
+    void platformAdminSessionLosesScopeAfterRoleDisabled() throws Exception {
+        assertScopeRevokedBy("UPDATE sys_role SET status = '1' WHERE role_key = 'portal-user'");
+    }
+
+    @Test
+    void platformAdminSessionLosesScopeAfterRoleSoftDeleted() throws Exception {
+        assertScopeRevokedBy("UPDATE sys_role SET del_flag = '1' WHERE role_key = 'portal-user'");
+    }
+
+    @Test
+    void platformAdminSessionLosesScopeAfterPermissionRemoval() throws Exception {
+        assertScopeRevokedBy(
+                "DELETE FROM sys_role_permission WHERE permission_code = 'ptmcp:platform:scope'");
+    }
+
+    @Test
+    void platformAdminScopeGrantedAfterLoginAppliesWithoutRenewingSession() throws Exception {
+        seedPortal();
+        Session session = login("bob", PASSWORD);
+        String expiresAt = assertSessionScope(session, false, null);
+        String index = sessionIndexSnapshot(BOB);
+        long roleId = Long.parseLong(scalar("SELECT role_id FROM sys_role WHERE role_key = 'portal-user'"));
+        addUserRole(BOB, roleId);
+        assertSessionScope(session, true, expiresAt);
+        assertEquals(index, sessionIndexSnapshot(BOB));
+        mockMvc.perform(
+                        post("/api/v1/session/logout")
+                                .cookie(session.cookie())
+                                .header("X-CSRF-Token", session.csrf()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void platformAdminScopeLookupFailureRejectsBeforeManagementWrite() throws Exception {
+        seedPortal();
+        Session session = login("alice", PASSWORD);
+        String index = sessionIndexSnapshot(ALICE);
+        String operations = scalar("SELECT COUNT(*) FROM admin_operation_log");
+        executeSql("RENAME TABLE sys_role_permission TO session_test_unavailable_permission");
+        try {
+            MvcResult result =
+                    mockMvc.perform(
+                                    post("/api/v1/admin/departments")
+                                            .cookie(session.cookie())
+                                            .header("X-CSRF-Token", session.csrf())
+                                            .header("Idempotency-Key", UUID.randomUUID().toString())
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(
+                                                    "{\"name\":\"scope_failure_probe\",\"enabled\":true}"))
+                            .andExpect(status().isServiceUnavailable())
+                            .andExpect(jsonPath("$.code").value("SECURITY_STATE_UNAVAILABLE"))
+                            .andExpect(jsonPath("$.retryable").value(true))
+                            .andExpect(header().string("Cache-Control", "no-store"))
+                            .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                            .andExpect(header().exists("X-Request-Id"))
+                            .andReturn();
+            assertFalse(result.getResponse().getContentAsString().contains("sys_role_permission"));
+            assertFalse(result.getResponse().getContentAsString().contains("SQLException"));
+            assertEquals("0", scalar("SELECT COUNT(*) FROM sys_dept WHERE dept_name = 'scope_failure_probe'"));
+            assertEquals(operations, scalar("SELECT COUNT(*) FROM admin_operation_log"));
+            assertEquals(index, sessionIndexSnapshot(ALICE));
+        } finally {
+            executeSql("RENAME TABLE session_test_unavailable_permission TO sys_role_permission");
+        }
+        assertSessionScope(session, true, null);
+    }
+
+    private void assertScopeRevokedBy(String mutation) throws Exception {
+        seedPortal();
+        Session session = login("alice", PASSWORD);
+        String expiresAt = assertSessionScope(session, true, null);
+        String index = sessionIndexSnapshot(ALICE);
+        executeSql(mutation);
+        assertSessionScope(session, false, expiresAt);
+        assertEquals(index, sessionIndexSnapshot(ALICE));
+        mockMvc.perform(
+                        post("/api/v1/session/logout")
+                                .cookie(session.cookie())
+                                .header("X-CSRF-Token", session.csrf()))
+                .andExpect(status().isOk());
+    }
+
+    private String assertSessionScope(Session session, boolean expected, String originalExpiresAt)
+            throws Exception {
+        MvcResult me =
+                mockMvc.perform(get("/api/v1/session/me").cookie(session.cookie()))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.platformAdmin").value(expected))
+                        .andExpect(header().doesNotExist("Set-Cookie"))
+                        .andReturn();
+        JsonNode data = json(me);
+        assertEquals(
+                expected,
+                data.get("permissions").toString().contains("\"ptmcp:platform:scope\""));
+        String expiresAt = data.get("expiresAt").asString();
+        if (originalExpiresAt != null) {
+            assertEquals(originalExpiresAt, expiresAt);
+        }
+        MvcResult management =
+                mockMvc.perform(get("/api/v1/admin/roles").cookie(session.cookie()))
+                        .andExpect(expected ? status().isOk() : status().isForbidden())
+                        .andReturn();
+        if (!expected) {
+            assertEquals("MANAGEMENT_SCOPE_DENIED", json(management).get("code").asString());
+        }
+        return expiresAt;
+    }
+
+    private static String sessionIndexSnapshot(long userId) throws SQLException {
+        return scalar(
+                "SELECT CONCAT_WS('|', HEX(session_hash), auth_version, version,"
+                        + " issued_at, expires_at, revoked_at) FROM web_session_index"
+                        + " WHERE kind = 'ADMIN' AND user_id = " + userId);
+    }
+
+    private static void executeSql(String sql) throws SQLException {
+        try (Connection connection = connect(); Statement statement = connection.createStatement()) {
+            statement.execute(sql);
+        }
+    }
+
+    @Test
     void aHostIdCollisionCannotAuthenticateAnotherLoginName() throws Exception {
         seedPortal();
         try (Connection connection = connect();

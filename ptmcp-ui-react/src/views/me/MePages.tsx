@@ -29,6 +29,8 @@ import {
 } from '../../services/access';
 import type { MetadataObject } from '../../services/data';
 import { mePortalApi, type DatasourceItem, type DictionaryItem, type PlatformItem } from '../../services/mePortalApi';
+import { changePassword } from '../../services/session';
+import { validatePasswordForm } from './passwordForm';
 import { BackBar } from '../admin/DetailPages';
 
 function fmt(at: string | null | undefined): string {
@@ -806,6 +808,9 @@ export function HistoryPage() {
 
 export function SecurityPage() {
   const [platforms, setPlatforms] = useState<{ items: { id: string; name: string; tier: number }[] } | null>(null);
+  const [pwForm, setPwForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwError, setPwError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -836,8 +841,68 @@ export function SecurityPage() {
         ) : (
           <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>加载接入上下文…</p>
         )}
-        <div style={{ marginTop: 14 }}>
-          <Alert kind="info">修改密码与会话管理暂未在预览模式提供;接入线上环境后通过会话管理页操作。</Alert>
+      </div>
+      <div className="table-card" style={{ padding: '16px 18px', maxWidth: 640, marginTop: 14 }}>
+        <strong style={{ fontSize: 14, color: 'var(--ptmcp-heading)' }}>修改密码</strong>
+        <p style={{ margin: '6px 0 12px', fontSize: 12.5, color: 'var(--ptmcp-text-muted)' }}>
+          修改成功后，当前账号的其他会话、PAT 与客户端授权会按服务端规则失效，需要重新登录。
+        </p>
+        <Field label="当前密码">
+          <TextInput
+            value={pwForm.oldPassword}
+            onChange={(v) => setPwForm((f) => ({ ...f, oldPassword: v }))}
+            type="password"
+            autoComplete="current-password"
+          />
+        </Field>
+        <Field label="新密码" hint="12～64 个字符，UTF-8 不超过 72 字节">
+          <TextInput
+            value={pwForm.newPassword}
+            onChange={(v) => setPwForm((f) => ({ ...f, newPassword: v }))}
+            type="password"
+            autoComplete="new-password"
+          />
+        </Field>
+        <Field label="确认新密码">
+          <TextInput
+            value={pwForm.confirmPassword}
+            onChange={(v) => setPwForm((f) => ({ ...f, confirmPassword: v }))}
+            type="password"
+            autoComplete="new-password"
+          />
+        </Field>
+        {pwError ? <Alert kind="danger">{pwError}</Alert> : null}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
+          <button
+            className="btn btn--secondary"
+            onClick={() => setPwForm({ oldPassword: '', newPassword: '', confirmPassword: '' })}
+            disabled={pwSaving}
+          >
+            清空
+          </button>
+          <button
+            className="btn btn--primary"
+            disabled={pwSaving}
+            onClick={async () => {
+              setPwError('');
+              const err = validatePasswordForm(pwForm);
+              if (err) {
+                setPwError(err);
+                return;
+              }
+              setPwSaving(true);
+              try {
+                await changePassword(pwForm.oldPassword, pwForm.newPassword);
+                setPwForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
+              } catch (e) {
+                setPwError(e instanceof Error ? e.message : '修改失败，请稍后重试。');
+              } finally {
+                setPwSaving(false);
+              }
+            }}
+          >
+            {pwSaving ? '提交中…' : '修改密码'}
+          </button>
         </div>
       </div>
     </>
