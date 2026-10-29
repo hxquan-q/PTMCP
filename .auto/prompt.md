@@ -38,6 +38,11 @@ frontendPreview`（仅预览模式放行）把真实模式全部禁用。每个�
   ACL effective、审计解密）。
 - `ptmcp-parent/ptmcp-persistence/**` — 新增 Store/仓储时（跟随切片，小步）。
 - `ptmcp-ui/src/**` — 页面、服务层、契约测试（`ptmcp-ui/tests/`）。
+- `ptmcp-ui-react/**`（2026-10-30 起，用户指定 React 接管主线）：页面、服务层、
+  契约测试（`ptmcp-ui-react/tests/`）。每切片 = 页面对齐 Vue/设计稿能力 +
+  纯函数/契约测试；检查门禁含 `pnpm --dir ptmcp-ui-react check`。
+  遗留主战场：个人令牌创建/一次性展示、授权管理页操作、窄屏与键盘可达性自查、
+  真实后端（非 preview）联调。
 - `tasks/work-items/T17-*.md` 等 — 切片交接记录（每切片更新）。
 - `.auto/**` — 会话文件。
 
