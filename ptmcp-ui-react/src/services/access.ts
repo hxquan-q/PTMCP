@@ -315,6 +315,20 @@ export function listAudit(params: AuditQuery = {}, signal?: AbortSignal): Promis
   return getPage(`/api/v1/admin/audit?${q}`, signal);
 }
 
+export interface SensitiveAccessRow {
+  id: string;
+  operatorId: string;
+  reason: string;
+  fields: string[];
+  createdAt: string;
+}
+
+/** 审计解密的访问留痕：谁、何时、以何理由解密了哪些字段。 */
+export async function listSensitiveAccess(requestId: string, signal?: AbortSignal): Promise<SensitiveAccessRow[]> {
+  const { data } = await request<SensitiveAccessRow[]>(`/api/v1/admin/audit/${encodeURIComponent(requestId)}/sensitive-access`, { signal });
+  return data;
+}
+
 /* 触发一次数据源连通性测试,返回落库的 TEST 任务(含真实 state)。可选 draft 让服务端按内存中的表单(而非已落库行)验证。 */
 export async function testDatasource(id: string, draft?: unknown, signal?: AbortSignal): Promise<JobRow> {
   const { data } = await request<JobRow>(`/api/v1/admin/datasources/${id}/test`, { method: 'POST', body: draft ? { draft } : {}, signal });

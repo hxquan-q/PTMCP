@@ -80,6 +80,9 @@ BUILD SUCCESS/exit0，2026-10-30 04:42:23 +08:00，Admin24+Session1共25项，
 0 failures/0 errors/0 skipped。覆盖全部58条真实路由合同、未声明handler零副作用、
 成员/角色/动作撤销、撤码后的幂等重放、解密隔离和真实Cookie/CSRF/个人入口。
 管理API、用户存储/安全状态、身份恢复、OAuth与MCP HTTP的组合回归及实际独立只读终审仍在进行。
+首轮组合`ptmcp-admin-action-combined-green.log`在SecurityState13与Org23通过后外部中断，
+04:47:35的Surefire记录为EOF与Maven shutdown hook；进程和执行句柄均已消失，
+没有完整退出/测试汇总，不计产品失败或组合GREEN。确认无残留构建后，改用独立后台进程重跑同一组合。
 
 身份组合 GREEN：`ptmcp-identity-combined-green.log` BUILD SUCCESS，78 tests / 0 failures/errors/skipped；
 覆盖双 MySQL 改密恢复13、真实 ADMIN 改密HTTP2、Session8、Org13、SecurityState13、OAuth27及MCP HTTP2。

@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Badge, Dialog, DrawerFields, EmptyState, Field, PageHeader, Select, StatusDot, TextInput } from '../../components/common';
-import { getAudit, getJob, decryptAudit, testDatasource, type AuditDecryptResult, type AuditRow, type JobRow } from '../../services/access';
+import {
+  getAudit,
+  getJob,
+  decryptAudit,
+  listSensitiveAccess,
+  testDatasource,
+  type AuditDecryptResult,
+  type AuditRow,
+  type JobRow,
+  type SensitiveAccessRow,
+} from '../../services/access';
 import {
   DataRequestError,
   deleteDatasource,
@@ -166,6 +176,24 @@ export function JobDetailPage({ id }: { id: string }) {
 /* ─── 审计详情:/admin/audit/{requestId} ─── */
 export function AuditDetailPage({ id }: { id: string }) {
   const [decryptOpen, setDecryptOpen] = useState(false);
+  const [trail, setTrail] = useState<SensitiveAccessRow[]>([]);
+  const [trailLoading, setTrailLoading] = useState(false);
+  const [trailError, setTrailError] = useState('');
+  const loadTrail = useCallback((requestId: string) => {
+    setTrailLoading(true);
+    setTrailError('');
+    listSensitiveAccess(requestId)
+      .then(setTrail)
+      .catch((e) => {
+        setTrail([]);
+        setTrailError(e instanceof Error ? e.message : '访问留痕读取失败。');
+      })
+      .finally(() => setTrailLoading(false));
+  }, []);
+  useEffect(() => {
+    setTrail([]);
+    loadTrail(id);
+  }, [id, loadTrail]);
   const [row, setRow] = useState<AuditRow | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -246,9 +274,53 @@ export function AuditDetailPage({ id }: { id: string }) {
               >
                 {row.sqlMasked}
               </pre>
-              <AuditDecryptDialog open={decryptOpen} requestId={row.requestId} onClose={() => setDecryptOpen(false)} />
+              <AuditDecryptDialog
+                open={decryptOpen}
+                requestId={row.requestId}
+                onDecrypted={() => loadTrail(row.requestId)}
+                onClose={() => setDecryptOpen(false)}
+              />
             </div>
           ) : null}
+          <div className="table-card" style={{ padding: '16px 18px', maxWidth: 860, marginBottom: 14 }}>
+            <strong style={{ fontSize: 14, color: 'var(--ptmcp-heading)' }}>解密访问记录</strong>
+            <p style={{ margin: '6px 0 10px', fontSize: 12.5, color: 'var(--ptmcp-text-muted)' }}>
+              每次解密都会留痕：操作者、时间、理由与字段。留痕本身不可删除。
+            </p>
+            {trailError ? <Alert kind="danger">{trailError}</Alert> : null}
+            {trailLoading ? <Alert kind="info">读取访问留痕…</Alert> : null}
+            {!trailLoading && !trailError && trail.length === 0 ? (
+              <p style={{ margin: 0, fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>尚无解密记录。</p>
+            ) : null}
+            {trail.length ? (
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>时间</th>
+                    <th>操作者</th>
+                    <th>理由</th>
+                    <th>字段</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trail.map((t) => (
+                    <tr key={t.id}>
+                      <td style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{fmt(t.createdAt)}</td>
+                      <td>用户 {t.operatorId}</td>
+                      <td style={{ maxWidth: 360 }}>{t.reason}</td>
+                      <td>
+                        {(t.fields ?? []).map((f) => (
+                          <Badge key={f} tone="neutral">
+                            {f}
+                          </Badge>
+                        ))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : null}
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginTop: 14 }}>
             {[
               { label: '总耗时', value: row.durationMs != null ? `${row.durationMs} ms` : '—' },
@@ -947,7 +1019,17 @@ export function DatasourceDetailPage({ id }: { id: string }) {
 }
 
 /** 审计解密弹窗：理由（10–500）+ 字段选择；明文 30s 倒计时后自动清除（aria-live 播报）。 */
-export function AuditDecryptDialog({ open, requestId, onClose }: { open: boolean; requestId: string; onClose: () => void }) {
+export function AuditDecryptDialog({
+  open,
+  requestId,
+  onClose,
+  onDecrypted,
+}: {
+  open: boolean;
+  requestId: string;
+  onClose: () => void;
+  onDecrypted?: () => void;
+}) {
   const [reason, setReason] = useState('');
   const [fields, setFields] = useState<string[]>(['sqlRaw']);
   const [result, setResult] = useState<AuditDecryptResult | null>(null);
@@ -983,6 +1065,7 @@ export function AuditDecryptDialog({ open, requestId, onClose }: { open: boolean
     try {
       const data = await decryptAudit(requestId, reason.trim(), fields);
       setResult(data);
+      onDecrypted?.();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '解密失败，请稍后重试。');
     } finally {
