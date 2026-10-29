@@ -126,6 +126,12 @@ host/port先做DNS与网络目的地策略验证，拒绝云元数据/loopback�
 
 身份绑定：新建用户为 UNBOUND；宿主供应/显式导入闭环前，登录、改密和发证均拒绝。普通资料编辑不改变绑定状态；当前尚无供应转换接口。已有 READY/Pending 也核对宿主 ID 与元库规范化登录名，不符时不自动重绑。
 
+启停实现：通用PUT与专用status共用OrgStore；ACTIVE/DISABLED实际变化与profile/roles、
+authVersion/identityVersion、ADMIN/AS/PAT/OAuth撤销、epoch、事件和操作日志在同一元库事务提交。
+启用不恢复旧凭证，相同状态/普通资料保存不额外撤证；提交回包丢失返回409 OPERATION_UNKNOWN，禁止自动重放。
+阶段验证见[网关收尾工作项](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
+表中最后有效平台管理员保护仍是未完成的验收要求，当前实现尚缺跨所有权限变更入口的并发保护。
+
 身份恢复补充：CHANGE_PENDING 期间用户资料、角色、部门与状态写入返回409 VERSION_CONFLICT，
 先用当前 GET identity 的版本完成恢复再编辑；已完成恢复也拒绝过期 If-Match。
 Cookie 管理写的 Origin/Referer 必须与请求的 scheme/host/port 一致；Sec-Fetch-Site 只接受 same-origin/none。

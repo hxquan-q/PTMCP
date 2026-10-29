@@ -53,8 +53,11 @@ async function write<T>(
   return normalizeOrgResponse(path, data) as T;
 }
 
-export function listUsers(signal?: AbortSignal): Promise<UserRow[]> {
-  return get<UserRow[]>('/api/v1/admin/users?pageSize=100', signal);
+export function listUsers(params: { departmentId?: string; keyword?: string; signal?: AbortSignal } = {}): Promise<UserRow[]> {
+  const q = new URLSearchParams({ pageSize: '100' });
+  if (params.departmentId) q.set('departmentId', params.departmentId);
+  if (params.keyword) q.set('keyword', params.keyword);
+  return get<UserRow[]>(`/api/v1/admin/users?${q}`, params.signal);
 }
 
 export function listRoles(signal?: AbortSignal): Promise<RoleRow[]> {

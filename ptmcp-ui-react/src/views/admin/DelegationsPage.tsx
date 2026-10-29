@@ -18,12 +18,24 @@ export function DelegationsPage() {
   const [revokingId, setRevokingId] = useState('');
   const [creating, setCreating] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
+  const [userFilter, setUserFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [resourceTypeFilter, setResourceTypeFilter] = useState('');
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const filterParams = () => ({
+    userId: userFilter || undefined,
+    status: statusFilter || undefined,
+    resourceType: resourceTypeFilter || undefined,
+    pageSize: 20,
+  });
 
   const load = () => {
     setLoading(true);
-    Promise.all([listDelegations({ pageSize: 200 }), listUsers(), listDepartments()])
+    Promise.all([listDelegations(filterParams()), listUsers(), listDepartments()])
       .then(([page, us, ds]) => {
         setRows(page.items);
+        setNextCursor(page.nextCursor);
         setUsers(us);
         setDepts(ds);
       })
@@ -37,7 +49,7 @@ export function DelegationsPage() {
 
   useEffect(() => {
     load();
-  }, [reloadTick]);
+  }, [reloadTick, userFilter, statusFilter, resourceTypeFilter]);
 
   const revoke = (id: string) => {
     setRevokingId(id);
@@ -69,7 +81,38 @@ export function DelegationsPage() {
             flex: 'none',
           }}
         >
-          <span style={{ fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>共 {rows.length} 条委派</span>
+          <Select
+            value={userFilter}
+            onChange={setUserFilter}
+            label="管理员"
+            width={160}
+            options={[
+              { value: '', label: '全部管理员' },
+              ...users.filter((u) => u.enabled).map((u) => ({ value: u.id, label: u.displayName || u.username })),
+            ]}
+          />
+          <Select
+            value={statusFilter}
+            onChange={setStatusFilter}
+            label="状态"
+            width={120}
+            options={[
+              { value: '', label: '全部状态' },
+              { value: 'ACTIVE', label: '生效中' },
+              { value: 'REVOKED', label: '已撤销' },
+            ]}
+          />
+          <Select
+            value={resourceTypeFilter}
+            onChange={setResourceTypeFilter}
+            label="资源类型"
+            width={140}
+            options={[
+              { value: '', label: '全部类型' },
+              { value: 'DATASOURCE', label: '数据源' },
+            ]}
+          />
+          <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>已加载 {rows.length} 条委派</span>
         </div>
         <div className="table-scroll">
           <table className="data-table">
@@ -129,7 +172,33 @@ export function DelegationsPage() {
               })}
             </tbody>
           </table>
-          {!loading && rows.length === 0 ? <EmptyState title="暂无委派" description="点击右上角「新建委派」创建第一条委派。" /> : null}
+          {!loading && rows.length === 0 ? <EmptyState title="暂无委派" description="调整筛选条件，或点击右上角「新建委派」。" /> : null}
+        </div>
+        <div className="table-footer" style={{ justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
+            已加载 {rows.length} 条{nextCursor ? ' · 可能还有更多' : ''}
+          </span>
+          {loading ? null : nextCursor ? (
+            <button
+              className="btn btn--secondary"
+              disabled={loadingMore}
+              onClick={() => {
+                if (!nextCursor || loadingMore) return;
+                setLoadingMore(true);
+                listDelegations({ ...filterParams(), cursor: nextCursor })
+                  .then((p) => {
+                    setRows((prev) => [...prev, ...p.items]);
+                    setNextCursor(p.nextCursor);
+                  })
+                  .catch(() => undefined)
+                  .finally(() => setLoadingMore(false));
+              }}
+            >
+              {loadingMore ? '加载中…' : '加载更多'}
+            </button>
+          ) : (
+            <span style={{ fontSize: 12, color: 'var(--ptmcp-text-faint)' }}>没有更多了</span>
+          )}
         </div>
       </div>
 

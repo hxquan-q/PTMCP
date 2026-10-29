@@ -122,8 +122,20 @@ authVersion/identityVersion、ADMIN/AS/PAT/OAuth撤销、epoch、事件及操作
 有效RED：`ptmcp-user-status-red.log` BUILD FAILURE/exit1，2026-10-30 03:30:16 +08:00，
 7 tests /5 failures /0 errors /0 skipped；分别复现权限版本未提升、UNBOUND版本未提升、
 事件失败未触发回滚、版本耗尽未拒绝、真实commit后丢失确认仍错误返回DEPENDENCY_UNAVAILABLE。
-同状态/普通资料不撤证及冲突/Pending零副作用两例通过。生产补丁已接入既有安全事务，
-下一步完整Org/Admin/Session/OAuth组合验证和独立复审，尚未取得本片GREEN。
+同状态/普通资料不撤证及冲突/Pending零副作用两例通过。生产补丁已接入既有安全事务。
+最终GREEN：`ptmcp-user-status-green-final.log` BUILD SUCCESS/exit0，2026-10-30 03:42:57 +08:00，
+Org23、Admin43、Session11、OAuth29，共106 tests，0失败/错误/跳过。
+新增两项真实MySQL闩锁回归覆盖捕获后的profile/authority/Pending变化及同值ACTIVE保存与并发停用；
+旧命令必须VERSION_CONFLICT，完整profile/roles/authority/epoch/event/log和五域凭证快照不变。
+首轮75项GREEN没有运行authz，最终组合已补OAuth29；最终命令误写不存在的McpHttpEndpointTest，
+gateway只完成编译、没有运行MCP HTTP测试，不能把该项计作通过，后续使用McpHttpBoundaryTest补验。
+本片独立只读复审已实际核阅最终106项GREEN日志与源码，未发现新增阻断；未重复运行动态测试。
+结论不代替最后有效管理员、供应或完整身份验收。
+
+下一切片：ADMIN平台管理员资格逐请求从当前主库有效角色/成员/功能码重算，仅缓存本请求，
+保留原session ID/CSRF/绝对期限；真实Cookie回归先复现撤成员、停/软删角色、删scope后的旧会话越权，
+再覆盖新授资格与权限依赖故障。权限读取失败须在过滤链拒绝并返回稳定错误。
+本片不代替安全写入事务内actor重验、最后有效管理员保护或多副本会话内容共享。
 
 双库 CAS 首次 GREEN：`ptmcp-identity-cas-green.log`，10 tests / 0 failures/errors/skipped，BUILD SUCCESS。
 独立实际 diff 复审未发现迟到写/提交不明新增高危阻断；发现恢复 hash 长期保留、控制器 epoch 字段错配及并发完成额外 epoch，已补回归和修复，重验进行中。

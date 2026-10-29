@@ -206,11 +206,13 @@ function adaptMetadataPage(dto: { items: (MetadataObject & { id: string | number
 
 export async function listMetadata(params: {
   datasourceId: string;
+  keyword?: string;
   pageSize?: number;
   cursor?: string;
   signal?: AbortSignal;
 }): Promise<ApiResult<MetadataPage>> {
   const query = new URLSearchParams({ datasourceId: params.datasourceId, pageSize: String(params.pageSize ?? 100) });
+  if (params.keyword) query.set('keyword', params.keyword);
   if (params.cursor) query.set('cursor', params.cursor);
   return adaptedRequest(`/api/v1/admin/metadata/objects?${query}`, { signal: params.signal }, adaptMetadataPage);
 }

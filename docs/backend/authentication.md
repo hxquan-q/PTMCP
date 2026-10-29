@@ -25,6 +25,13 @@ ADMIN和AS session最长8小时，不因页面轮询无限续期；成功登录�
 宿主提交确认后仅当前 operation 可恢复 READY。Pending 不允许登录、签发或刷新；失败与提交不明通过管理员恢复入口重试持久目标，
 不能超时放行或用新密码覆盖未收敛操作。该协议替代原同库原子改密假设；正常改密不把账号status改DISABLED。停用/删除同样撤销但改变status/del_flag；重新启用也不能恢复旧令牌，必须重新登录/授权。
 
+当前实现证据：用户ACTIVE/DISABLED实际切换通过OrgStore同一元库安全事务更新profile/roles、
+authVersion/identityVersion、ADMIN/AS索引、PAT、OAuth family/authorization、epoch、事件和操作日志；
+同值/普通资料不额外撤证，UNBOUND不因启停变READY，Pending拒绝，提交结果不明返回OPERATION_UNKNOWN。
+真实MySQL的失败回滚、并发版本与106项Org/Admin/Session/OAuth组合结果见
+[网关收尾工作项](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
+这仅证明已验证切片；最后有效管理员并发保护、ADMIN管理员资格逐请求重算、可信账号供应和共享登录限流仍待完成。
+
 ## 3. 平台Tier与每请求来源证明
 
 平台是服务器分配的platform_id，与client注册/PAT绑定；任何工具入参或X-Platform-ID不能覆盖。请求Header若声明platform_id而与令牌绑定不符，直接403 PLATFORM_MISMATCH，不能“以Header为准”。平台Scope永远是授权上限。

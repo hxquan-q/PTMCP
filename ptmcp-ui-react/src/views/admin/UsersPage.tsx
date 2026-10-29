@@ -43,11 +43,13 @@ export function UsersPage() {
   const [reloadTick, setReloadTick] = useState(0);
   const debounced = useDebounced(keyword);
 
+  const [deptFilter, setDeptFilter] = useState('');
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setLoadError('');
-    Promise.all([listUsers(), listRoles(), listDepartments()])
+    Promise.all([listUsers({ departmentId: deptFilter || undefined, keyword: debounced.trim() || undefined }), listRoles(), listDepartments()])
       .then(([us, rs, ds]) => {
         if (cancelled) return;
         setRows(us);
@@ -64,7 +66,7 @@ export function UsersPage() {
     return () => {
       cancelled = true;
     };
-  }, [reloadTick]);
+  }, [reloadTick, deptFilter, debounced]);
 
   const reload = () => setReloadTick((t) => t + 1);
   const deptName = (id: string | null) => depts.find((d) => d.id === id)?.name ?? '—';
@@ -110,6 +112,13 @@ export function UsersPage() {
             flex: 'none',
           }}
         >
+          <Select
+            value={deptFilter}
+            onChange={setDeptFilter}
+            label="部门"
+            width={150}
+            options={[{ value: '', label: '全部部门' }, ...depts.map((d) => ({ value: d.id, label: d.name }))]}
+          />
           <SearchInput value={keyword} onChange={setKeyword} placeholder="搜索用户名或显示名…" width={260} />
           <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>共 {filtered.length} 个用户</span>
         </div>

@@ -801,8 +801,16 @@ public final class OrgStore {
                                 }
                                 UserRow written =
                                         applyUserUpdate(
-                                                connection, before, displayName, deptId, email,
-                                                phoneNumber, remark, enabled, roles, actorId);
+                                                connection,
+                                                before,
+                                                displayName,
+                                                deptId,
+                                                email,
+                                                phoneNumber,
+                                                remark,
+                                                enabled,
+                                                roles,
+                                                actorId);
                                 try (PreparedStatement statement =
                                         OrgSql.statement(
                                                 connection,
@@ -831,8 +839,16 @@ public final class OrgStore {
                 requireEditableIdentity(security);
                 UserRow updated =
                         applyUserUpdate(
-                                connection, before, displayName, deptId, email, phoneNumber,
-                                remark, enabled, roles, actorId);
+                                connection,
+                                before,
+                                displayName,
+                                deptId,
+                                email,
+                                phoneNumber,
+                                remark,
+                                enabled,
+                                roles,
+                                actorId);
                 connection.commit();
                 return updated;
             } catch (SQLException | RuntimeException failure) {
@@ -858,8 +874,16 @@ public final class OrgStore {
     }
 
     private UserRow applyUserUpdate(
-            Connection connection, UserRow before, String displayName, long deptId, String email,
-            String phoneNumber, String remark, Boolean enabled, List<Long> roles, long actorId)
+            Connection connection,
+            UserRow before,
+            String displayName,
+            long deptId,
+            String email,
+            String phoneNumber,
+            String remark,
+            Boolean enabled,
+            List<Long> roles,
+            long actorId)
             throws SQLException {
         requireDepartmentExists(connection, deptId);
         try (PreparedStatement statement =
@@ -897,9 +921,20 @@ public final class OrgStore {
             insertUserRoles(connection, before.id(), roles);
         }
         writeOperationLog(
-                connection, actorId, "USER_UPDATE", "USER", before.id(),
-                "{\"displayName\":\"" + displayName + "\",\"deptId\":" + deptId
-                        + ",\"enabled\":" + enabled + ",\"rolesChanged\":" + (roles != null) + "}");
+                connection,
+                actorId,
+                "USER_UPDATE",
+                "USER",
+                before.id(),
+                "{\"displayName\":\""
+                        + displayName
+                        + "\",\"deptId\":"
+                        + deptId
+                        + ",\"enabled\":"
+                        + enabled
+                        + ",\"rolesChanged\":"
+                        + (roles != null)
+                        + "}");
         return readUser(connection, before.id());
     }
 
@@ -948,38 +983,38 @@ public final class OrgStore {
     }
 
     private UserRow readUser(Connection connection, long id) throws SQLException {
-            UserRow row;
-            try (PreparedStatement statement =
-                    OrgSql.statement(
-                            connection,
-                            "SELECT p.user_id, l.normalized_name, p.display_name, p.dept_id, p.email,"
-                                    + " p.phone_number, p.remark, p.status, p.version"
-                                    + " FROM sys_user_profile p"
-                                    + " JOIN sys_user_login_name l ON l.user_id = p.user_id"
-                                    + " WHERE p.user_id = ?")) {
-                statement.setLong(1, id);
-                try (ResultSet result = statement.executeQuery()) {
-                    if (!result.next()) {
-                        throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
-                    }
-                    row =
-                            new UserRow(
-                                    result.getLong(1),
-                                    result.getString(2),
-                                    result.getString(3),
-                                    result.getLong(4),
-                                    result.getString(5),
-                                    result.getString(6),
-                                    result.getString(7),
-                                    "ACTIVE".equals(result.getString(8)),
-                                    new ArrayList<>(),
-                                    result.getLong(9));
+        UserRow row;
+        try (PreparedStatement statement =
+                OrgSql.statement(
+                        connection,
+                        "SELECT p.user_id, l.normalized_name, p.display_name, p.dept_id, p.email,"
+                                + " p.phone_number, p.remark, p.status, p.version"
+                                + " FROM sys_user_profile p"
+                                + " JOIN sys_user_login_name l ON l.user_id = p.user_id"
+                                + " WHERE p.user_id = ?")) {
+            statement.setLong(1, id);
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
                 }
+                row =
+                        new UserRow(
+                                result.getLong(1),
+                                result.getString(2),
+                                result.getString(3),
+                                result.getLong(4),
+                                result.getString(5),
+                                result.getString(6),
+                                result.getString(7),
+                                "ACTIVE".equals(result.getString(8)),
+                                new ArrayList<>(),
+                                result.getLong(9));
             }
-            Map<Long, UserRow> rows = new LinkedHashMap<>();
-            rows.put(id, row);
-            appendUserRoles(connection, rows);
-            return row;
+        }
+        Map<Long, UserRow> rows = new LinkedHashMap<>();
+        rows.put(id, row);
+        appendUserRoles(connection, rows);
+        return row;
     }
 
     // ---- internal ----------------------------------------------------------

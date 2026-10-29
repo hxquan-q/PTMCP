@@ -244,10 +244,15 @@ export function deleteClient(id: string, version: string | number): Promise<void
   return writeRow<void>(`/api/v1/admin/clients/${encodeURIComponent(id)}`, { method: 'DELETE', kind: 'delete', version });
 }
 
-export function listDelegations(params?: { userId?: string; pageSize?: number; signal?: AbortSignal }): Promise<Page<DelegationRow>> {
-  const q = new URLSearchParams({ pageSize: String(params?.pageSize ?? 100) });
-  if (params?.userId) q.set('userId', params.userId);
-  return getPage(`/api/v1/admin/delegations?${q}`, params?.signal);
+export function listDelegations(
+  params: { userId?: string; status?: string; resourceType?: string; cursor?: string; pageSize?: number; signal?: AbortSignal } = {},
+): Promise<Page<DelegationRow>> {
+  const q = new URLSearchParams({ pageSize: String(params.pageSize ?? 20) });
+  if (params.userId) q.set('userId', params.userId);
+  if (params.status) q.set('status', params.status);
+  if (params.resourceType) q.set('resourceType', params.resourceType);
+  if (params.cursor) q.set('cursor', params.cursor);
+  return getPage(`/api/v1/admin/delegations?${q}`, params.signal);
 }
 
 export interface DelegationWrite {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Badge, EmptyState, PageHeader, SearchInput, Select, StatusDot, useDebounced } from '../../components/common';
 import { listDatasources, listMetadata, type DatasourceRead, type MetadataObject } from '../../services/data';
 
@@ -8,6 +8,8 @@ export function MetadataPage() {
   const [rows, setRows] = useState<MetadataObject[]>([]);
   const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const debounced = useDebounced(keyword);
 
   useEffect(() => {
@@ -32,25 +34,25 @@ export function MetadataPage() {
     }
     let cancelled = false;
     setLoading(true);
-    listMetadata({ datasourceId, pageSize: 200 })
-      .then(({ data }) => !cancelled && setRows(data.items))
-      .catch(() => !cancelled && setRows([]))
+    listMetadata({ datasourceId, keyword: debounced.trim() || undefined, pageSize: 20 })
+      .then(({ data }) => {
+        if (cancelled) return;
+        setRows(data.items);
+        setNextCursor(data.nextCursor);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRows([]);
+          setNextCursor(null);
+        }
+      })
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [datasourceId]);
+  }, [datasourceId, debounced]);
 
-  const filtered = useMemo(
-    () =>
-      rows.filter(
-        (r) =>
-          !debounced ||
-          (r.objectName ?? '').toLowerCase().includes(debounced.toLowerCase()) ||
-          (r.tableName ?? '').toLowerCase().includes(debounced.toLowerCase()),
-      ),
-    [rows, debounced],
-  );
+  const filtered = rows;
 
   return (
     <>
@@ -116,6 +118,32 @@ export function MetadataPage() {
             </tbody>
           </table>
           {!loading && filtered.length === 0 ? <EmptyState title="没有匹配的元数据对象" description="调整搜索关键字或切换数据源。" /> : null}
+        </div>
+        <div className="table-footer" style={{ justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
+            已加载 {filtered.length} 个{nextCursor ? ' · 可能还有更多' : ''}
+          </span>
+          {loading ? null : nextCursor ? (
+            <button
+              className="btn btn--secondary"
+              disabled={loadingMore}
+              onClick={() => {
+                if (!nextCursor || loadingMore) return;
+                setLoadingMore(true);
+                listMetadata({ datasourceId, keyword: debounced.trim() || undefined, cursor: nextCursor, pageSize: 20 })
+                  .then(({ data }) => {
+                    setRows((prev) => [...prev, ...data.items]);
+                    setNextCursor(data.nextCursor);
+                  })
+                  .catch(() => undefined)
+                  .finally(() => setLoadingMore(false));
+              }}
+            >
+              {loadingMore ? '加载中…' : '加载更多'}
+            </button>
+          ) : (
+            <span style={{ fontSize: 12, color: 'var(--ptmcp-text-faint)' }}>没有更多了</span>
+          )}
         </div>
       </div>
     </>

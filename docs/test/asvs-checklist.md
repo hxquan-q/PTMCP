@@ -14,7 +14,7 @@
 | 6.3.2 | 无默认种子账号或默认密码 | [迁移](../backend/db-design.md)、T03 | 完整初装账号扫描与启用流程仍需验证；阶段证据[T03-a1](../../tasks/work-items/T03-a1.md)三表迁移只有singleton系统种子、无PTMCP账号或密码，测试使用独立随机数据库凭据，不代表完整账号初始化已验收 | NOT_RUN |
 | 7.2.1 / 7.2.3 | 后端验证会话，高熵随机值 | 认证、T04/T13 | 会话生成、过期与伪造拒绝，不输出真实 token | NOT_RUN |
 | 7.2.4 | 登录/重新认证轮换并废弃旧会话 | 认证、T17 | 固定会话攻击及新旧 Cookie 测试 | NOT_RUN |
-| 7.4.1 / 7.4.2 | 登出、过期、停用/删除后会话不可用 | [权限](../backend/authorization.md)、T12 | 多副本、丢消息、族/PAT/session 一致撤销 | NOT_RUN |
+| 7.4.1 / 7.4.2 | 登出、过期、停用/删除后会话不可用 | [权限](../backend/authorization.md)、T12 | 多副本、丢消息、族/PAT/session 一致撤销；阶段证据：[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)用户实际启停与五域撤证/版本/epoch/event/log同元库事务，106项真实MySQL及Servlet/OAuth组合通过，含并发与commit丢确认；尚未覆盖完整删除、多副本与真实客户端 | NOT_RUN |
 | 7.4.5 | 管理员可终止会话 | API/认证、T16 | 有权撤销/越权拒绝及审计 | NOT_RUN |
 | 8.1.1 / 8.2.1 | 功能权限与资源权限分开 | 权限、T08/T16 | 菜单隐藏不能代替服务端鉴权；阶段证据：[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)通用用户PUT分别核actor功能码、单一委派全部动作/新旧部门/最终角色上限，57项真实MySQL定向测试通过；专用接口旧门禁、自扩权及事务内授权重验仍待补 | NOT_RUN |
 | 8.2.2 | 资源归属与 IDOR/BOLA | [API](../backend/api-spec.md)、T16/T17 | 换 userId/requestId/资源 ID、直接 API 访问 | NOT_RUN |
