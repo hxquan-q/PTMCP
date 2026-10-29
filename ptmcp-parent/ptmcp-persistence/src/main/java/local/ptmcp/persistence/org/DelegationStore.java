@@ -2,6 +2,8 @@ package local.ptmcp.persistence.org;
 
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
+import local.ptmcp.persistence.SecurityChangeTransaction;
+import local.ptmcp.persistence.SecurityEvent;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -16,6 +18,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 import javax.sql.DataSource;
@@ -24,9 +27,9 @@ import javax.sql.DataSource;
  * admin_delegation records: one delegated administrator, one department root, one resource scope,
  * an explicit action subset and a hard validity window. Creation resolves the resource's current
  * active generation and rejects self-delegation, unknown subjects/resources, empty or non-delegable
- * actions and overlapping duplicates. Every mutation appends one {@code admin_operation_log} row
- * inside the same transaction, so a delegation change is never silent. Scope enforcement for
- * delegated (non-platform) administrators is a later slice; this store only owns the records.
+ * actions and overlapping duplicates. Every mutation locks the global security row before the
+ * delegation and atomically commits the row, operation log, policy epoch and ID/version event.
+ * Callers own authorization; this store does not revalidate the actor's effective management scope.
  */
 public final class DelegationStore {
     private static final Pattern ACTION_CODE =
@@ -137,13 +140,22 @@ public final class DelegationStore {
     }
 
     public DelegationRow get(long id) {
-        try (Connection connection = OrgSql.configure(primary);
-                PreparedStatement statement =
-                        OrgSql.statement(
-                                connection,
-                                "SELECT id, user_id, department_root_id, resource_type, resource_id,"
-                                        + " resource_generation, allowed_actions, valid_from, valid_to, status,"
-                                        + " version FROM admin_delegation WHERE id = ?")) {
+        try (Connection connection = OrgSql.configure(primary)) {
+            return get(connection, id, false);
+        } catch (SQLException error) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+    }
+
+    private static DelegationRow get(Connection connection, long id, boolean forUpdate)
+            throws SQLException {
+        try (PreparedStatement statement =
+                OrgSql.statement(
+                        connection,
+                        "SELECT id, user_id, department_root_id, resource_type, resource_id,"
+                                + " resource_generation, allowed_actions, valid_from, valid_to, status,"
+                                + " version FROM admin_delegation WHERE id = ?"
+                                + (forUpdate ? " FOR UPDATE" : ""))) {
             statement.setLong(1, id);
             try (ResultSet result = statement.executeQuery()) {
                 if (!result.next()) {
@@ -151,13 +163,11 @@ public final class DelegationStore {
                 }
                 return row(result);
             }
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
     }
 
     /**
-     * Creates one delegation plus its admin_operation_log entry in a single transaction. The caller
+     * Creates one delegation, log, epoch and event in a single security transaction. The caller
      * passes the actions it is allowed to delegate; the stored subset must stay inside it (AC-07: a
      * delegated admin can never hold actions beyond the delegation).
      */
@@ -185,74 +195,65 @@ public final class DelegationStore {
         }
         LocalDateTime from = OrgSql.ofInstant(draft.validFrom());
         LocalDateTime to = OrgSql.ofInstant(draft.validTo());
-        try (Connection connection = OrgSql.configure(primary)) {
-            connection.setAutoCommit(false);
-            try {
-                requireSubjectExists(connection, draft.userId());
-                requireDepartmentExists(connection, draft.departmentRootId());
-                long generation =
-                        resolveGeneration(connection, draft.resourceType(), draft.resourceId());
-                requireNoDuplicate(connection, draft, generation, from, to);
-                long id;
-                try (PreparedStatement statement =
-                        OrgSql.statement(
-                                connection,
-                                "INSERT INTO admin_delegation (user_id, department_root_id,"
-                                        + " resource_type, resource_id, resource_generation,"
-                                        + " allowed_actions, valid_from, valid_to, status, version,"
-                                        + " create_time, update_time, created_by, updated_by)"
-                                        + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 1,"
-                                        + " UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), ?, ?)",
-                                Statement.RETURN_GENERATED_KEYS)) {
-                    statement.setLong(1, draft.userId());
-                    statement.setLong(2, draft.departmentRootId());
-                    statement.setString(3, draft.resourceType());
-                    statement.setLong(4, draft.resourceId());
-                    statement.setLong(5, generation);
-                    statement.setString(6, actionsJson(actions));
-                    statement.setObject(7, from);
-                    statement.setObject(8, to);
-                    statement.setLong(9, actorId);
-                    statement.setLong(10, actorId);
-                    statement.executeUpdate();
-                    try (ResultSet generated = statement.getGeneratedKeys()) {
-                        if (!generated.next()) {
-                            throw new DomainException(ErrorCode.OPERATION_UNKNOWN);
-                        }
-                        id = generated.getLong(1);
-                    }
-                }
-                appendOperationLog(
-                        connection,
-                        actorId,
-                        requestId,
-                        "DELEGATION_CREATE",
-                        id,
-                        null,
-                        summary(
-                                draft.userId(),
-                                draft.departmentRootId(),
-                                draft.resourceType(),
-                                draft.resourceId(),
-                                generation,
-                                actions,
-                                from,
-                                to));
-                connection.commit();
-                return get(id);
-            } catch (SQLException | RuntimeException failure) {
-                try {
-                    connection.rollback();
-                } catch (SQLException ignored) {
-                    // Never mask the in-flight failure with a rollback error.
-                }
-                throw failure;
-            } finally {
-                connection.setAutoCommit(true);
-            }
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
-        }
+        return new SecurityChangeTransaction(primary)
+                .executeReturning(
+                        connection -> {
+                            requireSubjectExists(connection, draft.userId());
+                            requireDepartmentExists(connection, draft.departmentRootId());
+                            long generation =
+                                    resolveGeneration(
+                                            connection, draft.resourceType(), draft.resourceId());
+                            requireNoDuplicate(connection, draft, generation, from, to);
+                            long id;
+                            try (PreparedStatement statement =
+                                    OrgSql.statement(
+                                            connection,
+                                            "INSERT INTO admin_delegation (user_id, department_root_id,"
+                                                    + " resource_type, resource_id, resource_generation,"
+                                                    + " allowed_actions, valid_from, valid_to, status, version,"
+                                                    + " create_time, update_time, created_by, updated_by)"
+                                                    + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 1,"
+                                                    + " UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), ?, ?)",
+                                            Statement.RETURN_GENERATED_KEYS)) {
+                                statement.setLong(1, draft.userId());
+                                statement.setLong(2, draft.departmentRootId());
+                                statement.setString(3, draft.resourceType());
+                                statement.setLong(4, draft.resourceId());
+                                statement.setLong(5, generation);
+                                statement.setString(6, actionsJson(actions));
+                                statement.setObject(7, from);
+                                statement.setObject(8, to);
+                                statement.setLong(9, actorId);
+                                statement.setLong(10, actorId);
+                                statement.executeUpdate();
+                                try (ResultSet generated = statement.getGeneratedKeys()) {
+                                    if (!generated.next()) {
+                                        throw new DomainException(ErrorCode.OPERATION_UNKNOWN);
+                                    }
+                                    id = generated.getLong(1);
+                                }
+                            }
+                            appendOperationLog(
+                                    connection,
+                                    actorId,
+                                    requestId,
+                                    "DELEGATION_CREATE",
+                                    id,
+                                    null,
+                                    summary(
+                                            draft.userId(),
+                                            draft.departmentRootId(),
+                                            draft.resourceType(),
+                                            draft.resourceId(),
+                                            generation,
+                                            actions,
+                                            from,
+                                            to));
+                            DelegationRow created = get(connection, id, false);
+                            return new SecurityChangeTransaction.Outcome<>(
+                                    created, delegationEvent(created));
+                        })
+                .value();
     }
 
     /** Distinct org/ACL capability codes of one user; mirrors the session permission query. */
@@ -285,62 +286,66 @@ public final class DelegationStore {
         if (expectedVersion <= 0) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
-        try (Connection connection = OrgSql.configure(primary)) {
-            connection.setAutoCommit(false);
-            try {
-                DelegationRow before = get(id);
-                if (before.userId() == actorId) {
-                    throw new DomainException(ErrorCode.SELF_PRIVILEGE_ESCALATION);
-                }
-                if ("REVOKED".equals(before.status())) {
-                    throw new DomainException(ErrorCode.VERSION_CONFLICT);
-                }
-                int updated;
-                try (PreparedStatement statement =
-                        OrgSql.statement(
-                                connection,
-                                "UPDATE admin_delegation SET status = 'REVOKED', version = version + 1,"
-                                        + " update_time = UTC_TIMESTAMP(6), updated_by = ?"
-                                        + " WHERE id = ? AND version = ? AND status = 'ACTIVE'")) {
-                    statement.setLong(1, actorId);
-                    statement.setLong(2, id);
-                    statement.setLong(3, expectedVersion);
-                    updated = statement.executeUpdate();
-                }
-                if (updated != 1) {
-                    throw new DomainException(ErrorCode.VERSION_CONFLICT);
-                }
-                appendOperationLog(
-                        connection,
-                        actorId,
-                        requestId,
-                        "DELEGATION_REVOKE",
-                        id,
-                        summary(
-                                before.userId(),
-                                before.departmentRootId(),
-                                before.resourceType(),
-                                before.resourceId(),
-                                before.resourceGeneration(),
-                                new LinkedHashSet<>(before.allowedActions()),
-                                OrgSql.ofInstant(before.validFrom()),
-                                OrgSql.ofInstant(before.validTo())),
-                        null);
-                connection.commit();
-                return get(id);
-            } catch (SQLException | RuntimeException failure) {
-                try {
-                    connection.rollback();
-                } catch (SQLException ignored) {
-                    // Never mask the in-flight failure with a rollback error.
-                }
-                throw failure;
-            } finally {
-                connection.setAutoCommit(true);
-            }
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
-        }
+        return new SecurityChangeTransaction(primary)
+                .executeReturning(
+                        connection -> {
+                            DelegationRow before = get(connection, id, true);
+                            if (before.userId() == actorId) {
+                                throw new DomainException(ErrorCode.SELF_PRIVILEGE_ESCALATION);
+                            }
+                            if (before.version() != expectedVersion
+                                    || "REVOKED".equals(before.status())) {
+                                throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                            }
+                            if (before.version() == Long.MAX_VALUE) {
+                                throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+                            }
+                            int updated;
+                            try (PreparedStatement statement =
+                                    OrgSql.statement(
+                                            connection,
+                                            "UPDATE admin_delegation SET status = 'REVOKED', version = version + 1,"
+                                                    + " update_time = UTC_TIMESTAMP(6), updated_by = ?"
+                                                    + " WHERE id = ? AND version = ? AND status = 'ACTIVE'")) {
+                                statement.setLong(1, actorId);
+                                statement.setLong(2, id);
+                                statement.setLong(3, expectedVersion);
+                                updated = statement.executeUpdate();
+                            }
+                            if (updated != 1) {
+                                throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                            }
+                            appendOperationLog(
+                                    connection,
+                                    actorId,
+                                    requestId,
+                                    "DELEGATION_REVOKE",
+                                    id,
+                                    summary(
+                                            before.userId(),
+                                            before.departmentRootId(),
+                                            before.resourceType(),
+                                            before.resourceId(),
+                                            before.resourceGeneration(),
+                                            new LinkedHashSet<>(before.allowedActions()),
+                                            OrgSql.ofInstant(before.validFrom()),
+                                            before.validTo() == null
+                                                    ? null
+                                                    : OrgSql.ofInstant(before.validTo())),
+                                    null);
+                            DelegationRow revoked = get(connection, id, false);
+                            return new SecurityChangeTransaction.Outcome<>(
+                                    revoked, delegationEvent(revoked));
+                        })
+                .value();
+    }
+
+    private static SecurityEvent delegationEvent(DelegationRow delegation) {
+        return new SecurityEvent(
+                UUID.randomUUID(),
+                SecurityEvent.Kind.DELEGATION_CHANGED,
+                new SecurityEvent.NumericId(delegation.id()),
+                delegation.version());
     }
 
     private static void requireDraftShape(DelegationDraft draft) {

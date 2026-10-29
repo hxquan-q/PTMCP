@@ -465,9 +465,15 @@ G1 已完成：`McpResourceMetadata` 由四处部署配置（`resource-uri`、`r
 事务内actor/委派授权重验、整子树、自扩权、自然到期策略及业务token撤销不在本片，不据此关闭整体授权缺口。
 
 最低验证：旧源码有效RED；创建/撤销原子成功；日志/事件故障全快照回滚；真实commit丢确认；
-单连接返回；并发重复创建及同版本撤销；stale/revoked/self拒绝无副作用。继续使用专属WSL的隔离MySQL容器。
+单连接返回及提交后竞争撤销仍返回自身快照；并发重复创建及同版本撤销；missing/stale/future/revoked/self、
+委派版本/epoch耗尽拒绝无副作用；旧valid_to=NULL撤销兼容。继续使用专属WSL的隔离MySQL容器。
 产品范围为DelegationStore、SecurityEvent及现有OrgManagementStoreTest；契约/原Note随实现同步。
-独立只读评审复用既有reviewer，不并行实现。动态验证与终审尚未完成，结果保持NOT_RUN。
+独立只读设计评审确认可复用现有事务，明确事件落库不等于广播/消费者闭环；实际diff终审仍待完成。
+旧实现有效RED：`delegation-transaction-red.log/.exit`，2026-10-30 07:38:57 +08:00，BUILD FAILURE/exit1，
+22项中14 failures、1 error、0 skipped。失败含缺epoch/event、事件故障仍提交、重叠创建双成功、
+丢确认误报DEPENDENCY_UNAVAILABLE、额外借连接、返回竞争撤销的v2及版本/epoch耗尽仍写入。
+唯一error是产品撤销旧valid_to=NULL行时OrgSql.ofInstant(null)抛NPE，不是夹具或基础设施错误；同批补空值兼容。
+7项通过包含操作日志故障回滚与部分既有拒绝行为。修复后GREEN及最终终审尚未完成。
 
 前一幂等切片收尾后实际检查：`python scripts/check.py` exit0（145份Markdown/672项链接、62项检查器回归），
 Skill tree/format/archived均exit0（12篇活跃笔记、0篇归档），`git diff --check` exit0；不替代本片验证。

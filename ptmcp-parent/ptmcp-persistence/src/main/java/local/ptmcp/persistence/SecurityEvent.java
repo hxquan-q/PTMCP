@@ -29,6 +29,7 @@ public record SecurityEvent(UUID eventId, Kind kind, AggregateId aggregateId, lo
     public enum Kind {
         USER_SECURITY_CHANGED("USER", false),
         DEPARTMENT_CHANGED("DEPARTMENT", false),
+        DELEGATION_CHANGED("ADMIN_DELEGATION", false),
         ACL_CHANGED("ACL", false),
         REFRESH_FAMILY_CHANGED("REFRESH_FAMILY", true);
 

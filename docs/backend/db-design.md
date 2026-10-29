@@ -143,6 +143,7 @@ Refresh 事务统一先锁sys_security_state单行，再锁sys_user_security，�
 | --- | --- | --- |
 | 用户改密/停用/删除 | 组织行+auth_version+会话族/PAT撤销标志+epoch+事件+管理操作记录 | 发布事件、清理Redis；失败补扫 |
 | 角色/部门/成员变更 | 组织行、成员表、相关主体version、global epoch、事件 | 清有效权限缓存；部门移动重算父链 |
+| 管理委派创建/撤销 | delegation行/version、操作日志、global epoch、DELEGATION_CHANGED事件 | 管理范围重算；不自动撤销业务grant/token |
 | ACL/平台范围变更 | grant/scope行、聚合version、global epoch、事件 | 广播失效；不等待广播才返回提交成功 |
 | 数据源启停/凭证变化 | config_version/status、resource_version按需、epoch、事件 | 池先DRAIN旧代再建立新代；事务内不连业务库 |
 | 快照发布 | 复核配置version，发布快照、更新active_snapshot_id/resource_version，世代变更标旧授权stale、epoch+事件 | 旧快照保留供在途解释；新查询只用新版本 |
@@ -161,6 +162,12 @@ HTTP包装在action分派后失败保留请求键，尽力仅RUNNING→UNKNOWN�
 24小时仅为最小保留，未来删除墓碑、人工解除或重占须另有owner代次防护；不能从store级测试推断HTTP结果。
 全表锁快照的成本随部门数量增加，尚无容量结论；用户创建/换部门等其他写方未共用此围栏，
 不能据此推断部门删除的引用完整性或提交前操作者授权重验已完成。实际验证见[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
+
+委派create/revoke也复用SecurityChangeTransaction.executeReturning：全局安全锁先于委派聚合，
+创建的重叠检查/INSERT和撤销的同连接FOR UPDATE/版本CAS均在锁内；行、日志、epoch、事件同事务。
+DELEGATION_CHANGED的aggregate_type为ADMIN_DELEGATION，payload沿用schemaVersion=1与ID/version-only结构，
+新增事件无需修改历史迁移。创建与撤销均从同连接取得返回快照，commit后不再读取，丢确认不重放。
+并发保证依赖所有委派写方遵守该围栏；旧直写代码混跑、事件广播/消费者及提交前授权重验未由此实现。
 
 ## 8. 生命周期、归档和迁移验收
 

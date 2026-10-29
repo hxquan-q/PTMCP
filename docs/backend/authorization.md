@@ -79,13 +79,23 @@ gateway进入请求读取/核验安全快照；排队出队时和JDBC执行提�
 | 客户端停用/回调/认证方式变化 | client版本、族撤销、epoch、事件 | 旧token不能继续凭签名有效使用 |
 | PAT/family撤销/refresh重放 | status/version、epoch/安全事件 | PAT拒绝/整族JWT拒绝 |
 | 数据源停用/换凭证、Schema发布/删除重建/视图定义变化 | config/resource版本、epoch、事件 | 旧ApprovedQuery拒绝/重守门，旧池排空，旧对象grant不自动迁移 |
-| 委派撤销/到期 | delegation状态/version、epoch、事件 | 后台写权限重算；不自动改变被委派者已依法授予的业务grant，需另行撤销策略 |
+| 委派创建/撤销 | delegation状态/version、操作日志、epoch、事件 | 后台写权限重算；不自动改变被委派者已依法授予的业务grant，需另行撤销策略 |
+| 委派自然生效/到期 | 无需后台写事件 | 请求按权威时间重判管理范围，不等待扫描或广播 |
 
 外部脚本直接写若依表会跳过闭环，一期只允许经PTMCP管理域写入；数据库凭证禁止通用后台直接写组织表。已有若依接口必须包装/禁用，不能保留旁路。紧急运维SQL需同事务更新版本/outbox并有审核日志及恢复校验。
 
 ## 7. 管理范围委派
 
 admin_delegation是平台管理员给组织授权管理员的管理授权，包含userId、departmentRootId、resourceType/resourceId/generation、allowedActions、validFrom/validTo、status/version。服务端把多个委派分别校验，不能把“委派A的部门”与“委派B的资源”交叉拼出没有授予的新组合。管理命令必须由至少一个完整委派覆盖该命令的所有目标及动作；批量多目标逐项校验，任一失败整个事务不提交。
+
+委派create/revoke复用SecurityChangeTransaction，先锁sys_security_state，再在同连接检查/写入委派；
+行、操作日志、epoch与DELEGATION_CHANGED原子提交。事件固定aggregate_type=ADMIN_DELEGATION，
+payload仅schemaVersion=1、实际数值ID和本次version。创建在INSERT后同连接读取数据库微秒快照，
+撤销同连接FOR UPDATE校验旧版本/状态/自撤销限制并保留CAS，版本耗尽拒绝SECURITY_STATE_UNAVAILABLE。
+返回本事务快照，不在提交后另开连接读取；commit丢确认返回OPERATION_UNKNOWN且单次调用不重放。
+重叠检查受同一全局锁保护，要求所有委派写方使用此事务，不支持与旧直写代码混跑。
+此片只保证epoch/事件持久原子性，不代表广播、多副本消费或事务内actor/角色/委派授权重验完成；
+自然到期仍按时间判断，现有业务grant和业务token不随管理委派自动撤销。实际验证见[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
 
 部门和主体的范围归属从target的parent_id权威链判定，不使用ancestors缓存。单条有界查询读取完整链，含target最多64节点，只parent_id=0为正常根；缺父、负父、环或需第65节点拒绝SECURITY_STATE_UNAVAILABLE，匹配委派根或target等于根也不能提前结束。未知target返回不覆盖；已存在target先校验完整链，再要求target和命中的根都未软删。停用但未删除的节点仍可受委派管理以重新启用；中间节点停用/软删不改父边拓扑，不能套用业务DEPT主体过滤。SQL故障维持DEPENDENCY_UNAVAILABLE。这一片仅定义单目标范围读取，不代表完整PUT同一委派覆盖新旧父/子树、事务提交前重验、写树或epoch闭环已实现；实际验证见[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
 

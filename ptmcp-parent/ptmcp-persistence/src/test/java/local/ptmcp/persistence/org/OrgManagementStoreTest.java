@@ -51,6 +51,8 @@ import java.util.TimeZone;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import javax.sql.DataSource;
@@ -2482,6 +2484,466 @@ class OrgManagementStoreTest {
                                 now)
                         .allowGrantIds()
                         .get(0));
+    }
+
+    private static final Set<String> TRANSACTION_DELEGATION_ACTIONS = Set.of("ptmcp:user:update");
+
+    private record DelegationWriteSnapshot(
+            List<String> delegations, DepartmentWriteSnapshot journal) {}
+
+    private DelegationWriteSnapshot delegationWriteSnapshot() throws SQLException {
+        try (Connection connection = dataSource.getConnection()) {
+            return new DelegationWriteSnapshot(
+                    departmentWriteRows(connection, "SELECT * FROM admin_delegation ORDER BY id"),
+                    departmentWriteSnapshot());
+        }
+    }
+
+    private DelegationStore.DelegationDraft transactionDelegationDraft() throws SQLException {
+        long department = orgStore.createDepartment(null, "事务委派部", true, 1).id();
+        orgStore.createUser("transaction-holder", "占位", department, "unused", List.of(), true, 1);
+        long delegate =
+                orgStore.createUser(
+                                "transaction-delegate",
+                                "委派人",
+                                department,
+                                "unused",
+                                List.of(),
+                                true,
+                                1)
+                        .id();
+        return new DelegationStore.DelegationDraft(
+                delegate,
+                department,
+                "DATASOURCE",
+                insertDatasource("transaction-delegation"),
+                List.copyOf(TRANSACTION_DELEGATION_ACTIONS),
+                Instant.parse("2020-01-01T00:00:00.123456Z"),
+                Instant.parse("2030-01-01T00:00:00.654321Z"));
+    }
+
+    private DelegationStore.DelegationRow transactionDelegationCreate(
+            DelegationStore store, DelegationStore.DelegationDraft draft) {
+        return store.create(
+                1, java.util.UUID.randomUUID().toString(), draft, TRANSACTION_DELEGATION_ACTIONS);
+    }
+
+    private DelegationStore.DelegationRow delegationMutation(
+            String command,
+            DelegationStore store,
+            DelegationStore.DelegationDraft draft,
+            DelegationStore.DelegationRow existing) {
+        return "CREATE".equals(command)
+                ? transactionDelegationCreate(store, draft)
+                : store.revoke(
+                        existing.id(),
+                        existing.version(),
+                        1,
+                        java.util.UUID.randomUUID().toString());
+    }
+
+    private void assertDelegationJournal(
+            String command, DelegationWriteSnapshot before, DelegationStore.DelegationRow written)
+            throws SQLException {
+        DelegationWriteSnapshot after = delegationWriteSnapshot();
+        assertAll(
+                () -> assertEquals(before.journal().epoch() + 1, after.journal().epoch()),
+                () ->
+                        assertEquals(
+                                before.delegations().size() + ("CREATE".equals(command) ? 1 : 0),
+                                after.delegations().size()),
+                () ->
+                        assertEquals(
+                                before.journal().events().size() + 1,
+                                after.journal().events().size()),
+                () ->
+                        assertEquals(
+                                before.journal().operations().size() + 1,
+                                after.journal().operations().size()),
+                () ->
+                        assertEquals(
+                                1,
+                                statusScalar(
+                                        "SELECT COUNT(*) FROM sys_security_event WHERE aggregate_type='ADMIN_DELEGATION'"
+                                                + " AND aggregate_id=? AND event_type='DELEGATION_CHANGED' AND epoch="
+                                                + after.journal().epoch()
+                                                + " AND JSON_LENGTH(payload)=3 AND JSON_EXTRACT(payload,'$.schemaVersion')=1"
+                                                + " AND JSON_EXTRACT(payload,'$.version')="
+                                                + written.version()
+                                                + " AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.aggregateId'))='"
+                                                + written.id()
+                                                + "'",
+                                        String.valueOf(written.id()))),
+                () ->
+                        assertEquals(
+                                1,
+                                statusScalar(
+                                        "SELECT COUNT(*) FROM admin_operation_log WHERE aggregate_type='ADMIN_DELEGATION'"
+                                                + " AND aggregate_id=? AND action='DELEGATION_"
+                                                + command
+                                                + "'",
+                                        written.id())));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"CREATE", "REVOKE"})
+    void delegationTransactionCommitsRowLogEpochAndIdVersionEvent(String command) throws Exception {
+        DelegationStore.DelegationDraft draft = transactionDelegationDraft();
+        DelegationStore.DelegationRow existing =
+                "CREATE".equals(command)
+                        ? null
+                        : transactionDelegationCreate(delegationStore, draft);
+        DelegationWriteSnapshot before = delegationWriteSnapshot();
+        DelegationStore.DelegationRow written =
+                delegationMutation(command, delegationStore, draft, existing);
+        assertAll(
+                () ->
+                        assertEquals(
+                                "CREATE".equals(command) ? "ACTIVE" : "REVOKED", written.status()),
+                () -> assertEquals("CREATE".equals(command) ? 1 : 2, written.version()),
+                () -> assertEquals(draft.validFrom(), written.validFrom()),
+                () -> assertEquals(draft.validTo(), written.validTo()),
+                () -> assertEquals(delegationStore.get(written.id()), written),
+                () -> assertDelegationJournal(command, before, written));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "CREATE,INSERT INTO sys_security_event",
+        "REVOKE,INSERT INTO sys_security_event",
+        "CREATE,INSERT INTO admin_operation_log",
+        "REVOKE,INSERT INTO admin_operation_log"
+    })
+    void delegationTransactionFailureRollsBackEveryRow(String command, String failedSql)
+            throws Exception {
+        DelegationStore.DelegationDraft draft = transactionDelegationDraft();
+        DelegationStore.DelegationRow existing =
+                "CREATE".equals(command)
+                        ? null
+                        : transactionDelegationCreate(delegationStore, draft);
+        DelegationWriteSnapshot before = delegationWriteSnapshot();
+        DelegationStore failing = new DelegationStore(statusFaultDataSource(failedSql, false));
+        assertAll(
+                () ->
+                        assertEquals(
+                                ErrorCode.DEPENDENCY_UNAVAILABLE,
+                                codeOf(
+                                        () ->
+                                                delegationMutation(
+                                                        command, failing, draft, existing))),
+                () -> assertEquals(before, delegationWriteSnapshot()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"CREATE", "REVOKE"})
+    void delegationTransactionLostCommitAckIsUnknownAndCommitsOnce(String command)
+            throws Exception {
+        DelegationStore.DelegationDraft draft = transactionDelegationDraft();
+        DelegationStore.DelegationRow existing =
+                "CREATE".equals(command)
+                        ? null
+                        : transactionDelegationCreate(delegationStore, draft);
+        DelegationWriteSnapshot before = delegationWriteSnapshot();
+        DelegationStore uncertain = new DelegationStore(statusFaultDataSource(null, true));
+        assertEquals(
+                ErrorCode.OPERATION_UNKNOWN,
+                codeOf(() -> delegationMutation(command, uncertain, draft, existing)));
+        DelegationStore.DelegationRow stored =
+                delegationStore.list(null, null, null, null, 20).get(0);
+        assertDelegationJournal(command, before, stored);
+        DelegationWriteSnapshot committed = delegationWriteSnapshot();
+        assertEquals(
+                "CREATE".equals(command) ? ErrorCode.DUPLICATE_GRANT : ErrorCode.VERSION_CONFLICT,
+                codeOf(() -> delegationMutation(command, delegationStore, draft, existing)));
+        assertEquals(committed, delegationWriteSnapshot());
+    }
+
+    /** Observes real JDBC boundaries without replacing DML, locks or commit. */
+    private DataSource delegationObservedSource(
+            Runnable beforeAcquire, Consumer<String> beforeSql, Runnable afterCommit) {
+        return (DataSource)
+                Proxy.newProxyInstance(
+                        DataSource.class.getClassLoader(),
+                        new Class<?>[] {DataSource.class},
+                        (proxy, method, args) -> {
+                            if ("getConnection".equals(method.getName()) && beforeAcquire != null)
+                                beforeAcquire.run();
+                            try {
+                                Object value = method.invoke(dataSource, args);
+                                if (!(value instanceof Connection connection)) return value;
+                                return Proxy.newProxyInstance(
+                                        Connection.class.getClassLoader(),
+                                        new Class<?>[] {Connection.class},
+                                        (connectionProxy, operation, parameters) -> {
+                                            if ("prepareStatement".equals(operation.getName())
+                                                    && beforeSql != null)
+                                                beforeSql.accept((String) parameters[0]);
+                                            try {
+                                                Object result =
+                                                        operation.invoke(connection, parameters);
+                                                if ("commit".equals(operation.getName())
+                                                        && afterCommit != null) afterCommit.run();
+                                                return result;
+                                            } catch (InvocationTargetException failure) {
+                                                throw failure.getCause();
+                                            }
+                                        });
+                            } catch (InvocationTargetException failure) {
+                                throw failure.getCause();
+                            }
+                        });
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"CREATE", "REVOKE"})
+    void delegationTransactionReturnsWithoutBorrowingAnotherConnection(String command)
+            throws Exception {
+        DelegationStore.DelegationDraft draft = transactionDelegationDraft();
+        DelegationStore.DelegationRow existing =
+                "CREATE".equals(command)
+                        ? null
+                        : transactionDelegationCreate(delegationStore, draft);
+        AtomicInteger borrowed = new AtomicInteger();
+        DelegationStore singleConnection =
+                new DelegationStore(
+                        delegationObservedSource(
+                                () -> {
+                                    if (borrowed.incrementAndGet() > 1)
+                                        throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+                                },
+                                null,
+                                null));
+        DelegationStore.DelegationRow written =
+                assertDoesNotThrow(
+                        () -> delegationMutation(command, singleConnection, draft, existing));
+        assertEquals(1, borrowed.get());
+        assertEquals(delegationStore.get(written.id()), written);
+    }
+
+    @Test
+    void delegationTransactionCreateReturnsOwnSnapshotAfterCompetingRevoke() throws Exception {
+        DelegationStore.DelegationDraft draft = transactionDelegationDraft();
+        DelegationStore competing =
+                new DelegationStore(
+                        delegationObservedSource(
+                                null,
+                                null,
+                                () -> {
+                                    DelegationStore.DelegationRow committed =
+                                            delegationStore.list(null, null, null, null, 20).get(0);
+                                    delegationStore.revoke(
+                                            committed.id(),
+                                            committed.version(),
+                                            1,
+                                            java.util.UUID.randomUUID().toString());
+                                }));
+        DelegationStore.DelegationRow returned = transactionDelegationCreate(competing, draft);
+        DelegationStore.DelegationRow current = delegationStore.get(returned.id());
+        assertAll(
+                () -> assertEquals("ACTIVE", returned.status()),
+                () -> assertEquals(1, returned.version()),
+                () -> assertEquals("REVOKED", current.status()),
+                () -> assertEquals(2, current.version()));
+    }
+
+    private static void delegationAwait(CountDownLatch latch) {
+        try {
+            assertTrue(latch.await(10, TimeUnit.SECONDS), "delegation test boundary not reached");
+        } catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(failure);
+        }
+    }
+
+    private String delegationAttempt(
+            String command,
+            DelegationStore store,
+            DelegationStore.DelegationDraft draft,
+            DelegationStore.DelegationRow existing) {
+        try {
+            delegationMutation(command, store, draft, existing);
+            return "COMMITTED";
+        } catch (DomainException failure) {
+            return failure.errorCode().name();
+        }
+    }
+
+    @Test
+    void delegationTransactionSerializesOverlappingCreates() throws Exception {
+        DelegationStore.DelegationDraft draft = transactionDelegationDraft();
+        DelegationWriteSnapshot before = delegationWriteSnapshot();
+        CountDownLatch firstInsert = new CountDownLatch(1);
+        CountDownLatch allowFirst = new CountDownLatch(1);
+        CountDownLatch secondBoundary = new CountDownLatch(1);
+        CountDownLatch allowSecond = new CountDownLatch(1);
+        DelegationStore first =
+                new DelegationStore(
+                        delegationObservedSource(
+                                null,
+                                sql -> {
+                                    if (sql.startsWith("INSERT INTO admin_delegation")) {
+                                        firstInsert.countDown();
+                                        delegationAwait(allowFirst);
+                                    }
+                                },
+                                null));
+        DelegationStore second =
+                new DelegationStore(
+                        delegationObservedSource(
+                                null,
+                                sql -> {
+                                    if (sql.startsWith(
+                                                    "SELECT policy_epoch FROM sys_security_state")
+                                            || sql.startsWith("INSERT INTO admin_delegation")) {
+                                        secondBoundary.countDown();
+                                        delegationAwait(allowSecond);
+                                    }
+                                },
+                                null));
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            try {
+                var firstResult =
+                        executor.submit(() -> delegationAttempt("CREATE", first, draft, null));
+                delegationAwait(firstInsert);
+                var secondResult =
+                        executor.submit(() -> delegationAttempt("CREATE", second, draft, null));
+                delegationAwait(secondBoundary);
+                allowFirst.countDown();
+                assertEquals("COMMITTED", firstResult.get(10, TimeUnit.SECONDS));
+                allowSecond.countDown();
+                assertEquals("DUPLICATE_GRANT", secondResult.get(10, TimeUnit.SECONDS));
+            } finally {
+                allowFirst.countDown();
+                allowSecond.countDown();
+            }
+        }
+        assertDelegationJournal(
+                "CREATE", before, delegationStore.list(null, null, null, null, 20).get(0));
+    }
+
+    @Test
+    void delegationTransactionConcurrentRevokeAdvancesOnce() throws Exception {
+        DelegationStore.DelegationDraft draft = transactionDelegationDraft();
+        DelegationStore.DelegationRow existing =
+                transactionDelegationCreate(delegationStore, draft);
+        DelegationWriteSnapshot before = delegationWriteSnapshot();
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first =
+                    executor.submit(
+                            () -> {
+                                delegationAwait(start);
+                                return delegationAttempt(
+                                        "REVOKE", delegationStore, draft, existing);
+                            });
+            var second =
+                    executor.submit(
+                            () -> {
+                                delegationAwait(start);
+                                return delegationAttempt(
+                                        "REVOKE", delegationStore, draft, existing);
+                            });
+            start.countDown();
+            assertEquals(
+                    List.of("COMMITTED", "VERSION_CONFLICT"),
+                    Stream.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS))
+                            .sorted()
+                            .toList());
+        }
+        assertDelegationJournal("REVOKE", before, delegationStore.get(existing.id()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"MISSING", "STALE", "FUTURE", "SELF", "REVOKED", "VERSION_EXHAUSTED"})
+    void delegationTransactionRejectedRevokeDoesNotWrite(String reason) throws Exception {
+        DelegationStore.DelegationDraft draft = transactionDelegationDraft();
+        DelegationStore.DelegationRow existing =
+                transactionDelegationCreate(delegationStore, draft);
+        if ("REVOKED".equals(reason))
+            delegationStore.revoke(existing.id(), 1, 1, java.util.UUID.randomUUID().toString());
+        if ("VERSION_EXHAUSTED".equals(reason))
+            statusExecute(
+                    "UPDATE admin_delegation SET version=? WHERE id=?",
+                    Long.MAX_VALUE,
+                    existing.id());
+        long id = "MISSING".equals(reason) ? Long.MAX_VALUE : existing.id();
+        long version =
+                switch (reason) {
+                    case "STALE" -> 1;
+                    case "FUTURE" -> 3;
+                    case "VERSION_EXHAUSTED" -> Long.MAX_VALUE;
+                    default -> existing.version();
+                };
+        if ("STALE".equals(reason))
+            statusExecute("UPDATE admin_delegation SET version=2 WHERE id=?", existing.id());
+        long actor = "SELF".equals(reason) ? draft.userId() : 1;
+        ErrorCode expected =
+                switch (reason) {
+                    case "MISSING" -> ErrorCode.RESOURCE_NOT_FOUND;
+                    case "SELF" -> ErrorCode.SELF_PRIVILEGE_ESCALATION;
+                    case "VERSION_EXHAUSTED" -> ErrorCode.SECURITY_STATE_UNAVAILABLE;
+                    default -> ErrorCode.VERSION_CONFLICT;
+                };
+        DelegationWriteSnapshot before = delegationWriteSnapshot();
+        assertAll(
+                () ->
+                        assertEquals(
+                                expected,
+                                codeOf(
+                                        () ->
+                                                delegationStore.revoke(
+                                                        id,
+                                                        version,
+                                                        actor,
+                                                        java.util.UUID.randomUUID().toString()))),
+                () -> assertEquals(before, delegationWriteSnapshot()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"CREATE", "REVOKE"})
+    void delegationTransactionExhaustedEpochRejectsWithoutWrites(String command) throws Exception {
+        DelegationStore.DelegationDraft draft = transactionDelegationDraft();
+        DelegationStore.DelegationRow existing =
+                "CREATE".equals(command)
+                        ? null
+                        : transactionDelegationCreate(delegationStore, draft);
+        long savedEpoch =
+                statusScalar("SELECT policy_epoch FROM sys_security_state WHERE singleton_id=?", 1);
+        try {
+            statusExecute(
+                    "UPDATE sys_security_state SET policy_epoch=? WHERE singleton_id=1",
+                    Long.MAX_VALUE);
+            DelegationWriteSnapshot before = delegationWriteSnapshot();
+            assertAll(
+                    () ->
+                            assertEquals(
+                                    ErrorCode.SECURITY_STATE_UNAVAILABLE,
+                                    codeOf(
+                                            () ->
+                                                    delegationMutation(
+                                                            command,
+                                                            delegationStore,
+                                                            draft,
+                                                            existing))),
+                    () -> assertEquals(before, delegationWriteSnapshot()));
+        } finally {
+            statusExecute(
+                    "UPDATE sys_security_state SET policy_epoch=? WHERE singleton_id=1",
+                    savedEpoch);
+        }
+    }
+
+    @Test
+    void delegationTransactionRevokePreservesLegacyUnboundedWindow() throws Exception {
+        DelegationStore.DelegationDraft draft = transactionDelegationDraft();
+        DelegationStore.DelegationRow existing =
+                transactionDelegationCreate(delegationStore, draft);
+        statusExecute("UPDATE admin_delegation SET valid_to=NULL WHERE id=?", existing.id());
+        DelegationWriteSnapshot before = delegationWriteSnapshot();
+        DelegationStore.DelegationRow revoked =
+                delegationStore.revoke(existing.id(), 1, 1, java.util.UUID.randomUUID().toString());
+        assertNull(revoked.validTo());
+        assertDelegationJournal("REVOKE", before, revoked);
     }
 
     @Test
