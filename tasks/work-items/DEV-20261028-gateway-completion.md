@@ -67,6 +67,20 @@ wrapper 未设置 executable，使用 bash 调用，不改文件权限。已有�
 依赖故障零写入及平台管理员组合编辑反例，再实现、组合测试与独立只读复审。
 本片保留URL/DTO/ETag与CSRF，不扩展为事务内授权重验、最后管理员或自扩权保护。
 
+有效RED：`ptmcp-admin-action-red-valid.log` BUILD FAILURE/exit1，2026-10-30 04:26:25 +08:00，
+18 tests /18 failures /0 errors /0 skipped；包括九类列表、无动作码创建、list替代read、
+停/软删角色与撤码、权限依赖故障以及平台管理员通用PUT缺少实际变更动作。
+前轮`ptmcp-admin-action-red.log`的8项非法角色键夹具错误不计行为RED，仅其10项failure有效。
+实现为58个方法级AdminAction与统一默认拒绝MVC入口；测试独立登记58条HTTP合同，
+另补缺声明handler、撤成员、撤码后同幂等键重试、audit读码不能解密及真实Cookie/CSRF/个人入口。
+首次GREEN尝试`ptmcp-admin-action-green-attempt.log`实际25项，0 failures/24 errors/0 skipped，
+24项因测试注入同时匹配MVC和Actuator路由Bean未运行断言；Cookie新用例通过。
+已以明确Qualifier选业务handlerMapping；定向重验`ptmcp-admin-action-focused-green.log`
+BUILD SUCCESS/exit0，2026-10-30 04:42:23 +08:00，Admin24+Session1共25项，
+0 failures/0 errors/0 skipped。覆盖全部58条真实路由合同、未声明handler零副作用、
+成员/角色/动作撤销、撤码后的幂等重放、解密隔离和真实Cookie/CSRF/个人入口。
+管理API、用户存储/安全状态、身份恢复、OAuth与MCP HTTP的组合回归及实际独立只读终审仍在进行。
+
 身份组合 GREEN：`ptmcp-identity-combined-green.log` BUILD SUCCESS，78 tests / 0 failures/errors/skipped；
 覆盖双 MySQL 改密恢复13、真实 ADMIN 改密HTTP2、Session8、Org13、SecurityState13、OAuth27及MCP HTTP2。
 Origin 有效 RED 为 `ptmcp-identity-origin-red.log`（8例中1 failure，跨站Origin携合法CSRF错误返回200）；

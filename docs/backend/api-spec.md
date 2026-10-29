@@ -34,6 +34,12 @@ POST 创建/启动任务/撤销/解密动作使用 Idempotency-Key（客户端�
 
 功能码采用 ptmcp:<resource>:<action>，每端点在下表声明；复用若依菜单机制只是功能入口校验。平台管理员也须显式业务表READ才能查询数据。
 
+当前58个管理handler以方法级`@AdminAction`显式登记功能码，由统一MVC拦截器在body绑定、控制器调用与幂等重放前
+从主库当前成员关系、启用且未删除角色读取精确码。未声明或缺码均403 MANAGEMENT_SCOPE_DENIED；
+平台管理员资格仅表达管理范围，不能替代端点动作，不支持通配符或相邻CRUD动作代替。
+动作权限依赖不可用时返回503 DEPENDENCY_UNAVAILABLE；若在Cookie身份附着阶段失败，则为上述会话资格的503映射。
+本入口检查不代替提交前事务内授权重验。当前审计控制器仍额外要求平台管理员范围，角色无关的解密资源范围尚待实现。
+
 | resource | action |
 | --- | --- |
 | datasource | list、read、create、update、delete、test、sync |
@@ -100,7 +106,7 @@ host/port先做DNS与网络目的地策略验证，拒绝云元数据/loopback�
 | /users CRUD | user对应动作 | UserWrite→UserDTO；筛选keyword/departmentId/status；不接受外部org树替换；删除逻辑删除并撤销令牌 |
 | PUT /users/{id} | user:update，加实际变更的status/assign-role/move | 完整 UserWrite+If-Match→UserDTO；授权分类快照版本必须等于If-Match，落库保留同版本CAS，冲突不自动重试；roleIds缺省保留、按集合比较；委派管理员须自身具备所需功能码，且同一有效委派覆盖全部动作与新旧部门；角色变化时最终整组功能码不得超过该委派，不能跨委派拼接 |
 | PUT /users/{id}/status | user:status | {status:ACTIVE/DISABLED}+If-Match→UserDTO；保留其他资料与角色；不能停用最后一个有效平台管理员 |
-| GET /users/{id}/identity | 平台管理员 | →IdentityState={userId,version,identityState:UNBOUND/READY/CHANGE_PENDING,recoveryRequired}；不返回摘要、目标或操作材料 |
+| GET /users/{id}/identity | user:read，平台管理员 | →IdentityState={userId,version,identityState:UNBOUND/READY/CHANGE_PENDING,recoveryRequired}；不返回摘要、目标或操作材料 |
 | PUT /users/{id}/password | user:reset-password，平台管理员 | {newPassword,reason}+If-Match+Idempotency-Key→200 IdentityState；先提权威版本并撤销全部认证，跨库异常保持 Pending，由管理员恢复 |
 | POST /users/{id}/password/retry | user:reset-password，平台管理员 | {}+If-Match+Idempotency-Key→200 IdentityState；只重试持久目标；完成重试不写宿主、不提版本/epoch；不接受新密码；版本与 body 一起绑定幂等摘要 |
 | PUT /users/{id}/roles | user:assign-role | {roleIds:[]}+If-Match→UserDTO；整组替换，最终整组功能码由同一有效委派覆盖，不能逐角色拼接不同委派 |
@@ -127,14 +133,17 @@ host/port先做DNS与网络目的地策略验证，拒绝云元数据/loopback�
 | DELETE /delegations/{id} | delegation:delete，平台管理员 | If-Match→撤销结果+epoch事件 |
 | GET /audit | audit:list | from/to(单次≤31天)、userId/platformId/datasourceId/tool/result/verdict/errorCode/cursor/pageSize→AuditSummary[]；不能筛sql_raw，不返回密文 |
 | GET /audit/{requestId} | audit:read | →AuditDetail（脱敏SQL、对象、版本、阶段耗时、错误/截断），普通审计员无原文 |
+| GET /audit/{requestId}/sensitive-access | audit:read | →原文访问轨迹；不含解密内容，仍核当前审计范围 |
 | POST /audit/{requestId}/decrypt | audit:decrypt，额外明确授权 | {fields:[sqlRaw/sqlFinal],reason:10..500}→{sqlRaw?,sqlFinal?,expiresAt}；每次持久审计后才返回，no-store，服务端不缓存明文；保留期外404 |
+| GET /operations | audit:list，平台管理员 | action/aggregateType/actorId/cursor/pageSize→管理操作日志游标页；不含原始SQL或结果 |
 
 身份绑定：新建用户为 UNBOUND；宿主供应/显式导入闭环前，登录、改密和发证均拒绝。普通资料编辑不改变绑定状态；当前尚无供应转换接口。已有 READY/Pending 也核对宿主 ID 与元库规范化登录名，不符时不自动重绑。
 
 专用status/roles/department接口始终核对应动作；委派管理员还须自身当前功能码与同一有效委派相交。
 这一份委派必须覆盖本条命令的全部动作、新旧部门及最终整组角色功能码，不从其他委派补足。
 每个接口使用同一次用户快照核If-Match、授权及生成写参数，保留落库同版本CAS；冲突不追新快照重试。
-专用命令不额外要求user:update，URL、DTO、ETag保持兼容。事务内actor/委派/角色定义重验与平台管理员逐动作码仍待后续切片。
+专用命令不额外要求user:update，URL、DTO、ETag保持兼容。平台管理员同样核对应动作；
+通用PUT还按实际变化组合status/assign-role/move。事务内actor/委派/角色定义重验仍待后续切片。
 
 启停实现：通用PUT与专用status共用OrgStore；ACTIVE/DISABLED实际变化与profile/roles、
 authVersion/identityVersion、ADMIN/AS/PAT/OAuth撤销、epoch、事件和操作日志在同一元库事务提交。

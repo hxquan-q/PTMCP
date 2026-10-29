@@ -34,6 +34,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -189,7 +190,9 @@ class AdminApiTest {
     @Autowired private DelegationStore delegationStore;
     @Autowired private DelegationScopeResolver delegationScopeResolver;
     @Autowired private IdempotencyRecorder idempotencyRecorder;
-    @Autowired private RequestMappingHandlerMapping handlerMapping;
+    @Autowired
+    @Qualifier("requestMappingHandlerMapping")
+    private RequestMappingHandlerMapping handlerMapping;
 
     @BeforeEach
     void resetOnlyOwnedData() throws Exception {
@@ -629,23 +632,27 @@ class AdminApiTest {
     @Test
     void selfGrantEscalationIsBlockedWithoutAnyRowWritten() throws Exception {
         long deptId = createDepartment("自增部");
-        createUser("esc-admin", "自增管理员", deptId);
+        long selfActor = createUser("esc-admin", "自增管理员", deptId);
+        try (Connection connection = connect()) {
+            AdminActionTestSupport.grant(connection, selfActor,
+                    AdminActionTestSupport.standardActions().toArray(String[]::new));
+        }
         long datasourceId = insertActiveDatasource();
 
         mockMvc.perform(
                         post("/api/v1/admin/acl/grants")
-                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-User-Id", selfActor)
                                 .header("X-Test-Platform-Admin", "true")
                                 .header("Idempotency-Key", "grant-esc-" + UUID.randomUUID())
                                 .contentType("application/json")
-                                .content(grantBody("USER", ADMIN_ID, datasourceId, "META", "ALLOW"))
+                                .content(grantBody("USER", selfActor, datasourceId, "META", "ALLOW"))
                                 .header("If-Match", "0"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("SELF_PRIVILEGE_ESCALATION"));
 
         mockMvc.perform(
                         get("/api/v1/admin/acl/grants")
-                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-User-Id", selfActor)
                                 .header("X-Test-Platform-Admin", "true"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
@@ -654,7 +661,7 @@ class AdminApiTest {
         MvcResult created =
                 mockMvc.perform(
                                 post("/api/v1/admin/acl/grants")
-                                        .header("X-Test-User-Id", ADMIN_ID)
+                                        .header("X-Test-User-Id", selfActor)
                                         .header("X-Test-Platform-Admin", "true")
                                         .header(
                                                 "Idempotency-Key",
@@ -674,7 +681,7 @@ class AdminApiTest {
 
         mockMvc.perform(
                         post("/api/v1/admin/acl/grants")
-                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-User-Id", selfActor)
                                 .header("X-Test-Platform-Admin", "true")
                                 .contentType("application/json")
                                 .content(
@@ -685,7 +692,7 @@ class AdminApiTest {
 
         mockMvc.perform(
                         delete("/api/v1/admin/acl/grants/" + grantId)
-                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-User-Id", selfActor)
                                 .header("X-Test-Platform-Admin", "true")
                                 .header("If-Match", "1"))
                 .andExpect(status().isOk())
@@ -693,7 +700,7 @@ class AdminApiTest {
 
         mockMvc.perform(
                         delete("/api/v1/admin/acl/grants/" + grantId)
-                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-User-Id", selfActor)
                                 .header("X-Test-Platform-Admin", "true")
                                 .header("If-Match", "2"))
                 .andExpect(status().isOk())
@@ -701,7 +708,7 @@ class AdminApiTest {
 
         mockMvc.perform(
                         get("/api/v1/admin/acl/grants")
-                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-User-Id", selfActor)
                                 .header("X-Test-Platform-Admin", "true"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
@@ -795,7 +802,8 @@ class AdminApiTest {
                                 .content(
                                         "{\"key\":\"dept_admin\",\"name\":\"部门管理员\","
                                                 + "\"enabled\":true,"
-                                                + "\"permissionCodes\":[\"ptmcp:department:update\","
+                                                + "\"permissionCodes\":[\"ptmcp:department:list\",\"ptmcp:department:read\","
+                                                + "\"ptmcp:department:update\","
                                                 + "\"ptmcp:department:delete\"]}"))
                 .andExpect(status().isCreated());
         // Grant the role via SQL (roles API list unused here); assign to delegate.
@@ -1036,6 +1044,7 @@ class AdminApiTest {
                                 "用户管理功能",
                                 true,
                                 List.of(
+                                        "ptmcp:user:list", "ptmcp:user:read",
                                         "ptmcp:user:update", "ptmcp:user:status",
                                         "ptmcp:user:assign-role", "ptmcp:user:move"),
                                 ADMIN_ID)
@@ -1984,6 +1993,11 @@ class AdminApiTest {
         long rootId = createDepartment("角色目录部");
         createUser("roletest-throwaway", "占位用户", rootId);
         long delegate = createUser("roletest-delegate", "角色目录受控员", rootId);
+        try (Connection connection = connect()) {
+            AdminActionTestSupport.grant(connection, delegate,
+                    "ptmcp:role:list", "ptmcp:role:read", "ptmcp:role:create");
+            AdminActionTestSupport.grant(connection, 42L, "ptmcp:role:list");
+        }
 
         mockMvc.perform(
                         post("/api/v1/admin/delegations")
@@ -2069,6 +2083,10 @@ class AdminApiTest {
         long outsideId = createDepartment("ACL作用域外");
         createUser("acl-throwaway", "占位用户", rootId);
         long delegate = createUser("acl-delegate", "ACL受控员", rootId);
+        try (Connection connection = connect()) {
+            AdminActionTestSupport.grant(connection, delegate, AdminActionTestSupport.standardActions().stream()
+                    .filter(code -> code.startsWith("ptmcp:acl:")).toArray(String[]::new));
+        }
         long insideSubject = createUser("acl-inside", "子树内主体", rootId);
         long secondInsideSubject = createUser("acl-inside-two", "子树内主体二", rootId);
         long outsideSubject = createUser("acl-outside", "子树外主体", outsideId);
@@ -3612,6 +3630,10 @@ class AdminApiTest {
 
     @Test
     void auditDecryptRequiresReasonRecordsAccessAndReturnsPlaintext() throws Exception {
+        actionActorRole("ptmcp:audit:read", "ptmcp:audit:decrypt");
+        try (Connection connection = connect()) {
+            AdminActionTestSupport.grant(connection, 2L, "ptmcp:audit:decrypt");
+        }
         String requestId = "11111111-2222-3333-4444-555555555555";
         local.ptmcp.admin.datasource.AuditCipher cipher =
                 new local.ptmcp.admin.datasource.AuditCipher(

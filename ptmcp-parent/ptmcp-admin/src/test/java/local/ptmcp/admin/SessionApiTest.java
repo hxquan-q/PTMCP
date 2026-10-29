@@ -438,6 +438,54 @@ class SessionApiTest {
                 .andExpect(status().isOk());
     }
 
+    @Test
+    void adminActionUsesCurrentCookiePermissionsAndPreservesCsrfAndSelfService() throws Exception {
+        seedPortal();
+        Session session = login("alice", PASSWORD);
+        String index = sessionIndexSnapshot(ALICE);
+        mockMvc.perform(get("/api/v1/admin/roles").cookie(session.cookie()))
+                .andExpect(status().isOk());
+        executeSql("DELETE FROM sys_role_permission WHERE permission_code='ptmcp:role:list'");
+        mockMvc.perform(get("/api/v1/admin/roles").cookie(session.cookie()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+        mockMvc.perform(get("/api/v1/session/me").cookie(session.cookie()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.platformAdmin").value(true))
+                .andExpect(header().doesNotExist("Set-Cookie"));
+        mockMvc.perform(get("/api/v1/me/tokens").cookie(session.cookie()))
+                .andExpect(status().isOk());
+
+        String key = UUID.randomUUID().toString();
+        String body = "{\"name\":\"cookie_action_probe\",\"enabled\":true}";
+        String departments = scalar("SELECT COUNT(*) FROM sys_dept");
+        mockMvc.perform(post("/api/v1/admin/departments").cookie(session.cookie())
+                        .header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_INVALID"));
+        assertEquals(departments, scalar("SELECT COUNT(*) FROM sys_dept"));
+        mockMvc.perform(post("/api/v1/admin/departments").cookie(session.cookie())
+                        .header("X-CSRF-Token", session.csrf())
+                        .header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated());
+        executeSql("DELETE FROM sys_role_permission WHERE permission_code='ptmcp:department:create'");
+        String operations = scalar("SELECT COUNT(*) FROM admin_operation_log");
+        departments = scalar("SELECT COUNT(*) FROM sys_dept");
+        String replays = scalar("SELECT COUNT(*) FROM api_idempotency");
+        mockMvc.perform(post("/api/v1/admin/departments").cookie(session.cookie())
+                        .header("X-CSRF-Token", session.csrf())
+                        .header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+        assertEquals(operations, scalar("SELECT COUNT(*) FROM admin_operation_log"));
+        assertEquals(departments, scalar("SELECT COUNT(*) FROM sys_dept"));
+        assertEquals(replays, scalar("SELECT COUNT(*) FROM api_idempotency"));
+        assertEquals(index, sessionIndexSnapshot(ALICE));
+    }
+
     private String assertSessionScope(Session session, boolean expected, String originalExpiresAt)
             throws Exception {
         MvcResult me =
@@ -1168,6 +1216,10 @@ class SessionApiTest {
         long roleId = addRole("portal-user", "门户用户");
         addRolePermission(roleId, "mcp:query");
         addRolePermission(roleId, "ptmcp:platform:scope");
+        addRolePermission(roleId, "ptmcp:role:list");
+        addRolePermission(roleId, "ptmcp:department:create");
+        addRolePermission(roleId, "ptmcp:user:read");
+        addRolePermission(roleId, "ptmcp:user:reset-password");
         addUser(ALICE, "alice", "爱丽丝", PASSWORD, deptId);
         addUser(BOB, "bob", "鲍勃", PASSWORD, deptId);
         addUserRole(ALICE, roleId);

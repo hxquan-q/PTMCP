@@ -197,10 +197,19 @@ class DatasourceApiTest {
                             "resource_namespace",
                             "schema_snapshot",
                             "acl_grant",
+                            "sys_user_role",
+                            "sys_role_permission",
+                            "sys_role",
                             "datasource")) {
                 statement.execute("DELETE FROM " + table);
             }
             statement.execute("SET FOREIGN_KEY_CHECKS = 1");
+            AdminActionTestSupport.grant(connection, Long.parseLong(ADMIN),
+                    AdminActionTestSupport.standardActions().stream()
+                            .filter(code -> code.startsWith("ptmcp:datasource:")
+                                    || code.startsWith("ptmcp:metadata:")
+                                    || code.equals("ptmcp:job:read"))
+                            .toArray(String[]::new));
         }
     }
 

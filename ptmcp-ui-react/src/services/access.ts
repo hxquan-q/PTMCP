@@ -331,6 +331,36 @@ export async function getAudit(requestId: string, signal?: AbortSignal): Promise
   return data;
 }
 
+export interface ScopeRule {
+  resourceType: string;
+  resourceId: string;
+  resourceGeneration: string;
+  action: string;
+  includeDescendants: boolean;
+}
+
+export interface ScopeRead {
+  items: ScopeRule[];
+  scopeVersion: string;
+  version: string;
+}
+
+export async function getPlatformScopes(id: string, signal?: AbortSignal): Promise<ScopeRead> {
+  const { data } = await request<ScopeRead>(`/api/v1/admin/platforms/${encodeURIComponent(id)}/scopes`, { signal });
+  return data;
+}
+
+/** 整组替换：PUT + If-Match；成功后 scopeVersion/version 均递增。 */
+export function savePlatformScopes(id: string, items: ScopeRule[], version: string | number, signal?: AbortSignal): Promise<ScopeRead> {
+  return writeRow<ScopeRead>(`/api/v1/admin/platforms/${encodeURIComponent(id)}/scopes`, {
+    method: 'PUT',
+    kind: 'update',
+    version,
+    body: { items },
+    signal,
+  } as Parameters<typeof writeRow>[1] & { signal?: AbortSignal });
+}
+
 export interface OperationRow {
   id: string;
   actorId: string;
