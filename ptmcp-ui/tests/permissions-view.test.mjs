@@ -17,7 +17,9 @@ test('主体面板按名称或精确字符串ID筛选，切换主体类型清除
     if (specifier === 'vue') return `from ${vue}`;
     if (specifier === './useAccessWorkspace') return `from ${JSON.stringify(workspace)}`;
     if (specifier === './resource-tree') return `from ${JSON.stringify(new URL('../src/views/admin/access/resource-tree.ts', import.meta.url).href)}`;
+    if (specifier === '../../portalUtils') return `from ${JSON.stringify(url('export const formatDate=(value)=>String(value);'))}`;
     if (specifier.endsWith('.vue')) return `from ${JSON.stringify(url('export default {};'))}`;
+    if (specifier.startsWith('~icons/')) return `from ${JSON.stringify(url('export default {};'))}`;
     return original;
   });
   const component = (await import(url(stripTypeScriptTypes(code, { mode: 'transform' })))).default;
