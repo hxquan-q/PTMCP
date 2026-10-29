@@ -1,12 +1,16 @@
 package local.ptmcp.gateway.mcp;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
 import local.ptmcp.common.authz.PermissionEvaluator;
+import local.ptmcp.common.error.DomainException;
+import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.datasource.connection.CredentialCipher;
 import local.ptmcp.persistence.org.AuthorizationReader;
 import local.ptmcp.persistence.schema.PublishedSnapshotReader;
@@ -14,6 +18,9 @@ import local.ptmcp.persistence.schema.PublishedSnapshotReader;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.mysql.MySQLContainer;
 
 import java.sql.Connection;
@@ -146,6 +153,111 @@ class ToolPermissionDenyTest {
 
         assertTrue(orders.read(), "the datasource-level ALLOW must grant READ on orders");
         assertFalse(secret.read(), "the object-level READ DENY must beat the datasource ALLOW");
+    }
+
+    private static void seedDepartmentUser() throws Exception {
+        try (Connection connection = PRIMARY.getConnection();
+                Statement statement = connection.createStatement()) {
+            statement.execute("INSERT INTO sys_dept (dept_id,parent_id,ancestors,dept_name,status,del_flag,create_time,update_time) VALUES"
+                    + " (101,0,'0','root','0','0',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6)),"
+                    + " (102,101,'0,101','middle','0','0',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6)),"
+                    + " (103,102,'0,101,102','direct','0','0',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
+            statement.execute("INSERT INTO sys_user_profile (user_id,dept_id,display_name,password_hash,status,create_time,update_time)"
+                    + " VALUES (101,103,'department-user','unused','ACTIVE',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
+        }
+    }
+
+    private static void clearDepartmentUser() throws Exception {
+        try (Connection connection = PRIMARY.getConnection();
+                Statement statement = connection.createStatement()) {
+            statement.execute("DELETE FROM acl_grant WHERE subject_type = 'DEPT' AND subject_id IN (101,102,103)");
+            statement.execute("DELETE FROM sys_user_profile WHERE user_id = 101");
+            statement.execute("DELETE FROM sys_dept WHERE dept_id IN (101,102,103)");
+        }
+    }
+
+    private static void departmentGrant(long deptId, String effect) throws Exception {
+        try (Connection connection = PRIMARY.getConnection();
+                PreparedStatement statement = connection.prepareStatement(
+                        "INSERT INTO acl_grant (subject_type,subject_id,resource_type,resource_id,resource_generation,action,effect,"
+                                + "include_descendants,valid_from,status,reason,create_time,update_time,created_by,updated_by)"
+                                + " VALUES ('DEPT',?,'DATASOURCE',1,1,'READ',?,1,UTC_TIMESTAMP(6),'ACTIVE','department regression',"
+                                + "UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),1,1)")) {
+            statement.setLong(1, deptId);
+            statement.setString(2, effect);
+            statement.executeUpdate();
+        }
+    }
+
+    private static ToolPermissionService.Session departmentSession(boolean inheritance) {
+        return new ToolPermissionService(new AuthorizationReader(PRIMARY), inheritance)
+                .open(101, 1, 1, new PublishedSnapshotReader(PRIMARY).load(1));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"101,1,0", "101,0,1", "102,1,0", "102,0,1", "103,1,0", "103,0,1"})
+    void inactiveDepartmentCannotGrantMcpRead(long deptId, String status, String deleted)
+            throws Exception {
+        try {
+            seedDepartmentUser();
+            departmentGrant(deptId, "ALLOW");
+            try (Connection connection = PRIMARY.getConnection();
+                    PreparedStatement statement = connection.prepareStatement(
+                            "UPDATE sys_dept SET status = ?, del_flag = ? WHERE dept_id = ?")) {
+                statement.setString(1, status);
+                statement.setString(2, deleted);
+                statement.setLong(3, deptId);
+                statement.executeUpdate();
+            }
+            assertFalse(departmentSession(true).decide(1).read(), "inactive department cannot contribute READ");
+            assertFalse(departmentSession(false).decide(1).read(), "disabling inheritance must still filter the direct department");
+        } finally {
+            clearDepartmentUser();
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"1,0", "0,1"})
+    void inactiveMiddleCannotRemoveMcpRootDeny(String status, String deleted) throws Exception {
+        try {
+            seedDepartmentUser();
+            departmentGrant(101, "DENY");
+            departmentGrant(103, "ALLOW");
+            try (Connection connection = PRIMARY.getConnection();
+                    PreparedStatement statement = connection.prepareStatement(
+                            "UPDATE sys_dept SET status = ?, del_flag = ? WHERE dept_id = 102")) {
+                statement.setString(1, status);
+                statement.setString(2, deleted);
+                statement.executeUpdate();
+            }
+            assertFalse(departmentSession(true).decide(1).read(), "active root DENY survives an inactive intermediate node");
+            assertTrue(departmentSession(false).decide(1).read(), "explicitly disabled inheritance leaves the direct ALLOW");
+        } finally {
+            clearDepartmentUser();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"SELF", "CYCLE", "MISSING_PARENT"})
+    void corruptDepartmentAuthorityRejectsMcpPermissionSession(String corruption) throws Exception {
+        try {
+            seedDepartmentUser();
+            departmentGrant(103, "ALLOW");
+            try (Connection connection = PRIMARY.getConnection();
+                    Statement statement = connection.createStatement()) {
+                switch (corruption) {
+                    case "SELF" -> statement.execute("UPDATE sys_dept SET parent_id = 103 WHERE dept_id = 103");
+                    case "CYCLE" -> statement.execute("UPDATE sys_dept SET parent_id = 103 WHERE dept_id = 101");
+                    default -> statement.execute("UPDATE sys_dept SET parent_id = 9999999 WHERE dept_id = 101");
+                }
+            }
+            for (boolean inheritance : new boolean[] {true, false}) {
+                DomainException failure = assertThrows(DomainException.class, () -> departmentSession(inheritance));
+                assertEquals(ErrorCode.SECURITY_STATE_UNAVAILABLE, failure.errorCode());
+            }
+        } finally {
+            clearDepartmentUser();
+        }
     }
 
     @AfterAll

@@ -39,6 +39,7 @@ import type { ConflictDifference } from '../../adapters/edit-conflict';
 import { updateDictionary, type DictionaryWrite } from '../../services/data';
 import { dsForm, dsValidate, type DsForm } from './dsForm';
 import { EditIcon, LockIcon } from '../../components/Icons';
+import { useSensitivePermissions } from '../../permissionsContext';
 import { ApiError } from '../../services/http';
 import { newUuid } from '../../services/uuid';
 
@@ -181,6 +182,7 @@ export function JobDetailPage({ id }: { id: string }) {
 /* ─── 审计详情:/admin/audit/{requestId} ─── */
 export function AuditDetailPage({ id }: { id: string }) {
   const [decryptOpen, setDecryptOpen] = useState(false);
+  const { can } = useSensitivePermissions();
   const [trail, setTrail] = useState<SensitiveAccessRow[]>([]);
   const [trailLoading, setTrailLoading] = useState(false);
   const [trailError, setTrailError] = useState('');
@@ -258,9 +260,11 @@ export function AuditDetailPage({ id }: { id: string }) {
             <div style={{ marginTop: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                 <strong style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>SQL（脱敏）</strong>
-                <button className="btn btn--secondary" onClick={() => setDecryptOpen(true)}>
-                  <LockIcon /> 解密查看
-                </button>
+                {can('auditDecrypt') ? (
+                  <button className="btn btn--secondary" onClick={() => setDecryptOpen(true)}>
+                    <LockIcon /> 解密查看
+                  </button>
+                ) : null}
               </div>
               <pre
                 style={{

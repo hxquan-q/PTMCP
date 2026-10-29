@@ -48,6 +48,7 @@ import { LoginPage } from './views/auth/LoginPage';
 import { getSession, logout, type SessionInfo } from './services/session';
 import { onSessionExpired } from './services/http';
 import { ADMIN_ROUTE_PERMISSIONS, filterNavGroups, resolveRoute, safeReturnTo, type PermissionedNavGroup } from './navigation';
+import { PermissionsContext, createPermissionsValue } from './permissionsContext';
 
 /* 轻量 hash 路由:#/me/integrations、#/admin/datasources … */
 function useHashRoute(): [string, (path: string) => void] {
@@ -314,6 +315,7 @@ export function App() {
   const [sessionState, setSessionState] = useState<'probing' | 'anonymous' | 'signed-in'>('probing');
   const [expiredNote, setExpiredNote] = useState('');
   const [returnTo, setReturnTo] = useState('/me/integrations');
+  const permissionsValue = useMemo(() => createPermissionsValue(session?.permissions), [session]);
   const pendingReturnRef = useRef<string | null>(null);
 
   const probe = useCallback(() => {
@@ -408,23 +410,25 @@ export function App() {
   }
 
   return (
-    <AppShell
-      groups={groups}
-      active={route?.navKey ?? ''}
-      onNavigate={onNavigate}
-      breadcrumb={route?.breadcrumb}
-      onLogout={() => {
-        setExpiredNote('');
-        setReturnTo('/me/integrations');
-        void logout().finally(() => {
-          setSession(null);
-          setSessionState('anonymous');
-        });
-      }}
-      user={session ? { displayName: session.displayName, department: session.department?.name ?? '' } : undefined}
-    >
-      {route ? route.element(resolved.match === 'prefix' ? resolved.id : undefined) : null}
-    </AppShell>
+    <PermissionsContext.Provider value={permissionsValue}>
+      <AppShell
+        groups={groups}
+        active={route?.navKey ?? ''}
+        onNavigate={onNavigate}
+        breadcrumb={route?.breadcrumb}
+        onLogout={() => {
+          setExpiredNote('');
+          setReturnTo('/me/integrations');
+          void logout().finally(() => {
+            setSession(null);
+            setSessionState('anonymous');
+          });
+        }}
+        user={session ? { displayName: session.displayName, department: session.department?.name ?? '' } : undefined}
+      >
+        {route ? route.element(resolved.match === 'prefix' ? resolved.id : undefined) : null}
+      </AppShell>
+    </PermissionsContext.Provider>
   );
 }
 

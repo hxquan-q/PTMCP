@@ -60,6 +60,14 @@ wrapper 未设置 executable，使用 bash 调用，不改文件权限。已有�
 
 ## 结果与证据
 
+当前切片：网关与管理端预览共用parent_id权威部门主体读取，不信任ancestors缓存；
+各节点自身停用/软删只排除该节点，保持有效祖先与DENY。以活动用户档案为单语句锚点，
+含直属最多64节点，环/缺父/缺直属/超深拒绝SECURITY_STATE_UNAVAILABLE；
+继承关闭仍校验完整链但只贡献直属主体（可用性收紧），不增加部署开关或epoch切换实现。
+先补真实MySQL缓存污染、状态组合、合法64层/非法链及网关决定回归，获得有效RED后实施。
+独立只读设计核阅已提出上述边界与null直属部门预览要求，实际实现和GREEN仍待复核。
+上一片根检查已重新实际执行，python scripts/check.py与git diff --check均exit0，62项检查器回归通过。
+
 当前切片：所有admin handler显式声明功能码，统一MVC入口默认拒绝未声明/无功能码请求；
 平台管理员不能绕过端点动作，通用用户PUT仍按实际变化补status/assign-role/move。
 身份状态读复用user:read，操作日志复用audit:list，原文访问轨迹复用audit:read，解密单独audit:decrypt。
@@ -130,6 +138,13 @@ Org23+Admin84共107项，0 failures/0 errors/0 skipped，三条原子性回归�
 独立只读复核指出复用路径给MOVE日志附加name，会把既有UPDATE/CREATE的手工JSON限制
 传播至原先只记录计数的MOVE。当前先以历史引号/反斜杠部门名补真实MOVE回归，
 取得候选实现的有效失败后恢复原MOVE日志结构；最终结果及复核另记，不累计重复执行。
+兼容有效RED：`department-move-compat-red.log`于2026-10-30 05:32:06 +08:00退出1，
+1 test/1 failure/0 errors/0 skipped，历史引号与反斜杠名称导致MOVE写JSON日志失败。
+现保留MOVE仅descendantsMoved的旧结构，不把CREATE/UPDATE既有手工JSON限制传播给移动。
+最终组合`department-edit-green-final.log`于2026-10-30 05:38:25 +08:00 BUILD SUCCESS/exit0，
+Org24+Admin84共108项，0 failures/0 errors/0 skipped；包含历史名称兼容及三条完整PUT回归。
+独立只读终审已核阅实际最终日志与当前源码，未发现新增阻断；复审未运行动态测试或修改文件。
+本片部分提交/目标双增版本问题关闭，原子性不代替部门授权/版本失效或commit丢确认闭环。
 
 身份组合 GREEN：`ptmcp-identity-combined-green.log` BUILD SUCCESS，78 tests / 0 failures/errors/skipped；
 覆盖双 MySQL 改密恢复13、真实 ADMIN 改密HTTP2、Session8、Org13、SecurityState13、OAuth27及MCP HTTP2。
