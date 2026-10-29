@@ -44,7 +44,7 @@ UI 改动涵盖 App、PageState、useCursorPage、styles、权限/审计/数据�
 | G3 候选与健康 | T15-c S4 | 错候选不替换 active、CAS 发布、健康绑定版本与目标 | pending |
 | G4 取消与容量 | T15-c S5/T19-d | 主体隔离取消、执行清理后归还额度、部署预算语义明确且有边界测试 | pending |
 | G5 密钥兼容 | T15-c S6 | 新旧钥兼容、对象绑定与迁移格式、日志不泄漏、恢复仍可读 | pending |
-| G6 字典上下文 | T15-c S7 | 三工具契约说明、授权后字典/关系/预算、撤权与恶意注释测试 | pending |
+| G6 字典上下文 | T15-c S7 | 三工具契约说明、授权后字典/关系/预算、撤权与恶意注释测试 | [in_progress](DEV-20261030-schema-context.md) |
 | G7 组合验收 | T19-e/T20 | 双引擎、OAuth、恢复、前后端适用门禁；真实客户端与部署证据单列 | pending |
 
 G1 写入范围为 gateway 元数据/过滤器/测试、API 合同、相关工作项与笔记。
@@ -80,12 +80,20 @@ token表单策略1/1，均0失败/0错误/0跳过；gateway元数据单测21/21�
 全部0失败/0错误/0跳过。撤销归属两项及旧快照save回滚撤族已先取得真实RED。
 修复先验client归属再处理refresh摘要、JWT本地验签与canonical audience/主体/family绑定；
 全局epoch先锁与统一撤族锁序，重放在grant写入前提交撤销，拒绝旧快照复活授权。
-独立复审进行中，不能用作者测试代替评审结论。
+独立只读复审已确认OAuth撤销归属、统一锁序、重放撤销提交与旧快照防复活均关闭，无新增阻断；
+复审读取实际GREEN日志，未重复运行动态测试。
 
-G2底层已加入OS目录锁、活动`.open`与封段`.wal`隔离、在线恢复共享owner和关闭后拒写；
-崩溃测试改为在writer关闭前真正halt。异常清理的最后小修尚待重验。
-G2仍未完成：需要网关恢复调度、同START事务的执行租约、旧boot有据UNKNOWN收敛与故障测试；
-当前不调用仅凭超时的UNKNOWN扫描。随后续接权威用户版本/ADMIN与AS会话、G3～G7。
+G2新增两项真实RED：`ptmcp-unknown-owner-red.log`为超时错误恢复2条，
+`ptmcp-wal-native-lock-red.log`为同JVM失败竞争者关闭第二句柄后外部JVM错误取得锁（预期23、实际0）。
+修复后`ptmcp-audit-recovery-green.log` BUILD SUCCESS：AuditRepository 11/11、WAL回放10/10、
+owner5/5、gateway McpAuditWriter 3/3，均无失败/错误/跳过。
+已经接入网关恢复worker、START/执行租约同主库事务、先回放封段再处理有据退休boot的过期START、
+损坏/容量/主库故障暂停新准入。仅凭超时的旧API无副作用，当前boot及无归属历史不自动UNKNOWN。
+G2仍未完成：正在补网关worker真实元库故障测试；独立复审发现UNKNOWN数据源ID遗漏及boot标记回收边界，
+需补元库退休围栏避免迟到START在删除证据后提交。随后续接权威用户版本/ADMIN与AS会话、G3～G7。
+worker首轮`ptmcp-recovery-worker-red.log`实际为5例、1 failure、3 errors：
+failure为容量不足仍回放并删除封段；3 errors为新测试夹具只改lease_until而未同步heartbeat_at，违反CHECK，
+属于测试编写错误，不计产品缺陷。已修正夹具，续加退休后迟到START零副作用及UNKNOWN保留数据源的回归。
 保留另一窗口的React、Vue测试辅助和.auto改动；其他窗口的提交可能已包含早期后端改动，不回退历史。
 
 G1 已完成：`McpResourceMetadata` 由四处部署配置（`resource-uri`、`resource`、`issuer`、

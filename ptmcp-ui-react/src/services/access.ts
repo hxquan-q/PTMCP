@@ -339,6 +339,29 @@ export function listMyTokens(signal?: AbortSignal): Promise<Page<TokenRow>> {
   return getPage('/api/v1/me/tokens?pageSize=100', signal);
 }
 
+export interface TokenWrite {
+  name: string;
+  platformId: string;
+  scopes: string[];
+  expiresAt: string;
+}
+
+export interface TokenCreated {
+  token: string;
+  metadata: TokenRow;
+}
+
+/** 创建 PAT：响应携带一次性明文 token，metadata 为落库视图（不再含明文）。 */
+export async function createToken(body: TokenWrite, signal?: AbortSignal): Promise<TokenCreated> {
+  const { data } = await request<TokenCreated>('/api/v1/me/tokens', {
+    method: 'POST',
+    body,
+    headers: { 'Idempotency-Key': idempotencyKey() },
+    signal,
+  });
+  return data;
+}
+
 export async function revokeToken(id: string, signal?: AbortSignal): Promise<void> {
   const { etag } = await request(`/api/v1/me/tokens/${id}`, { signal });
   await request(`/api/v1/me/tokens/${id}`, { method: 'DELETE', signal, headers: etag ? { 'If-Match': etag } : undefined });

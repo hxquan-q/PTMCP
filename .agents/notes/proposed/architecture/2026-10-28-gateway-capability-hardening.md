@@ -70,6 +70,10 @@ Status: proposed
    START与租约同事务，恢复先回放所有封段，再在同一主库事务锁定退休boot的过期租约及RUNNING行并写UNKNOWN。
    当前boot、其他卷/实例、无归属的历史START、仅租约超时都不能自动判UNKNOWN；不重放SQL。
    损坏或缺钥段保留并告警，阻止UNKNOWN掩盖尚未恢复的终结；恢复失败可重试，不能静默清理证据。
+   同JVM争锁必须在打开`.owner`前按realPath登记，否则Linux关闭失败竞争者的第二句柄会释放原生进程锁。
+   boot标记回收还需元库单调OPEN→RETIRED围栏：START先锁boot再写审计及lease；退休事务先封禁旧boot，
+   再处理过期lease。旧START先赢则退休等待其提交，退休先赢则迟到START拒绝，不能只凭一次空扫描删除证据。
+   仅参与该围栏的新格式boot、全部lease终结且封段回放完成后才回收文件；DB墓碑保留，旧格式标记不自动删除。
 4. **客户端取消尚未贯通。** `McpToolService.handle` 对无 id 通知直接 202，
    执行时创建独立 `ReadOnlyCancellation`，未见请求 owner 到取消句柄的映射。
    执行器支持取消不代表 `notifications/cancelled` 或断连能终止查询。

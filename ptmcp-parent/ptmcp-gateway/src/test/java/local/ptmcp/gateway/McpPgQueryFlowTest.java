@@ -161,6 +161,17 @@ class McpPgQueryFlowTest {
     }
 
     @Test
+    void pgCatalogDiscoversNamespaceBeforeSchemaIsKnown() throws Exception {
+        HttpResponse<String> listed = toolCall("list_databases_and_tables", Map.of("datasource_id", "1"), PAT);
+        assertEquals(200, listed.statusCode(), listed.body());
+        assertFalse(JSON.readTree(listed.body()).path("result").path("isError").asBoolean(true), listed.body());
+        assertEquals("public", data(listed).path("items").get(0).path("schemaName").asText());
+        HttpResponse<String> incomplete = toolCall("list_databases_and_tables",
+                Map.of("datasource_id", "1", "schema_name", "public"), PAT);
+        assertTrue(incomplete.body().contains("DIALECT_CONTEXT_INVALID"), incomplete.body());
+    }
+
+    @Test
     void pgSchemaAndQueryReturnTypedValues() throws Exception {
         HttpResponse<String> schema =
                 toolCall(

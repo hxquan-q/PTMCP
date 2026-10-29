@@ -63,6 +63,11 @@ final class ToolPermissionService {
             return cache.computeIfAbsent(objectId, this::evaluate);
         }
 
+        /** Rechecks half-open grant windows after slow metadata work, without cached decisions. */
+        Session atCurrentTime() {
+            return new Session(Instant.now(), scope, grants, platformScope, forest);
+        }
+
         /** The platform's META/READ ceiling for the object, before any user grants. */
         boolean platformVisible(long objectId) {
             Forest.Node target = forest.object(objectId);

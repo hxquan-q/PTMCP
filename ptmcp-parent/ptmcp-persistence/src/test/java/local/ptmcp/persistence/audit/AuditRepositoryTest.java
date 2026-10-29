@@ -508,6 +508,7 @@ class AuditRepositoryTest {
                 new TerminalWal(
                         recoveryDirectory, "instance", UUID.randomUUID().toString(), keys)) {
             retired = ownedStart(repository, old.executionOwner(), oldStart);
+            assertTrue(repository.confirmExecution(retired, 1, old.executionOwner()));
             walled = ownedStart(repository, old.executionOwner(), oldStart);
             unexpired = ownedStart(repository, old.executionOwner(), oldStart);
             old.append(terminal(walled, oldStart, AuditTerminal.Result.SUCCESS));
@@ -547,6 +548,12 @@ class AuditRepositoryTest {
             try (Connection connection = open()) {
                 assertOutcome(
                         connection, retired, "UNKNOWN", "UNKNOWN", "EXECUTION_OUTCOME_UNKNOWN");
+                assertEquals(
+                        1,
+                        scalar(
+                                connection,
+                                "SELECT datasource_id FROM audit_log WHERE request_id = ?",
+                                retired.toString()));
                 assertOutcome(connection, walled, "SUCCESS", "ALLOW", null);
                 assertOutcome(connection, unexpired, "RUNNING", "UNKNOWN", null);
                 assertOutcome(connection, unowned, "RUNNING", "UNKNOWN", null);
@@ -570,6 +577,48 @@ class AuditRepositoryTest {
         assertThrows(
                 DomainException.class,
                 () -> repository.markUnknownForRetiredBoot(savedProof.get(), 100));
+    }
+
+    @Test
+    void retiringAnEmptyBootRejectsAllLateOwnerWritesWithoutSideEffects() throws Exception {
+        AuditRepository repository = repository();
+        WalKeyProvider keys = () -> new WalKey("recovery-test", new byte[32]);
+        ExecutionOwner oldOwner;
+        try (TerminalWal old =
+                new TerminalWal(
+                        recoveryDirectory, "instance", UUID.randomUUID().toString(), keys)) {
+            oldOwner = old.executionOwner();
+        }
+        try (TerminalWal current =
+                new TerminalWal(
+                        recoveryDirectory, "instance", UUID.randomUUID().toString(), keys)) {
+            current.recoverRetiredBoots(
+                    proof -> assertEquals(0, repository.markUnknownForRetiredBoot(proof, 100)));
+            AuditStart late =
+                    new AuditStart(
+                            UUID.randomUUID(),
+                            7L,
+                            3L,
+                            "get_table_schema",
+                            null,
+                            null,
+                            pastMinutes(10));
+            assertEquals(
+                    ErrorCode.AUDIT_UNAVAILABLE,
+                    assertThrows(
+                                    DomainException.class,
+                                    () -> repository.insertStart(late, oldOwner))
+                            .errorCode());
+            assertThrows(DomainException.class, () -> repository.heartbeat(oldOwner));
+            assertThrows(
+                    DomainException.class,
+                    () -> repository.confirmExecution(late.requestId(), 1, oldOwner));
+            try (Connection connection = open()) {
+                assertEquals(0, count(connection, "audit_log", late.requestId()));
+                assertEquals(0, count(connection, "audit_outbox", late.requestId()));
+                assertEquals(0, count(connection, "execution_lease", late.requestId()));
+            }
+        }
     }
 
     @Test

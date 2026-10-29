@@ -23,7 +23,8 @@ final class SchemaContextText {
         int bytes = 0;
         while (end < value.length()) {
             int codePoint = value.codePointAt(end);
-            int width = codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
+            int width =
+                    codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
             if (bytes + width > limit) {
                 break;
             }

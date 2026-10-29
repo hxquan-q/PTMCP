@@ -58,7 +58,8 @@ class AuditRecoveryWorkerTest {
                                         "mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69"))
                         .withDatabaseName("gateway_recovery_test")
                         .withUsername("recovery_test")
-                        .withPassword(Base64.getUrlEncoder().withoutPadding().encodeToString(secret))
+                        .withPassword(
+                                Base64.getUrlEncoder().withoutPadding().encodeToString(secret))
                         .withUrlParam("connectionTimeZone", "UTC")
                         .withUrlParam("forceConnectionTimeZoneToSession", "true")
                         .withUrlParam("allowPublicKeyRetrieval", "true")
@@ -94,7 +95,8 @@ class AuditRecoveryWorkerTest {
 
     @BeforeEach
     void clearOnlyOwnedAuditRows() throws Exception {
-        try (Connection connection = primary.getConnection(); var sql = connection.createStatement()) {
+        try (Connection connection = primary.getConnection();
+                var sql = connection.createStatement()) {
             sql.executeUpdate("DELETE FROM execution_lease");
             sql.executeUpdate("DELETE FROM audit_outbox");
             sql.executeUpdate("DELETE FROM audit_log");
@@ -129,8 +131,9 @@ class AuditRecoveryWorkerTest {
             assertEquals("RUNNING", outcome(live.requestId()));
             assertEquals(1, count("execution_lease", admitted.requestId()));
             try (Connection connection = primary.getConnection();
-                    var sql = connection.prepareStatement(
-                            "SELECT boot_id, datasource_id, state FROM execution_lease WHERE request_id = ?")) {
+                    var sql =
+                            connection.prepareStatement(
+                                    "SELECT boot_id, datasource_id, state FROM execution_lease WHERE request_id = ?")) {
                 sql.setString(1, admitted.requestId().toString());
                 try (var rows = sql.executeQuery()) {
                     assertTrue(rows.next());
@@ -181,7 +184,10 @@ class AuditRecoveryWorkerTest {
         }
         Path segment;
         try (var files = Files.list(directory)) {
-            segment = files.filter(file -> file.toString().endsWith(".wal")).findFirst().orElseThrow();
+            segment =
+                    files.filter(file -> file.toString().endsWith(".wal"))
+                            .findFirst()
+                            .orElseThrow();
         }
         byte[] bytes = Files.readAllBytes(segment);
         bytes[bytes.length - 1] ^= 1;
@@ -190,7 +196,8 @@ class AuditRecoveryWorkerTest {
                 AuditRecoveryWorker worker = worker(repository, current)) {
             worker.recover();
             assertThrows(DomainException.class, current::requireAdmission);
-            assertTrue(Files.exists(segment.resolveSibling(segment.getFileName() + ".quarantined")));
+            assertTrue(
+                    Files.exists(segment.resolveSibling(segment.getFileName() + ".quarantined")));
             assertEquals("RUNNING", outcome(completed.requestId()));
             worker.recover();
             assertEquals(1, count("audit_outbox", completed.requestId()));
@@ -206,7 +213,8 @@ class AuditRecoveryWorkerTest {
             retired.append(success(completed));
         }
         try (TerminalWal current = wal();
-                AuditRecoveryWorker constrained = new AuditRecoveryWorker(repository, current, 1, 0);
+                AuditRecoveryWorker constrained =
+                        new AuditRecoveryWorker(repository, current, 1, 0);
                 AuditRecoveryWorker normal = worker(repository, current)) {
             constrained.recover();
             assertThrows(DomainException.class, current::requireAdmission);
@@ -224,7 +232,8 @@ class AuditRecoveryWorkerTest {
     void lowFreeDiskSpacePausesAdmission() {
         AuditRepository repository = new AuditRepository(primary);
         try (TerminalWal current = wal();
-                AuditRecoveryWorker worker = new AuditRecoveryWorker(repository, current, MAX_BYTES, Long.MAX_VALUE)) {
+                AuditRecoveryWorker worker =
+                        new AuditRecoveryWorker(repository, current, MAX_BYTES, Long.MAX_VALUE)) {
             worker.recover();
             assertThrows(DomainException.class, current::requireAdmission);
         }
@@ -240,21 +249,42 @@ class AuditRecoveryWorkerTest {
 
     private static AuditStart start() {
         return new AuditStart(
-                UUID.randomUUID(), 1L, 1L, "list_databases_and_tables", null, null,
+                UUID.randomUUID(),
+                1L,
+                1L,
+                "list_databases_and_tables",
+                null,
+                null,
                 Instant.now().minus(10, ChronoUnit.MINUTES).truncatedTo(ChronoUnit.MICROS));
     }
 
     private static AuditTerminal success(AuditStart start) {
         return new AuditTerminal(
-                start.requestId(), AuditTerminal.Result.SUCCESS, AuditTerminal.Verdict.ALLOW,
-                null, 1L, null, 0, false, null, null, null, null,
-                start.tool(), start.userId(), start.platformId(), null, start.startedAt());
+                start.requestId(),
+                AuditTerminal.Result.SUCCESS,
+                AuditTerminal.Verdict.ALLOW,
+                null,
+                1L,
+                null,
+                0,
+                false,
+                null,
+                null,
+                null,
+                null,
+                start.tool(),
+                start.userId(),
+                start.platformId(),
+                null,
+                start.startedAt());
     }
 
     private static void expire(ExecutionOwner owner) throws Exception {
         try (Connection connection = primary.getConnection();
-                var sql = connection.prepareStatement(
-                        "UPDATE execution_lease SET lease_until = DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 2 MINUTE) WHERE boot_id = ?")) {
+                var sql =
+                        connection.prepareStatement(
+                                "UPDATE execution_lease SET heartbeat_at = DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 3 MINUTE), "
+                                        + "lease_until = DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 2 MINUTE) WHERE boot_id = ?")) {
             sql.setString(1, owner.bootId());
             sql.executeUpdate();
         }
@@ -262,7 +292,9 @@ class AuditRecoveryWorkerTest {
 
     private static String outcome(UUID requestId) throws Exception {
         try (Connection connection = primary.getConnection();
-                var sql = connection.prepareStatement("SELECT result FROM audit_log WHERE request_id = ?")) {
+                var sql =
+                        connection.prepareStatement(
+                                "SELECT result FROM audit_log WHERE request_id = ?")) {
             sql.setString(1, requestId.toString());
             try (var rows = sql.executeQuery()) {
                 assertTrue(rows.next());
@@ -276,7 +308,9 @@ class AuditRecoveryWorkerTest {
             throw new IllegalArgumentException("Unexpected test table");
         }
         try (Connection connection = primary.getConnection();
-                var sql = connection.prepareStatement("SELECT COUNT(*) FROM " + table + " WHERE request_id = ?")) {
+                var sql =
+                        connection.prepareStatement(
+                                "SELECT COUNT(*) FROM " + table + " WHERE request_id = ?")) {
             sql.setString(1, requestId.toString());
             try (var rows = sql.executeQuery()) {
                 assertTrue(rows.next());
@@ -286,17 +320,19 @@ class AuditRecoveryWorkerTest {
     }
 
     private static DataSource switchable(AtomicBoolean unavailable) {
-        return (DataSource) Proxy.newProxyInstance(
-                DataSource.class.getClassLoader(), new Class<?>[] {DataSource.class},
-                (proxy, method, arguments) -> {
-                    if (method.getName().equals("getConnection") && unavailable.get()) {
-                        throw new SQLException("synthetic metadata outage");
-                    }
-                    try {
-                        return method.invoke(primary, arguments);
-                    } catch (InvocationTargetException failure) {
-                        throw failure.getCause();
-                    }
-                });
+        return (DataSource)
+                Proxy.newProxyInstance(
+                        DataSource.class.getClassLoader(),
+                        new Class<?>[] {DataSource.class},
+                        (proxy, method, arguments) -> {
+                            if (method.getName().equals("getConnection") && unavailable.get()) {
+                                throw new SQLException("synthetic metadata outage");
+                            }
+                            try {
+                                return method.invoke(primary, arguments);
+                            } catch (InvocationTargetException failure) {
+                                throw failure.getCause();
+                            }
+                        });
     }
 }

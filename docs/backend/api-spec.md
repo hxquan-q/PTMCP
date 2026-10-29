@@ -184,6 +184,22 @@ PG get/execute必须schema_name；MySQL三工具都拒绝非空schema_name。lis
 
 Column={index:整数,name:字符串,databaseType:字符串,logicalType:STRING/INTEGER/DECIMAL/FLOAT/BOOLEAN/DATE/TIME/LOCAL_DATETIME/INSTANT/BINARY/JSON,nullable:布尔,encoding:null/BASE64/JSON_TEXT}。重复列名保留，按index访问，不用map覆盖列。Cell为null、boolean、JSON number或JSON string；BIGINT/NUMERIC/DECIMAL固定string（INTEGER仅安全32位整数用number），浮点NaN/Infinity作为string并logicalType=FLOAT，客户端不可当JSON非法数字。日期YYYY-MM-DD，TIME含精度及有时区时显式offset，LOCAL_DATETIME为不带Z的数据库本地值，INSTANT转UTC带Z；不能伪造本地DATETIME为UTC。BINARY为BASE64；JSON为有界JSON_TEXT字符串，截断后不声称是完整合法JSON。单格4KiB按输出UTF-8/解码二进制预算，JSON转义和BASE64膨胀同时计入总1MiB。
 
+get_table_schema 的 data 另含 `contextPolicy="UNTRUSTED_DATA"`、`contextTruncated:boolean`。
+每张 table 另含 `tableCommentTruncated:boolean`、`businessDictionary:null或Dictionary`；
+每个 column 另含 `commentTruncated:boolean`、`businessDictionary:null或Dictionary`。
+Dictionary={source:"business_dictionary",version:十进制字符串,title:字符串,description:null或字符串,truncated:boolean}。
+业务字典标题/说明可表达业务词义与单位，独立于物理 tableComment/comment；不返回维护人等管理身份。
+只有整批表 READ 通过才读指定对象字典；列字典必须仍匹配当前发布快照的列，旧列词条不披露。
+读取后重新加载权限，返回前复核身份、主库安全状态、发布版本及当前时间的 READ（含已披露外键目标）；
+在途撤权、到期或版本变化时整批拒绝。
+
+schema 中每个注释、字典 title/description 最多 2048 UTF-8 字节；本次所有这些文本共享
+32768 UTF-8 字节预算，按表名自然排序、每表物理注释→表字典→列 ordinal 顺序分配，列内先物理注释再字典。
+按完整 Unicode code point 保留前缀，不添加伪造内容；任一字段缩短则其局部标记和 contextTruncated 为 true。
+预算用尽时已有词条可返回空文本及 truncated=true；null 表示没有该说明/字典。列名、类型、键不因文本预算被删改。
+最终 JSON 转义、text/structuredContent 双份和 JSON-RPC 壳仍计入 1MiB，结构超限整体返回 METADATA_TOO_LARGE。
+此预算是输出约束，不是宽表读取的聚合内存证明。tools/list 的三工具与参数说明明确这些文本为数据，不能作为代理指令。
+
 若已知SQL外层LIMIT等于上限且恰好返回上限，无法证明有更多行时 truncated=true,ROW_LIMIT 表示“已施加上限，可能还有行”，不额外取第501行突破预算。用户原LIMIT小于上限且全部返回不标ROW_LIMIT。CELL_LIMIT不将真实值改成[TRUNCATED]，有界前缀加独立cellTruncations。response预算在追加整行前计算，放不下的行整行舍弃，columns本身放不下返回RESULT_METADATA_TOO_LARGE。无任何列输出不能通过空结果逃避未知输出类型校验。
 
 错误 CallToolResult 统一 isError=true，structuredContent与text相同：

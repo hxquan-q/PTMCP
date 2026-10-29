@@ -1,7 +1,7 @@
 {
   "version": "1.0-design",
-  "date": "2026-10-23",
-  "status": "design-not-implemented",
+  "date": "2026-10-30",
+  "status": "input-contract-implemented",
   "transport": "streamable-http",
   "endpoint": "/mcp",
   "sessionMode": "STATELESS",
@@ -17,34 +17,43 @@
         "properties": {
           "datasource_id": {
             "type": "string",
-            "pattern": "^[0-9]+$"
+            "pattern": "^[0-9]+$",
+            "description": "Positive decimal datasource ID from the configured resource catalog."
           },
           "database_name": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 128
+            "maxLength": 128,
+            "description": ""
           },
           "schema_name": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 128
+            "maxLength": 128,
+            "description": "PostgreSQL schema name; optional filter, requires database_name. Omit for MySQL (non-empty values are rejected)."
           },
           "keyword": {
             "type": "string",
-            "maxLength": 128
+            "maxLength": 128,
+            "description": "Optional table-name search within this datasource and namespace filter.",
+            "minLength": 1
           },
           "cursor": {
             "type": "string",
-            "maxLength": 2048
+            "maxLength": 2048,
+            "description": "",
+            "minLength": 1
           },
           "page_size": {
             "type": "integer",
             "minimum": 1,
             "maximum": 100,
-            "default": 20
+            "default": 20,
+            "description": ""
           }
         }
-      }
+      },
+      "description": ""
     },
     {
       "name": "get_table_schema",
@@ -59,17 +68,20 @@
         "properties": {
           "datasource_id": {
             "type": "string",
-            "pattern": "^[0-9]+$"
+            "pattern": "^[0-9]+$",
+            "description": "Positive decimal datasource ID from the configured resource catalog."
           },
           "database_name": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 128
+            "maxLength": 128,
+            "description": ""
           },
           "schema_name": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 128
+            "maxLength": 128,
+            "description": "PostgreSQL schema name; required with database_name. Omit for MySQL (non-empty values are rejected)."
           },
           "table_names": {
             "type": "array",
@@ -80,10 +92,12 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 128
-            }
+            },
+            "description": "One to twenty distinct exact table names from the catalog, without database/schema prefixes."
           }
         }
-      }
+      },
+      "description": "Inspect columns, types, keys and administrator-maintained business dictionary "
     },
     {
       "name": "execute_readonly_sql",
@@ -98,30 +112,36 @@
         "properties": {
           "datasource_id": {
             "type": "string",
-            "pattern": "^[0-9]+$"
+            "pattern": "^[0-9]+$",
+            "description": "Positive decimal datasource ID from the configured resource catalog."
           },
           "database_name": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 128
+            "maxLength": 128,
+            "description": ""
           },
           "schema_name": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 128
+            "maxLength": 128,
+            "description": "PostgreSQL schema name; required with database_name. Omit for MySQL (non-empty values are rejected)."
           },
           "sql_query": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": ""
           },
           "max_rows": {
             "type": "integer",
             "minimum": 1,
             "maximum": 500,
-            "default": 500
+            "default": 500,
+            "description": ""
           }
         }
-      }
+      },
+      "description": ""
     }
   ]
 }
