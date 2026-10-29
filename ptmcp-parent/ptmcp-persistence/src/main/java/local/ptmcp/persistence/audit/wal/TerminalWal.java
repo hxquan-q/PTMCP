@@ -3,7 +3,12 @@ package local.ptmcp.persistence.audit.wal;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.persistence.audit.AuditTerminal;
+import local.ptmcp.persistence.audit.ExecutionOwner;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -11,11 +16,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -32,7 +39,7 @@ import java.util.regex.Pattern;
 public final class TerminalWal implements AutoCloseable {
     static final long DEFAULT_MAX_SEGMENT_BYTES = 64L * 1024 * 1024;
     private static final Pattern SEGMENT_FILE =
-            Pattern.compile("wal-(\\d{6})-.+\\.(?:wal|open)(?:\\..+)?");
+            Pattern.compile("wal-(\\d{6,19})-.+\\.(?:wal|open)(?:\\..+)?");
 
     private final Path directory;
     private final WalDirectoryOwner owner;
@@ -45,10 +52,11 @@ public final class TerminalWal implements AutoCloseable {
     private Path activeSegment;
     private WalKey segmentKey;
     private long channelSize;
-    private int segmentIndex;
+    private long segmentIndex;
     private long framesInSegment;
     private boolean poisoned;
     private boolean closed;
+    private volatile boolean recoveryAvailable;
 
     public TerminalWal(
             Path directory, String gatewayInstanceId, String bootId, WalKeyProvider keys) {
@@ -75,6 +83,7 @@ public final class TerminalWal implements AutoCloseable {
         }
         this.gatewayInstanceId = gatewayInstanceId;
         this.bootId = bootId;
+        new ExecutionOwner(gatewayInstanceId, bootId);
         this.keys = Objects.requireNonNull(keys, "keys");
         this.forceOnAppend = forceOnAppend;
         this.maxSegmentBytes = maxSegmentBytes;
@@ -83,6 +92,7 @@ public final class TerminalWal implements AutoCloseable {
         try {
             owner.recoverAbandonedSegments();
             this.segmentIndex = highestExistingSegment(this.directory);
+            persistBoot();
         } catch (RuntimeException failure) {
             owner.close();
             throw failure;
@@ -166,6 +176,124 @@ public final class TerminalWal implements AutoCloseable {
         }
     }
 
+    public ExecutionOwner executionOwner() {
+        owner.requireHeld();
+        return new ExecutionOwner(gatewayInstanceId, bootId);
+    }
+
+    public void recoveryAvailable(boolean available) {
+        recoveryAvailable = available;
+    }
+
+    public synchronized void requireAdmission() {
+        owner.requireHeld();
+        if (closed || poisoned || !recoveryAvailable) {
+            throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+        }
+    }
+
+    /** Quarantined evidence remains a blocking recovery incident until explicitly repaired. */
+    public synchronized void verifyRecoveryCapacity(long maxBytes, long minFreeBytes) {
+        owner.requireHeld();
+        if (maxBytes < 1 || minFreeBytes < 0) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
+        long bytes = 0;
+        int entries = 0;
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(directory)) {
+            for (Path file : files) {
+                String name = file.getFileName().toString();
+                if (++entries > 10000
+                        || name.endsWith(".quarantined")
+                        || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
+                    throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+                }
+                bytes = Math.addExact(bytes, Files.size(file));
+                if (bytes > maxBytes) {
+                    throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+                }
+            }
+            if (Files.getFileStore(directory).getUsableSpace() < minFreeBytes) {
+                throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+            }
+        } catch (IOException | ArithmeticException failure) {
+            throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+        }
+    }
+
+    /** The monitor keeps ownership held throughout the caller's recovery transactions. */
+    public synchronized void recoverRetiredBoots(Consumer<RetiredBoot> recovery) {
+        owner.requireHeld();
+        try (DirectoryStream<Path> pending = Files.newDirectoryStream(directory, "wal-*")) {
+            for (Path file : pending) {
+                String name = file.getFileName().toString();
+                if (name.endsWith(".wal") || name.endsWith(".quarantined")) {
+                    throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+                }
+            }
+        } catch (IOException failure) {
+            throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+        }
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "boot-*.boot")) {
+            int scanned = 0;
+            for (Path file : files) {
+                if (++scanned > 10000
+                        || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)
+                        || Files.size(file) > 512) {
+                    throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+                }
+                try (DataInputStream input =
+                        new DataInputStream(new ByteArrayInputStream(Files.readAllBytes(file)))) {
+                    if (input.readUnsignedByte() != 1) {
+                        throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+                    }
+                    ExecutionOwner retired = new ExecutionOwner(input.readUTF(), input.readUTF());
+                    if (input.available() != 0
+                            || !file.getFileName()
+                                    .toString()
+                                    .equals("boot-" + retired.bootId() + ".boot")) {
+                        throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+                    }
+                    if (!retired.bootId().equals(bootId)) {
+                        recovery.accept(new RetiredBoot(owner, retired));
+                    }
+                }
+            }
+        } catch (IOException failure) {
+            throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+        }
+    }
+
+    private void persistBoot() {
+        Path target = directory.resolve("boot-" + bootId + ".boot");
+        // Reusing a boot identity could make its previous tasks look live. Fail closed.
+        if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
+            throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+        }
+        Path temporary = directory.resolve("boot-" + bootId + ".tmp");
+        try {
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            try (DataOutputStream output = new DataOutputStream(bytes)) {
+                output.writeByte(1);
+                output.writeUTF(gatewayInstanceId);
+                output.writeUTF(bootId);
+            }
+            try (FileChannel file =
+                    FileChannel.open(
+                            temporary, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
+                ByteBuffer buffer = ByteBuffer.wrap(bytes.toByteArray());
+                while (buffer.hasRemaining()) {
+                    file.write(buffer);
+                }
+                file.force(true);
+            }
+            Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
+            WalDirectoryOwner.sync(directory);
+        } catch (IOException failure) {
+            throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+        }
+    }
+
     private byte[] encode(AuditTerminal terminal) {
         WalFormat.Frame frame =
                 new WalFormat.Frame(
@@ -185,10 +313,10 @@ public final class TerminalWal implements AutoCloseable {
         seal();
         segmentKey = keys.current();
         for (int attempt = 0; attempt < 2; attempt++) {
-            segmentIndex++;
-            if (segmentIndex > 999999) {
+            if (segmentIndex == Long.MAX_VALUE) {
                 throw new IOException("WAL segment sequence exhausted");
             }
+            segmentIndex++;
             Path file = directory.resolve(segmentName(segmentIndex));
             try {
                 channel =
@@ -244,7 +372,7 @@ public final class TerminalWal implements AutoCloseable {
         return header.array();
     }
 
-    private String segmentName(int index) {
+    private String segmentName(long index) {
         return String.format("wal-%06d-%s.open", index, bootId);
     }
 
@@ -267,13 +395,13 @@ public final class TerminalWal implements AutoCloseable {
         activeSegment = null;
     }
 
-    private static int highestExistingSegment(Path directory) {
+    private static long highestExistingSegment(Path directory) {
         try (DirectoryStream<Path> files = Files.newDirectoryStream(directory)) {
-            int highest = 0;
+            long highest = 0;
             for (Path file : files) {
                 Matcher match = SEGMENT_FILE.matcher(file.getFileName().toString());
                 if (match.matches()) {
-                    highest = Math.max(highest, Integer.parseInt(match.group(1)));
+                    highest = Math.max(highest, Long.parseLong(match.group(1)));
                 }
             }
             return highest;

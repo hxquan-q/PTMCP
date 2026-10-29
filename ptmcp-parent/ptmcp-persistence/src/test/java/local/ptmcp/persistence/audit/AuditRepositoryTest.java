@@ -10,17 +10,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
+import local.ptmcp.persistence.audit.wal.RetiredBoot;
+import local.ptmcp.persistence.audit.wal.TerminalWal;
+import local.ptmcp.persistence.audit.wal.WalKey;
+import local.ptmcp.persistence.audit.wal.WalKeyProvider;
 
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.testcontainers.mysql.MySQLContainer;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.sql.Connection;
@@ -41,6 +47,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.sql.DataSource;
 
@@ -48,6 +55,7 @@ import javax.sql.DataSource;
 class AuditRepositoryTest {
     private static final String SENSITIVE_RAW = "synthetic-secret-card-4111111111111111";
     private static MySQLContainer mysql;
+    @TempDir Path recoveryDirectory;
 
     @BeforeAll
     static void startSyntheticMetadataDatabase() throws Exception {
@@ -485,6 +493,136 @@ class AuditRepositoryTest {
             assertEquals(0, count(connection, "audit_outbox", requestId));
             assertEquals(0, count(connection, "audit_log", requestId));
         }
+    }
+
+    @Test
+    void ownedRecoveryReplaysTerminalsFirstAndOnlyReconcilesExpiredRetiredBoots() throws Exception {
+        AuditRepository repository = repository();
+        Instant oldStart = pastMinutes(30);
+        UUID retired;
+        UUID walled;
+        UUID unexpired;
+        UUID unowned = admitted(repository, oldStart);
+        WalKeyProvider keys = () -> new WalKey("recovery-test", new byte[32]);
+        try (TerminalWal old =
+                new TerminalWal(
+                        recoveryDirectory, "instance", UUID.randomUUID().toString(), keys)) {
+            retired = ownedStart(repository, old.executionOwner(), oldStart);
+            walled = ownedStart(repository, old.executionOwner(), oldStart);
+            unexpired = ownedStart(repository, old.executionOwner(), oldStart);
+            old.append(terminal(walled, oldStart, AuditTerminal.Result.SUCCESS));
+            try (Connection connection = open()) {
+                expireLease(connection, retired);
+                expireLease(connection, walled);
+            }
+        }
+        AtomicReference<RetiredBoot> savedProof = new AtomicReference<>();
+        try (TerminalWal current =
+                new TerminalWal(
+                        recoveryDirectory, "instance", UUID.randomUUID().toString(), keys)) {
+            UUID live = ownedStart(repository, current.executionOwner(), oldStart);
+            try (Connection connection = open()) {
+                expireLease(connection, live);
+            }
+            assertThrows(
+                    DomainException.class,
+                    () ->
+                            current.recoverRetiredBoots(
+                                    proof -> repository.markUnknownForRetiredBoot(proof, 100)));
+            assertEquals(1, current.replayClosed(repository::submitTerminal).framesIngested());
+            AtomicInteger recovered = new AtomicInteger();
+            current.recoverRetiredBoots(
+                    proof -> {
+                        savedProof.set(proof);
+                        recovered.addAndGet(repository.markUnknownForRetiredBoot(proof, 100));
+                    });
+            assertEquals(1, recovered.get());
+            current.recoverRetiredBoots(
+                    proof -> assertEquals(0, repository.markUnknownForRetiredBoot(proof, 100)));
+            assertFalse(
+                    repository.confirmExecution(
+                            live, 1, new ExecutionOwner("instance", UUID.randomUUID().toString())));
+            assertTrue(repository.confirmExecution(live, 1, current.executionOwner()));
+            repository.submitTerminal(terminal(live, oldStart, AuditTerminal.Result.SUCCESS));
+            try (Connection connection = open()) {
+                assertOutcome(
+                        connection, retired, "UNKNOWN", "UNKNOWN", "EXECUTION_OUTCOME_UNKNOWN");
+                assertOutcome(connection, walled, "SUCCESS", "ALLOW", null);
+                assertOutcome(connection, unexpired, "RUNNING", "UNKNOWN", null);
+                assertOutcome(connection, unowned, "RUNNING", "UNKNOWN", null);
+                assertOutcome(connection, live, "SUCCESS", "ALLOW", null);
+                assertEquals(1, terminalOutbox(connection, retired));
+                assertEquals(1, terminalOutbox(connection, walled));
+                assertEquals(0, terminalOutbox(connection, unexpired));
+                assertEquals(0, terminalOutbox(connection, unowned));
+                try (var statement =
+                        connection.prepareStatement(
+                                "SELECT state FROM execution_lease WHERE request_id = ?")) {
+                    statement.setString(1, live.toString());
+                    try (var result = statement.executeQuery()) {
+                        assertTrue(result.next());
+                        assertEquals("TERMINAL", result.getString(1));
+                    }
+                }
+            }
+        }
+        assertNotNull(savedProof.get());
+        assertThrows(
+                DomainException.class,
+                () -> repository.markUnknownForRetiredBoot(savedProof.get(), 100));
+    }
+
+    @Test
+    void startReplayCannotReassignAnExecutionOwner() throws Exception {
+        AuditRepository repository = repository();
+        ExecutionOwner owner = new ExecutionOwner("instance", UUID.randomUUID().toString());
+        UUID id = ownedStart(repository, owner, pastMinutes(10));
+        AuditStart identical;
+        try (Connection connection = open();
+                var statement =
+                        connection.prepareStatement(
+                                "SELECT started_at FROM audit_log WHERE request_id = ?")) {
+            statement.setString(1, id.toString());
+            try (var result = statement.executeQuery()) {
+                assertTrue(result.next());
+                identical =
+                        new AuditStart(
+                                id,
+                                7L,
+                                3L,
+                                "get_table_schema",
+                                null,
+                                null,
+                                result.getObject(1, LocalDateTime.class).toInstant(ZoneOffset.UTC));
+            }
+        }
+        repository.insertStart(identical, owner);
+        DomainException failure =
+                assertThrows(
+                        DomainException.class,
+                        () ->
+                                repository.insertStart(
+                                        identical,
+                                        new ExecutionOwner(
+                                                "instance", UUID.randomUUID().toString())));
+        assertEquals(ErrorCode.IDEMPOTENCY_KEY_REUSED, failure.errorCode());
+        assertTrue(repository.confirmExecution(id, 1, owner));
+    }
+
+    private static UUID ownedStart(
+            AuditRepository repository, ExecutionOwner owner, Instant startedAt) {
+        UUID id = UUID.randomUUID();
+        repository.insertStart(
+                new AuditStart(id, 7L, 3L, "get_table_schema", null, null, startedAt), owner);
+        return id;
+    }
+
+    private static void expireLease(Connection connection, UUID id) throws SQLException {
+        update(
+                connection,
+                "UPDATE execution_lease SET heartbeat_at = DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 3 MINUTE), "
+                        + "lease_until = DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 2 MINUTE) WHERE request_id = ?",
+                id.toString());
     }
 
     @Test

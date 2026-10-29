@@ -1,4 +1,4 @@
-import { request } from './http';
+import { idempotencyKey, request } from './http';
 
 export type SubjectType = 'USER' | 'ROLE' | 'DEPT';
 export type ResourceType = 'DATASOURCE' | 'NAMESPACE' | 'OBJECT';
@@ -186,6 +186,62 @@ export function listPlatforms(params?: { pageSize?: number; cursor?: string; sig
 
 export function listClients(platformId: string, signal?: AbortSignal): Promise<Page<ClientRow>> {
   return getPage(`/api/v1/admin/platforms/${platformId}/clients?pageSize=100`, signal);
+}
+
+export interface PlatformWrite {
+  code: string;
+  name: string;
+  tier: number;
+  catalogMode: string;
+  proofMode: string;
+  status: string;
+}
+
+export interface ClientWrite {
+  name: string;
+  type: string;
+  authMethods: string[];
+}
+
+/** 客户端创建响应：CONFIDENTIAL + client_secret_basic 时一次性返回明文 secret。 */
+export interface ClientCreated {
+  client: ClientRow;
+  clientSecret?: string;
+}
+
+async function writeRow<T>(
+  path: string,
+  init: { method: 'POST' | 'PUT' | 'DELETE'; body?: unknown } & ({ kind: 'create' } | { kind: 'update' | 'delete'; version: string | number }),
+): Promise<T> {
+  const headers = new Headers();
+  if (init.kind === 'create') headers.set('Idempotency-Key', idempotencyKey());
+  else headers.set('If-Match', `"${init.version}"`);
+  const { data } = await request<T>(path, { method: init.method, body: init.body, headers });
+  return data;
+}
+
+export function createPlatform(body: PlatformWrite): Promise<PlatformRow> {
+  return writeRow<PlatformRow>('/api/v1/admin/platforms', { method: 'POST', kind: 'create', body });
+}
+
+export function updatePlatform(id: string, body: PlatformWrite, version: string | number): Promise<PlatformRow> {
+  return writeRow<PlatformRow>(`/api/v1/admin/platforms/${encodeURIComponent(id)}`, { method: 'PUT', kind: 'update', version, body });
+}
+
+export function deletePlatform(id: string, version: string | number): Promise<void> {
+  return writeRow<void>(`/api/v1/admin/platforms/${encodeURIComponent(id)}`, { method: 'DELETE', kind: 'delete', version });
+}
+
+export function createClient(platformId: string, body: ClientWrite): Promise<ClientCreated> {
+  return writeRow<ClientCreated>(`/api/v1/admin/platforms/${platformId}/clients`, { method: 'POST', kind: 'create', body });
+}
+
+export function updateClient(id: string, body: ClientWrite, version: string | number): Promise<ClientRow> {
+  return writeRow<ClientRow>(`/api/v1/admin/clients/${encodeURIComponent(id)}`, { method: 'PUT', kind: 'update', version, body });
+}
+
+export function deleteClient(id: string, version: string | number): Promise<void> {
+  return writeRow<void>(`/api/v1/admin/clients/${encodeURIComponent(id)}`, { method: 'DELETE', kind: 'delete', version });
 }
 
 export function listDelegations(params?: { userId?: string; pageSize?: number; signal?: AbortSignal }): Promise<Page<DelegationRow>> {

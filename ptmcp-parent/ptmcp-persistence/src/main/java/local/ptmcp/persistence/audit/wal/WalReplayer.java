@@ -75,6 +75,9 @@ public final class WalReplayer {
         for (Path segment : segments) {
             Path done = directory.resolve(segment.getFileName().toString() + DONE_SUFFIX);
             if (Files.exists(done)) {
+                if (deleteQuietly(segment)) {
+                    deleteQuietly(done);
+                }
                 skipped++;
                 continue;
             }
@@ -153,7 +156,9 @@ public final class WalReplayer {
                 truncatedBytes += file.length - validEnd;
             }
             checkpoint(done);
-            deleteQuietly(segment);
+            if (deleteQuietly(segment)) {
+                deleteQuietly(done);
+            }
             replayed++;
         }
         return new ReplayReport(
@@ -168,15 +173,23 @@ public final class WalReplayer {
 
     private static List<Path> listSegments(Path directory) {
         List<Path> segments = new ArrayList<>();
-        try (DirectoryStream<Path> files =
-                Files.newDirectoryStream(directory, "wal-??????-*.wal")) {
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "wal-*.wal")) {
             for (Path file : files) {
                 segments.add(file);
             }
         } catch (IOException error) {
             throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
         }
-        segments.sort(Comparator.comparing(path -> path.getFileName().toString()));
+        segments.sort(
+                Comparator.comparingLong(
+                        path -> {
+                            String name = path.getFileName().toString();
+                            try {
+                                return Long.parseLong(name.substring(4, name.indexOf('-', 4)));
+                            } catch (RuntimeException malformed) {
+                                throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+                            }
+                        }));
         return segments;
     }
 
@@ -210,12 +223,14 @@ public final class WalReplayer {
         }
     }
 
-    private static void deleteQuietly(Path segment) {
+    private static boolean deleteQuietly(Path segment) {
         try {
             Files.deleteIfExists(segment);
             WalDirectoryOwner.sync(segment.getParent());
+            return true;
         } catch (IOException ignored) {
             // The .done marker already prevents double ingestion; a locked file is retried later.
+            return false;
         }
     }
 }

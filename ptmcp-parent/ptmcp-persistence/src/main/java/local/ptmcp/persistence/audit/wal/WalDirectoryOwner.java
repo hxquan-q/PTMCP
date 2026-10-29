@@ -15,6 +15,7 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** One OS-enforced owner per persistent WAL directory, shared by its writer and recovery worker. */
 final class WalDirectoryOwner implements AutoCloseable {
@@ -24,6 +25,7 @@ final class WalDirectoryOwner implements AutoCloseable {
     private final Path directory;
     private final FileChannel channel;
     private final FileLock lock;
+    private final AtomicBoolean closed = new AtomicBoolean();
 
     private WalDirectoryOwner(Path directory, FileChannel channel, FileLock lock) {
         this.directory = directory;
@@ -70,7 +72,7 @@ final class WalDirectoryOwner implements AutoCloseable {
             } catch (IOException ignored) {
                 // The acquisition fails closed regardless of cleanup outcome.
             }
-            if (registered) {
+            if (registered && (channel == null || !channel.isOpen())) {
                 LOCAL_OWNERS.remove(directory);
             }
             throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
@@ -82,7 +84,7 @@ final class WalDirectoryOwner implements AutoCloseable {
     }
 
     void requireHeld() {
-        if (!lock.isValid()) {
+        if (closed.get() || !lock.isValid()) {
             throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
         }
     }
@@ -90,8 +92,7 @@ final class WalDirectoryOwner implements AutoCloseable {
     /** Only a new directory owner may seal segments abandoned by an earlier process. */
     void recoverAbandonedSegments() {
         requireHeld();
-        try (DirectoryStream<Path> files =
-                Files.newDirectoryStream(directory, "wal-??????-*.open")) {
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "wal-*.open")) {
             for (Path file : files) {
                 if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
                     throw new IOException("Unexpected WAL segment type");
@@ -106,8 +107,6 @@ final class WalDirectoryOwner implements AutoCloseable {
             sync(directory);
         } catch (IOException failure) {
             throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
-        } finally {
-            LOCAL_OWNERS.remove(directory);
         }
     }
 
@@ -119,6 +118,9 @@ final class WalDirectoryOwner implements AutoCloseable {
 
     @Override
     public void close() {
+        if (!closed.compareAndSet(false, true)) {
+            return;
+        }
         try {
             try {
                 if (lock.isValid()) {
@@ -129,6 +131,10 @@ final class WalDirectoryOwner implements AutoCloseable {
             }
         } catch (IOException failure) {
             throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+        } finally {
+            if (!channel.isOpen()) {
+                LOCAL_OWNERS.remove(directory);
+            }
         }
     }
 }

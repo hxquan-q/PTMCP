@@ -34,7 +34,8 @@ final class AuditRecoveryWorker implements AutoCloseable {
     }
 
     void start() {
-        scheduler.scheduleWithFixedDelay(this::recover, 0, 10, TimeUnit.SECONDS);
+        recover();
+        scheduler.scheduleWithFixedDelay(this::recover, 10, 10, TimeUnit.SECONDS);
     }
 
     void recover() {

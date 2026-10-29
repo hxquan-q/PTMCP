@@ -1,16 +1,55 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Badge, EmptyState, PageHeader, StatusDot, Tabs } from '../../components/common';
-import { listClients, listPlatforms, type ClientRow, type PlatformRow } from '../../services/access';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, Badge, Dialog, EmptyState, Field, PageHeader, Select, StatusDot, Tabs, TextInput } from '../../components/common';
+import { CloseIcon, CopyIcon, EditIcon, PlusIcon } from '../../components/Icons';
+import {
+  createClient,
+  createPlatform,
+  deleteClient,
+  deletePlatform,
+  listClients,
+  listPlatforms,
+  updateClient,
+  updatePlatform,
+  type ClientCreated,
+  type ClientRow,
+  type PlatformRow,
+} from '../../services/access';
 
 const TIER_LABEL: Record<number, string> = { 1: '一级', 2: '二级', 3: '三级' };
+const CATALOG_MODES = ['BLACKLIST', 'WHITELIST', 'FULL'];
+const PROOF_MODES = ['NONE', 'PKCE_S256'];
+const CLIENT_TYPES = ['PUBLIC', 'CONFIDENTIAL'];
+const AUTH_METHODS = ['client_secret_basic', 'client_secret_post', 'private_key_jwt', 'none'];
+
+interface PlatformForm {
+  code: string;
+  name: string;
+  tier: string;
+  catalogMode: string;
+  proofMode: string;
+  status: string;
+}
+
+interface ClientForm {
+  platformId: string;
+  name: string;
+  type: string;
+  authMethods: string[];
+}
 
 export function PlatformsPage() {
   const [platforms, setPlatforms] = useState<PlatformRow[]>([]);
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('platforms');
+  const [reloadTick, setReloadTick] = useState(0);
+  const [platformDialog, setPlatformDialog] = useState<{ mode: 'create' } | { mode: 'edit'; row: PlatformRow } | null>(null);
+  const [clientDialog, setClientDialog] = useState<{ mode: 'create' } | { mode: 'edit'; row: ClientRow } | null>(null);
+  const [deleting, setDeleting] = useState<{ kind: 'platform' | 'client'; row: PlatformRow | ClientRow } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [secretCreated, setSecretCreated] = useState<ClientCreated | null>(null);
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     let cancelled = false;
     setLoading(true);
     listPlatforms({ pageSize: 100 })
@@ -38,6 +77,8 @@ export function PlatformsPage() {
     };
   }, []);
 
+  useEffect(reload, [reload, reloadTick]);
+
   const clientCount = useMemo(() => {
     const m = new Map<string, number>();
     for (const c of clients) m.set(c.platformId, (m.get(c.platformId) ?? 0) + 1);
@@ -46,7 +87,21 @@ export function PlatformsPage() {
 
   return (
     <>
-      <PageHeader title="平台与客户端" description="接入平台的层级、目录模式与关联 OAuth 客户端。" />
+      <PageHeader
+        title="平台与客户端"
+        description="接入平台的层级、目录模式与关联 OAuth 客户端。"
+        actions={
+          tab === 'platforms' ? (
+            <button className="btn btn--primary" onClick={() => setPlatformDialog({ mode: 'create' })}>
+              <PlusIcon /> 新建平台
+            </button>
+          ) : (
+            <button className="btn btn--primary" onClick={() => setClientDialog({ mode: 'create' })}>
+              <PlusIcon /> 新建客户端
+            </button>
+          )
+        }
+      />
       <div className="table-card" style={{ flex: 1, minHeight: 0 }}>
         <div style={{ padding: '0 14px', flex: 'none' }}>
           <Tabs
@@ -69,6 +124,7 @@ export function PlatformsPage() {
                   <th>凭证</th>
                   <th>客户端数</th>
                   <th>状态</th>
+                  <th style={{ width: 150 }}>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -96,6 +152,19 @@ export function PlatformsPage() {
                     <td>
                       <StatusDot tone={p.status === 'ACTIVE' ? 'success' : 'neutral'}>{p.status === 'ACTIVE' ? '启用' : '停用'}</StatusDot>
                     </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <button className="link" onClick={() => setPlatformDialog({ mode: 'edit', row: p })}>
+                        <EditIcon /> 编辑
+                      </button>
+                      <button
+                        className="link"
+                        style={{ marginLeft: 10, color: 'var(--ptmcp-red)' }}
+                        onClick={() => setDeleting({ kind: 'platform', row: p })}
+                        aria-label={`删除平台 ${p.name}`}
+                      >
+                        <CloseIcon /> 删除
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -109,6 +178,7 @@ export function PlatformsPage() {
                   <th>所属平台</th>
                   <th>类型</th>
                   <th>状态</th>
+                  <th style={{ width: 150 }}>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -128,15 +198,369 @@ export function PlatformsPage() {
                     <td>
                       <StatusDot tone={c.status === 'ACTIVE' ? 'success' : 'neutral'}>{c.status === 'ACTIVE' ? '启用' : '停用'}</StatusDot>
                     </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <button className="link" onClick={() => setClientDialog({ mode: 'edit', row: c })}>
+                        <EditIcon /> 编辑
+                      </button>
+                      <button
+                        className="link"
+                        style={{ marginLeft: 10, color: 'var(--ptmcp-red)' }}
+                        onClick={() => setDeleting({ kind: 'client', row: c })}
+                        aria-label={`删除客户端 ${c.name}`}
+                      >
+                        <CloseIcon /> 删除
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
-          {!loading && tab === 'platforms' && platforms.length === 0 ? <EmptyState title="暂无平台" description="创建平台后在此管理。" /> : null}
-          {!loading && tab === 'clients' && clients.length === 0 ? <EmptyState title="暂无客户端" description="为平台注册 OAuth 客户端。" /> : null}
+          {!loading && tab === 'platforms' && platforms.length === 0 ? (
+            <EmptyState title="暂无平台" description="点击右上角「新建平台」创建。" />
+          ) : null}
+          {!loading && tab === 'clients' && clients.length === 0 ? (
+            <EmptyState title="暂无客户端" description="切换到客户端页签后点击「新建客户端」。" />
+          ) : null}
         </div>
       </div>
+
+      {platformDialog ? (
+        <PlatformDialog
+          state={platformDialog}
+          onClose={() => setPlatformDialog(null)}
+          onSaved={() => {
+            setPlatformDialog(null);
+            setReloadTick((t) => t + 1);
+          }}
+        />
+      ) : null}
+      {clientDialog ? (
+        <ClientDialog
+          state={clientDialog}
+          platforms={platforms}
+          onClose={() => setClientDialog(null)}
+          onSaved={() => {
+            setClientDialog(null);
+            setReloadTick((t) => t + 1);
+          }}
+          onSecret={(created) => setSecretCreated(created)}
+        />
+      ) : null}
+
+      <Dialog
+        open={!!deleting}
+        title={deleting?.kind === 'platform' ? '删除平台' : '删除客户端'}
+        onClose={() => setDeleting(null)}
+        width={440}
+        footer={
+          <>
+            <button className="btn btn--secondary" onClick={() => setDeleting(null)} disabled={busy}>
+              取消
+            </button>
+            <button
+              className="btn btn--primary"
+              style={{ background: 'var(--ptmcp-red)' }}
+              disabled={busy}
+              onClick={async () => {
+                if (!deleting) return;
+                setBusy(true);
+                try {
+                  if (deleting.kind === 'platform') await deletePlatform(deleting.row.id, deleting.row.version);
+                  else await deleteClient(deleting.row.id, deleting.row.version);
+                  setDeleting(null);
+                  setReloadTick((t) => t + 1);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {busy ? '删除中…' : '确认删除'}
+            </button>
+          </>
+        }
+      >
+        <p style={{ margin: 0, fontSize: 13 }}>
+          {deleting?.kind === 'platform'
+            ? `确认删除平台「${deleting.row.name}」？其下客户端将一并失效，该操作不可撤销。`
+            : `确认删除客户端「${deleting?.row.name}」？使用该客户端的会话将立即失效。`}
+        </p>
+      </Dialog>
+
+      {/* 一次性 secret 展示：关闭后不可再取 */}
+      <Dialog
+        open={!!secretCreated}
+        title="客户端密钥已生成"
+        onClose={() => setSecretCreated(null)}
+        width={520}
+        footer={
+          <button className="btn btn--primary" onClick={() => setSecretCreated(null)}>
+            我已保存，关闭
+          </button>
+        }
+      >
+        <Alert kind="warning" title="密钥仅此一次展示">
+          关闭后无法再次查看，请立即复制并妥善保管（对照 PAT 的发放模式）。
+        </Alert>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+          <code
+            style={{
+              flex: 1,
+              padding: '10px 12px',
+              background: 'var(--ptmcp-canvas)',
+              border: '1px solid var(--ptmcp-border)',
+              borderRadius: 8,
+              fontSize: 12.5,
+              wordBreak: 'break-all',
+              userSelect: 'all',
+            }}
+          >
+            {secretCreated?.clientSecret}
+          </code>
+          <button
+            className="btn btn--secondary"
+            onClick={() => navigator.clipboard?.writeText(secretCreated?.clientSecret ?? '').catch(() => undefined)}
+          >
+            <CopyIcon /> 复制
+          </button>
+        </div>
+      </Dialog>
     </>
+  );
+}
+
+function PlatformDialog({
+  state,
+  onClose,
+  onSaved,
+}: {
+  state: { mode: 'create' } | { mode: 'edit'; row: PlatformRow };
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const editing = state.mode === 'edit' ? state.row : null;
+  const [values, setValues] = useState<PlatformForm>(() => ({
+    code: editing?.code ?? '',
+    name: editing?.name ?? '',
+    tier: String(editing?.tier ?? '3'),
+    catalogMode: editing?.catalogMode ?? 'BLACKLIST',
+    proofMode: editing?.proofMode ?? 'PKCE_S256',
+    status: editing?.status ?? 'ACTIVE',
+  }));
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [conflict, setConflict] = useState('');
+
+  const submit = async () => {
+    setFormError('');
+    setConflict('');
+    const code = values.code.trim();
+    const name = values.name.trim();
+    if (!editing && !/^[a-z][a-z0-9-]{1,63}$/.test(code)) {
+      setFormError('平台编码须以小写字母开头，仅含小写字母、数字与短横线，长度 2–64');
+      return;
+    }
+    if (name.length < 2 || name.length > 128) {
+      setFormError('平台名称长度须为 2–128 个字符');
+      return;
+    }
+    const body = {
+      code,
+      name,
+      tier: Number(values.tier),
+      catalogMode: values.catalogMode,
+      proofMode: values.proofMode,
+      status: values.status,
+    };
+    setSaving(true);
+    try {
+      if (editing) await updatePlatform(editing.id, body, editing.version);
+      else await createPlatform(body);
+      onSaved();
+    } catch (e) {
+      const status = (e as { status?: number }).status;
+      if (status === 412) setConflict('该平台已被他人修改，请关闭后重试。');
+      else if (status === 409) setConflict('平台编码已存在。');
+      else setFormError((e as Error).message || '保存失败，请稍后重试。');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open title={editing ? `编辑平台 · ${editing.name}` : '新建平台'} onClose={onClose} width={520}>
+      {conflict ? (
+        <Alert kind="warning" title="版本冲突（412）">
+          {conflict}
+        </Alert>
+      ) : null}
+      <Field label="平台编码" hint={editing ? '编码创建后不可修改' : '小写字母开头，可含数字与短横线'}>
+        <TextInput value={values.code} onChange={(v) => setValues((s) => ({ ...s, code: v }))} disabled={!!editing} placeholder="prod-desktop" />
+      </Field>
+      <Field label="平台名称">
+        <TextInput value={values.name} onChange={(v) => setValues((s) => ({ ...s, name: v }))} placeholder="如：合成桌面平台" />
+      </Field>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <Field label="层级">
+          <Select
+            value={values.tier}
+            onChange={(v) => setValues((s) => ({ ...s, tier: v }))}
+            options={[1, 2, 3].map((t) => ({ value: String(t), label: `Tier ${t}（${TIER_LABEL[t]}）` }))}
+          />
+        </Field>
+        <Field label="状态">
+          <Select
+            value={values.status}
+            onChange={(v) => setValues((s) => ({ ...s, status: v }))}
+            options={[
+              { value: 'ACTIVE', label: '启用' },
+              { value: 'DISABLED', label: '停用' },
+            ]}
+          />
+        </Field>
+        <Field label="目录模式">
+          <Select
+            value={values.catalogMode}
+            onChange={(v) => setValues((s) => ({ ...s, catalogMode: v }))}
+            options={CATALOG_MODES.map((m) => ({ value: m, label: m }))}
+          />
+        </Field>
+        <Field label="凭证模式" hint="留空 NONE 表示不要求 proof">
+          <Select
+            value={values.proofMode}
+            onChange={(v) => setValues((s) => ({ ...s, proofMode: v }))}
+            options={PROOF_MODES.map((m) => ({ value: m, label: m }))}
+          />
+        </Field>
+      </div>
+      {formError ? <Alert kind="danger">{formError}</Alert> : null}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
+        <button className="btn btn--secondary" onClick={onClose} disabled={saving}>
+          取消
+        </button>
+        <button className="btn btn--primary" onClick={submit} disabled={saving}>
+          {saving ? '保存中…' : editing ? '保存修改' : '创建平台'}
+        </button>
+      </div>
+    </Dialog>
+  );
+}
+
+function ClientDialog({
+  state,
+  platforms,
+  onClose,
+  onSaved,
+  onSecret,
+}: {
+  state: { mode: 'create' } | { mode: 'edit'; row: ClientRow };
+  platforms: PlatformRow[];
+  onClose: () => void;
+  onSaved: () => void;
+  onSecret: (created: ClientCreated) => void;
+}) {
+  const editing = state.mode === 'edit' ? state.row : null;
+  const [values, setValues] = useState<ClientForm>(() => ({
+    platformId: editing?.platformId ?? platforms[0]?.id ?? '',
+    name: editing?.name ?? '',
+    type: editing?.type ?? 'CONFIDENTIAL',
+    authMethods: ['client_secret_basic'],
+  }));
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [conflict, setConflict] = useState('');
+
+  const submit = async () => {
+    setFormError('');
+    setConflict('');
+    const name = values.name.trim();
+    if (name.length < 2 || name.length > 128) {
+      setFormError('客户端名称长度须为 2–128 个字符');
+      return;
+    }
+    if (!values.platformId) {
+      setFormError('请选择所属平台');
+      return;
+    }
+    if (values.authMethods.length === 0) {
+      setFormError('请至少选择一种认证方式');
+      return;
+    }
+    setSaving(true);
+    try {
+      if (editing) {
+        await updateClient(editing.id, { name, type: values.type, authMethods: values.authMethods }, editing.version);
+        onSaved();
+      } else {
+        const created = await createClient(values.platformId, { name, type: values.type, authMethods: values.authMethods });
+        onSaved();
+        if (created.clientSecret) onSecret(created);
+      }
+    } catch (e) {
+      const status = (e as { status?: number }).status;
+      if (status === 412) setConflict('该客户端已被他人修改，请关闭后重试。');
+      else setFormError((e as Error).message || '保存失败，请稍后重试。');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open title={editing ? `编辑客户端 · ${editing.name}` : '新建客户端'} onClose={onClose} width={520}>
+      {conflict ? (
+        <Alert kind="warning" title="版本冲突（412）">
+          {conflict}
+        </Alert>
+      ) : null}
+      <Field label="所属平台" hint={editing ? '所属平台不可修改' : undefined}>
+        <Select
+          value={values.platformId}
+          onChange={(v) => setValues((s) => ({ ...s, platformId: v }))}
+          disabled={!!editing}
+          options={platforms.map((p) => ({ value: p.id, label: p.name }))}
+        />
+      </Field>
+      <Field label="客户端名称">
+        <TextInput value={values.name} onChange={(v) => setValues((s) => ({ ...s, name: v }))} placeholder="如：WorkBuddy 接入端" />
+      </Field>
+      <Field label="客户端类型" hint="CONFIDENTIAL 类型创建后会一次性发放 client secret">
+        <Select
+          value={values.type}
+          onChange={(v) => setValues((s) => ({ ...s, type: v }))}
+          options={CLIENT_TYPES.map((t) => ({ value: t, label: t }))}
+        />
+      </Field>
+      <Field label={`认证方式（已选 ${values.authMethods.length}）`}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, border: '1px solid var(--ptmcp-border)', borderRadius: 8, padding: 6 }}>
+          {AUTH_METHODS.map((method) => (
+            <label
+              key={method}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px', borderRadius: 6, cursor: 'pointer', fontSize: 12.5 }}
+            >
+              <input
+                type="checkbox"
+                checked={values.authMethods.includes(method)}
+                onChange={() =>
+                  setValues((s) => ({
+                    ...s,
+                    authMethods: s.authMethods.includes(method) ? s.authMethods.filter((m) => m !== method) : [...s.authMethods, method],
+                  }))
+                }
+              />
+              <code>{method}</code>
+            </label>
+          ))}
+        </div>
+      </Field>
+      {formError ? <Alert kind="danger">{formError}</Alert> : null}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
+        <button className="btn btn--secondary" onClick={onClose} disabled={saving}>
+          取消
+        </button>
+        <button className="btn btn--primary" onClick={submit} disabled={saving}>
+          {saving ? '保存中…' : editing ? '保存修改' : '创建客户端'}
+        </button>
+      </div>
+    </Dialog>
   );
 }

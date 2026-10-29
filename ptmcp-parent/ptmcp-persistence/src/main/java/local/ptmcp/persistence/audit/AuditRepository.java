@@ -2,6 +2,7 @@ package local.ptmcp.persistence.audit;
 
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
+import local.ptmcp.persistence.audit.wal.RetiredBoot;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -67,12 +68,10 @@ public final class AuditRepository {
             "SELECT result, verdict, error_code, completed_at FROM audit_log WHERE request_id = ?";
     private static final String SELECT_STALE =
             "SELECT l.request_id, l.user_id, l.platform_id, l.tool, l.datasource_id, l.started_at "
-                    + "FROM audit_log l "
-                    + "WHERE l.result = 'RUNNING' AND l.started_at <= ? "
-                    + "AND NOT EXISTS (SELECT 1 FROM execution_lease e "
-                    + "WHERE e.request_id = l.request_id "
+                    + "FROM audit_log l JOIN execution_lease e ON e.request_id = l.request_id "
+                    + "WHERE l.result = 'RUNNING' AND e.gateway_instance_id = ? AND e.boot_id = ? "
                     + "AND e.state IN ('QUEUED', 'RUNNING', 'CANCELLING') "
-                    + "AND e.lease_until > UTC_TIMESTAMP(6)) "
+                    + "AND e.lease_until <= UTC_TIMESTAMP(6) "
                     + "ORDER BY l.started_at, l.request_id LIMIT ?";
 
     private final AuditTransaction transaction;
@@ -86,12 +85,21 @@ public final class AuditRepository {
      * Persists the minimal START or accepts an identical replay; a changed payload is a conflict.
      */
     public void insertStart(AuditStart start) {
+        insertStart(start, null);
+    }
+
+    /** START and its process lease are committed together, before any business connection. */
+    public void insertStart(AuditStart start, ExecutionOwner owner) {
         if (start == null) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
+        if (owner != null && start.userId() == null) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
         AuditPayloads.Payload payload = AuditPayloads.start(start);
         transaction.execute(
                 connection -> {
+                    lockAuditRow(connection, start.requestId());
                     boolean inserted =
                             insertOutbox(connection, start.requestId(), "START", 0, payload);
                     if (!inserted) {
@@ -105,6 +113,9 @@ public final class AuditRepository {
                         }
                     }
                     materializeStart(connection, start);
+                    if (owner != null) {
+                        insertLease(connection, start, owner);
+                    }
                     return null;
                 });
     }
@@ -119,35 +130,174 @@ public final class AuditRepository {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
         AuditPayloads.Payload payload = AuditPayloads.terminal(terminal);
-        return transaction.execute(
-                connection -> {
-                    boolean inserted =
-                            insertOutbox(connection, terminal.requestId(), "TERMINAL", 1, payload);
-                    if (!inserted) {
-                        return replayTerminal(connection, terminal, payload);
-                    }
-                    return persistTerminal(connection, terminal, payload.hash());
-                });
+        return transaction.execute(connection -> submitTerminal(connection, terminal, payload));
+    }
+
+    private static TerminalState submitTerminal(
+            Connection connection, AuditTerminal terminal, AuditPayloads.Payload payload)
+            throws SQLException {
+        lockAuditRow(connection, terminal.requestId());
+        boolean inserted = insertOutbox(connection, terminal.requestId(), "TERMINAL", 1, payload);
+        TerminalState state =
+                inserted
+                        ? persistTerminal(connection, terminal, payload.hash())
+                        : replayTerminal(connection, terminal, payload);
+        try (PreparedStatement statement =
+                AuditTransaction.statement(
+                        connection,
+                        "UPDATE execution_lease SET state = 'TERMINAL', version = version + 1, "
+                                + "update_time = UTC_TIMESTAMP(6) WHERE request_id = ? AND state <> 'TERMINAL'")) {
+            statement.setString(1, terminal.requestId().toString());
+            statement.executeUpdate();
+        }
+        return state;
     }
 
     /**
-     * Recovers START-only rows as UNKNOWN when the cutoff has passed and no execution lease is
-     * still active. This is a recovery primitive; it must not be called for in-flight work.
+     * Compatibility entry point: a cutoff alone cannot prove a process is dead. It deliberately
+     * does no recovery. The directory-owner proof is required by markUnknownForRetiredBoot.
      */
     public int markUnknownIfStale(Instant staleBefore, int limit) {
         if (staleBefore == null || limit < 1 || limit > 1000) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
-        List<AuditTerminal> stale =
-                transaction.execute(connection -> selectStale(connection, staleBefore, limit));
-        int recovered = 0;
-        for (AuditTerminal terminal : stale) {
-            TerminalState state = submitTerminal(terminal);
-            if (!state.alreadyExisted() && !state.conflict()) {
-                recovered++;
+        return 0;
+    }
+
+    /** Only a new owner of the same persistent directory can recover a retired boot. */
+    public int markUnknownForRetiredBoot(RetiredBoot proof, int limit) {
+        if (proof == null || limit < 1 || limit > 1000) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
+        ExecutionOwner retired = proof.identity();
+        return transaction.execute(
+                connection -> {
+                    int recovered = 0;
+                    for (AuditTerminal terminal : selectStale(connection, retired, limit)) {
+                        if (!lockAuditRow(connection, terminal.requestId())) {
+                            continue;
+                        }
+                        try (PreparedStatement statement =
+                                AuditTransaction.statement(
+                                        connection,
+                                        "SELECT request_id FROM execution_lease WHERE request_id = ? "
+                                                + "AND gateway_instance_id = ? AND boot_id = ? "
+                                                + "AND state IN ('QUEUED', 'RUNNING', 'CANCELLING') "
+                                                + "AND lease_until <= UTC_TIMESTAMP(6) FOR UPDATE")) {
+                            statement.setString(1, terminal.requestId().toString());
+                            statement.setString(2, retired.instanceId());
+                            statement.setString(3, retired.bootId());
+                            try (ResultSet result = statement.executeQuery()) {
+                                if (!result.next()) {
+                                    continue;
+                                }
+                            }
+                        }
+                        proof.requireHeld();
+                        TerminalState state =
+                                submitTerminal(
+                                        connection, terminal, AuditPayloads.terminal(terminal));
+                        if (!state.alreadyExisted() && !state.conflict()) {
+                            recovered++;
+                        }
+                    }
+                    proof.requireHeld();
+                    return recovered;
+                });
+    }
+
+    public void heartbeat(ExecutionOwner owner) {
+        Objects.requireNonNull(owner, "owner");
+        transaction.execute(
+                connection -> {
+                    try (PreparedStatement statement =
+                            AuditTransaction.statement(
+                                    connection,
+                                    "UPDATE execution_lease SET heartbeat_at = UTC_TIMESTAMP(6), "
+                                            + "lease_until = TIMESTAMPADD(SECOND, 90, UTC_TIMESTAMP(6)), "
+                                            + "version = version + 1, update_time = UTC_TIMESTAMP(6) "
+                                            + "WHERE gateway_instance_id = ? AND boot_id = ? "
+                                            + "AND state IN ('QUEUED', 'RUNNING', 'CANCELLING')")) {
+                        statement.setString(1, owner.instanceId());
+                        statement.setString(2, owner.bootId());
+                        statement.executeUpdate();
+                    }
+                    return null;
+                });
+    }
+
+    public boolean confirmExecution(UUID requestId, long datasourceId, ExecutionOwner owner) {
+        if (requestId == null || datasourceId <= 0 || owner == null) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
+        return transaction.execute(
+                connection -> {
+                    if (!lockAuditRow(connection, requestId)) {
+                        return false;
+                    }
+                    try (PreparedStatement statement =
+                            AuditTransaction.statement(
+                                    connection,
+                                    "UPDATE execution_lease SET datasource_id = ?, state = 'RUNNING', "
+                                            + "execution_started_at = COALESCE(execution_started_at, UTC_TIMESTAMP(6)), "
+                                            + "heartbeat_at = UTC_TIMESTAMP(6), "
+                                            + "lease_until = TIMESTAMPADD(SECOND, 90, UTC_TIMESTAMP(6)), "
+                                            + "version = version + 1, update_time = UTC_TIMESTAMP(6) "
+                                            + "WHERE request_id = ? AND gateway_instance_id = ? AND boot_id = ? "
+                                            + "AND state IN ('QUEUED', 'RUNNING')")) {
+                        statement.setLong(1, datasourceId);
+                        statement.setString(2, requestId.toString());
+                        statement.setString(3, owner.instanceId());
+                        statement.setString(4, owner.bootId());
+                        return statement.executeUpdate() == 1;
+                    }
+                });
+    }
+
+    private static boolean lockAuditRow(Connection connection, UUID requestId) throws SQLException {
+        try (PreparedStatement statement =
+                AuditTransaction.statement(
+                        connection,
+                        "SELECT result FROM audit_log WHERE request_id = ? FOR UPDATE")) {
+            statement.setString(1, requestId.toString());
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() && "RUNNING".equals(result.getString(1));
             }
         }
-        return recovered;
+    }
+
+    private static void insertLease(Connection connection, AuditStart start, ExecutionOwner owner)
+            throws SQLException {
+        try (PreparedStatement statement =
+                AuditTransaction.statement(
+                        connection,
+                        "INSERT INTO execution_lease (request_id, user_id, gateway_instance_id, boot_id, "
+                                + "state, heartbeat_at, lease_until, create_time, update_time) "
+                                + "VALUES (?, ?, ?, ?, 'QUEUED', UTC_TIMESTAMP(6), "
+                                + "TIMESTAMPADD(SECOND, 90, UTC_TIMESTAMP(6)), UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))")) {
+            statement.setString(1, start.requestId().toString());
+            statement.setLong(2, start.userId());
+            statement.setString(3, owner.instanceId());
+            statement.setString(4, owner.bootId());
+            statement.executeUpdate();
+        } catch (SQLException failure) {
+            if (!AuditTransaction.duplicateKey(failure)) {
+                throw failure;
+            }
+            try (PreparedStatement existing =
+                    AuditTransaction.statement(
+                            connection,
+                            "SELECT gateway_instance_id, boot_id FROM execution_lease WHERE request_id = ? FOR UPDATE")) {
+                existing.setString(1, start.requestId().toString());
+                try (ResultSet result = existing.executeQuery()) {
+                    if (!result.next()
+                            || !owner.instanceId().equals(result.getString(1))
+                            || !owner.bootId().equals(result.getString(2))) {
+                        throw new DomainException(ErrorCode.IDEMPOTENCY_KEY_REUSED);
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -393,11 +543,12 @@ public final class AuditRepository {
     }
 
     private static List<AuditTerminal> selectStale(
-            Connection connection, Instant staleBefore, int limit) throws SQLException {
+            Connection connection, ExecutionOwner retired, int limit) throws SQLException {
         List<AuditTerminal> stale = new ArrayList<>();
         try (PreparedStatement statement = AuditTransaction.statement(connection, SELECT_STALE)) {
-            statement.setObject(1, utc(staleBefore));
-            statement.setInt(2, limit);
+            statement.setString(1, retired.instanceId());
+            statement.setString(2, retired.bootId());
+            statement.setInt(3, limit);
             try (ResultSet result = statement.executeQuery()) {
                 while (result.next()) {
                     stale.add(

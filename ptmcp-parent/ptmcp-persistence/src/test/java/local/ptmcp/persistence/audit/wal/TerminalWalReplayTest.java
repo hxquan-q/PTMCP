@@ -248,7 +248,8 @@ class TerminalWalReplayTest {
     }
 
     @Test
-    void unknownRecoveryNeverTouchesStoredSuccessAndLateWalSuccessConflicts() throws Exception {
+    void previouslyStoredUnknownNeverOverwritesSuccessAndLateWalSuccessConflicts()
+            throws Exception {
         AuditRepository repository = repository();
         Instant startedAt = pastMinutes(30);
 
@@ -261,7 +262,27 @@ class TerminalWalReplayTest {
             wal.append(terminal(walled, startedAt, "SELECT 'walled'"));
         }
 
-        assertEquals(1, repository.markUnknownIfStale(Instant.now(), 100));
+        // Simulate an UNKNOWN produced by an older/manual recovery. New automated recovery
+        // must replay the WAL first; this test preserves the conflicting-ending invariant.
+        repository.submitTerminal(
+                new AuditTerminal(
+                        walled,
+                        AuditTerminal.Result.UNKNOWN,
+                        AuditTerminal.Verdict.UNKNOWN,
+                        "EXECUTION_OUTCOME_UNKNOWN",
+                        null,
+                        null,
+                        null,
+                        false,
+                        null,
+                        null,
+                        null,
+                        null,
+                        "execute_readonly_sql",
+                        7L,
+                        3L,
+                        1L,
+                        startedAt));
 
         List<AuditRepository.TerminalState> states = new ArrayList<>();
         WalReplayer.ReplayReport report =

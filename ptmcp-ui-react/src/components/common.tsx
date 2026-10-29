@@ -219,17 +219,19 @@ export function Select({
   options,
   width,
   label,
+  disabled,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
   width?: number | string;
   label?: string;
+  disabled?: boolean;
 }) {
   return (
     <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--ptmcp-text)' }}>
       {label}
-      <select className="select" style={{ width }} value={value} onChange={(e) => onChange(e.target.value)}>
+      <select className="select" style={{ width }} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
         {options.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
