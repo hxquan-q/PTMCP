@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Badge,
+  DrawerFields,
   Dialog,
   EmptyState,
   Field,
@@ -16,6 +17,7 @@ import { CopyIcon, PlusIcon } from '../../components/Icons';
 import {
   createToken,
   listMyAuthorizations,
+  getMyHistoryDetail,
   listMyHistory,
   listMyTokens,
   revokeAuthorization,
@@ -27,6 +29,7 @@ import {
 } from '../../services/access';
 import { listDatasources, listMetadata, type DatasourceRead, type MetadataObject } from '../../services/data';
 import { mePortalApi } from '../../services/mePortalApi';
+import { BackBar } from '../admin/DetailPages';
 
 function fmt(at: string | null | undefined): string {
   return at ? at.slice(0, 19).replace('T', ' ') : '—';
@@ -488,7 +491,15 @@ export function HistoryPage() {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.requestId}>
-                  <td style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{fmt(r.startedAt)}</td>
+                  <td style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>
+                    <button
+                      className="link"
+                      onClick={() => (window.location.hash = `/me/history/${encodeURIComponent(r.requestId)}`)}
+                      aria-label={`查看请求 ${r.requestId} 详情`}
+                    >
+                      {fmt(r.startedAt)}
+                    </button>
+                  </td>
                   <td>
                     <Badge tone="neutral">{r.tool}</Badge>
                   </td>
@@ -549,6 +560,203 @@ export function SecurityPage() {
           <Alert kind="info">修改密码与会话管理暂未在预览模式提供;接入线上环境后通过会话管理页操作。</Alert>
         </div>
       </div>
+    </>
+  );
+}
+
+/* ─── 查询历史详情（个人视角，脱敏 SQL + 耗时分解 + 排障指引） ─── */
+export function HistoryDetailPage({ requestId }: { requestId: string }) {
+  const [row, setRow] = useState<AuditRow | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    setRow(null);
+    getMyHistoryDetail(requestId)
+      .then((data) => !cancelled && setRow(data))
+      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : '读取失败'))
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [requestId]);
+
+  const guidance =
+    row?.result === 'UNKNOWN'
+      ? '执行结局不确定或请求超时，请按 requestId 排查；不要直接认定未执行或自动重复查询。'
+      : row?.result === 'ERROR'
+        ? '语法或只读规则拒绝时，请让 Agent 修正请求后再试；排障请使用 requestId 联系管理员。'
+        : '如需排障或核对完整 SQL，请使用 requestId 联系管理员（个人视角仅展示脱敏语句）。';
+
+  return (
+    <>
+      <BackBar to="/me/history" label="返回查询历史" />
+      <PageHeader title={row?.requestId ?? '查询详情'} description={row ? `${fmt(row.startedAt)} · ${row.tool}` : '单次工具调用详情。'} />
+      {error ? (
+        <Alert kind="danger" title="查询详情读取失败">
+          {error}
+        </Alert>
+      ) : null}
+      {loading ? <Alert kind="info">加载查询详情…</Alert> : null}
+      {row ? (
+        <>
+          <div className="table-card" style={{ padding: '16px 18px', maxWidth: 860, marginBottom: 14 }}>
+            <DrawerFields
+              fields={[
+                {
+                  label: '结果',
+                  value: (
+                    <StatusDot tone={row.result === 'SUCCESS' ? 'success' : row.result === 'ERROR' ? 'danger' : 'warning'}>{row.result}</StatusDot>
+                  ),
+                },
+                { label: '判定', value: row.verdict ?? '—' },
+                { label: '错误码', value: row.errorCode ?? '—' },
+                { label: '完成时间', value: fmt(row.completedAt) },
+              ]}
+            />
+          </div>
+          {row.sqlMasked ? (
+            <div className="table-card" style={{ padding: '16px 18px', maxWidth: 860, marginBottom: 14 }}>
+              <strong style={{ display: 'block', fontSize: 12, color: 'var(--ptmcp-text-muted)', marginBottom: 6 }}>SQL（脱敏）</strong>
+              <pre
+                style={{
+                  margin: 0,
+                  padding: '12px 14px',
+                  background: 'var(--ptmcp-chrome)',
+                  border: '1px solid var(--ptmcp-border)',
+                  borderRadius: 8,
+                  fontSize: 12.5,
+                  lineHeight: 1.6,
+                  whiteSpace: 'pre-wrap',
+                  overflow: 'auto',
+                  fontFamily: "ui-monospace, 'SF Mono', Consolas, monospace",
+                }}
+              >
+                {row.sqlMasked}
+              </pre>
+            </div>
+          ) : null}
+          <div className="table-card" style={{ padding: '16px 18px', maxWidth: 860, marginBottom: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
+              {[
+                { label: '总耗时', value: row.durationMs != null ? `${row.durationMs} ms` : '—' },
+                { label: '排队', value: row.queueMs != null ? `${row.queueMs} ms` : '—' },
+                { label: '数据库', value: row.dbMs != null ? `${row.dbMs} ms` : '—' },
+                { label: '返回行数', value: row.rowsReturned ?? '—' },
+                { label: '响应字节', value: row.responseBytes ?? '—' },
+                { label: '截断', value: row.truncated ? '是' : '否' },
+              ].map((m) => (
+                <div key={m.label}>
+                  <div style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>{m.label}</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ptmcp-heading)', marginTop: 4 }}>{m.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <Alert kind="info" title="排障指引">
+            {guidance}
+          </Alert>
+        </>
+      ) : null}
+    </>
+  );
+}
+
+/* ─── 我的数据字典详情（个人视角，只读结构与业务注释） ─── */
+export function DictionaryDetailPage({ objectId }: { objectId: string }) {
+  const [obj, setObj] = useState<MetadataObject | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    setObj(null);
+    mePortalApi
+      .dictionaryDetail<MetadataObject>(objectId, '1')
+      .then((data) => !cancelled && setObj(data))
+      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : '读取失败'))
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [objectId]);
+
+  const dict = obj?.dictionary;
+
+  return (
+    <>
+      <BackBar to="/me/dictionary" label="返回我的数据字典" />
+      <PageHeader
+        title={obj ? (dict?.title ?? obj.objectName) : '字典详情'}
+        description={
+          obj ? `${obj.databaseName}${obj.schemaName ? ` / ${obj.schemaName}` : ''} · ${obj.objectType} · 个人视角只读` : '对象结构与业务字典。'
+        }
+      />
+      {error ? (
+        <Alert kind="danger" title="字典详情读取失败">
+          {error}
+        </Alert>
+      ) : null}
+      {loading ? <Alert kind="info">加载字典详情…</Alert> : null}
+      {obj ? (
+        <>
+          <div className="table-card" style={{ padding: '16px 18px', maxWidth: 860, marginBottom: 14 }}>
+            {dict?.description ? <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--ptmcp-text)' }}>{dict.description}</p> : null}
+            <DrawerFields
+              fields={[
+                { label: '对象名', value: <code>{obj.objectName}</code> },
+                { label: '类型', value: <Badge tone={obj.objectType === 'TABLE' ? 'accent' : 'neutral'}>{obj.objectType}</Badge> },
+                { label: '代次', value: `v${obj.generation}` },
+                { label: '表注释', value: obj.tableComment ?? '—' },
+              ]}
+            />
+          </div>
+          <div className="table-card" style={{ flex: 1, minHeight: 0 }}>
+            <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--ptmcp-border)', fontSize: 13, fontWeight: 600 }}>
+              列结构{' '}
+              <span style={{ color: 'var(--ptmcp-text-faint)', fontWeight: 400 }}>{obj.columns?.length ? `${obj.columns.length} 列` : ''}</span>
+            </div>
+            <div className="table-scroll">
+              {obj.columns?.length ? (
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 40 }}>#</th>
+                      <th>列名</th>
+                      <th>类型</th>
+                      <th>业务标题</th>
+                      <th>业务说明</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {obj.columns.map((c) => {
+                      const annotation = dict?.columns?.find((d) => (d.name ?? '').toLowerCase() === c.name.toLowerCase());
+                      return (
+                        <tr key={c.ordinal}>
+                          <td style={{ color: 'var(--ptmcp-text-faint)' }}>{c.ordinal}</td>
+                          <td>
+                            <code style={{ fontSize: 12 }}>{c.name}</code>
+                          </td>
+                          <td style={{ color: 'var(--ptmcp-text-muted)' }}>{c.databaseType}</td>
+                          <td>{annotation?.displayName ?? '—'}</td>
+                          <td style={{ color: 'var(--ptmcp-text-muted)' }}>{annotation?.description ?? '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <EmptyState title="无列结构信息" description="该对象未同步列结构，请联系管理员触发元数据同步。" />
+              )}
+            </div>
+          </div>
+        </>
+      ) : null}
     </>
   );
 }

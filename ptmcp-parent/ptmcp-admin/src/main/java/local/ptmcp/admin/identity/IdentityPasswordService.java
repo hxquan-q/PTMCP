@@ -8,6 +8,11 @@ import local.ptmcp.persistence.security.UserSecurityStore;
 
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+
 import javax.sql.DataSource;
 
 /** A failed host write leaves an explicit, recoverable login gate; never a working old password. */
@@ -54,6 +59,33 @@ public final class IdentityPasswordService {
         if (operation.profileVersion() != expectedVersion)
             throw new DomainException(ErrorCode.VERSION_CONFLICT);
         return changes.finish(operation);
+    }
+
+    public record Status(
+            long userId, long version, String identityState, boolean recoveryRequired) {}
+
+    /** One primary statement returns only public recovery state, never operation material. */
+    public Status status(long userId) {
+        if (userId <= 0) throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        try (Connection connection = primary.getConnection();
+                PreparedStatement query =
+                        connection.prepareStatement(
+                                "SELECT p.version,s.identity_state FROM sys_user_profile p"
+                                        + " LEFT JOIN sys_user_security s ON s.user_id=p.user_id WHERE p.user_id=?")) {
+            connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+            query.setQueryTimeout(5);
+            query.setLong(1, userId);
+            try (ResultSet result = query.executeQuery()) {
+                if (!result.next()) throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
+                long version = result.getLong(1);
+                String state = result.getString(2);
+                if (version <= 0 || !("READY".equals(state) || "CHANGE_PENDING".equals(state)))
+                    throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+                return new Status(userId, version, state, "CHANGE_PENDING".equals(state));
+            }
+        } catch (SQLException failure) {
+            throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+        }
     }
 
     public static void requirePassword(String value) {

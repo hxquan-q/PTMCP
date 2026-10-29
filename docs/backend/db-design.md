@@ -73,13 +73,18 @@ ERD 的 acl_grant 还可以指向数据源/命名空间；多态主体/目标用
 
 | 表 | 字段 | 主键/索引/约束 |
 | --- | --- | --- |
-| sys_user_security | user_id BIGINT；auth_version BIGINT=1；identity_version BIGINT=1；version BIGINT；password_changed_at DATETIME(6) N | PK/FK user_id；版本单调递增；改密只增 auth_version，停用再改 sys_user.status |
+| sys_user_security | user_id BIGINT；auth_version BIGINT=1；identity_version BIGINT=1；identity_state READY/CHANGE_PENDING；identity_change_id UUID N；version BIGINT；password_changed_at DATETIME(6) N | PK/FK sys_user_profile.user_id；唯一权威；改密同时提升 auth/identity 版本；Pending 拒绝认证，不因超时释放 |
+| identity_password_change | operation_id UUID；user_id；auth_version；profile_version；expected_hash BINARY(32) N；target_hash BCrypt N；status PENDING/COMPLETED；requested_by；时间 | PK operation_id；UNIQUE(user_id,profile_version)；FK sys_user_security；Pending 必须保留不可变 hash，完成同事务清空两列，仅保留幂等墓碑 |
 | sys_subject_version | subject_type VARCHAR(16) USER/ROLE/DEPT；subject_id BIGINT；policy_version BIGINT；version BIGINT | PK(type,id)；删除保留 tombstone，不复用主体 ID |
 | sys_security_state | singleton_id TINYINT=1；policy_epoch BIGINT；update_time DATETIME(6) | PK 1，锁住本行分配全局 epoch |
 | sys_security_event | event_id CHAR(36)；epoch BIGINT；aggregate_type VARCHAR(32)；aggregate_id VARCHAR(64)；event_type VARCHAR(48)；payload JSON；occurred_at DATETIME(6)；published_at N；attempts INT=0 | PK event_id；UNIQUE(epoch,event_id)；INDEX(published_at,occurred_at,event_id)；payload 仅 ID/版本，不能含凭证或 SQL |
 | security_consumer_cursor | consumer_id VARCHAR(128)；last_epoch BIGINT；update_time DATETIME(6) | PK consumer_id；不以“已经收到消息”替代主库安全核验 |
 
 用户/角色/部门修改与扩展版本、epoch、outbox 同一 MySQL 主库事务。临时登录失败计数 Redis 账号/IP 双桶，锁5次10分钟，Redis 不可用时拒绝密码认证或使用经测试的主库限速后备，不能静默取消限速。
+
+跨库改密按 [ADR-0011](../architecture/adr/0011-跨库身份变更与权威版本.md)先 Pending 与撤证、再宿主 expected-hash CAS、最后完成。
+sys_user_profile.password_hash 是遗留兼容列，不作为认证源；改密时写 external 哨兵，不再复制宿主 BCrypt。
+V11/V12 升级需停旧写方，禁止旧新混跑；已备份的旧恢复材料仍按密码资产控制与清理。
 
 ## 4. 平台、资源与授权表
 
@@ -118,7 +123,7 @@ OAuth 协议标准表以锁定 Spring Security 版本所附 schema 为物理迁�
 
 Refresh 事务统一先锁sys_security_state单行，再锁sys_user_security，再按family id、token generation顺序锁族与旧token。检查用户/客户端/平台/族状态及到期，再把 ACTIVE 旧 token 置 CONSUMED，插入新 token，更新 idle_expires_at=min(now+7d,absolute_expires_at)、generation、authorization/version，更新epoch/插安全事件并提交；同一事务失败不产生可用响应。遇 CONSUMED 则撤销整族并提交后返回 invalid_grant。JWT 的 sid=family_id（无刷新族授权也创建可撤销 session/family 标识），auth_version 为签发版本。精确协议见 [authentication](authentication.md)。全局单行锁会串行化安全变更/refresh，不覆盖普通查询读取；M0压测不足时只能用新ADR调整为无循环的分层版本方案，不能私自跳过锁或epoch。
 
-用户改密/停用/删除在同一权威事务提高 auth_version，标记全部 family/PAT/session 撤销并写事件；大用户批量数据不以异步扫描作为即时撤销依据：auth_version立即拦截，后续清理才异步。业务角色变化通常不撤销登录，升 policy_epoch/主体版本使下一次请求重算授权。
+用户改密的元库阶段、停用/删除在同一权威事务提高 auth_version，标记全部 family/PAT/session 撤销并写事件；大用户批量数据不以异步扫描作为即时撤销依据：auth_version立即拦截，后续清理才异步。业务角色变化通常不撤销登录，升 policy_epoch/主体版本使下一次请求重算授权。
 
 ## 6. 审计、幂等和任务表
 

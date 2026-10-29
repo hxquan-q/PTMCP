@@ -94,7 +94,9 @@ host/port先做DNS与网络目的地策略验证，拒绝云元数据/loopback�
 | PUT /metadata/objects/{id}/dictionary | metadata:dictionary | DictionaryWrite+If-Match→ObjectDetail；不能修改真实数据库DDL |
 | /users CRUD | user对应动作 | UserWrite→UserDTO；筛选keyword/departmentId/status；不接受外部org树替换；删除逻辑删除并撤销令牌 |
 | PUT /users/{id}/status | user:status | {status:ACTIVE/DISABLED}+If-Match→UserDTO；不能停用最后一个有效平台管理员 |
-| PUT /users/{id}/password | user:reset-password | {newPassword,reason}+If-Match→{id,reauthenticationRequired:true,version}；重置同样撤销全部认证 |
+| GET /users/{id}/identity | 平台管理员 | →IdentityState={userId,version,identityState:READY/CHANGE_PENDING,recoveryRequired}；不返回摘要、目标或操作材料 |
+| PUT /users/{id}/password | user:reset-password，平台管理员 | {newPassword,reason}+If-Match+Idempotency-Key→200 IdentityState；先提权威版本并撤销全部认证，跨库异常保持 Pending，由管理员恢复 |
+| POST /users/{id}/password/retry | user:reset-password，平台管理员 | {}+If-Match+Idempotency-Key→200 IdentityState；只重试持久目标；完成重试不写宿主、不提版本/epoch；不接受新密码；版本与 body 一起绑定幂等摘要 |
 | PUT /users/{id}/roles | user:assign-role | {roleIds:[]}+If-Match→UserDTO；整组替换，全部角色均受管理范围约束 |
 | PUT /users/{id}/department | user:move | {departmentId,reason}+If-Match→UserDTO；新旧部门均可管理；更新身份版本与epoch |
 | /departments CRUD | department对应动作 | DepartmentWrite→DepartmentDTO；列表可parentId过滤；删除有子部门/用户409；PUT移动校验整棵子树无环且在范围 |
@@ -122,6 +124,10 @@ host/port先做DNS与网络目的地策略验证，拒绝云元数据/loopback�
 | POST /audit/{requestId}/decrypt | audit:decrypt，额外明确授权 | {fields:[sqlRaw/sqlFinal],reason:10..500}→{sqlRaw?,sqlFinal?,expiresAt}；每次持久审计后才返回，no-store，服务端不缓存明文；保留期外404 |
 
 业务对象不存在404、授权目标不可见404；可见对象但动作不足403 MANAGEMENT_SCOPE_DENIED。全局列表的actor过滤在持久查询层执行，禁止先分页再前端过滤。平台/数据源健康测试和同步运行的系统账号同样受凭证、目的地及审计约束。
+
+身份动作响应中的 version 是用户 aggregate version，首个响应带 ETag；幂等重放以持久 body 中的 version 为准。
+不再返回含混的 X-Security-Epoch。独立宿主未配置时不开放身份管理动作；跨库协议见 [ADR-0011](../architecture/adr/0011-跨库身份变更与权威版本.md)。
+当前 REST 实现直接返回显式 DTO，统一 R 包装尚待 G7 合同对齐，不能宣称已完成该包装。
 
 ## 6. 个人门户 API
 

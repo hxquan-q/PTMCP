@@ -177,6 +177,13 @@ class AdminApiTest {
                             "platform_scope",
                             "admin_delegation",
                             "admin_operation_log",
+                            "identity_password_change",
+                            "sys_user_security",
+                            "web_session_index",
+                            "personal_token",
+                            "oauth_refresh_family",
+                            "oauth2_authorization",
+                            "oauth2_registered_client",
                             "sys_user_role",
                             "sys_user_profile",
                             "sys_user_login_name",
@@ -2700,6 +2707,10 @@ class AdminApiTest {
                             + target
                             + ", 'pwd-target', '密码用户', '$2a$10$oldoldoldoldoldoldoldoldoldoldoldoldoldoldoldoldoldold',"
                             + " '0', '0') ON DUPLICATE KEY UPDATE password = VALUES(password)");
+            statement.execute(
+                    "INSERT INTO sys_user_security (user_id,auth_version,identity_version,identity_state,version,create_time,update_time) VALUES ("
+                            + target
+                            + ",1,1,'READY',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
             // One ACTIVE refresh family so the revocation has a real target.
             statement.execute(
                     "INSERT INTO oauth2_registered_client (id, client_id, client_name,"
@@ -2765,27 +2776,6 @@ class AdminApiTest {
                                                 + "\"reason\":\"用户报告凭证泄露需要立即重置\"}"))
                 .andExpect(status().isConflict());
 
-        // Diagnostic: run the epoch machinery directly to isolate the failure.
-        try (Connection probeConnection = connect()) {
-            var receipt =
-                    new local.ptmcp.persistence.SecurityChangeTransaction(
-                                    new org.springframework.jdbc.datasource
-                                            .SingleConnectionDataSource(probeConnection, true))
-                            .execute(
-                                    new local.ptmcp.persistence.SecurityEvent(
-                                            java.util.UUID.randomUUID(),
-                                            local.ptmcp.persistence.SecurityEvent.Kind
-                                                    .USER_SECURITY_CHANGED,
-                                            new local.ptmcp.persistence.SecurityEvent.NumericId(
-                                                    target),
-                                            99),
-                                    connection -> {});
-            System.out.println("EPOCH-PROBE epoch=" + receipt.epoch());
-        } catch (RuntimeException probeError) {
-            System.out.println("EPOCH-PROBE-FAIL " + probeError);
-            probeError.printStackTrace();
-        }
-
         mockMvc.perform(
                         put("/api/v1/admin/users/" + target + "/password")
                                 .header("X-Test-User-Id", ADMIN_ID)
@@ -2796,14 +2786,53 @@ class AdminApiTest {
                                 .content(
                                         "{\"newPassword\":\"correct-horse-battery\","
                                                 + "\"reason\":\"用户报告凭证泄露需要立即重置\"}"))
-                .andExpect(status().isNoContent())
-                .andExpect(
-                        result -> {
-                            String epoch = result.getResponse().getHeader("X-Security-Epoch");
-                            if (epoch == null || Long.parseLong(epoch) < 1) {
-                                throw new AssertionError("missing security epoch: " + epoch);
-                            }
-                        });
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(2))
+                .andExpect(jsonPath("$.identityState").value("READY"))
+                .andExpect(header().doesNotExist("X-Security-Epoch"));
+        mockMvc.perform(
+                        get("/api/v1/admin/users/" + target + "/identity")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(2))
+                .andExpect(jsonPath("$.recoveryRequired").value(false))
+                .andExpect(jsonPath("$.targetHash").doesNotExist());
+        mockMvc.perform(
+                        get("/api/v1/admin/users/" + target + "/identity")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "false"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(
+                        post("/api/v1/admin/users/" + target + "/password/retry")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "2")
+                                .header("Idempotency-Key", "pwd-retry-1")
+                                .contentType("application/json")
+                                .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(2));
+        mockMvc.perform(
+                        post("/api/v1/admin/users/" + target + "/password/retry")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "2")
+                                .header("Idempotency-Key", "pwd-retry-1")
+                                .contentType("application/json")
+                                .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Idempotent-Replay", "true"));
+        mockMvc.perform(
+                        post("/api/v1/admin/users/" + target + "/password/retry")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "3")
+                                .header("Idempotency-Key", "pwd-retry-1")
+                                .contentType("application/json")
+                                .content("{}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSED"));
 
         // Identity store: a real bcrypt hash replaced the fake one; the plaintext is nowhere.
         try (Connection connection = connect();
@@ -2840,7 +2869,7 @@ class AdminApiTest {
                     assertTrue(result.next());
                     assertEquals(2, result.getLong(1));
                     // The console login source shares the same bcrypt hash.
-                    assertTrue(result.getString(2).startsWith("$2"), "profile hash missing");
+                    assertEquals("external", result.getString(2));
                 }
             }
             try (PreparedStatement session =
@@ -2866,7 +2895,7 @@ class AdminApiTest {
                     connection.prepareStatement(
                             "SELECT action, before_masked FROM admin_operation_log"
                                     + " WHERE aggregate_type = 'USER' AND aggregate_id = ?"
-                                    + " AND action = 'USER_PASSWORD_RESET'")) {
+                                    + " AND action = 'USER_PASSWORD_CHANGED'")) {
                 log.setLong(1, target);
                 try (ResultSet result = log.executeQuery()) {
                     assertTrue(result.next());
@@ -2875,6 +2904,95 @@ class AdminApiTest {
                         throw new AssertionError("log leaked plaintext");
                     }
                 }
+            }
+        }
+    }
+
+    @Test
+    void passwordRecoveryCompletesPersistedPendingWithoutNewCredentials() throws Exception {
+        long deptId = createDepartment("Recovery synthetic department");
+        long target = createUser("recover-synthetic", "Synthetic", deptId);
+        String operation = UUID.randomUUID().toString();
+        String oldSecret = "old-" + UUID.randomUUID();
+        String newSecret = "new-" + UUID.randomUUID();
+        var encoder = new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
+        String oldHash = encoder.encode(oldSecret), targetHash = encoder.encode(newSecret);
+        try (Connection connection = connect();
+                Statement sql = connection.createStatement()) {
+            sql.execute(
+                    "CREATE TABLE IF NOT EXISTS sys_user (user_id BIGINT PRIMARY KEY,user_name VARCHAR(30) NOT NULL UNIQUE,nick_name VARCHAR(30) NOT NULL,password VARCHAR(100) NOT NULL,status CHAR(1) NOT NULL,del_flag CHAR(1) NOT NULL DEFAULT '0')");
+            try (PreparedStatement insert =
+                    connection.prepareStatement(
+                            "INSERT INTO sys_user (user_id,user_name,nick_name,password,status,del_flag) VALUES (?,'recover-synthetic','Synthetic',?,'0','0')")) {
+                insert.setLong(1, target);
+                insert.setString(2, oldHash);
+                insert.executeUpdate();
+            }
+            sql.execute(
+                    "INSERT INTO sys_user_security (user_id,auth_version,identity_version,identity_state,identity_change_id,version,create_time,update_time) VALUES ("
+                            + target
+                            + ",2,2,'CHANGE_PENDING','"
+                            + operation
+                            + "',2,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
+            sql.execute("UPDATE sys_user_profile SET version=2 WHERE user_id=" + target);
+            try (PreparedStatement insert =
+                    connection.prepareStatement(
+                            "INSERT INTO identity_password_change (operation_id,user_id,auth_version,profile_version,expected_hash,target_hash,status,requested_by,create_time,update_time) VALUES (?,?,2,2,?,?,'PENDING',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))")) {
+                insert.setString(1, operation);
+                insert.setLong(2, target);
+                insert.setBytes(
+                        3, local.ptmcp.persistence.security.HostIdentityStore.fingerprint(oldHash));
+                insert.setString(4, targetHash);
+                insert.executeUpdate();
+            }
+        }
+        String uri = "/api/v1/admin/users/" + target;
+        mockMvc.perform(
+                        get(uri + "/identity")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.identityState").value("CHANGE_PENDING"))
+                .andExpect(jsonPath("$.version").value(2))
+                .andExpect(jsonPath("$.recoveryRequired").value(true));
+        mockMvc.perform(
+                        post(uri + "/password/retry")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("If-Match", "2")
+                                .header("Idempotency-Key", "recovery-denied")
+                                .contentType("application/json")
+                                .content("{}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(
+                        post(uri + "/password/retry")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "2")
+                                .header("Idempotency-Key", "recovery-extra")
+                                .contentType("application/json")
+                                .content("{\"newPassword\":\"cannot replace persisted target\"}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(
+                        post(uri + "/password/retry")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "2")
+                                .header("Idempotency-Key", "recovery-complete")
+                                .contentType("application/json")
+                                .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.identityState").value("READY"))
+                .andExpect(jsonPath("$.version").value(2))
+                .andExpect(jsonPath("$.target").doesNotExist());
+        try (Connection connection = connect();
+                PreparedStatement query =
+                        connection.prepareStatement(
+                                "SELECT password FROM sys_user WHERE user_id=?")) {
+            query.setLong(1, target);
+            try (ResultSet result = query.executeQuery()) {
+                assertTrue(result.next());
+                assertTrue(encoder.matches(newSecret, result.getString(1)));
             }
         }
     }

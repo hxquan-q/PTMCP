@@ -22,6 +22,7 @@ public final class CsrfInterceptor implements HandlerInterceptor {
                 && Boolean.TRUE.equals(
                         request.getAttribute(
                                 AdminSessionService.SESSION_AUTHENTICATED_ATTRIBUTE))) {
+            SessionController.requireSameOrigin(request);
             sessions.requireCsrf(request);
         }
         return true;

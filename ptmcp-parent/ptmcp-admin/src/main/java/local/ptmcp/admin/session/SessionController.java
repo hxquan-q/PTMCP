@@ -133,20 +133,28 @@ public class SessionController {
      * the presence of an explicit cross-site signal is rejected; non-browser clients send no
      * header.
      */
-    private static void requireSameOrigin(HttpServletRequest request) {
+    static void requireSameOrigin(HttpServletRequest request) {
         String site = request.getHeader("Sec-Fetch-Site");
-        if (site != null
-                && !"same-origin".equals(site)
-                && !"same-site".equals(site)
-                && !"none".equals(site)) {
+        if (site != null && !"same-origin".equals(site) && !"none".equals(site))
             throw new DomainException(ErrorCode.CSRF_INVALID);
-        }
         String origin = request.getHeader(HttpHeaders.ORIGIN);
-        if (origin != null && !origin.isBlank()) {
-            String expected = request.getScheme() + "://" + request.getHeader("Host");
-            if (!expected.equalsIgnoreCase(origin)) {
-                throw new DomainException(ErrorCode.CSRF_INVALID);
-            }
+        String referer = request.getHeader(HttpHeaders.REFERER);
+        if (origin != null) requireOrigin(request, origin, true);
+        else if (referer != null) requireOrigin(request, referer, false);
+    }
+
+    private static void requireOrigin(HttpServletRequest request, String value, boolean originHeader) {
+        try {
+            java.net.URI uri=java.net.URI.create(value);
+            String host=request.getServerName();
+            int port=uri.getPort()<0 ? ("https".equalsIgnoreCase(uri.getScheme())?443:80) : uri.getPort();
+            if (uri.getHost()==null || uri.getRawUserInfo()!=null || uri.getRawFragment()!=null
+                    || !request.getScheme().equalsIgnoreCase(uri.getScheme())
+                    || !host.equalsIgnoreCase(uri.getHost()) || request.getServerPort()!=port
+                    || (originHeader && (uri.getRawQuery()!=null || !uri.getRawPath().isEmpty())))
+                throw new IllegalArgumentException();
+        } catch (IllegalArgumentException failure) {
+            throw new DomainException(ErrorCode.CSRF_INVALID);
         }
     }
 }

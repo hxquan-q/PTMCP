@@ -49,7 +49,7 @@ function useDatasources(): [DatasourceRead[], (id: string | null | undefined) =>
   return [datasources, name];
 }
 
-function BackBar({ to, label }: { to: string; label: string }) {
+export function BackBar({ to, label }: { to: string; label: string }) {
   return (
     <div style={{ marginBottom: 10 }}>
       <button className="btn btn--link" style={{ padding: 0 }} onClick={() => (window.location.hash = to)}>

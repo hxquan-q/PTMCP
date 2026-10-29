@@ -44,4 +44,6 @@ export const mePortalApi = {
   },
   mcpConfig: (platformId: string, clientType: string, signal?: AbortSignal): Promise<McpConfig> =>
     request<McpConfig>(`/api/v1/me/mcp-config${query({ platformId, clientType })}`, { signal }),
+  dictionaryDetail: <T>(objectId: string, platformId: string, signal?: AbortSignal): Promise<T> =>
+    request<T>(`/api/v1/me/dictionary/${encodeURIComponent(objectId)}${query({ platformId })}`, { signal }),
 };

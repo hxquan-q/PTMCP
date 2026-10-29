@@ -149,6 +149,22 @@ class IdentityPasswordServiceTest {
     }
 
     @Test
+    void completedOperationErasesRecoveryHashesAndLegacyShadow() {
+        service(primary, identity).reset(42, 5, NEXT, "Synthetic material lifecycle", 99);
+        assertEquals(
+                0,
+                jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM identity_password_change WHERE expected_hash IS NOT NULL OR target_hash IS NOT NULL",
+                        Integer.class));
+        assertEquals(
+                "external",
+                jdbc.queryForObject(
+                        "SELECT password_hash FROM sys_user_profile WHERE user_id=42",
+                        String.class));
+        assertEquals(6, service(primary, identity).retry(42, 6));
+    }
+
+    @Test
     void retryAfterCompletedOperationIsIdempotent() {
         service(primary, identity).reset(42, 5, NEXT, "Synthetic reset test", 99);
         long epoch = epoch();
@@ -315,6 +331,7 @@ class IdentityPasswordServiceTest {
             releaseCommit.countDown();
             assertEquals(6L, first.get(20, TimeUnit.SECONDS));
             assertEquals(6L, second.get(20, TimeUnit.SECONDS));
+            assertEquals(22, epoch(), "only begin and first completion advance the epoch");
             assertReady(NEXT, 8);
             assertEquals(
                     1,

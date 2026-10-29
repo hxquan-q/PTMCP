@@ -379,3 +379,8 @@ export async function revokeAuthorization(id: string, signal?: AbortSignal): Pro
 export function listMyHistory(signal?: AbortSignal): Promise<Page<AuditRow>> {
   return getPage('/api/v1/me/history?pageSize=100', signal);
 }
+
+export async function getMyHistoryDetail(requestId: string, signal?: AbortSignal): Promise<AuditRow> {
+  const { data } = await request<AuditRow>(`/api/v1/me/history/${encodeURIComponent(requestId)}`, { signal });
+  return data;
+}

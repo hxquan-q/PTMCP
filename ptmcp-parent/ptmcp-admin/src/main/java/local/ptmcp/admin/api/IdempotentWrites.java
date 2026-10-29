@@ -68,6 +68,24 @@ final class IdempotentWrites {
         return ResponseEntity.status(response.getStatusCode()).headers(headers).body(body);
     }
 
+    /** Optimistic-concurrency headers are part of the request intent for recovery actions. */
+    static <T> ResponseEntity<byte[]> execute(
+            IdempotencyRecorder recorder,
+            long actorId,
+            String routeKey,
+            String key,
+            long expectedVersion,
+            byte[] requestBody,
+            Supplier<ResponseEntity<T>> action) {
+        byte[] body = requestBody == null ? new byte[0] : requestBody;
+        byte[] intent =
+                java.nio.ByteBuffer.allocate(Long.BYTES + body.length)
+                        .putLong(expectedVersion)
+                        .put(body)
+                        .array();
+        return execute(recorder, actorId, routeKey, key, intent, action);
+    }
+
     private static void release(
             IdempotencyRecorder recorder, long actorId, String routeKey, String key) {
         try {

@@ -18,6 +18,6 @@ public class AuthzIdentityDataSourceConfiguration {
             @Value("${ptmcp.authz.identity-datasource.password}") String credential) {
         HikariConfig config=new HikariConfig();config.setJdbcUrl(url);config.setUsername(username);
         config.setPassword(credential);config.setMaximumPoolSize(2);config.setConnectionTimeout(5000);
-        config.setPoolName("ptmcp-authz-identity");return new HikariDataSource(config);
+        config.setReadOnly(true);config.setPoolName("ptmcp-authz-identity");return new HikariDataSource(config);
     }
 }

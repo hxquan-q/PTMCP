@@ -26,7 +26,15 @@ import { PlatformsPage } from './views/admin/PlatformsPage';
 import { DelegationsPage } from './views/admin/DelegationsPage';
 import { AuditPage } from './views/admin/AuditPage';
 import { MetadataPage } from './views/admin/MetadataPage';
-import { AuthorizationsPage, DictionaryPage, HistoryPage, SecurityPage, TokensPage } from './views/me/MePages';
+import {
+  AuthorizationsPage,
+  DictionaryDetailPage,
+  DictionaryPage,
+  HistoryDetailPage,
+  HistoryPage,
+  SecurityPage,
+  TokensPage,
+} from './views/me/MePages';
 import { AuditDetailPage, DatasourceDetailPage, JobDetailPage, MetadataDetailPage } from './views/admin/DetailPages';
 
 /* 轻量 hash 路由:#/me/integrations、#/admin/datasources … */
@@ -62,6 +70,14 @@ const ROUTES: RouteDef[] = [
     element: () => <DictionaryPage />,
   },
   {
+    path: '/me/dictionary',
+    navKey: 'me-dictionary',
+    prefix: true,
+    breadcrumb: <>个人门户 &nbsp;›&nbsp; 数据字典 &nbsp;›&nbsp; 字典详情</>,
+    realm: 'me',
+    element: (id?: string) => <DictionaryDetailPage objectId={decodeURIComponent(id ?? '')} />,
+  },
+  {
     path: '/me/integrations',
     navKey: 'me-integrations',
     breadcrumb: <>个人门户 &nbsp;›&nbsp; 接入配置</>,
@@ -77,6 +93,14 @@ const ROUTES: RouteDef[] = [
     element: () => <AuthorizationsPage />,
   },
   { path: '/me/history', navKey: 'me-history', breadcrumb: <>个人门户 &nbsp;›&nbsp; 查询历史</>, realm: 'me', element: () => <HistoryPage /> },
+  {
+    path: '/me/history',
+    navKey: 'me-history',
+    prefix: true,
+    breadcrumb: <>个人门户 &nbsp;›&nbsp; 查询历史 &nbsp;›&nbsp; 查询详情</>,
+    realm: 'me',
+    element: (id?: string) => <HistoryDetailPage requestId={decodeURIComponent(id ?? '')} />,
+  },
   { path: '/me/security', navKey: 'me-security', breadcrumb: <>个人门户 &nbsp;›&nbsp; 账号安全</>, realm: 'me', element: () => <SecurityPage /> },
   {
     path: '/admin/datasources',

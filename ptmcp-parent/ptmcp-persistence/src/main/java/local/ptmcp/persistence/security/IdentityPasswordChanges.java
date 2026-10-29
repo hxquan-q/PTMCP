@@ -37,12 +37,12 @@ public final class IdentityPasswordChanges {
             String target,
             boolean completed) {
         public Pending {
-            expected = expected.clone();
+            expected = expected == null ? null : expected.clone();
         }
 
         @Override
         public byte[] expected() {
-            return expected.clone();
+            return expected == null ? null : expected.clone();
         }
 
         @Override
@@ -91,7 +91,7 @@ public final class IdentityPasswordChanges {
                                     statement(
                                             connection,
                                             "UPDATE sys_user_profile SET password_hash=?,version=version+1,update_time=UTC_TIMESTAMP(6) WHERE user_id=? AND version=?")) {
-                                update.setString(1, target);
+                                update.setString(1, "external");
                                 update.setLong(2, userId);
                                 update.setLong(3, expectedProfileVersion);
                                 if (update.executeUpdate() != 1)
@@ -204,57 +204,71 @@ public final class IdentityPasswordChanges {
             throw new DomainException(ErrorCode.VERSION_CONFLICT);
         if (current.completed()) return current.profileVersion();
         host.compareAndSetHash(current.userId(), current.expected(), current.target());
-        new SecurityChangeTransaction(primary)
-                .execute(
-                        new SecurityEvent(
-                                UUID.randomUUID(),
-                                SecurityEvent.Kind.USER_SECURITY_CHANGED,
-                                new SecurityEvent.NumericId(current.userId()),
-                                current.authVersion()),
-                        connection -> {
-                            UserSecurityStore.State state =
-                                    UserSecurityStore.read(connection, current.userId(), true);
-                            String persistedStatus;
-                            try (PreparedStatement query =
-                                    statement(
-                                            connection,
-                                            "SELECT status FROM identity_password_change WHERE operation_id=? AND user_id=? AND auth_version=? AND profile_version=? FOR UPDATE")) {
-                                query.setString(1, current.id().toString());
-                                query.setLong(2, current.userId());
-                                query.setLong(3, current.authVersion());
-                                query.setLong(4, current.profileVersion());
-                                try (ResultSet result = query.executeQuery()) {
-                                    if (!result.next())
-                                        throw new DomainException(ErrorCode.VERSION_CONFLICT);
-                                    persistedStatus = result.getString(1);
+        try {
+            new SecurityChangeTransaction(primary)
+                    .execute(
+                            new SecurityEvent(
+                                    UUID.randomUUID(),
+                                    SecurityEvent.Kind.USER_SECURITY_CHANGED,
+                                    new SecurityEvent.NumericId(current.userId()),
+                                    current.authVersion()),
+                            connection -> {
+                                UserSecurityStore.State state =
+                                        UserSecurityStore.read(connection, current.userId(), true);
+                                String persistedStatus;
+                                try (PreparedStatement query =
+                                        statement(
+                                                connection,
+                                                "SELECT status FROM identity_password_change WHERE operation_id=? AND user_id=? AND auth_version=? AND profile_version=? FOR UPDATE")) {
+                                    query.setString(1, current.id().toString());
+                                    query.setLong(2, current.userId());
+                                    query.setLong(3, current.authVersion());
+                                    query.setLong(4, current.profileVersion());
+                                    try (ResultSet result = query.executeQuery()) {
+                                        if (!result.next())
+                                            throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                                        persistedStatus = result.getString(1);
+                                    }
                                 }
-                            }
-                            if (state.ready()
-                                    && state.authVersion() == current.authVersion()
-                                    && "COMPLETED".equals(persistedStatus)) return;
-                            if (!"PENDING".equals(persistedStatus))
-                                throw new DomainException(ErrorCode.VERSION_CONFLICT);
-                            UserSecurityStore.requireActiveProfile(connection, current.userId());
-                            try (PreparedStatement complete =
-                                    statement(
-                                            connection,
-                                            "UPDATE sys_user_security SET identity_state='READY',identity_change_id=NULL,password_changed_at=UTC_TIMESTAMP(6),"
-                                                    + "version=version+1,update_time=UTC_TIMESTAMP(6) WHERE user_id=? AND auth_version=? AND identity_state='CHANGE_PENDING' AND identity_change_id=?")) {
-                                complete.setLong(1, current.userId());
-                                complete.setLong(2, current.authVersion());
-                                complete.setString(3, current.id().toString());
-                                if (complete.executeUpdate() != 1)
+                                // Roll this losing transition back before the framework advances
+                                // epoch.
+                                // A fresh read below recognizes only this exact completed
+                                // operation.
+                                if (state.ready()
+                                        && state.authVersion() == current.authVersion()
+                                        && "COMPLETED".equals(persistedStatus))
                                     throw new DomainException(ErrorCode.VERSION_CONFLICT);
-                            }
-                            try (PreparedStatement complete =
-                                    statement(
-                                            connection,
-                                            "UPDATE identity_password_change SET status='COMPLETED',update_time=UTC_TIMESTAMP(6) WHERE operation_id=? AND status='PENDING'")) {
-                                complete.setString(1, current.id().toString());
-                                if (complete.executeUpdate() != 1)
+                                if (!"PENDING".equals(persistedStatus))
                                     throw new DomainException(ErrorCode.VERSION_CONFLICT);
-                            }
-                        });
+                                UserSecurityStore.requireActiveProfile(
+                                        connection, current.userId());
+                                try (PreparedStatement complete =
+                                        statement(
+                                                connection,
+                                                "UPDATE sys_user_security SET identity_state='READY',identity_change_id=NULL,password_changed_at=UTC_TIMESTAMP(6),"
+                                                        + "version=version+1,update_time=UTC_TIMESTAMP(6) WHERE user_id=? AND auth_version=? AND identity_state='CHANGE_PENDING' AND identity_change_id=?")) {
+                                    complete.setLong(1, current.userId());
+                                    complete.setLong(2, current.authVersion());
+                                    complete.setString(3, current.id().toString());
+                                    if (complete.executeUpdate() != 1)
+                                        throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                                }
+                                try (PreparedStatement complete =
+                                        statement(
+                                                connection,
+                                                "UPDATE identity_password_change SET status='COMPLETED',expected_hash=NULL,target_hash=NULL,update_time=UTC_TIMESTAMP(6) WHERE operation_id=? AND status='PENDING'")) {
+                                    complete.setString(1, current.id().toString());
+                                    if (complete.executeUpdate() != 1)
+                                        throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                                }
+                            });
+        } catch (DomainException conflict) {
+            if (conflict.errorCode() != ErrorCode.VERSION_CONFLICT) throw conflict;
+            Pending completed = operation(current.userId(), current.profileVersion());
+            if (!completed.completed()
+                    || !completed.id().equals(current.id())
+                    || completed.authVersion() != current.authVersion()) throw conflict;
+        }
         return current.profileVersion();
     }
 

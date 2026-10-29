@@ -60,6 +60,12 @@ wrapper 未设置 executable，使用 bash 调用，不改文件权限。已有�
 
 ## 结果与证据
 
+双库 CAS 首次 GREEN：`ptmcp-identity-cas-green.log`，10 tests / 0 failures/errors/skipped，BUILD SUCCESS。
+独立实际 diff 复审未发现迟到写/提交不明新增高危阻断；发现恢复 hash 长期保留、控制器 epoch 字段错配及并发完成额外 epoch，已补回归和修复，重验进行中。
+有效生命周期/HTTP RED：`ptmcp-identity-http-lifecycle-red.log`，12 tests / 2 failures / 0 errors/skipped；分别为完成未清 hash、应返回200明确版本但仍204旧头。
+后续 GREEN、真实会话 Origin/CSRF 和组合 OAuth/网关验证未收敛前，不记身份闭环完成。
+
+
 身份版本定向 GREEN：`ptmcp-identity-version-green.log` BUILD SUCCESS（2026-10-30 01:20:25 +08:00），
 SecurityStateTest 13/13、OAuthAuthorizationCodeFlowTest 27/27，0失败/错误/跳过。
 仅覆盖当时版本，后续跨库改密、独立宿主读取和 JWT family 绑定仍须重验。
