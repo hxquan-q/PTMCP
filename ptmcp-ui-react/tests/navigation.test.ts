@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { filterNavGroups, resolveRoute, type PermissionedNavGroup } from '../src/navigation.ts';
+import { filterNavGroups, resolveRoute, safeReturnTo, type PermissionedNavGroup } from '../src/navigation.ts';
 
 const groups: PermissionedNavGroup[] = [
   {
@@ -47,4 +47,15 @@ test('resolveRoute prefers exact, then prefix with decoded id, else none', () =>
   assert.equal(resolveRoute('/no/such/path', routes).match, 'none');
   // 前缀必须整段匹配：/admin/auditory 不应命中 /admin/audit 前缀
   assert.equal(resolveRoute('/admin/auditory', routes).match, 'none');
+});
+
+test('safeReturnTo only accepts in-app admin/me paths without control characters', () => {
+  assert.equal(safeReturnTo('/admin/datasources/3'), '/admin/datasources/3');
+  assert.equal(safeReturnTo('/me/tokens?tab=2'), '/me/tokens?tab=2');
+  assert.equal(safeReturnTo('/me'), '/me');
+  assert.equal(safeReturnTo('https://evil.example/phish'), '/');
+  assert.equal(safeReturnTo('\\/admin'), '/');
+  assert.equal(safeReturnTo('/admin/a\u0000b'), '/');
+  assert.equal(safeReturnTo('/other'), '/');
+  assert.equal(safeReturnTo('/admin/x', '/me/integrations'), '/admin/x');
 });

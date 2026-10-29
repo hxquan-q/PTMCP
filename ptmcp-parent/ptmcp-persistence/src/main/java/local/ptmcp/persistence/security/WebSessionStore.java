@@ -26,18 +26,26 @@ public final class WebSessionStore {
     }
 
     /** Called after session fixation protection, using the final cookie/session id. */
-    public void issue(String kind, String id, long userId, long authVersion, Instant issuedAt, Instant expiresAt) {
+    public void issue(
+            String kind,
+            String id,
+            long userId,
+            long authVersion,
+            Instant issuedAt,
+            Instant expiresAt) {
         requireKind(kind);
         try (Connection connection = primary.getConnection()) {
             connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
             connection.setAutoCommit(false);
             try {
                 UserSecurityStore.lockGlobal(connection);
-                UserSecurityStore.requireReady(UserSecurityStore.read(connection, userId, true), authVersion);
+                UserSecurityStore.requireReady(
+                        UserSecurityStore.read(connection, userId, true), authVersion);
                 UserSecurityStore.requireActiveProfile(connection, userId);
-                try (PreparedStatement statement = connection.prepareStatement(
-                        "INSERT INTO web_session_index (session_hash, kind, user_id, auth_version,"
-                                + " issued_at, expires_at, create_time, update_time) VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))")) {
+                try (PreparedStatement statement =
+                        connection.prepareStatement(
+                                "INSERT INTO web_session_index (session_hash, kind, user_id, auth_version,"
+                                        + " issued_at, expires_at, create_time, update_time) VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))")) {
                     statement.setQueryTimeout(5);
                     statement.setBytes(1, hash(id));
                     statement.setString(2, kind);
@@ -59,12 +67,14 @@ public final class WebSessionStore {
 
     public boolean active(String kind, String id, long userId, long authVersion) {
         requireKind(kind);
-        try (Connection connection = primary.getConnection(); PreparedStatement statement = connection.prepareStatement(
-                "SELECT 1 FROM web_session_index w JOIN sys_user_security s ON s.user_id = w.user_id"
-                        + " JOIN sys_user_profile p ON p.user_id = s.user_id"
-                        + " WHERE w.session_hash = ? AND w.kind = ? AND w.user_id = ? AND w.auth_version = ?"
-                        + " AND w.auth_version = s.auth_version AND s.identity_state = 'READY' AND p.status = 'ACTIVE'"
-                        + " AND w.revoked_at IS NULL AND w.expires_at > UTC_TIMESTAMP(6)")) {
+        try (Connection connection = primary.getConnection();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "SELECT 1 FROM web_session_index w JOIN sys_user_security s ON s.user_id = w.user_id"
+                                        + " JOIN sys_user_profile p ON p.user_id = s.user_id"
+                                        + " WHERE w.session_hash = ? AND w.kind = ? AND w.user_id = ? AND w.auth_version = ?"
+                                        + " AND w.auth_version = s.auth_version AND s.identity_state = 'READY' AND p.status = 'ACTIVE'"
+                                        + " AND w.revoked_at IS NULL AND w.expires_at > UTC_TIMESTAMP(6)")) {
             statement.setQueryTimeout(5);
             statement.setBytes(1, hash(id));
             statement.setString(2, kind);
@@ -80,9 +90,11 @@ public final class WebSessionStore {
 
     public void revoke(String kind, String id) {
         requireKind(kind);
-        try (Connection connection = primary.getConnection(); PreparedStatement statement = connection.prepareStatement(
-                "UPDATE web_session_index SET revoked_at = UTC_TIMESTAMP(6), version = version + 1,"
-                        + " update_time = UTC_TIMESTAMP(6) WHERE session_hash = ? AND kind = ? AND revoked_at IS NULL")) {
+        try (Connection connection = primary.getConnection();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "UPDATE web_session_index SET revoked_at = UTC_TIMESTAMP(6), version = version + 1,"
+                                        + " update_time = UTC_TIMESTAMP(6) WHERE session_hash = ? AND kind = ? AND revoked_at IS NULL")) {
             statement.setQueryTimeout(5);
             statement.setBytes(1, hash(id));
             statement.setString(2, kind);

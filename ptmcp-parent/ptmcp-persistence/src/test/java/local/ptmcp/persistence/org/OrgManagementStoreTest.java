@@ -214,7 +214,7 @@ class OrgManagementStoreTest {
                             "admin_delegation",
                             "sys_user_role",
                             "sys_user_security",
-                        "sys_user_profile",
+                            "sys_user_profile",
                             "sys_user_login_name",
                             "sys_role_permission",
                             "sys_role",
@@ -488,10 +488,6 @@ class OrgManagementStoreTest {
         assertEquals(1, authority.authVersion());
         assertEquals(deptId, user.deptId());
         assertEquals(List.of(role.id()), user.roleIds());
-        orgStore.updateUser(user.id(), "Edited", deptId, null, null, null, false,
-                List.of(role.id()), user.version(), 1L);
-        assertEquals("UNBOUND", new local.ptmcp.persistence.security.UserSecurityStore(dataSource)
-                .read(user.id()).identityState());
 
         assertEquals(
                 ErrorCode.INVALID_ARGUMENT,
@@ -521,6 +517,11 @@ class OrgManagementStoreTest {
         assertFalse(updated.enabled());
         assertEquals(List.of(), updated.roleIds());
         assertEquals(2, updated.version());
+        assertEquals(
+                "UNBOUND",
+                new local.ptmcp.persistence.security.UserSecurityStore(dataSource)
+                        .read(user.id())
+                        .identityState());
         assertEquals(
                 ErrorCode.VERSION_CONFLICT,
                 codeOf(

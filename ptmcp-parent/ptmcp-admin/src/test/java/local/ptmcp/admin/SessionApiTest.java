@@ -60,12 +60,14 @@ import java.util.UUID;
  * through MockMvc exactly as the browser would use it: pre-session CSRF, opaque cookies, rotation
  * and revocation. Personal data is seeded per test and cleaned without touching any other schema.
  */
-@SpringBootTest(classes = AdminApplication.class, properties = {
-    "ptmcp.admin.cookie-secure=true",
-    "ptmcp.admin.identity-datasource.url=${ptmcp.admin.datasource.url}",
-    "ptmcp.admin.identity-datasource.username=${ptmcp.admin.datasource.username}",
-    "ptmcp.admin.identity-datasource.password=${ptmcp.admin.datasource.password}"
-})
+@SpringBootTest(
+        classes = AdminApplication.class,
+        properties = {
+            "ptmcp.admin.cookie-secure=true",
+            "ptmcp.admin.identity-datasource.url=${ptmcp.admin.datasource.url}",
+            "ptmcp.admin.identity-datasource.username=${ptmcp.admin.datasource.username}",
+            "ptmcp.admin.identity-datasource.password=${ptmcp.admin.datasource.password}"
+        })
 @AutoConfigureMockMvc
 class SessionApiTest {
     private static final String MYSQL_IMAGE =
@@ -185,7 +187,8 @@ class SessionApiTest {
     void resetOnlyOwnedData() throws Exception {
         try (Connection connection = connect();
                 Statement statement = connection.createStatement()) {
-            statement.execute("CREATE TABLE IF NOT EXISTS sys_user (user_id BIGINT PRIMARY KEY,user_name VARCHAR(30) NOT NULL UNIQUE,nick_name VARCHAR(30) NOT NULL,password VARCHAR(100) NOT NULL,status CHAR(1) NOT NULL,del_flag CHAR(1) NOT NULL DEFAULT '0')");
+            statement.execute(
+                    "CREATE TABLE IF NOT EXISTS sys_user (user_id BIGINT PRIMARY KEY,user_name VARCHAR(30) NOT NULL UNIQUE,nick_name VARCHAR(30) NOT NULL,password VARCHAR(100) NOT NULL,status CHAR(1) NOT NULL,del_flag CHAR(1) NOT NULL DEFAULT '0')");
             statement.execute("SET FOREIGN_KEY_CHECKS = 0");
             for (String table :
                     List.of(
@@ -345,8 +348,10 @@ class SessionApiTest {
     @Test
     void aHostIdCollisionCannotAuthenticateAnotherLoginName() throws Exception {
         seedPortal();
-        try (Connection connection = connect(); PreparedStatement update = connection.prepareStatement(
-                "UPDATE sys_user SET user_name='eve' WHERE user_id=?")) {
+        try (Connection connection = connect();
+                PreparedStatement update =
+                        connection.prepareStatement(
+                                "UPDATE sys_user SET user_name='eve' WHERE user_id=?")) {
             update.setLong(1, BOB);
             assertEquals(1, update.executeUpdate());
         }
@@ -356,8 +361,10 @@ class SessionApiTest {
     @Test
     void anUnboundIdentityCannotUseAnIdenticallyNamedHostAccount() throws Exception {
         seedPortal();
-        try (Connection connection = connect(); PreparedStatement update = connection.prepareStatement(
-                "UPDATE sys_user_security SET identity_state='UNBOUND' WHERE user_id=?")) {
+        try (Connection connection = connect();
+                PreparedStatement update =
+                        connection.prepareStatement(
+                                "UPDATE sys_user_security SET identity_state='UNBOUND' WHERE user_id=?")) {
             update.setLong(1, BOB);
             assertEquals(1, update.executeUpdate());
         }
@@ -365,19 +372,27 @@ class SessionApiTest {
     }
 
     private void assertBobLoginRejectedByIdentityBinding() throws Exception {
-        MvcResult csrf = mockMvc.perform(get("/api/v1/session/csrf"))
-                .andExpect(status().isOk()).andReturn();
-        String presession = cookieHeader(csrf, AdminSessionService.PRESESSION_COOKIE)
-                .split(";", 2)[0].split("=", 2)[1];
-        mockMvc.perform(post("/api/v1/session/login")
-                        .cookie(new Cookie(AdminSessionService.PRESESSION_COOKIE, presession))
-                        .header("X-CSRF-Token", json(csrf).get("csrfToken").asString())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"bob\",\"password\":\"" + PASSWORD + "\"}"))
+        MvcResult csrf =
+                mockMvc.perform(get("/api/v1/session/csrf")).andExpect(status().isOk()).andReturn();
+        String presession =
+                cookieHeader(csrf, AdminSessionService.PRESESSION_COOKIE)
+                        .split(";", 2)[0]
+                        .split("=", 2)[1];
+        mockMvc.perform(
+                        post("/api/v1/session/login")
+                                .cookie(
+                                        new Cookie(
+                                                AdminSessionService.PRESESSION_COOKIE, presession))
+                                .header("X-CSRF-Token", json(csrf).get("csrfToken").asString())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"username\":\"bob\",\"password\":\"" + PASSWORD + "\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTHENTICATION_FAILED"));
-        try (Connection connection = connect(); PreparedStatement query = connection.prepareStatement(
-                "SELECT COUNT(*) FROM web_session_index WHERE user_id=?")) {
+        try (Connection connection = connect();
+                PreparedStatement query =
+                        connection.prepareStatement(
+                                "SELECT COUNT(*) FROM web_session_index WHERE user_id=?")) {
             query.setLong(1, BOB);
             try (ResultSet result = query.executeQuery()) {
                 assertTrue(result.next());
@@ -511,46 +526,159 @@ class SessionApiTest {
     }
 
     @Test
+    void aHostRenameCannotBeginSelfServicePasswordChange() throws Exception {
+        seedPortal();
+        Session session = login("alice", PASSWORD);
+        String security =
+                scalar(
+                        "SELECT CONCAT(auth_version, ':', identity_version, ':', identity_state, ':', version) FROM sys_user_security WHERE user_id="
+                                + ALICE);
+        String profileVersion =
+                scalar("SELECT version FROM sys_user_profile WHERE user_id=" + ALICE);
+        String epoch = scalar("SELECT policy_epoch FROM sys_security_state WHERE singleton_id=1");
+        String operations = scalar("SELECT COUNT(*) FROM identity_password_change");
+        String activeSessions =
+                scalar(
+                        "SELECT COUNT(*) FROM web_session_index WHERE user_id="
+                                + ALICE
+                                + " AND revoked_at IS NULL");
+        try (Connection connection = connect();
+                PreparedStatement rename =
+                        connection.prepareStatement(
+                                "UPDATE sys_user SET user_name='renamed-host' WHERE user_id=?")) {
+            rename.setLong(1, ALICE);
+            assertEquals(1, rename.executeUpdate());
+        }
+
+        mockMvc.perform(
+                        put("/api/v1/session/password")
+                                .cookie(session.cookie())
+                                .header("X-CSRF-Token", session.csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        JSON.writeValueAsString(
+                                                java.util.Map.of(
+                                                        "oldPassword",
+                                                        PASSWORD,
+                                                        "newPassword",
+                                                        NEW_PASSWORD))))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_FAILED"));
+
+        assertEquals(
+                security,
+                scalar(
+                        "SELECT CONCAT(auth_version, ':', identity_version, ':', identity_state, ':', version) FROM sys_user_security WHERE user_id="
+                                + ALICE));
+        assertEquals(
+                profileVersion,
+                scalar("SELECT version FROM sys_user_profile WHERE user_id=" + ALICE));
+        assertEquals(
+                epoch, scalar("SELECT policy_epoch FROM sys_security_state WHERE singleton_id=1"));
+        assertEquals(operations, scalar("SELECT COUNT(*) FROM identity_password_change"));
+        assertEquals(
+                activeSessions,
+                scalar(
+                        "SELECT COUNT(*) FROM web_session_index WHERE user_id="
+                                + ALICE
+                                + " AND revoked_at IS NULL"));
+    }
+
+    @Test
     void identityActionsRequireCsrfAndRejectCrossOrigin() throws Exception {
         seedPortal();
-        Session admin=login("alice", PASSWORD);
-        String uri="/api/v1/admin/users/"+BOB+"/password";
-        String body=JSON.writeValueAsString(java.util.Map.of("newPassword",NEW_PASSWORD,"reason","Synthetic recovery boundary"));
-        mockMvc.perform(put(uri).cookie(admin.cookie()).header("If-Match","1")
-                        .header("Idempotency-Key","reset-no-csrf").contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("CSRF_INVALID"));
-        mockMvc.perform(put(uri).cookie(admin.cookie()).header("If-Match","1")
-                        .header("X-CSRF-Token",admin.csrf()).header("Origin","https://attacker.example.test")
-                        .header("Idempotency-Key","reset-cross-origin").contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("CSRF_INVALID"));
-        mockMvc.perform(post(uri+"/retry").cookie(admin.cookie()).header("If-Match","1")
-                        .header("X-CSRF-Token",admin.csrf()).header("Sec-Fetch-Site","cross-site")
-                        .header("Idempotency-Key","retry-cross-origin").contentType(MediaType.APPLICATION_JSON).content("{}"))
-                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("CSRF_INVALID"));
-        for (String invalidOrigin : java.util.List.of("null", "https://localhost", "http://localhost:8080",
-                "http://localhost/", "http://user@localhost", "http://localhost?query", "http://localhost/#fragment")) {
-            mockMvc.perform(put(uri).cookie(admin.cookie()).header("If-Match", "1")
-                            .header("X-CSRF-Token", admin.csrf()).header("Origin", invalidOrigin)
-                            .header("Idempotency-Key", "reset-invalid-origin")
-                            .contentType(MediaType.APPLICATION_JSON).content(body))
-                    .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("CSRF_INVALID"));
+        Session admin = login("alice", PASSWORD);
+        String uri = "/api/v1/admin/users/" + BOB + "/password";
+        String body =
+                JSON.writeValueAsString(
+                        java.util.Map.of(
+                                "newPassword",
+                                NEW_PASSWORD,
+                                "reason",
+                                "Synthetic recovery boundary"));
+        mockMvc.perform(
+                        put(uri).cookie(admin.cookie())
+                                .header("If-Match", "1")
+                                .header("Idempotency-Key", "reset-no-csrf")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_INVALID"));
+        mockMvc.perform(
+                        put(uri).cookie(admin.cookie())
+                                .header("If-Match", "1")
+                                .header("X-CSRF-Token", admin.csrf())
+                                .header("Origin", "https://attacker.example.test")
+                                .header("Idempotency-Key", "reset-cross-origin")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_INVALID"));
+        mockMvc.perform(
+                        post(uri + "/retry")
+                                .cookie(admin.cookie())
+                                .header("If-Match", "1")
+                                .header("X-CSRF-Token", admin.csrf())
+                                .header("Sec-Fetch-Site", "cross-site")
+                                .header("Idempotency-Key", "retry-cross-origin")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_INVALID"));
+        for (String invalidOrigin :
+                java.util.List.of(
+                        "null",
+                        "https://localhost",
+                        "http://localhost:8080",
+                        "http://localhost/",
+                        "http://user@localhost",
+                        "http://localhost?query",
+                        "http://localhost/#fragment")) {
+            mockMvc.perform(
+                            put(uri).cookie(admin.cookie())
+                                    .header("If-Match", "1")
+                                    .header("X-CSRF-Token", admin.csrf())
+                                    .header("Origin", invalidOrigin)
+                                    .header("Idempotency-Key", "reset-invalid-origin")
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(body))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("CSRF_INVALID"));
         }
-        mockMvc.perform(put(uri).cookie(admin.cookie()).header("If-Match", "1")
-                        .header("X-CSRF-Token", admin.csrf()).header("Sec-Fetch-Site", "same-site")
-                        .header("Origin", "http://localhost").header("Idempotency-Key", "reset-sibling-site")
-                        .contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("CSRF_INVALID"));
-        mockMvc.perform(put(uri).cookie(admin.cookie()).header("If-Match", "1")
-                        .header("X-CSRF-Token", admin.csrf()).header("Referer", "https://attacker.example.test/page")
-                        .header("Idempotency-Key", "reset-other-referer")
-                        .contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("CSRF_INVALID"));
-        assertEquals("1",scalar("SELECT auth_version FROM sys_user_security WHERE user_id="+BOB));
-        mockMvc.perform(put(uri).cookie(admin.cookie()).header("If-Match", "1")
-                        .header("X-CSRF-Token", admin.csrf()).header("Sec-Fetch-Site", "same-origin")
-                        .header("Origin", "http://localhost").header("Idempotency-Key", "reset-same-origin")
-                        .contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.version").value(2));
+        mockMvc.perform(
+                        put(uri).cookie(admin.cookie())
+                                .header("If-Match", "1")
+                                .header("X-CSRF-Token", admin.csrf())
+                                .header("Sec-Fetch-Site", "same-site")
+                                .header("Origin", "http://localhost")
+                                .header("Idempotency-Key", "reset-sibling-site")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_INVALID"));
+        mockMvc.perform(
+                        put(uri).cookie(admin.cookie())
+                                .header("If-Match", "1")
+                                .header("X-CSRF-Token", admin.csrf())
+                                .header("Referer", "https://attacker.example.test/page")
+                                .header("Idempotency-Key", "reset-other-referer")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_INVALID"));
+        assertEquals(
+                "1", scalar("SELECT auth_version FROM sys_user_security WHERE user_id=" + BOB));
+        mockMvc.perform(
+                        put(uri).cookie(admin.cookie())
+                                .header("If-Match", "1")
+                                .header("X-CSRF-Token", admin.csrf())
+                                .header("Sec-Fetch-Site", "same-origin")
+                                .header("Origin", "http://localhost")
+                                .header("Idempotency-Key", "reset-same-origin")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(2));
     }
 
     // ------------------------------------------------------------------ personal tokens
@@ -1152,10 +1280,14 @@ class SessionApiTest {
             throws SQLException {
         String hash = new BCryptPasswordEncoder().encode(password);
         try (Connection connection = connect()) {
-            try (PreparedStatement insert=connection.prepareStatement(
-                    "INSERT INTO sys_user (user_id,user_name,nick_name,password,status,del_flag) VALUES (?,?,?,?,'0','0')")) {
-                insert.setLong(1,userId); insert.setString(2,username); insert.setString(3,displayName);
-                insert.setString(4,hash); insert.executeUpdate();
+            try (PreparedStatement insert =
+                    connection.prepareStatement(
+                            "INSERT INTO sys_user (user_id,user_name,nick_name,password,status,del_flag) VALUES (?,?,?,?,'0','0')")) {
+                insert.setLong(1, userId);
+                insert.setString(2, username);
+                insert.setString(3, displayName);
+                insert.setString(4, hash);
+                insert.executeUpdate();
             }
             try (PreparedStatement statement =
                     connection.prepareStatement(
@@ -1180,9 +1312,11 @@ class SessionApiTest {
                 statement.setObject(4, now());
                 statement.executeUpdate();
             }
-            try (PreparedStatement insert=connection.prepareStatement(
-                    "INSERT INTO sys_user_security (user_id,auth_version,identity_version,identity_state,version,create_time,update_time) VALUES (?,1,1,'READY',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))")) {
-                insert.setLong(1,userId); insert.executeUpdate();
+            try (PreparedStatement insert =
+                    connection.prepareStatement(
+                            "INSERT INTO sys_user_security (user_id,auth_version,identity_version,identity_state,version,create_time,update_time) VALUES (?,1,1,'READY',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))")) {
+                insert.setLong(1, userId);
+                insert.executeUpdate();
             }
         }
     }

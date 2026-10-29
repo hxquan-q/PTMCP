@@ -65,7 +65,12 @@ public final class PersonalTokenService {
     public record TokenPage(List<TokenView> items, String nextCursor) {}
 
     public Created create(
-            long userId, long expectedAuthVersion, String name, Long platformId, List<String> scopes, Instant expiresAt) {
+            long userId,
+            long expectedAuthVersion,
+            String name,
+            Long platformId,
+            List<String> scopes,
+            Instant expiresAt) {
         if (name == null || name.isBlank() || name.length() > 64 || platformId == null) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
@@ -92,7 +97,8 @@ public final class PersonalTokenService {
             connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
             connection.setAutoCommit(false);
             UserSecurityStore.lockGlobal(connection);
-            UserSecurityStore.requireReady(UserSecurityStore.read(connection, userId, true), expectedAuthVersion);
+            UserSecurityStore.requireReady(
+                    UserSecurityStore.read(connection, userId, true), expectedAuthVersion);
             UserSecurityStore.requireActiveProfile(connection, userId);
             statement.setLong(1, userId);
             statement.setLong(2, platformId);

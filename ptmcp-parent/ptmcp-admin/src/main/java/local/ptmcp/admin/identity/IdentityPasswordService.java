@@ -83,7 +83,10 @@ public final class IdentityPasswordService {
                 if (!result.next()) throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
                 long version = result.getLong(1);
                 String state = result.getString(2);
-                if (version <= 0 || !("READY".equals(state) || "CHANGE_PENDING".equals(state) || "UNBOUND".equals(state)))
+                if (version <= 0
+                        || !("READY".equals(state)
+                                || "CHANGE_PENDING".equals(state)
+                                || "UNBOUND".equals(state)))
                     throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
                 return new Status(userId, version, state, "CHANGE_PENDING".equals(state));
             }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { AppShell, type NavGroup } from './layouts/AppShell';
 import {
   BarChartIcon,
@@ -39,7 +39,7 @@ import { AuditDetailPage, DatasourceDetailPage, JobDetailPage, MetadataDetailPag
 import { LoginPage } from './views/auth/LoginPage';
 import { getSession, logout, type SessionInfo } from './services/session';
 import { onSessionExpired } from './services/http';
-import { filterNavGroups, resolveRoute, type PermissionedNavGroup } from './navigation';
+import { filterNavGroups, resolveRoute, safeReturnTo, type PermissionedNavGroup } from './navigation';
 
 /* 轻量 hash 路由:#/me/integrations、#/admin/datasources … */
 function useHashRoute(): [string, (path: string) => void] {
@@ -278,6 +278,8 @@ export function App() {
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [sessionState, setSessionState] = useState<'probing' | 'anonymous' | 'signed-in'>('probing');
   const [expiredNote, setExpiredNote] = useState('');
+  const [returnTo, setReturnTo] = useState('/me/integrations');
+  const pendingReturnRef = useRef<string | null>(null);
 
   const probe = useCallback(() => {
     setSessionState('probing');
@@ -294,17 +296,28 @@ export function App() {
 
   useEffect(probe, [probe]);
 
+  const [path, navigate] = useHashRoute();
+
+  /* 登录确认后再回跳：避免在登录请求与 hash 变更之间竞态。 */
+  useEffect(() => {
+    if (sessionState === 'signed-in' && pendingReturnRef.current) {
+      const target = pendingReturnRef.current;
+      pendingReturnRef.current = null;
+      navigate(target);
+    }
+  }, [sessionState, navigate]);
+
   useEffect(
     () =>
       onSessionExpired(() => {
+        setReturnTo(safeReturnTo(path));
         setSession(null);
         setSessionState('anonymous');
         setExpiredNote('会话已过期或未登录，请重新登录。');
       }),
-    [],
+    [path],
   );
 
-  const [path, navigate] = useHashRoute();
   const can = useCallback((code: string) => !!session?.permissions.includes(code), [session]);
   const resolved = useMemo(() => resolveRoute(path, ROUTES), [path]);
   const { route } = resolved;
@@ -340,6 +353,7 @@ export function App() {
         reason={sessionState === 'anonymous' ? expiredNote || undefined : undefined}
         onLoggedIn={() => {
           setExpiredNote('');
+          pendingReturnRef.current = returnTo;
           probe();
         }}
       />
@@ -354,6 +368,7 @@ export function App() {
       breadcrumb={route?.breadcrumb}
       onLogout={() => {
         setExpiredNote('');
+        setReturnTo('/me/integrations');
         void logout().finally(() => {
           setSession(null);
           setSessionState('anonymous');

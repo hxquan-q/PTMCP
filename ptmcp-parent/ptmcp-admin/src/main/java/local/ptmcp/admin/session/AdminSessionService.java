@@ -6,9 +6,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import local.ptmcp.admin.api.AdminPrincipal;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
-import local.ptmcp.persistence.security.UserSecurityStore;
 import local.ptmcp.persistence.security.HostIdentityStore;
 import local.ptmcp.persistence.security.IdentityPasswordChanges;
+import local.ptmcp.persistence.security.UserSecurityStore;
 import local.ptmcp.persistence.security.WebSessionStore;
 
 import org.springframework.http.ResponseCookie;
@@ -35,7 +35,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import javax.sql.DataSource;
 
-/** Opaque ADMIN sessions; every request verifies the durable index and authoritative user version. */
+/**
+ * Opaque ADMIN sessions; every request verifies the durable index and authoritative user version.
+ */
 public final class AdminSessionService {
     public static final String SESSION_COOKIE = "PTMCP_ADMIN_SESSION";
     public static final String PRESESSION_COOKIE = "PTMCP_ADMIN_PRESESSION";
@@ -65,10 +67,12 @@ public final class AdminSessionService {
     private final Map<String, Failures> failures = new ConcurrentHashMap<>();
 
     public AdminSessionService(DataSource primary) {
-        this(primary,primary);
+        this(primary, primary);
     }
-    public AdminSessionService(DataSource primary,DataSource identity) {
-        this.primary=primary; this.host=new HostIdentityStore(identity);
+
+    public AdminSessionService(DataSource primary, DataSource identity) {
+        this.primary = primary;
+        this.host = new HostIdentityStore(identity);
     }
 
     public record CsrfIssued(String presessionId, String csrfToken, Instant expiresAt) {}
@@ -176,12 +180,18 @@ public final class AdminSessionService {
             }
         }
         Long boundUser = findUserId(normalized);
-        UserSecurityStore.State captured = boundUser == null ? null : new UserSecurityStore(primary).read(boundUser);
+        UserSecurityStore.State captured =
+                boundUser == null ? null : new UserSecurityStore(primary).read(boundUser);
         Profile profile = captured != null && captured.ready() ? findProfile(normalized) : null;
-        HostIdentityStore.Account account=profile==null ? null : host.read(profile.userId());
+        HostIdentityStore.Account account = profile == null ? null : host.read(profile.userId());
         String hash = account == null || !account.boundTo(normalized) ? dummyHash : account.hash();
         boolean matches = passwords.matches(password, hash);
-        if (profile == null || account == null || !account.boundTo(normalized) || !account.active() || !matches || !"ACTIVE".equals(profile.status())) {
+        if (profile == null
+                || account == null
+                || !account.boundTo(normalized)
+                || !account.active()
+                || !matches
+                || !"ACTIVE".equals(profile.status())) {
             recordFailure(normalized, now);
             throw new DomainException(ErrorCode.AUTHENTICATION_FAILED);
         }
@@ -252,22 +262,39 @@ public final class AdminSessionService {
                 || newPassword.equals(oldPassword)) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
-        UserSecurityStore.State captured=new UserSecurityStore(primary).read(session.userId());
-        UserSecurityStore.requireReady(captured,session.authVersion());
-        HostIdentityStore.Account account=host.read(session.userId());
-        if(account==null || !account.active() || !passwords.matches(oldPassword,account.hash())) {
+        UserSecurityStore authority = new UserSecurityStore(primary);
+        UserSecurityStore.State captured = authority.read(session.userId());
+        UserSecurityStore.requireReady(captured, session.authVersion());
+        String boundName = authority.loginName(session.userId());
+        HostIdentityStore.Account account = host.read(session.userId());
+        if (account == null
+                || !account.active()
+                || !account.boundTo(boundName)
+                || !passwords.matches(oldPassword, account.hash())) {
             throw new DomainException(ErrorCode.AUTHENTICATION_FAILED);
         }
         long profileVersion;
-        try(Connection connection=primary.getConnection();PreparedStatement query=connection.prepareStatement("SELECT version FROM sys_user_profile WHERE user_id=?")) {
-            query.setQueryTimeout(5);query.setLong(1,session.userId());
-            try(ResultSet result=query.executeQuery()) {
-                if(!result.next()) throw new DomainException(ErrorCode.AUTHENTICATION_FAILED);
-                profileVersion=result.getLong(1);
+        try (Connection connection = primary.getConnection();
+                PreparedStatement query =
+                        connection.prepareStatement(
+                                "SELECT version FROM sys_user_profile WHERE user_id=?")) {
+            query.setQueryTimeout(5);
+            query.setLong(1, session.userId());
+            try (ResultSet result = query.executeQuery()) {
+                if (!result.next()) throw new DomainException(ErrorCode.AUTHENTICATION_FAILED);
+                profileVersion = result.getLong(1);
             }
-        }catch(SQLException failure){throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);}
-        new IdentityPasswordChanges(primary,host).begin(session.userId(),profileVersion,session.authVersion(),
-                HostIdentityStore.fingerprint(account.hash()),passwords.encode(newPassword),session.userId());
+        } catch (SQLException failure) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+        new IdentityPasswordChanges(primary, host)
+                .begin(
+                        session.userId(),
+                        profileVersion,
+                        session.authVersion(),
+                        HostIdentityStore.fingerprint(account.hash()),
+                        passwords.encode(newPassword),
+                        session.userId());
         sessions.entrySet().removeIf(entry -> entry.getValue().userId() == session.userId());
     }
 
@@ -353,7 +380,9 @@ public final class AdminSessionService {
             sessions.remove(key);
             return null;
         }
-        boolean indexed = new WebSessionStore(primary).active("ADMIN", sessionId, session.userId(), session.authVersion());
+        boolean indexed =
+                new WebSessionStore(primary)
+                        .active("ADMIN", sessionId, session.userId(), session.authVersion());
         if (!indexed) {
             sessions.remove(key);
             return null;
@@ -421,7 +450,14 @@ public final class AdminSessionService {
     }
 
     private void insertSessionIndex(String sessionId, long userId, SessionEntry session) {
-        new WebSessionStore(primary).issue("ADMIN", sessionId, userId, session.authVersion(), session.issuedAt(), session.expiresAt());
+        new WebSessionStore(primary)
+                .issue(
+                        "ADMIN",
+                        sessionId,
+                        userId,
+                        session.authVersion(),
+                        session.issuedAt(),
+                        session.expiresAt());
     }
 
     private void revokeIndex(String sessionHash) {
@@ -441,8 +477,10 @@ public final class AdminSessionService {
     }
 
     private Long findUserId(String normalizedName) {
-        try (Connection connection = primary.getConnection(); PreparedStatement statement = connection.prepareStatement(
-                "SELECT user_id FROM sys_user_login_name WHERE normalized_name = ?")) {
+        try (Connection connection = primary.getConnection();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "SELECT user_id FROM sys_user_login_name WHERE normalized_name = ?")) {
             statement.setQueryTimeout(5);
             statement.setString(1, normalizedName);
             try (ResultSet result = statement.executeQuery()) {

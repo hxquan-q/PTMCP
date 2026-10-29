@@ -10,8 +10,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Objects;
 import java.util.Locale;
+import java.util.Objects;
 
 import javax.sql.DataSource;
 
@@ -74,7 +74,8 @@ public final class HostIdentityStore {
     }
 
     /** A late operation can only replace its own captured predecessor, never a newer hash. */
-    public void compareAndSetHash(long userId, String normalizedName, byte[] expected, String target) {
+    public void compareAndSetHash(
+            long userId, String normalizedName, byte[] expected, String target) {
         if (userId <= 0
                 || normalizedName == null
                 || !normalizedName.equals(normalizeLoginName(normalizedName))

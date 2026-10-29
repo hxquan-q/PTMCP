@@ -58,7 +58,8 @@ public class OAuthDataConfiguration {
 
     @Bean
     AsSessionSecurity asSessionSecurity(DataSource dataSource) {
-        return new AsSessionSecurity(new local.ptmcp.persistence.security.WebSessionStore(dataSource));
+        return new AsSessionSecurity(
+                new local.ptmcp.persistence.security.WebSessionStore(dataSource));
     }
 
     @Bean
@@ -92,10 +93,14 @@ public class OAuthDataConfiguration {
     }
 
     @Bean
-    public AccountAuthenticator accountAuthenticator(JdbcTemplate oauthJdbcTemplate,
+    public AccountAuthenticator accountAuthenticator(
+            JdbcTemplate oauthJdbcTemplate,
             @org.springframework.beans.factory.annotation.Qualifier("authzIdentityDataSource")
-            org.springframework.beans.factory.ObjectProvider<DataSource> identity) {
-        return new JdbcAccountAuthenticator(oauthJdbcTemplate, identity.getIfAvailable(oauthJdbcTemplate::getDataSource), new BCryptPasswordEncoder());
+                    org.springframework.beans.factory.ObjectProvider<DataSource> identity) {
+        return new JdbcAccountAuthenticator(
+                oauthJdbcTemplate,
+                identity.getIfAvailable(oauthJdbcTemplate::getDataSource),
+                new BCryptPasswordEncoder());
     }
 
     @Bean

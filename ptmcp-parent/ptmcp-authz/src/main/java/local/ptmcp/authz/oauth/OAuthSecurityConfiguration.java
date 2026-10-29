@@ -20,8 +20,8 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.DispatcherTypeRequestMatcher;
 import org.springframework.security.web.util.matcher.OrRequestMatcher;
@@ -139,7 +139,9 @@ public class OAuthSecurityConfiguration {
     @Bean
     @Order(3)
     SecurityFilterChain pages(
-            HttpSecurity http, AccountAuthenticationProvider accountAuthenticationProvider, AsSessionSecurity sessionSecurity)
+            HttpSecurity http,
+            AccountAuthenticationProvider accountAuthenticationProvider,
+            AsSessionSecurity sessionSecurity)
             throws Exception {
         http.securityMatcher(pageMatcher())
                 .addFilterAfter(sessionSecurity.filter(), SecurityContextHolderFilter.class)
@@ -152,7 +154,11 @@ public class OAuthSecurityConfiguration {
                                         .permitAll()
                                         .anyRequest()
                                         .authenticated())
-                .formLogin(form -> form.loginPage(LOGIN_PAGE).successHandler(sessionSecurity::onSuccess).permitAll())
+                .formLogin(
+                        form ->
+                                form.loginPage(LOGIN_PAGE)
+                                        .successHandler(sessionSecurity::onSuccess)
+                                        .permitAll())
                 .authenticationProvider(accountAuthenticationProvider)
                 .logout(
                         logout ->

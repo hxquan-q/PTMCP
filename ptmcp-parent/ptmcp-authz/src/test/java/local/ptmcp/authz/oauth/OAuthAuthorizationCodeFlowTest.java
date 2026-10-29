@@ -161,8 +161,15 @@ class OAuthAuthorizationCodeFlowTest {
     @BeforeEach
     void clearAuthorizationState() throws SQLException {
         try (Connection connection = db()) {
-            execute(connection, "UPDATE sys_user SET user_name = ? WHERE user_id = ?", USERNAME, USER_ID);
-            execute(connection, "UPDATE sys_user_security SET auth_version = 1, identity_state = 'READY', identity_change_id = NULL WHERE user_id = ?", USER_ID);
+            execute(
+                    connection,
+                    "UPDATE sys_user SET user_name = ? WHERE user_id = ?",
+                    USERNAME,
+                    USER_ID);
+            execute(
+                    connection,
+                    "UPDATE sys_user_security SET auth_version = 1, identity_state = 'READY', identity_change_id = NULL WHERE user_id = ?",
+                    USER_ID);
             execute(connection, "DELETE FROM web_session_index");
             execute(connection, "DELETE FROM oauth_refresh_token");
             execute(connection, "DELETE FROM oauth_refresh_family");
@@ -182,7 +189,10 @@ class OAuthAuthorizationCodeFlowTest {
     @Test
     void anUnboundIdentityCannotUseAnIdenticallyNamedHostAccount() throws Exception {
         try (Connection connection = db()) {
-            execute(connection, "UPDATE sys_user_security SET identity_state = 'UNBOUND' WHERE user_id = ?", USER_ID);
+            execute(
+                    connection,
+                    "UPDATE sys_user_security SET identity_state = 'UNBOUND' WHERE user_id = ?",
+                    USER_ID);
         }
         assertLoginRejectedByIdentityBinding();
     }
@@ -191,8 +201,18 @@ class OAuthAuthorizationCodeFlowTest {
         HttpSession session = new HttpSession();
         Response page = session.get("/login");
         assertEquals(200, page.status());
-        Response result = session.postForm("/login", form(Map.of(
-                "username", USERNAME, "password", PASSWORD, "_csrf", csrf(page.body()))), Map.of());
+        Response result =
+                session.postForm(
+                        "/login",
+                        form(
+                                Map.of(
+                                        "username",
+                                        USERNAME,
+                                        "password",
+                                        PASSWORD,
+                                        "_csrf",
+                                        csrf(page.body()))),
+                        Map.of());
         assertEquals(302, result.status());
         assertTrue(result.first("Location").contains("error"));
         try (Connection connection = db()) {
@@ -203,38 +223,81 @@ class OAuthAuthorizationCodeFlowTest {
     @Test
     void loginAndCodeBindTheAuthoritativeUserVersion() throws Exception {
         try (Connection connection = db()) {
-            execute(connection, "UPDATE sys_user_security SET auth_version = 7 WHERE user_id = ?", USER_ID);
+            execute(
+                    connection,
+                    "UPDATE sys_user_security SET auth_version = 7 WHERE user_id = ?",
+                    USER_ID);
         }
         String verifier = verifier();
-        String code = issueCode(login(), PUBLIC_CLIENT_ID, PUBLIC_REDIRECT, PUBLIC_SCOPES, state(), verifier, true);
+        String code =
+                issueCode(
+                        login(),
+                        PUBLIC_CLIENT_ID,
+                        PUBLIC_REDIRECT,
+                        PUBLIC_SCOPES,
+                        state(),
+                        verifier,
+                        true);
         Response result = exchange(code, verifier, PUBLIC_REDIRECT, PUBLIC_CLIENT_ID, null);
         assertEquals(200, result.status());
-        JWTClaimsSet claims = SignedJWT.parse(JSON.readTree(result.body()).get("access_token").asString()).getJWTClaimsSet();
+        JWTClaimsSet claims =
+                SignedJWT.parse(JSON.readTree(result.body()).get("access_token").asString())
+                        .getJWTClaimsSet();
         assertEquals(7L, claims.getLongClaim("auth_version"));
     }
 
     @Test
     void aUserVersionChangeRejectsAnUnconsumedCode() throws Exception {
         String verifier = verifier();
-        String code = issueCode(login(), PUBLIC_CLIENT_ID, PUBLIC_REDIRECT, PUBLIC_SCOPES, state(), verifier, true);
+        String code =
+                issueCode(
+                        login(),
+                        PUBLIC_CLIENT_ID,
+                        PUBLIC_REDIRECT,
+                        PUBLIC_SCOPES,
+                        state(),
+                        verifier,
+                        true);
         try (Connection connection = db()) {
-            execute(connection, "UPDATE sys_user_security SET auth_version = auth_version + 1 WHERE user_id = ?", USER_ID);
+            execute(
+                    connection,
+                    "UPDATE sys_user_security SET auth_version = auth_version + 1 WHERE user_id = ?",
+                    USER_ID);
         }
-        assertOAuthError(exchange(code, verifier, PUBLIC_REDIRECT, PUBLIC_CLIENT_ID, null), 400, "invalid_grant");
+        assertOAuthError(
+                exchange(code, verifier, PUBLIC_REDIRECT, PUBLIC_CLIENT_ID, null),
+                400,
+                "invalid_grant");
         try (Connection connection = db()) {
-            assertEquals(1, scalar(connection, "SELECT COUNT(*) FROM oauth2_authorization WHERE authorization_code_hash = ? AND code_consumed_at IS NULL", sha256(code)));
+            assertEquals(
+                    1,
+                    scalar(
+                            connection,
+                            "SELECT COUNT(*) FROM oauth2_authorization WHERE authorization_code_hash = ? AND code_consumed_at IS NULL",
+                            sha256(code)));
         }
     }
 
     @Test
     void aUserVersionChangeRejectsRefreshWithoutRotating() throws Exception {
         String verifier = verifier();
-        String code = issueCode(login(), REFRESH_CLIENT_ID, REFRESH_REDIRECT, PUBLIC_SCOPES, state(), verifier, true);
+        String code =
+                issueCode(
+                        login(),
+                        REFRESH_CLIENT_ID,
+                        REFRESH_REDIRECT,
+                        PUBLIC_SCOPES,
+                        state(),
+                        verifier,
+                        true);
         Response issued = exchange(code, verifier, REFRESH_REDIRECT, REFRESH_CLIENT_ID, null);
         assertEquals(200, issued.status());
         String token = JSON.readTree(issued.body()).get("refresh_token").asString();
         try (Connection connection = db()) {
-            execute(connection, "UPDATE sys_user_security SET auth_version = auth_version + 1 WHERE user_id = ?", USER_ID);
+            execute(
+                    connection,
+                    "UPDATE sys_user_security SET auth_version = auth_version + 1 WHERE user_id = ?",
+                    USER_ID);
         }
         assertOAuthError(refresh(token), 400, "invalid_grant");
         try (Connection connection = db()) {
@@ -246,7 +309,10 @@ class OAuthAuthorizationCodeFlowTest {
     void aUserVersionChangeInvalidatesTheAsSession() throws Exception {
         HttpSession session = login();
         try (Connection connection = db()) {
-            execute(connection, "UPDATE sys_user_security SET auth_version = auth_version + 1 WHERE user_id = ?", USER_ID);
+            execute(
+                    connection,
+                    "UPDATE sys_user_security SET auth_version = auth_version + 1 WHERE user_id = ?",
+                    USER_ID);
         }
         assertAnonymousAuthorizeIsSentToLogin(session);
     }
@@ -254,16 +320,42 @@ class OAuthAuthorizationCodeFlowTest {
     @Test
     void identityChangePendingCannotLoginOrMintTokens() throws Exception {
         String verifier = verifier();
-        String code = issueCode(login(), PUBLIC_CLIENT_ID, PUBLIC_REDIRECT, PUBLIC_SCOPES, state(), verifier, true);
+        String code =
+                issueCode(
+                        login(),
+                        PUBLIC_CLIENT_ID,
+                        PUBLIC_REDIRECT,
+                        PUBLIC_SCOPES,
+                        state(),
+                        verifier,
+                        true);
         try (Connection connection = db()) {
-            execute(connection, "UPDATE sys_user_security SET identity_state = 'CHANGE_PENDING', identity_change_id = ? WHERE user_id = ?", java.util.UUID.randomUUID().toString(), USER_ID);
+            execute(
+                    connection,
+                    "UPDATE sys_user_security SET identity_state = 'CHANGE_PENDING', identity_change_id = ? WHERE user_id = ?",
+                    java.util.UUID.randomUUID().toString(),
+                    USER_ID);
         }
         HttpSession session = new HttpSession();
         Response page = session.get("/login");
-        Response attempt = session.postForm("/login", form(Map.of("username", USERNAME, "password", PASSWORD, "_csrf", csrf(page.body()))), Map.of());
+        Response attempt =
+                session.postForm(
+                        "/login",
+                        form(
+                                Map.of(
+                                        "username",
+                                        USERNAME,
+                                        "password",
+                                        PASSWORD,
+                                        "_csrf",
+                                        csrf(page.body()))),
+                        Map.of());
         assertEquals(302, attempt.status());
         assertTrue(attempt.first("Location").contains("/login?error"));
-        assertOAuthError(exchange(code, verifier, PUBLIC_REDIRECT, PUBLIC_CLIENT_ID, null), 400, "invalid_grant");
+        assertOAuthError(
+                exchange(code, verifier, PUBLIC_REDIRECT, PUBLIC_CLIENT_ID, null),
+                400,
+                "invalid_grant");
     }
 
     @Test
@@ -1653,10 +1745,24 @@ class OAuthAuthorizationCodeFlowTest {
                     USERNAME,
                     now,
                     now);
-            execute(connection,
-                    "INSERT INTO sys_user_security (user_id, auth_version, identity_version, identity_state, version, create_time, update_time) VALUES (?, 1, 1, 'READY', 1, ?, ?)", USER_ID, now, now);
-            execute(connection, "INSERT INTO sys_dept (dept_id, parent_id, ancestors, dept_name, status, create_time, update_time) VALUES (42, 0, '0', 'OAuth department', '0', ?, ?)", now, now);
-            execute(connection, "INSERT INTO sys_user_profile (user_id, dept_id, display_name, password_hash, status, create_time, update_time) VALUES (?, 42, 'Alice', ?, 'ACTIVE', ?, ?)", USER_ID, new BCryptPasswordEncoder().encode(PASSWORD), now, now);
+            execute(
+                    connection,
+                    "INSERT INTO sys_user_security (user_id, auth_version, identity_version, identity_state, version, create_time, update_time) VALUES (?, 1, 1, 'READY', 1, ?, ?)",
+                    USER_ID,
+                    now,
+                    now);
+            execute(
+                    connection,
+                    "INSERT INTO sys_dept (dept_id, parent_id, ancestors, dept_name, status, create_time, update_time) VALUES (42, 0, '0', 'OAuth department', '0', ?, ?)",
+                    now,
+                    now);
+            execute(
+                    connection,
+                    "INSERT INTO sys_user_profile (user_id, dept_id, display_name, password_hash, status, create_time, update_time) VALUES (?, 42, 'Alice', ?, 'ACTIVE', ?, ?)",
+                    USER_ID,
+                    new BCryptPasswordEncoder().encode(PASSWORD),
+                    now,
+                    now);
             insertClient(
                     connection,
                     CONFIDENTIAL_CLIENT_ROW,

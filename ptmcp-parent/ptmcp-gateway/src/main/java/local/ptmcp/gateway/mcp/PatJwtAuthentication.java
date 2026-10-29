@@ -96,13 +96,19 @@ final class PatJwtAuthentication implements McpAuthentication {
         if (!snapshot.familyVersions().containsKey(familyId)) {
             throw new DomainException(ErrorCode.TOKEN_REVOKED);
         }
-        IdentityStore.FamilyRecord family = identities.findFamily(familyId)
-                .orElseThrow(() -> new DomainException(ErrorCode.TOKEN_REVOKED));
+        IdentityStore.FamilyRecord family =
+                identities
+                        .findFamily(familyId)
+                        .orElseThrow(() -> new DomainException(ErrorCode.TOKEN_REVOKED));
         if (family.authVersion() != identity.authVersion()
-                || family.userId()!=identity.userId() || family.platformId()!=identity.platformId()
-                || !java.util.Objects.equals(family.clientId(),identity.clientId())
-                || !"ACTIVE".equals(family.status()) || !family.withinWindow()
-                || !family.platformActive() || !family.userActive() || !family.clientActive()) {
+                || family.userId() != identity.userId()
+                || family.platformId() != identity.platformId()
+                || !java.util.Objects.equals(family.clientId(), identity.clientId())
+                || !"ACTIVE".equals(family.status())
+                || !family.withinWindow()
+                || !family.platformActive()
+                || !family.userActive()
+                || !family.clientActive()) {
             throw new DomainException(ErrorCode.TOKEN_REVOKED);
         }
         return new McpIdentity(
@@ -195,7 +201,8 @@ final class PatJwtAuthentication implements McpAuthentication {
                 || family.userId() != userId
                 || family.platformId() != platformId
                 || family.authVersion() != authVersion
-                || !java.util.Objects.equals(family.clientId(),jwt.getClaimAsString("client_id"))) {
+                || !java.util.Objects.equals(
+                        family.clientId(), jwt.getClaimAsString("client_id"))) {
             throw new DomainException(ErrorCode.TOKEN_REVOKED);
         }
         SecuritySnapshot snapshot =
@@ -215,11 +222,13 @@ final class PatJwtAuthentication implements McpAuthentication {
                 snapshot.checkedAt());
     }
 
-    private static void requireUserVersion(SecuritySnapshot snapshot, long userId, long authVersion) {
+    private static void requireUserVersion(
+            SecuritySnapshot snapshot, long userId, long authVersion) {
         if (!snapshot.isFresh(Instant.now())) {
             throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
         }
-        if (authVersion <= 0 || snapshot.subjectVersions().getOrDefault(userId, 0L) != authVersion) {
+        if (authVersion <= 0
+                || snapshot.subjectVersions().getOrDefault(userId, 0L) != authVersion) {
             throw new DomainException(ErrorCode.TOKEN_REVOKED);
         }
     }

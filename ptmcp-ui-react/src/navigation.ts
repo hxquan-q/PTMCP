@@ -29,3 +29,8 @@ export function resolveRoute<R extends ResolvableRoute>(path: string, routes: R[
   if (prefix) return { match: 'prefix', route: prefix, id: decodeURIComponent(path.slice(prefix.path.length + 1)) };
   return { match: 'none' };
 }
+
+/** 会话过期后的安全回跳目标：仅接受站内 /admin /me 开头、无反斜杠、无控制字符的路径；否则回默认。 */
+export function safeReturnTo(path: string, fallback = '/'): string {
+  return /^\/(?:admin|me)(?:\/|\?|$)/.test(path) && !path.includes('\\') && [...path].every((ch) => ch.charCodeAt(0) >= 32) ? path : fallback;
+}

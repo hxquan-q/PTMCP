@@ -689,9 +689,11 @@ public final class OrgStore {
                     statement.setObject(10, OrgSql.nowUtc());
                     statement.executeUpdate();
                 }
-                try (PreparedStatement security = OrgSql.statement(connection,
-                        "INSERT INTO sys_user_security (user_id,auth_version,identity_version,identity_state,version,create_time,update_time)"
-                                + " VALUES (?,1,1,'UNBOUND',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))")) {
+                try (PreparedStatement security =
+                        OrgSql.statement(
+                                connection,
+                                "INSERT INTO sys_user_security (user_id,auth_version,identity_version,identity_state,version,create_time,update_time)"
+                                        + " VALUES (?,1,1,'UNBOUND',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))")) {
                     security.setLong(1, userId);
                     security.executeUpdate();
                 }

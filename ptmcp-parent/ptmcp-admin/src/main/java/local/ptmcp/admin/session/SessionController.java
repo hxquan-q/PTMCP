@@ -143,15 +143,22 @@ public class SessionController {
         else if (referer != null) requireOrigin(request, referer, false);
     }
 
-    private static void requireOrigin(HttpServletRequest request, String value, boolean originHeader) {
+    private static void requireOrigin(
+            HttpServletRequest request, String value, boolean originHeader) {
         try {
-            java.net.URI uri=java.net.URI.create(value);
-            String host=request.getServerName();
-            int port=uri.getPort()<0 ? ("https".equalsIgnoreCase(uri.getScheme())?443:80) : uri.getPort();
-            if (uri.getHost()==null || uri.getRawUserInfo()!=null || uri.getRawFragment()!=null
+            java.net.URI uri = java.net.URI.create(value);
+            String host = request.getServerName();
+            int port =
+                    uri.getPort() < 0
+                            ? ("https".equalsIgnoreCase(uri.getScheme()) ? 443 : 80)
+                            : uri.getPort();
+            if (uri.getHost() == null
+                    || uri.getRawUserInfo() != null
+                    || uri.getRawFragment() != null
                     || !request.getScheme().equalsIgnoreCase(uri.getScheme())
-                    || !host.equalsIgnoreCase(uri.getHost()) || request.getServerPort()!=port
-                    || (originHeader && (uri.getRawQuery()!=null || !uri.getRawPath().isEmpty())))
+                    || !host.equalsIgnoreCase(uri.getHost())
+                    || request.getServerPort() != port
+                    || (originHeader && (uri.getRawQuery() != null || !uri.getRawPath().isEmpty())))
                 throw new IllegalArgumentException();
         } catch (IllegalArgumentException failure) {
             throw new DomainException(ErrorCode.CSRF_INVALID);

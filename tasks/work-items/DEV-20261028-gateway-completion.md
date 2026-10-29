@@ -68,6 +68,26 @@ profile 围栏有效 RED 为 `ptmcp-identity-profile-red-real.log`（2 tests / 2
 独立只读复审关闭 Pending 资料漂移与恢复过期版本，但发现新建 READY 只按 ID 匹配宿主的账号碰撞风险。
 当前续接最小安全修复：前向迁移引入 UNBOUND，可靠供应完成前不签发；所有登录/改密/恢复核 ID+元库规范化登录名，
 宿主事务先锁行核绑定再 CAS。新建宿主账号供应仍未完成，不能把本片 GREEN 计作身份全闭环。
+绑定有效 RED：`ptmcp-identity-binding-red.log` 为新建仍 READY 的 1 failure；
+`ptmcp-identity-binding-http-red-real.log` 为 reset/恢复/ADMIN 登录 4 failures；
+`ptmcp-identity-binding-as-red.log` 为 AS 登录 1 failure，三份均 0 errors。
+独立复审另发现自助改密在宿主重命名后先创建 Pending，已补 begin 前绑定检查；
+`ptmcp-identity-self-binding-red-real.log` 1 test / 1 failure / 0 errors，预期401、实际409。
+首次组合因测试重复使用旧 profile version 而停止，随后 RED 跑因新锁测试缺 PreparedStatement import 停止，
+均已修正夹具，不计产品缺陷证据。`ptmcp-identity-binding-green-final.log` BUILD SUCCESS/exit0，
+112 tests / 0 failures / 0 errors / 0 skipped：SecurityState13、V12→V13迁移1、Org13、
+AdminApi26、双库恢复17、Session11、OAuth29、MCP HTTP2；完成时间2026-10-30 02:42:48 +08:00。
+覆盖宿主锁跨hash写、ID碰撞、Pending后宿主重命名、新UNBOUND同ID同名拒绝登录/重置、
+自助改密begin前拒绝且authority/profile/epoch/operation/session均不变。
+根检查 `ptmcp-root-identity-binding-check.log` exit0，62项检查器回归通过；格式已由Spotless生成。
+身份绑定片独立只读复审已读取实际 GREEN112 日志及当前 diff，未发现新增阻断；
+自助改密 begin 前绑定缺口关闭。复审未重复执行动态测试；UNBOUND 供应仍未完成。
+
+当前切片：封闭通用用户 PUT 绕过专用 status/roles 权限的入口。
+通用编辑始终要求当前部门的 user:update；实际启停、角色整组变化、部门迁移分别复用对应动作与范围检查，
+原值随完整 DTO 回传不额外索取 status/assign-role/move。角色按集合比较；缺省 roleIds 表示保留。
+先用真实 MySQL + Servlet 边界建立拒绝且 profile/roles/version 不变的反例，再验证合法资料编辑与授权变更。
+本片不声称修复角色定义/委派并发、登录时平台管理员快照或启停撤证；这些继续后续闭环。
 
 双库 CAS 首次 GREEN：`ptmcp-identity-cas-green.log`，10 tests / 0 failures/errors/skipped，BUILD SUCCESS。
 独立实际 diff 复审未发现迟到写/提交不明新增高危阻断；发现恢复 hash 长期保留、控制器 epoch 字段错配及并发完成额外 epoch，已补回归和修复，重验进行中。

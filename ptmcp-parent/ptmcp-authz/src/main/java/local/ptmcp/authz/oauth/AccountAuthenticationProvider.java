@@ -33,7 +33,11 @@ public final class AccountAuthenticationProvider implements AuthenticationProvid
         }
         AuthenticatedAccount value = account.get();
         AsPrincipal principal =
-                new AsPrincipal(value.userId(), value.loginName(), value.displayName(), value.authVersion());
+                new AsPrincipal(
+                        value.userId(),
+                        value.loginName(),
+                        value.displayName(),
+                        value.authVersion());
         return UsernamePasswordAuthenticationToken.authenticated(
                 principal, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
     }

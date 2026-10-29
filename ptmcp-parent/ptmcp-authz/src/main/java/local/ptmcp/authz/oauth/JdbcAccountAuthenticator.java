@@ -1,8 +1,8 @@
 package local.ptmcp.authz.oauth;
 
 import local.ptmcp.common.error.DomainException;
-import local.ptmcp.persistence.security.UserSecurityStore;
 import local.ptmcp.persistence.security.HostIdentityStore;
+import local.ptmcp.persistence.security.UserSecurityStore;
 
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -29,7 +29,9 @@ public final class JdbcAccountAuthenticator implements AccountAuthenticator {
     public JdbcAccountAuthenticator(JdbcTemplate jdbc, PasswordEncoder passwordEncoder) {
         this(jdbc, jdbc.getDataSource(), passwordEncoder);
     }
-    public JdbcAccountAuthenticator(JdbcTemplate jdbc, javax.sql.DataSource identity, PasswordEncoder passwordEncoder) {
+
+    public JdbcAccountAuthenticator(
+            JdbcTemplate jdbc, javax.sql.DataSource identity, PasswordEncoder passwordEncoder) {
         this.jdbc = jdbc;
         this.host = new HostIdentityStore(identity);
         this.passwordEncoder = passwordEncoder;
@@ -51,7 +53,11 @@ public final class JdbcAccountAuthenticator implements AccountAuthenticator {
         try {
             // Capture the credential version BEFORE reading the host hash. Rechecking after
             // validation cannot safely attach a new version to an old-password result.
-            List<Long> bindings = jdbc.queryForList("SELECT n.user_id FROM sys_user_login_name n JOIN sys_user_profile p ON p.user_id = n.user_id WHERE n.normalized_name = ? AND p.status = 'ACTIVE'", Long.class, normalized);
+            List<Long> bindings =
+                    jdbc.queryForList(
+                            "SELECT n.user_id FROM sys_user_login_name n JOIN sys_user_profile p ON p.user_id = n.user_id WHERE n.normalized_name = ? AND p.status = 'ACTIVE'",
+                            Long.class,
+                            normalized);
             if (bindings.size() != 1) {
                 verifyPassword(fakeHash, rawPassword);
                 return Optional.empty();
@@ -78,7 +84,8 @@ public final class JdbcAccountAuthenticator implements AccountAuthenticator {
             return Optional.empty();
         }
         return Optional.of(
-                new AuthenticatedAccount(row.userId(), row.loginName(), row.displayName(), state.authVersion()));
+                new AuthenticatedAccount(
+                        row.userId(), row.loginName(), row.displayName(), state.authVersion()));
     }
 
     static String normalize(String loginName) {
@@ -99,5 +106,4 @@ public final class JdbcAccountAuthenticator implements AccountAuthenticator {
         new SecureRandom().nextBytes(value);
         return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(value);
     }
-
 }

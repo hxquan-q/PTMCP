@@ -143,7 +143,9 @@ class SecurityStateTest {
                         + "updated_by) VALUES ('auth-1', 'client-1', 'alice', "
                         + "'authorization_code', 'ACTIVE', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), "
                         + "1, 1)");
-        update(connection, "INSERT INTO sys_user_security (user_id,auth_version,identity_version,version,create_time,update_time) VALUES (7,3,1,1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6)),(8,2,1,1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
+        update(
+                connection,
+                "INSERT INTO sys_user_security (user_id,auth_version,identity_version,version,create_time,update_time) VALUES (7,3,1,1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6)),(8,2,1,1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
         insertFamily(connection, FAMILY_1, 7L, 1L);
         insertFamily(connection, FAMILY_2, 7L, 3L);
         insertFamily(connection, FAMILY_3, 8L, 2L);
@@ -203,7 +205,10 @@ class SecurityStateTest {
                 Map.of(FAMILY_1, 1L, FAMILY_3, 1L),
                 after.familyVersions(),
                 "a revoked family disappears from the snapshot");
-        assertEquals(Map.of(7L, 3L), after.subjectVersions(), "family revocation cannot roll back the user version");
+        assertEquals(
+                Map.of(7L, 3L),
+                after.subjectVersions(),
+                "family revocation cannot roll back the user version");
     }
 
     @Test
@@ -213,16 +218,22 @@ class SecurityStateTest {
             update(connection, "DELETE FROM oauth_refresh_token");
             update(connection, "DELETE FROM oauth_refresh_family");
         }
-        SecuritySnapshot state = new SecurityStateReader(source()).read(new SecurityStateReader.SubjectRequest(1L, 7L, List.of()));
+        SecuritySnapshot state =
+                new SecurityStateReader(source())
+                        .read(new SecurityStateReader.SubjectRequest(1L, 7L, List.of()));
         assertEquals(Map.of(7L, 11L), state.subjectVersions());
     }
 
     @Test
     void aPendingIdentityDoesNotSupplyAnActiveUserVersion() throws Exception {
         try (Connection connection = open()) {
-            update(connection, "UPDATE sys_user_security SET identity_state = 'CHANGE_PENDING', identity_change_id = '00000000-0000-0000-0000-000000000001' WHERE user_id = 7");
+            update(
+                    connection,
+                    "UPDATE sys_user_security SET identity_state = 'CHANGE_PENDING', identity_change_id = '00000000-0000-0000-0000-000000000001' WHERE user_id = 7");
         }
-        SecuritySnapshot state = new SecurityStateReader(source()).read(new SecurityStateReader.SubjectRequest(1L, 7L, List.of()));
+        SecuritySnapshot state =
+                new SecurityStateReader(source())
+                        .read(new SecurityStateReader.SubjectRequest(1L, 7L, List.of()));
         assertEquals(0L, state.subjectVersions().get(7L));
     }
 
