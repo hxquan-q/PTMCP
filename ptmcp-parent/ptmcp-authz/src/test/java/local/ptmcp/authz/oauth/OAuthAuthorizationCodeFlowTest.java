@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.nimbusds.jose.crypto.RSASSAVerifier;
@@ -20,11 +21,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2RefreshToken;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
+import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
+import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.mysql.MySQLContainer;
@@ -71,6 +76,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -127,6 +135,8 @@ class OAuthAuthorizationCodeFlowTest {
     @Autowired private jakarta.servlet.ServletContext servletContext;
 
     @Autowired private JwtEncoder jwtEncoder;
+
+    @Autowired private PtmcpOAuth2AuthorizationService authorizations;
 
     @DynamicPropertySource
     static void oauthProperties(DynamicPropertyRegistry registry) {
@@ -832,6 +842,111 @@ class OAuthAuthorizationCodeFlowTest {
                 .postForm(
                         "/oauth2/revoke",
                         form(Map.of("token", token, "client_id", clientId)),
+                        Map.of());
+    }
+
+    @Test
+    void staleRefreshSaveCommitsReplayRevocationWithoutResurrectingAuthorization()
+            throws Exception {
+        String verifier = verifier();
+        String code =
+                issueCode(
+                        login(),
+                        REFRESH_CLIENT_ID,
+                        REFRESH_REDIRECT,
+                        PUBLIC_SCOPES,
+                        state(),
+                        verifier,
+                        true);
+        Response token = exchange(code, verifier, REFRESH_REDIRECT, REFRESH_CLIENT_ID, null);
+        assertEquals(200, token.status(), token.body());
+        JsonNode body = JSON.readTree(token.body());
+        String refresh = body.get("refresh_token").asString();
+        String family =
+                SignedJWT.parse(body.get("access_token").asString())
+                        .getJWTClaimsSet()
+                        .getStringClaim("sid");
+        OAuth2Authorization snapshot =
+                authorizations.findByToken(refresh, new OAuth2TokenType("refresh_token"));
+        assertNotNull(snapshot);
+        Response rotated = refresh(refresh);
+        assertEquals(200, rotated.status(), rotated.body());
+        OAuth2Authorization stale =
+                OAuth2Authorization.from(snapshot)
+                        .refreshToken(
+                                new OAuth2RefreshToken(
+                                        randomToken(32),
+                                        Instant.now(),
+                                        Instant.now().plusSeconds(300)))
+                        .build();
+        assertThrows(OAuth2AuthenticationException.class, () -> authorizations.save(stale));
+        assertFamilyActive(family, false);
+        assertEquals(null, authorizations.findById(snapshot.getId()));
+    }
+
+    @Test
+    void concurrentRefreshAndAccessRevocationFinishWithoutReactivatingFamily() throws Exception {
+        String verifier = verifier();
+        String code =
+                issueCode(
+                        login(),
+                        REFRESH_CLIENT_ID,
+                        REFRESH_REDIRECT,
+                        PUBLIC_SCOPES,
+                        state(),
+                        verifier,
+                        true);
+        Response token = exchange(code, verifier, REFRESH_REDIRECT, REFRESH_CLIENT_ID, null);
+        assertEquals(200, token.status(), token.body());
+        JsonNode body = JSON.readTree(token.body());
+        String refresh = body.get("refresh_token").asString();
+        String access = body.get("access_token").asString();
+        String family = SignedJWT.parse(access).getJWTClaimsSet().getStringClaim("sid");
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            var rotation =
+                    executor.submit(
+                            () -> {
+                                start.await();
+                                return refresh(refresh);
+                            });
+            var revocation =
+                    executor.submit(
+                            () -> {
+                                start.await();
+                                return revoke(access, REFRESH_CLIENT_ID);
+                            });
+            start.countDown();
+            assertTrue(Set.of(200, 400).contains(rotation.get(20, TimeUnit.SECONDS).status()));
+            Response revoked = revocation.get(20, TimeUnit.SECONDS);
+            assertEquals(200, revoked.status(), revoked.body());
+        }
+        assertFamilyActive(family, false);
+        assertOAuthError(refresh(refresh), 400, "invalid_grant");
+        try (Connection connection = db()) {
+            assertEquals(
+                    0,
+                    scalar(
+                            connection,
+                            "SELECT COUNT(*) FROM oauth_refresh_token WHERE family_id = ? AND status = 'ACTIVE'",
+                            family));
+        }
+    }
+
+    private Response refresh(String token) {
+        return new HttpSession()
+                .postForm(
+                        "/oauth2/token",
+                        form(
+                                Map.of(
+                                        "grant_type",
+                                        "refresh_token",
+                                        "refresh_token",
+                                        token,
+                                        "resource",
+                                        AUDIENCE,
+                                        "client_id",
+                                        REFRESH_CLIENT_ID)),
                         Map.of());
     }
 

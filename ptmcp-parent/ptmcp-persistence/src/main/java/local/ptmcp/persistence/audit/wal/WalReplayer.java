@@ -10,6 +10,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
@@ -49,6 +50,15 @@ public final class WalReplayer {
             List<Path> quarantined) {}
 
     public ReplayReport replay(Path directory, WalKeyProvider keys, TerminalSink sink) {
+        try (WalDirectoryOwner owner = WalDirectoryOwner.acquire(directory)) {
+            owner.recoverAbandonedSegments();
+            return replayOwned(owner, keys, sink);
+        }
+    }
+
+    ReplayReport replayOwned(WalDirectoryOwner owner, WalKeyProvider keys, TerminalSink sink) {
+        owner.requireHeld();
+        Path directory = owner.directory();
         Objects.requireNonNull(directory, "directory");
         Objects.requireNonNull(keys, "keys");
         Objects.requireNonNull(sink, "sink");
@@ -70,6 +80,10 @@ public final class WalReplayer {
             }
             byte[] file;
             try {
+                if (!Files.isRegularFile(segment, LinkOption.NOFOLLOW_LINKS)
+                        || Files.size(segment) > 128L * 1024 * 1024) {
+                    throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+                }
                 file = Files.readAllBytes(segment);
             } catch (IOException error) {
                 throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
@@ -91,7 +105,11 @@ public final class WalReplayer {
                     break;
                 }
                 int total = buffer.getInt(frameStart);
-                if (total <= 0 || frameStart + 4 + total > file.length) {
+                if (total <= 0 || total > 16 * 1024 * 1024) {
+                    broken = true;
+                    break;
+                }
+                if ((long) frameStart + 4 + total > file.length) {
                     break;
                 }
                 WalFormat.Frame frame;
@@ -117,6 +135,10 @@ public final class WalReplayer {
                     duplicated++;
                 } else {
                     ingested++;
+                }
+                if (state.conflict()) {
+                    broken = true;
+                    break;
                 }
                 validEnd = buffer.position();
             }
@@ -162,6 +184,7 @@ public final class WalReplayer {
         Path target = segment.resolveSibling(segment.getFileName().toString() + QUARANTINE_SUFFIX);
         try {
             Files.move(segment, target, StandardCopyOption.ATOMIC_MOVE);
+            WalDirectoryOwner.sync(segment.getParent());
         } catch (IOException error) {
             throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
         }
@@ -178,8 +201,10 @@ public final class WalReplayer {
     }
 
     private static void checkpoint(Path done) {
-        try {
-            Files.createFile(done);
+        try (FileChannel channel =
+                FileChannel.open(done, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
+            channel.force(true);
+            WalDirectoryOwner.sync(done.getParent());
         } catch (IOException error) {
             throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
         }
@@ -188,6 +213,7 @@ public final class WalReplayer {
     private static void deleteQuietly(Path segment) {
         try {
             Files.deleteIfExists(segment);
+            WalDirectoryOwner.sync(segment.getParent());
         } catch (IOException ignored) {
             // The .done marker already prevents double ingestion; a locked file is retried later.
         }

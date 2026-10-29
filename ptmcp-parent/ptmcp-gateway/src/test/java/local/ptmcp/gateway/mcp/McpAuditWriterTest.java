@@ -65,7 +65,7 @@ class McpAuditWriterTest {
         writer.terminal(terminal());
         List<Path> segments;
         try (var files = Files.list(walDirectory)) {
-            segments = files.filter(path -> path.toString().endsWith(".wal")).toList();
+            segments = files.filter(path -> path.toString().endsWith(".open")).toList();
         }
         assertEquals(segments.size(), 1);
         assertTrue(Files.size(segments.get(0)) > 0, "the terminal frame must be durable on disk");

@@ -143,12 +143,41 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = RefreshReplayException.class)
     public void save(OAuth2Authorization authorization) {
+        lockSecurityEpoch();
         StoredAuthorization existing =
                 jdbc.query(SELECT_BY_ID, (rs, row) -> map(rs), authorization.getId()).stream()
                         .findFirst()
                         .orElse(null);
+        if (existing == null
+                && !jdbc.queryForList(
+                                "SELECT id FROM oauth2_authorization WHERE id = ?",
+                                String.class,
+                                authorization.getId())
+                        .isEmpty()) {
+            throw invalidGrant();
+        }
+        byte[] presentedRefresh = attributeBytes(authorization, OAuthAttributes.REFRESH_TOKEN_HASH);
+        if (presentedRefresh != null) {
+            if (existing == null || existing.familyId() == null) {
+                throw invalidGrant();
+            }
+            List<String> status =
+                    jdbc.queryForList(
+                            "SELECT status FROM oauth_refresh_token WHERE token_hash = ? AND family_id = ?",
+                            String.class,
+                            presentedRefresh,
+                            existing.familyId());
+            if (status.isEmpty()) {
+                throw invalidGrant();
+            }
+            if (!"ACTIVE".equals(status.getFirst())) {
+                // Commit only the replay revocation; this check precedes every grant mutation.
+                revokeFamily(existing.familyId(), "REFRESH_REPLAY");
+                throw new RefreshReplayException();
+            }
+        }
         OAuth2AuthorizationRequest request =
                 authorization.getAttribute(OAuth2AuthorizationRequest.class.getName());
         Authentication principal = authorization.getAttribute(Principal.class.getName());
@@ -505,6 +534,18 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
     }
 
     private void revokeOwnedFamily(String familyId, String registeredClientId) {
+        lockSecurityEpoch();
+        if (!jdbc.queryForList(
+                        "SELECT id FROM oauth_refresh_family WHERE id = ? AND registered_client_id = ?",
+                        String.class,
+                        familyId,
+                        registeredClientId)
+                .isEmpty()) {
+            revokeFamily(familyId, "CLIENT_REVOKED");
+        }
+    }
+
+    private long lockSecurityEpoch() {
         Long epoch =
                 jdbc.queryForObject(
                         "SELECT policy_epoch FROM sys_security_state WHERE singleton_id = 1 FOR UPDATE",
@@ -512,17 +553,24 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
         if (epoch == null || epoch <= 0 || epoch == Long.MAX_VALUE) {
             throw new IllegalStateException("OAuth security state is unavailable");
         }
+        return epoch;
+    }
+
+    private void revokeFamily(String familyId, String reason) {
+        long epoch = lockSecurityEpoch();
         List<Long> versions =
                 jdbc.queryForList(
                         "SELECT version FROM oauth_refresh_family WHERE id = ?"
-                                + " AND registered_client_id = ? AND status = 'ACTIVE' FOR UPDATE",
+                                + " AND status = 'ACTIVE' FOR UPDATE",
                         Long.class,
-                        familyId,
-                        registeredClientId);
+                        familyId);
         if (versions.isEmpty()) {
             return;
         }
-        revokeFamily(familyId, "CLIENT_REVOKED");
+        LocalDateTime now = OAuthStoreSupport.toUtc(Instant.now());
+        jdbc.update(REVOKE_FAMILY, now, reason, now, familyId);
+        jdbc.update(REVOKE_FAMILY_AUTHORIZATION, now, familyId);
+        jdbc.update(REVOKE_FAMILY_TOKENS, now, familyId);
         jdbc.update(
                 "UPDATE sys_security_state SET policy_epoch = ?,"
                         + " update_time = UTC_TIMESTAMP(6) WHERE singleton_id = 1",
@@ -551,6 +599,9 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
         if (!StringUtils.hasText(token)) {
             return null;
         }
+        // Serialize grant lookup/replay and writes with all primary security mutations. No
+        // authorization/token row is locked before this gate, so refresh/revoke cannot invert it.
+        lockSecurityEpoch();
         if (tokenType == null) {
             OAuth2Authorization refreshed = findByRefreshToken(token);
             if (refreshed != null) {
@@ -645,19 +696,13 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
         return reconstruct(authorization, null, token, state.issuedAt(), state.tokenExpiresAt());
     }
 
-    private void revokeFamily(String familyId, String reason) {
-        LocalDateTime now = OAuthStoreSupport.toUtc(Instant.now());
-        jdbc.update(REVOKE_FAMILY, now, reason, now, familyId);
-        jdbc.update(REVOKE_FAMILY_TOKENS, now, familyId);
-        jdbc.update(REVOKE_FAMILY_AUTHORIZATION, now, familyId);
-    }
-
     @Override
     @Transactional
     public void remove(OAuth2Authorization authorization) {
         if (authorization == null || !StringUtils.hasText(authorization.getId())) {
             return;
         }
+        lockSecurityEpoch();
         List<String> families =
                 jdbc.queryForList(SELECT_AUTHORIZATION_FAMILY, String.class, authorization.getId());
         if (!families.isEmpty() && families.getFirst() != null) {
@@ -803,6 +848,15 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
         }
         throw new IllegalStateException(
                 "Authorization principal is not an AS account: " + principalName);
+    }
+
+    /** Only raised before grant writes; its sole persisted effect is family revocation. */
+    private static final class RefreshReplayException extends OAuth2AuthenticationException {
+        private static final long serialVersionUID = 1L;
+
+        RefreshReplayException() {
+            super(OAuth2ErrorCodes.INVALID_GRANT);
+        }
     }
 
     private static long attributeLong(

@@ -12,6 +12,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.Objects;
 import java.util.UUID;
@@ -24,25 +25,30 @@ import java.util.regex.Pattern;
  * must stop treating this writer as usable — bytes that did not reach the channel may be recovered
  * by replay, bytes that were never fsynced never happened.
  *
- * <p>Segments are plain files named {@code wal-%06d-{bootId}.wal} so that lexicographic order is
- * creation order. A plaintext segment header identifies the writer and the data key; only frame
- * bodies are encrypted.
+ * <p>The directory has one OS file-lock owner. Active segments end in {@code .open}; only sealed
+ * {@code .wal} segments may be replayed. A new owner seals abandoned files after acquiring the
+ * exclusive lock. Headers identify the writer and the data key; frame bodies are encrypted.
  */
 public final class TerminalWal implements AutoCloseable {
     static final long DEFAULT_MAX_SEGMENT_BYTES = 64L * 1024 * 1024;
-    private static final Pattern SEGMENT_FILE = Pattern.compile("wal-(\\d{6})-.+\\.wal");
+    private static final Pattern SEGMENT_FILE =
+            Pattern.compile("wal-(\\d{6})-.+\\.(?:wal|open)(?:\\..+)?");
 
     private final Path directory;
+    private final WalDirectoryOwner owner;
     private final String gatewayInstanceId;
     private final String bootId;
     private final WalKeyProvider keys;
     private final boolean forceOnAppend;
     private final long maxSegmentBytes;
     private FileChannel channel;
+    private Path activeSegment;
+    private WalKey segmentKey;
     private long channelSize;
     private int segmentIndex;
     private long framesInSegment;
     private boolean poisoned;
+    private boolean closed;
 
     public TerminalWal(
             Path directory, String gatewayInstanceId, String bootId, WalKeyProvider keys) {
@@ -60,46 +66,51 @@ public final class TerminalWal implements AutoCloseable {
                 || gatewayInstanceId.isBlank()
                 || gatewayInstanceId.length() > 128
                 || bootId == null
-                || bootId.isBlank()
-                || bootId.length() > 128) {
+                || !bootId.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+                || gatewayInstanceId.getBytes(StandardCharsets.UTF_8).length > 128) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
         if (maxSegmentBytes < 1) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
-        this.directory = Objects.requireNonNull(directory, "directory");
         this.gatewayInstanceId = gatewayInstanceId;
         this.bootId = bootId;
         this.keys = Objects.requireNonNull(keys, "keys");
         this.forceOnAppend = forceOnAppend;
         this.maxSegmentBytes = maxSegmentBytes;
+        this.owner = WalDirectoryOwner.acquire(Objects.requireNonNull(directory, "directory"));
+        this.directory = owner.directory();
         try {
-            Files.createDirectories(directory);
-        } catch (IOException error) {
-            throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+            owner.recoverAbandonedSegments();
+            this.segmentIndex = highestExistingSegment(this.directory);
+        } catch (RuntimeException failure) {
+            owner.close();
+            throw failure;
         }
-        this.segmentIndex = highestExistingSegment(directory);
     }
 
     /** Encodes, encrypts and fsyncs one terminal event. */
     public synchronized void append(AuditTerminal terminal) {
         Objects.requireNonNull(terminal, "terminal");
-        if (poisoned) {
+        if (poisoned || closed) {
             throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
         }
-        WalFormat.Frame frame =
-                new WalFormat.Frame(
-                        WalFormat.KIND_TERMINAL,
-                        UUID.randomUUID(),
-                        terminal.requestId(),
-                        (int) (framesInSegment & 0x7FFFFFFF),
-                        WalPayload.encode(terminal));
-        byte[] bytes = WalFormat.encodeFrame(frame, keys.current(), WalFormat.newNonce());
         try {
-            if (channel == null || channelSize + bytes.length > maxSegmentBytes) {
+            owner.requireHeld();
+            WalKey current = keys.current();
+            if (channel == null || !current.equals(segmentKey)) {
                 roll();
             }
-            channelSize += channel.write(ByteBuffer.wrap(bytes));
+            byte[] bytes = encode(terminal);
+            if (framesInSegment > 0 && channelSize + bytes.length > maxSegmentBytes) {
+                roll();
+                bytes = encode(terminal);
+            }
+            ByteBuffer buffer = ByteBuffer.wrap(bytes);
+            while (buffer.hasRemaining()) {
+                channel.write(buffer);
+            }
+            channelSize += bytes.length;
             if (forceOnAppend) {
                 channel.force(true);
             }
@@ -112,18 +123,58 @@ public final class TerminalWal implements AutoCloseable {
 
     @Override
     public synchronized void close() {
-        if (poisoned) {
+        if (closed) {
             return;
         }
+        closed = true;
         try {
             if (channel != null) {
-                channel.close();
-                channel = null;
+                if (poisoned) {
+                    channel.close();
+                    channel = null;
+                } else {
+                    seal();
+                }
             }
         } catch (IOException error) {
             poisoned = true;
             throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+        } finally {
+            owner.close();
         }
+    }
+
+    /** Online recovery shares this directory's owner and never reads the current active segment. */
+    public synchronized WalReplayer.ReplayReport replayClosed(WalReplayer.TerminalSink sink) {
+        if (closed || poisoned) {
+            throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+        }
+        owner.requireHeld();
+        return new WalReplayer().replayOwned(owner, keys, sink);
+    }
+
+    /** Makes the current fsynced segment eligible for recovery without closing the directory. */
+    public synchronized void sealForRecovery() {
+        if (closed || poisoned) {
+            throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+        }
+        try {
+            seal();
+        } catch (IOException failure) {
+            poisoned = true;
+            throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+        }
+    }
+
+    private byte[] encode(AuditTerminal terminal) {
+        WalFormat.Frame frame =
+                new WalFormat.Frame(
+                        WalFormat.KIND_TERMINAL,
+                        UUID.randomUUID(),
+                        terminal.requestId(),
+                        Math.toIntExact(framesInSegment),
+                        WalPayload.encode(terminal));
+        return WalFormat.encodeFrame(frame, segmentKey, WalFormat.newNonce());
     }
 
     Path directory() {
@@ -131,16 +182,19 @@ public final class TerminalWal implements AutoCloseable {
     }
 
     private void roll() throws IOException {
-        if (channel != null) {
-            channel.close();
-        }
+        seal();
+        segmentKey = keys.current();
         for (int attempt = 0; attempt < 2; attempt++) {
             segmentIndex++;
+            if (segmentIndex > 999999) {
+                throw new IOException("WAL segment sequence exhausted");
+            }
             Path file = directory.resolve(segmentName(segmentIndex));
             try {
                 channel =
                         FileChannel.open(
                                 file, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+                activeSegment = file;
                 break;
             } catch (FileAlreadyExistsException race) {
                 if (attempt == 1) {
@@ -154,6 +208,7 @@ public final class TerminalWal implements AutoCloseable {
             channel.write(buffer);
         }
         channel.force(true);
+        WalDirectoryOwner.sync(directory);
         channelSize = header.length;
         framesInSegment = 0;
     }
@@ -161,7 +216,7 @@ public final class TerminalWal implements AutoCloseable {
     private byte[] segmentHeader() {
         byte[] instance = gatewayInstanceId.getBytes(StandardCharsets.UTF_8);
         byte[] boot = bootId.getBytes(StandardCharsets.UTF_8);
-        byte[] keyId = keys.current().keyId().getBytes(StandardCharsets.UTF_8);
+        byte[] keyId = segmentKey.keyId().getBytes(StandardCharsets.UTF_8);
         UUID segmentId = UUID.randomUUID();
         ByteBuffer header =
                 ByteBuffer.allocate(
@@ -190,7 +245,24 @@ public final class TerminalWal implements AutoCloseable {
     }
 
     private String segmentName(int index) {
-        return String.format("wal-%06d-%s.wal", index, bootId);
+        return String.format("wal-%06d-%s.open", index, bootId);
+    }
+
+    private void seal() throws IOException {
+        if (channel == null) {
+            return;
+        }
+        channel.force(true);
+        channel.close();
+        channel = null;
+        String name = activeSegment.getFileName().toString();
+        Path target = activeSegment.resolveSibling(name.substring(0, name.length() - 5) + ".wal");
+        if (Files.exists(target)) {
+            throw new IOException("WAL segment collision");
+        }
+        Files.move(activeSegment, target, StandardCopyOption.ATOMIC_MOVE);
+        WalDirectoryOwner.sync(directory);
+        activeSegment = null;
     }
 
     private static int highestExistingSegment(Path directory) {

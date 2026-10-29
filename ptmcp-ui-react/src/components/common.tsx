@@ -110,11 +110,13 @@ export function TextInput({
   onChange,
   placeholder,
   type,
+  disabled,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   type?: string;
+  disabled?: boolean;
 }) {
   return (
     <input
@@ -122,6 +124,7 @@ export function TextInput({
       style={{ width: '100%' }}
       type={type ?? 'text'}
       value={value}
+      disabled={disabled}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
     />

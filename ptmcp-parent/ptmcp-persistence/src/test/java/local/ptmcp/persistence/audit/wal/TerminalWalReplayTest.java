@@ -420,9 +420,12 @@ class TerminalWalReplayTest {
 
     private static List<Path> segments(Path directory) throws IOException {
         List<Path> found = new ArrayList<>();
-        try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "wal-*.wal")) {
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "wal-*")) {
             for (Path file : files) {
-                found.add(file);
+                String name = file.getFileName().toString();
+                if (name.endsWith(".wal") || name.endsWith(".open")) {
+                    found.add(file);
+                }
             }
         }
         return found;

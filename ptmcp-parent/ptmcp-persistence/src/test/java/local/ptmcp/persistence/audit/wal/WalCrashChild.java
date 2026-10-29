@@ -36,8 +36,9 @@ public final class WalCrashChild {
             if ("torn-tail".equals(mode)) {
                 writeTornTail(directory, key, frames);
             }
+            // Halt while the writer and directory owner are still live: no close or shutdown hook.
+            Runtime.getRuntime().halt(0);
         }
-        Runtime.getRuntime().halt(0);
     }
 
     private static void writeTornTail(Path directory, WalKey key, int frames) throws Exception {
@@ -51,7 +52,7 @@ public final class WalCrashChild {
                         WalPayload.encode(extra));
         byte[] bytes = WalFormat.encodeFrame(frame, key, WalFormat.newNonce());
         Path segment;
-        try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "wal-*.wal")) {
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "wal-*.open")) {
             segment = files.iterator().next();
         }
         try (FileChannel channel =
