@@ -106,8 +106,24 @@ OrgManagementStoreTest 14/14通过（UTC/DST修复）；旧gate下Admin组合编
 当前先加真实MySQL+MockMvc闩锁回归，暂停控制器读取后的快照，让停用提交后再继续；
 以409及停用后的完整UserRow不变为通过条件，再补快照版本相等检查并保留落库CAS。
 `ptmcp-user-put-future-version-red.log` 已取得有效RED：1 test /1 failure /0 errors /0 skipped，
-预期409实际200。已补before.version与If-Match相等检查，完整AdminApiTest+OrgManagementStoreTest重验中；
-只有实际GREEN与独立复审收敛后才关闭本片。
+预期409实际200。已补before.version与If-Match相等检查并保留落库CAS。
+完整定向 GREEN：`ptmcp-user-put-green-final.log` BUILD SUCCESS/exit0，
+2026-10-30 03:21:03 +08:00；OrgManagementStoreTest14/14、AdminApiTest43/43，
+共57例，0失败/错误/跳过。Spotless四份Java结果经词法一致性检查后回拷，未改前端。
+独立只读复审已实际核阅GREEN日志与源码，确认未来If-Match的High关闭，无本片新增阻断；
+复审未重复构建。本片不能证明完整会话过滤链或身份闭环。
+根检查`ptmcp-root-user-put-check.log` exit0；笔记tree/format/archived三项全局Skill脚本均exit0。
+
+当前启停切片：用户ACTIVE/DISABLED实际变化时，在元库同事务完成profile/roles、
+authVersion/identityVersion、ADMIN/AS/PAT/OAuth撤销、epoch、事件及操作日志；
+启用不复活旧凭证，同状态/普通资料不额外撤证，UNBOUND保留，CHANGE_PENDING拒绝且零副作用。
+先在真实最新迁移MySQL建立撤证、失败回滚和提交回包丢失反例，再实现；
+最后有效管理员保护、逐请求平台管理员重算、供应和专用接口授权仍是后续范围。
+有效RED：`ptmcp-user-status-red.log` BUILD FAILURE/exit1，2026-10-30 03:30:16 +08:00，
+7 tests /5 failures /0 errors /0 skipped；分别复现权限版本未提升、UNBOUND版本未提升、
+事件失败未触发回滚、版本耗尽未拒绝、真实commit后丢失确认仍错误返回DEPENDENCY_UNAVAILABLE。
+同状态/普通资料不撤证及冲突/Pending零副作用两例通过。生产补丁已接入既有安全事务，
+下一步完整Org/Admin/Session/OAuth组合验证和独立复审，尚未取得本片GREEN。
 
 双库 CAS 首次 GREEN：`ptmcp-identity-cas-green.log`，10 tests / 0 failures/errors/skipped，BUILD SUCCESS。
 独立实际 diff 复审未发现迟到写/提交不明新增高危阻断；发现恢复 hash 长期保留、控制器 epoch 字段错配及并发完成额外 epoch，已补回归和修复，重验进行中。

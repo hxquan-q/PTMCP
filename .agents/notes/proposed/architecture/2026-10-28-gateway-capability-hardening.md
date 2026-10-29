@@ -144,6 +144,20 @@ ADMIN与AS继续独立Cookie/CSRF域，AS会话增加主库索引、绝对8小�
 否则台北环境可提前授权，夏令时还可能归一化有效窗口。读取仍显式转换 UTC。
 不统一平移旧委派：历史 JVM 时区、连接配置或夏令时可能混用，需按来源核对或撤销重建。
 
+### 用户启停与撤证事务
+
+ACTIVE与DISABLED实际切换是安全变更，通用PUT与专用status均在OrgStore统一执行。
+先以profile版本绑定本次命令，捕获权威身份版本；安全事务按global→user→aggregate锁序复核，
+同事务更新profile/roles、authVersion/identityVersion、撤销ADMIN/AS/PAT/OAuth、提升epoch、写事件和操作日志。
+启用也撤销旧凭证，不能使停用前令牌重新有效；UNBOUND保持UNBOUND，不借启停完成供应。
+CHANGE_PENDING拒绝且无副作用，普通资料或相同状态不额外撤证或提升epoch。
+提交回包丢失返回OPERATION_UNKNOWN，不自动重放；可重读状态与版本后由调用者处理。
+
+将撤证放在controller提交后回调最少改动，但失败窗口会留下已停用或重新启用却未撤证的状态，
+不能满足同事务约束。所有资料编辑一律撤证则实现简单，却会使无安全变化的姓名/联系方式保存踢出登录；
+因此按真实状态变化选择既有SecurityChangeTransaction，并在锁内再次绑定原profile与authority，
+普通路径保留同版本CAS，不追新版本。该片不替代最后有效管理员与事务内操作者授权重验。
+
 ### 参考机制及迁移边界
 
 | 参考 | 可吸收的机制与源码 | 为什么不能整包替代 |

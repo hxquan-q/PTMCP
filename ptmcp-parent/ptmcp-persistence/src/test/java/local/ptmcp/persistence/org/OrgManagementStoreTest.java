@@ -14,6 +14,7 @@ import local.ptmcp.common.authz.ResourceNode;
 import local.ptmcp.common.authz.SubjectScope;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
+import local.ptmcp.persistence.security.UserSecurityStore;
 
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
@@ -23,6 +24,8 @@ import org.junit.jupiter.api.Test;
 import org.testcontainers.mysql.MySQLContainer;
 
 import java.nio.charset.StandardCharsets;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.sql.Connection;
@@ -33,6 +36,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.TimeZone;
@@ -206,6 +210,16 @@ class OrgManagementStoreTest {
             statement.execute("SET FOREIGN_KEY_CHECKS = 0");
             for (String table :
                     List.of(
+                            "identity_password_change",
+                            "web_session_index",
+                            "personal_token",
+                            "oauth_refresh_token",
+                            "oauth_refresh_family",
+                            "oauth2_authorization_consent",
+                            "oauth2_authorization",
+                            "oauth2_registered_client",
+                            "sys_security_event",
+                            "admin_operation_log",
                             "resource_object",
                             "resource_namespace",
                             "schema_snapshot",
@@ -332,6 +346,248 @@ class OrgManagementStoreTest {
             return error.errorCode();
         }
         throw new AssertionError("expected DomainException");
+    }
+
+    // ---- user status security transaction ---------------------------------
+
+    @Test
+    void userStatusTransitionsRevokeEveryDomainWithoutRevivingCredentials() throws Exception {
+        OrgStore.UserRow user = statusUser("status-target", true);
+        OrgStore.UserRow observer = statusUser("status-observer", true);
+        insertStatusCredentials(user.id());
+        insertStatusCredentials(observer.id());
+        StatusSnapshot initial = statusSnapshot(user.id());
+        List<String> observerCredentials = credentialStates(observer.id());
+
+        OrgStore.UserRow disabled = changeStatus(orgStore, user, false);
+        assertFalse(disabled.enabled());
+        assertEquals(user.version() + 1, disabled.version());
+        assertStatusSecurityAdvanced(initial, statusSnapshot(user.id()));
+        assertEquals(5, credentialStates(user.id()).size());
+        assertTrue(credentialStates(user.id()).stream().allMatch(row -> row.contains(":REVOKED:")));
+        assertEquals(observerCredentials, credentialStates(observer.id()));
+        StatusSnapshot afterDisable = statusSnapshot(user.id());
+        assertEquals("READY", afterDisable.security().identityState());
+        assertEquals(1, statusScalar(
+                "SELECT COUNT(*) FROM sys_security_event WHERE aggregate_id=? AND event_type='USER_SECURITY_CHANGED'"
+                        + " AND JSON_EXTRACT(payload,'$.version')=" + afterDisable.security().authVersion(),
+                String.valueOf(user.id())));
+
+        OrgStore.UserRow enabled = changeStatus(orgStore, disabled, true);
+        assertTrue(enabled.enabled());
+        StatusSnapshot afterEnable = statusSnapshot(user.id());
+        assertStatusSecurityAdvanced(afterDisable, afterEnable);
+        assertEquals(afterDisable.credentials(), afterEnable.credentials());
+        assertEquals(observerCredentials, credentialStates(observer.id()));
+    }
+
+    @Test
+    void userStatusSameValueAndOrdinaryProfileEditsDoNotRevoke() throws Exception {
+        OrgStore.UserRow user = statusUser("status-noop", true);
+        insertStatusCredentials(user.id());
+        StatusSnapshot initial = statusSnapshot(user.id());
+        OrgStore.UserRow same = changeStatus(orgStore, user, true);
+        orgStore.updateUser(same.id(), "新显示名", same.deptId(), "person@example.invalid",
+                null, null, null, null, same.version(), 1L);
+        StatusSnapshot after = statusSnapshot(user.id());
+        assertEquals(initial.security(), after.security());
+        assertEquals(initial.securityRowVersion(), after.securityRowVersion());
+        assertEquals(initial.credentials(), after.credentials());
+        assertEquals(initial.epoch(), after.epoch());
+        assertEquals(initial.events(), after.events());
+        assertEquals(initial.operations() + 2, after.operations());
+        assertEquals(user.version() + 2, after.user().version());
+    }
+
+    @Test
+    void userStatusDoesNotBindAnUnprovisionedIdentity() throws Exception {
+        OrgStore.UserRow user = statusUser("status-unbound", false);
+        StatusSnapshot before = statusSnapshot(user.id());
+        OrgStore.UserRow disabled = changeStatus(orgStore, user, false);
+        assertEquals("UNBOUND", new UserSecurityStore(dataSource).read(user.id()).identityState());
+        assertStatusSecurityAdvanced(before, statusSnapshot(user.id()));
+        changeStatus(orgStore, disabled, true);
+        assertEquals("UNBOUND", new UserSecurityStore(dataSource).read(user.id()).identityState());
+    }
+
+    @Test
+    void userStatusVersionConflictAndPendingHaveNoSideEffects() throws Exception {
+        OrgStore.UserRow user = statusUser("status-conflict", true);
+        insertStatusCredentials(user.id());
+        OrgStore.UserRow edited = changeStatus(orgStore, user, true);
+        StatusSnapshot before = statusSnapshot(user.id());
+        assertEquals(ErrorCode.VERSION_CONFLICT, codeOf(() -> changeStatus(orgStore, user, false)));
+        OrgStore.UserRow future = new OrgStore.UserRow(edited.id(), edited.username(), edited.displayName(),
+                edited.deptId(), edited.email(), edited.phoneNumber(), edited.remark(), edited.enabled(),
+                edited.roleIds(), edited.version() + 1);
+        assertEquals(ErrorCode.VERSION_CONFLICT, codeOf(() -> changeStatus(orgStore, future, false)));
+        assertEquals(before, statusSnapshot(user.id()));
+
+        statusExecute("UPDATE sys_user_security SET identity_state='CHANGE_PENDING',identity_change_id=? WHERE user_id=?",
+                java.util.UUID.randomUUID().toString(), user.id());
+        StatusSnapshot pending = statusSnapshot(user.id());
+        assertEquals(ErrorCode.VERSION_CONFLICT, codeOf(() -> changeStatus(orgStore, edited, false)));
+        assertEquals(pending, statusSnapshot(user.id()));
+    }
+
+    @Test
+    void userStatusEventFailureRollsBackProfileRolesAuthorityAndRevocation() throws Exception {
+        OrgStore.UserRow user = statusUser("status-rollback", true);
+        insertStatusCredentials(user.id());
+        long role = orgStore.createRole("status_role", "状态角色", true, List.of("ptmcp:user:list"), 1L).id();
+        StatusSnapshot before = statusSnapshot(user.id());
+        OrgStore failing = new OrgStore(statusFaultDataSource("INSERT INTO sys_security_event", false));
+        assertEquals(ErrorCode.DEPENDENCY_UNAVAILABLE, codeOf(() -> failing.updateUser(user.id(),
+                "不应提交", user.deptId(), null, null, null, false, List.of(role), user.version(), 1L)));
+        assertEquals(before, statusSnapshot(user.id()));
+    }
+
+    @Test
+    void userStatusCommitAcknowledgementLossReturnsUnknownAndDoesNotReplay() throws Exception {
+        OrgStore.UserRow user = statusUser("status-unknown", true);
+        insertStatusCredentials(user.id());
+        StatusSnapshot before = statusSnapshot(user.id());
+        OrgStore uncertain = new OrgStore(statusFaultDataSource(null, true));
+        assertEquals(ErrorCode.OPERATION_UNKNOWN, codeOf(() -> changeStatus(uncertain, user, false)));
+        StatusSnapshot committed = statusSnapshot(user.id());
+        assertFalse(committed.user().enabled());
+        assertStatusSecurityAdvanced(before, committed);
+        assertTrue(committed.credentials().stream().allMatch(row -> row.contains(":REVOKED:")));
+        assertEquals(ErrorCode.VERSION_CONFLICT, codeOf(() -> changeStatus(orgStore, user, false)));
+        assertEquals(committed, statusSnapshot(user.id()));
+    }
+
+    @Test
+    void userStatusRejectsExhaustedAuthorityWithoutPartialChanges() throws Exception {
+        OrgStore.UserRow user = statusUser("status-exhausted", true);
+        insertStatusCredentials(user.id());
+        for (String column : List.of("auth_version", "identity_version")) {
+            statusExecute("UPDATE sys_user_security SET auth_version=1,identity_version=1 WHERE user_id=?", user.id());
+            statusExecute("UPDATE sys_user_security SET " + column + "=? WHERE user_id=?", Long.MAX_VALUE, user.id());
+            StatusSnapshot before = statusSnapshot(user.id());
+            assertEquals(ErrorCode.SECURITY_STATE_UNAVAILABLE, codeOf(() -> changeStatus(orgStore, user, false)));
+            assertEquals(before, statusSnapshot(user.id()));
+        }
+    }
+
+    private OrgStore.UserRow statusUser(String username, boolean ready) throws Exception {
+        long department = orgStore.createDepartment(null, username, true, 1L).id();
+        OrgStore.UserRow user = orgStore.createUser(username, "测试身份", department, "external", List.of(), true, 1L);
+        if (ready) {
+            statusExecute("UPDATE sys_user_security SET identity_state='READY' WHERE user_id=?", user.id());
+        }
+        return user;
+    }
+
+    private static OrgStore.UserRow changeStatus(OrgStore store, OrgStore.UserRow user, boolean enabled) {
+        return store.updateUser(user.id(), user.displayName(), user.deptId(), user.email(),
+                user.phoneNumber(), user.remark(), enabled, null, user.version(), 1L);
+    }
+
+    private record StatusSnapshot(OrgStore.UserRow user, UserSecurityStore.State security,
+            long securityRowVersion, long epoch, long events, long operations, List<String> credentials) {}
+
+    private StatusSnapshot statusSnapshot(long userId) throws Exception {
+        return new StatusSnapshot(orgStore.getUser(userId), new UserSecurityStore(dataSource).read(userId),
+                statusScalar("SELECT version FROM sys_user_security WHERE user_id=?", userId),
+                statusScalar("SELECT policy_epoch FROM sys_security_state WHERE singleton_id=?", 1L),
+                statusScalar("SELECT COUNT(*) FROM sys_security_event WHERE aggregate_type='USER' AND aggregate_id=?", String.valueOf(userId)),
+                statusScalar("SELECT COUNT(*) FROM admin_operation_log WHERE aggregate_type='USER' AND aggregate_id=?", userId),
+                credentialStates(userId));
+    }
+
+    private static void assertStatusSecurityAdvanced(StatusSnapshot before, StatusSnapshot after) {
+        assertEquals(before.security().authVersion() + 1, after.security().authVersion());
+        assertEquals(before.security().identityVersion() + 1, after.security().identityVersion());
+        assertEquals(before.securityRowVersion() + 1, after.securityRowVersion());
+        assertEquals(before.epoch() + 1, after.epoch());
+        assertEquals(before.events() + 1, after.events());
+        assertEquals(before.operations() + 1, after.operations());
+    }
+
+    private long statusScalar(String sql, Object parameter) throws SQLException {
+        try (Connection connection = dataSource.getConnection(); PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setObject(1, parameter);
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                return result.getLong(1);
+            }
+        }
+    }
+
+    private void statusExecute(String sql, Object... parameters) throws SQLException {
+        try (Connection connection = dataSource.getConnection(); PreparedStatement statement = connection.prepareStatement(sql)) {
+            for (int i = 0; i < parameters.length; i++) statement.setObject(i + 1, parameters[i]);
+            statement.executeUpdate();
+        }
+    }
+
+    private void insertStatusCredentials(long userId) throws SQLException {
+        long platform = insertPlatform("status-" + userId);
+        String client = java.util.UUID.randomUUID().toString();
+        String authorization = java.util.UUID.randomUUID().toString();
+        String family = java.util.UUID.randomUUID().toString();
+        statusExecute("INSERT INTO oauth2_registered_client (id,client_id,client_name,client_authentication_methods,"
+                + "authorization_grant_types,scopes,client_settings,token_settings,platform_id,client_type,status,"
+                + "registration_source,create_time,update_time,created_by,updated_by)"
+                + " VALUES (?,?,'fixture','none','authorization_code,refresh_token','mcp:query','{}','{}',?,'PUBLIC','ACTIVE','ADMIN',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),1,1)",
+                client, client, platform);
+        statusExecute("INSERT INTO oauth2_authorization (id,registered_client_id,principal_name,authorization_grant_type,"
+                + "user_id,family_id,auth_version,status,create_time,update_time,created_by,updated_by)"
+                + " VALUES (?,?,?,'authorization_code',?,?,1,'ACTIVE',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),1,1)",
+                authorization, client, String.valueOf(userId), userId, family);
+        statusExecute("INSERT INTO oauth_refresh_family (id,authorization_id,user_id,registered_client_id,platform_id,status,"
+                + "auth_version,absolute_expires_at,idle_expires_at,last_rotated_at,create_time,update_time)"
+                + " VALUES (?,?,?,?,?,'ACTIVE',1,UTC_TIMESTAMP(6)+INTERVAL 2 DAY,UTC_TIMESTAMP(6)+INTERVAL 1 DAY,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
+                family, authorization, userId, client, platform);
+        statusExecute("INSERT INTO personal_token (user_id,platform_id,token_prefix,token_hash,name,scopes,auth_version,expires_at,status,"
+                + "create_time,update_time,created_by,updated_by) VALUES (?,?,'test',?,'fixture','[\"mcp:query\"]',1,UTC_TIMESTAMP(6)+INTERVAL 1 DAY,'ACTIVE',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),1,1)",
+                userId, platform, digest("pat-status-" + userId));
+        for (String kind : List.of("ADMIN", "AS")) {
+            statusExecute("INSERT INTO web_session_index (session_hash,kind,user_id,auth_version,issued_at,expires_at,create_time,update_time)"
+                    + " VALUES (?,?,?,1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6)+INTERVAL 1 HOUR,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
+                    digest(kind + "-status-" + userId), kind, userId);
+        }
+    }
+
+    private List<String> credentialStates(long userId) throws SQLException {
+        List<String> rows = new ArrayList<>();
+        String query = "SELECT CONCAT(kind,':',IF(revoked_at IS NULL,'ACTIVE','REVOKED'),':',version,':',COALESCE(CAST(revoked_at AS CHAR),''))"
+                + " FROM web_session_index WHERE user_id=? UNION ALL SELECT CONCAT('PAT:',status,':',version,':',COALESCE(CAST(revoked_at AS CHAR),''))"
+                + " FROM personal_token WHERE user_id=? UNION ALL SELECT CONCAT('FAMILY:',status,':',version,':',COALESCE(CAST(revoked_at AS CHAR),''))"
+                + " FROM oauth_refresh_family WHERE user_id=? UNION ALL SELECT CONCAT('AUTH:',status,':',version) FROM oauth2_authorization WHERE user_id=? ORDER BY 1";
+        try (Connection connection = dataSource.getConnection(); PreparedStatement statement = connection.prepareStatement(query)) {
+            for (int i = 1; i <= 4; i++) statement.setLong(i, userId);
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) rows.add(result.getString(1));
+            }
+        }
+        return List.copyOf(rows);
+    }
+
+    /** Real server commit/DML with only the transport failure injected. */
+    private DataSource statusFaultDataSource(String failSqlPrefix, boolean loseCommitAck) {
+        return (DataSource) Proxy.newProxyInstance(DataSource.class.getClassLoader(), new Class<?>[] {DataSource.class},
+                (sourceProxy, sourceMethod, sourceArgs) -> {
+                    try {
+                        Object value = sourceMethod.invoke(dataSource, sourceArgs);
+                        if (!(value instanceof Connection connection)) return value;
+                        return Proxy.newProxyInstance(Connection.class.getClassLoader(), new Class<?>[] {Connection.class},
+                                (connectionProxy, method, args) -> {
+                                    if ("prepareStatement".equals(method.getName()) && failSqlPrefix != null
+                                            && ((String) args[0]).startsWith(failSqlPrefix)) throw new SQLException("synthetic event failure");
+                                    try {
+                                        Object result = method.invoke(connection, args);
+                                        if (loseCommitAck && "commit".equals(method.getName())) throw new SQLException("synthetic lost commit acknowledgement");
+                                        return result;
+                                    } catch (InvocationTargetException error) {
+                                        throw error.getCause();
+                                    }
+                                });
+                    } catch (InvocationTargetException error) {
+                        throw error.getCause();
+                    }
+                });
     }
 
     // ---- departments -------------------------------------------------------
@@ -872,8 +1128,10 @@ class OrgManagementStoreTest {
     void delegationUtcWindowsIgnoreJvmTimezoneAndKeepHalfOpenBoundaries() throws Exception {
         long department = orgStore.createDepartment(null, "UTC委派部", true, 1L).id();
         orgStore.createUser("utc-placeholder", "占位", department, "unused", List.of(), true, 1L);
-        long delegate = orgStore.createUser("utc-delegate", "委派人", department,
-                "unused", List.of(), true, 1L).id();
+        long delegate =
+                orgStore.createUser(
+                                "utc-delegate", "委派人", department, "unused", List.of(), true, 1L)
+                        .id();
         Instant from = Instant.parse("2026-03-08T06:59:59.123456Z");
         Instant to = Instant.parse("2026-03-08T07:00:59.123456Z");
         List<String> actions = List.of("ptmcp:user:update");
@@ -883,31 +1141,70 @@ class OrgManagementStoreTest {
             for (String zone : List.of("UTC", "Asia/Taipei", "America/New_York")) {
                 TimeZone.setDefault(TimeZone.getTimeZone(zone));
                 long source = insertDatasource("utc-window-" + index++);
-                DelegationStore.DelegationRow stored = delegationStore.create(1L,
-                        "utc-window-" + zone,
-                        new DelegationStore.DelegationDraft(delegate, department, "DATASOURCE",
-                                source, actions, from, to), Set.copyOf(actions));
+                DelegationStore.DelegationRow stored =
+                        delegationStore.create(
+                                1L,
+                                "utc-window-" + zone,
+                                new DelegationStore.DelegationDraft(
+                                        delegate,
+                                        department,
+                                        "DATASOURCE",
+                                        source,
+                                        actions,
+                                        from,
+                                        to),
+                                Set.copyOf(actions));
                 assertEquals(from, stored.validFrom(), zone);
                 assertEquals(to, stored.validTo(), zone);
-                DelegationStore.DelegationRow adjacent = delegationStore.create(1L,
-                        "utc-adjacent-" + zone,
-                        new DelegationStore.DelegationDraft(delegate, department, "DATASOURCE",
-                                source, actions, to, to.plusSeconds(60)), Set.copyOf(actions));
+                DelegationStore.DelegationRow adjacent =
+                        delegationStore.create(
+                                1L,
+                                "utc-adjacent-" + zone,
+                                new DelegationStore.DelegationDraft(
+                                        delegate,
+                                        department,
+                                        "DATASOURCE",
+                                        source,
+                                        actions,
+                                        to,
+                                        to.plusSeconds(60)),
+                                Set.copyOf(actions));
                 assertEquals(to, adjacent.validFrom(), zone);
-                assertEquals(ErrorCode.DUPLICATE_GRANT, codeOf(() -> delegationStore.create(1L,
-                        "utc-overlap-" + zone,
-                        new DelegationStore.DelegationDraft(delegate, department, "DATASOURCE",
-                                source, actions, to.minusNanos(1000), to.plusSeconds(30)),
-                        Set.copyOf(actions))), zone);
-                for (Instant boundary : List.of(
-                        Instant.parse("2026-03-08T02:30:00.123456Z"),
-                        Instant.parse("2026-11-01T01:30:00.123456Z"))) {
+                assertEquals(
+                        ErrorCode.DUPLICATE_GRANT,
+                        codeOf(
+                                () ->
+                                        delegationStore.create(
+                                                1L,
+                                                "utc-overlap-" + zone,
+                                                new DelegationStore.DelegationDraft(
+                                                        delegate,
+                                                        department,
+                                                        "DATASOURCE",
+                                                        source,
+                                                        actions,
+                                                        to.minusNanos(1000),
+                                                        to.plusSeconds(30)),
+                                                Set.copyOf(actions))),
+                        zone);
+                for (Instant boundary :
+                        List.of(
+                                Instant.parse("2026-03-08T02:30:00.123456Z"),
+                                Instant.parse("2026-11-01T01:30:00.123456Z"))) {
                     // These UTC digits fall into New York's gap/overlap if treated as local time.
-                    DelegationStore.DelegationRow dst = delegationStore.create(1L,
-                            java.util.UUID.randomUUID().toString(),
-                            new DelegationStore.DelegationDraft(delegate, department, "DATASOURCE",
-                                    source, actions, boundary, boundary.plusSeconds(3600)),
-                            Set.copyOf(actions));
+                    DelegationStore.DelegationRow dst =
+                            delegationStore.create(
+                                    1L,
+                                    java.util.UUID.randomUUID().toString(),
+                                    new DelegationStore.DelegationDraft(
+                                            delegate,
+                                            department,
+                                            "DATASOURCE",
+                                            source,
+                                            actions,
+                                            boundary,
+                                            boundary.plusSeconds(3600)),
+                                    Set.copyOf(actions));
                     assertEquals(boundary, dst.validFrom(), zone);
                     assertEquals(boundary.plusSeconds(3600), dst.validTo(), zone);
                 }

@@ -64,10 +64,22 @@ public final class UserScopeGate {
         List<DelegationScopeResolver.EffectiveDelegation> candidates =
                 resolver.effectiveDelegations(principal.userId(), now).stream()
                         .filter(delegation -> delegation.allowedActions().containsAll(actions))
-                        .filter(delegation -> resolver.covers(delegation,
-                                DelegationScopeResolver.Target.department(before.deptId()), null, now))
-                        .filter(delegation -> resolver.covers(delegation,
-                                DelegationScopeResolver.Target.department(targetDeptId), null, now))
+                        .filter(
+                                delegation ->
+                                        resolver.covers(
+                                                delegation,
+                                                DelegationScopeResolver.Target.department(
+                                                        before.deptId()),
+                                                null,
+                                                now))
+                        .filter(
+                                delegation ->
+                                        resolver.covers(
+                                                delegation,
+                                                DelegationScopeResolver.Target.department(
+                                                        targetDeptId),
+                                                null,
+                                                now))
                         .toList();
         if (candidates.isEmpty()) {
             throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
@@ -77,8 +89,9 @@ public final class UserScopeGate {
             for (long roleId : requestedRoles) {
                 assignedCodes.addAll(orgStore.getRole(roleId).permissionCodes());
             }
-            if (candidates.stream().noneMatch(
-                    delegation -> delegation.allowedActions().containsAll(assignedCodes))) {
+            if (candidates.stream()
+                    .noneMatch(
+                            delegation -> delegation.allowedActions().containsAll(assignedCodes))) {
                 throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
             }
         }

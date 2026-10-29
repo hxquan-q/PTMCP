@@ -121,7 +121,8 @@ public class UserAdminController {
             throw new local.ptmcp.common.error.DomainException(
                     local.ptmcp.common.error.ErrorCode.VERSION_CONFLICT);
         }
-        scopeGate.requireUserUpdate(request, before, write.deptId(), write.enabled(), write.roleIds());
+        scopeGate.requireUserUpdate(
+                request, before, write.deptId(), write.enabled(), write.roleIds());
         UserRead updated =
                 toRead(
                         orgStore.updateUser(

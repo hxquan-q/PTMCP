@@ -2,6 +2,8 @@ package local.ptmcp.persistence.org;
 
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
+import local.ptmcp.persistence.SecurityChangeTransaction;
+import local.ptmcp.persistence.SecurityEvent;
 import local.ptmcp.persistence.security.UserSecurityStore;
 
 import java.sql.Connection;
@@ -18,6 +20,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
 import javax.sql.DataSource;
@@ -768,69 +771,70 @@ public final class OrgStore {
         requireNullableText(phoneNumber, 11);
         requireNullableText(remark, 500);
         List<Long> roles = roleIds == null ? null : normalizedIds(roleIds);
+        UserRow before = getUser(id);
+        if (before.version() != expectedVersion) {
+            throw new DomainException(ErrorCode.VERSION_CONFLICT);
+        }
+        boolean statusChanged = enabled != null && enabled != before.enabled();
+        if (statusChanged) {
+            UserSecurityStore.State captured = new UserSecurityStore(primary).read(id);
+            requireEditableIdentity(captured);
+            if (captured.authVersion() == Long.MAX_VALUE
+                    || captured.identityVersion() == Long.MAX_VALUE) {
+                throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+            }
+            long nextAuthVersion = captured.authVersion() + 1;
+            AtomicReference<UserRow> updated = new AtomicReference<>();
+            new SecurityChangeTransaction(primary)
+                    .execute(
+                            new SecurityEvent(
+                                    UUID.randomUUID(),
+                                    SecurityEvent.Kind.USER_SECURITY_CHANGED,
+                                    new SecurityEvent.NumericId(id),
+                                    nextAuthVersion),
+                            connection -> {
+                                UserSecurityStore.State current =
+                                        UserSecurityStore.read(connection, id, true);
+                                requireEditableIdentity(current);
+                                if (!captured.equals(current)) {
+                                    throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                                }
+                                UserRow written =
+                                        applyUserUpdate(
+                                                connection, before, displayName, deptId, email,
+                                                phoneNumber, remark, enabled, roles, actorId);
+                                try (PreparedStatement statement =
+                                        OrgSql.statement(
+                                                connection,
+                                                "UPDATE sys_user_security SET auth_version=auth_version+1,"
+                                                        + " identity_version=identity_version+1,version=version+1,"
+                                                        + " update_time=UTC_TIMESTAMP(6) WHERE user_id=?"
+                                                        + " AND auth_version=? AND identity_version=? AND identity_state=?")) {
+                                    statement.setLong(1, id);
+                                    statement.setLong(2, captured.authVersion());
+                                    statement.setLong(3, captured.identityVersion());
+                                    statement.setString(4, captured.identityState());
+                                    if (statement.executeUpdate() != 1) {
+                                        throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                                    }
+                                }
+                                UserSecurityStore.revokeCredentials(connection, id);
+                                updated.set(written);
+                            });
+            return updated.get();
+        }
         try (Connection connection = OrgSql.configure(primary)) {
             connection.setAutoCommit(false);
             try {
                 UserSecurityStore.lockGlobal(connection);
                 UserSecurityStore.State security = UserSecurityStore.read(connection, id, true);
-                if ("CHANGE_PENDING".equals(security.identityState()))
-                    throw new DomainException(ErrorCode.VERSION_CONFLICT);
-                if (!security.ready() && !"UNBOUND".equals(security.identityState()))
-                    throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
-                requireDepartmentExists(connection, deptId);
-                try (PreparedStatement statement =
-                        OrgSql.statement(
-                                connection,
-                                "UPDATE sys_user_profile SET display_name = ?, dept_id = ?, email = ?,"
-                                        + " phone_number = ?, remark = ?,"
-                                        + " status = COALESCE(?, status), version = version + 1,"
-                                        + " update_time = ? WHERE user_id = ? AND version = ?")) {
-                    statement.setString(1, displayName);
-                    statement.setLong(2, deptId);
-                    setNullableText(statement, 3, email, 50);
-                    setNullableText(statement, 4, phoneNumber, 11);
-                    setNullableText(statement, 5, remark, 500);
-                    if (enabled == null) {
-                        statement.setNull(6, java.sql.Types.VARCHAR);
-                    } else {
-                        statement.setString(6, enabled ? "ACTIVE" : "DISABLED");
-                    }
-                    statement.setObject(7, OrgSql.nowUtc());
-                    statement.setLong(8, id);
-                    statement.setLong(9, expectedVersion);
-                    if (statement.executeUpdate() != 1) {
-                        throw conflictOrMissingUser(connection, id);
-                    }
-                }
-                if (roles != null) {
-                    for (long roleId : roles) {
-                        requireRoleExists(connection, roleId);
-                    }
-                    try (PreparedStatement delete =
-                            OrgSql.statement(
-                                    connection, "DELETE FROM sys_user_role WHERE user_id = ?")) {
-                        delete.setLong(1, id);
-                        delete.executeUpdate();
-                    }
-                    insertUserRoles(connection, id, roles);
-                }
-                writeOperationLog(
-                        connection,
-                        actorId,
-                        "USER_UPDATE",
-                        "USER",
-                        id,
-                        "{\"displayName\":\""
-                                + displayName
-                                + "\",\"deptId\":"
-                                + deptId
-                                + ",\"enabled\":"
-                                + enabled
-                                + ",\"rolesChanged\":"
-                                + (roles != null)
-                                + "}");
+                requireEditableIdentity(security);
+                UserRow updated =
+                        applyUserUpdate(
+                                connection, before, displayName, deptId, email, phoneNumber,
+                                remark, enabled, roles, actorId);
                 connection.commit();
-                return getUser(id);
+                return updated;
             } catch (SQLException | RuntimeException failure) {
                 try {
                     connection.rollback();
@@ -842,6 +846,61 @@ public final class OrgStore {
         } catch (SQLException error) {
             throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
+    }
+
+    private static void requireEditableIdentity(UserSecurityStore.State security) {
+        if ("CHANGE_PENDING".equals(security.identityState())) {
+            throw new DomainException(ErrorCode.VERSION_CONFLICT);
+        }
+        if (!security.ready() && !"UNBOUND".equals(security.identityState())) {
+            throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+        }
+    }
+
+    private UserRow applyUserUpdate(
+            Connection connection, UserRow before, String displayName, long deptId, String email,
+            String phoneNumber, String remark, Boolean enabled, List<Long> roles, long actorId)
+            throws SQLException {
+        requireDepartmentExists(connection, deptId);
+        try (PreparedStatement statement =
+                OrgSql.statement(
+                        connection,
+                        "UPDATE sys_user_profile SET display_name = ?, dept_id = ?, email = ?,"
+                                + " phone_number = ?, remark = ?, status = COALESCE(?, status),"
+                                + " version = version + 1, update_time = ? WHERE user_id = ? AND version = ?")) {
+            statement.setString(1, displayName);
+            statement.setLong(2, deptId);
+            setNullableText(statement, 3, email, 50);
+            setNullableText(statement, 4, phoneNumber, 11);
+            setNullableText(statement, 5, remark, 500);
+            if (enabled == null) {
+                statement.setNull(6, java.sql.Types.VARCHAR);
+            } else {
+                statement.setString(6, enabled ? "ACTIVE" : "DISABLED");
+            }
+            statement.setObject(7, OrgSql.nowUtc());
+            statement.setLong(8, before.id());
+            statement.setLong(9, before.version());
+            if (statement.executeUpdate() != 1) {
+                throw conflictOrMissingUser(connection, before.id());
+            }
+        }
+        if (roles != null) {
+            for (long roleId : roles) {
+                requireRoleExists(connection, roleId);
+            }
+            try (PreparedStatement delete =
+                    OrgSql.statement(connection, "DELETE FROM sys_user_role WHERE user_id = ?")) {
+                delete.setLong(1, before.id());
+                delete.executeUpdate();
+            }
+            insertUserRoles(connection, before.id(), roles);
+        }
+        writeOperationLog(
+                connection, actorId, "USER_UPDATE", "USER", before.id(),
+                "{\"displayName\":\"" + displayName + "\",\"deptId\":" + deptId
+                        + ",\"enabled\":" + enabled + ",\"rolesChanged\":" + (roles != null) + "}");
+        return readUser(connection, before.id());
     }
 
     public List<UserRow> listUsers() {
@@ -882,6 +941,13 @@ public final class OrgStore {
 
     public UserRow getUser(long id) {
         try (Connection connection = OrgSql.configure(primary)) {
+            return readUser(connection, id);
+        } catch (SQLException error) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+    }
+
+    private UserRow readUser(Connection connection, long id) throws SQLException {
             UserRow row;
             try (PreparedStatement statement =
                     OrgSql.statement(
@@ -914,9 +980,6 @@ public final class OrgStore {
             rows.put(id, row);
             appendUserRoles(connection, rows);
             return row;
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
-        }
     }
 
     // ---- internal ----------------------------------------------------------

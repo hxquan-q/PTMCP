@@ -217,15 +217,24 @@ export function TokensPage() {
   const [loading, setLoading] = useState(true);
   const [revokingId, setRevokingId] = useState('');
   const [creating, setCreating] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const load = () => {
     setLoading(true);
-    listMyTokens()
-      .then((p) => setRows(p.items))
-      .catch(() => setRows([]))
+    listMyTokens({ status: statusFilter || undefined, pageSize: 20 })
+      .then((p) => {
+        setRows(p.items);
+        setNextCursor(p.nextCursor);
+      })
+      .catch(() => {
+        setRows([]);
+        setNextCursor(null);
+      })
       .finally(() => setLoading(false));
   };
-  useEffect(load, []);
+  useEffect(load, [statusFilter]);
 
   const revoke = (id: string) => {
     setRevokingId(id);
@@ -257,7 +266,17 @@ export function TokensPage() {
             flex: 'none',
           }}
         >
-          <span style={{ fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>共 {rows.length} 个令牌</span>
+          <Select
+            value={statusFilter}
+            onChange={setStatusFilter}
+            label="状态"
+            options={[
+              { value: '', label: '全部状态' },
+              { value: 'ACTIVE', label: '生效中' },
+              { value: 'REVOKED', label: '已撤销' },
+            ]}
+          />
+          <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>已加载 {rows.length} 个令牌</span>
         </div>
         <div className="table-scroll">
           <table className="data-table">
@@ -309,7 +328,33 @@ export function TokensPage() {
               ))}
             </tbody>
           </table>
-          {!loading && rows.length === 0 ? <EmptyState title="暂无个人令牌" /> : null}
+          {!loading && rows.length === 0 ? <EmptyState title="暂无个人令牌" description="切换状态筛选或新建令牌。" /> : null}
+        </div>
+        <div className="table-footer" style={{ justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
+            已加载 {rows.length} 个{nextCursor ? ' · 可能还有更多' : ''}
+          </span>
+          {loading ? null : nextCursor ? (
+            <button
+              className="btn btn--secondary"
+              disabled={loadingMore}
+              onClick={() => {
+                if (!nextCursor || loadingMore) return;
+                setLoadingMore(true);
+                listMyTokens({ status: statusFilter || undefined, cursor: nextCursor, pageSize: 20 })
+                  .then((p) => {
+                    setRows((prev) => [...prev, ...p.items]);
+                    setNextCursor(p.nextCursor);
+                  })
+                  .catch(() => undefined)
+                  .finally(() => setLoadingMore(false));
+              }}
+            >
+              {loadingMore ? '加载中…' : '加载更多'}
+            </button>
+          ) : (
+            <span style={{ fontSize: 12, color: 'var(--ptmcp-text-faint)' }}>没有更多了</span>
+          )}
         </div>
       </div>
       {creating ? (
@@ -459,12 +504,20 @@ export function AuthorizationsPage() {
   const [rows, setRows] = useState<AuthorizationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [revokingId, setRevokingId] = useState('');
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const load = () => {
     setLoading(true);
-    listMyAuthorizations()
-      .then((p) => setRows(p.items))
-      .catch(() => setRows([]))
+    listMyAuthorizations({ pageSize: 20 })
+      .then((p) => {
+        setRows(p.items);
+        setNextCursor(p.nextCursor);
+      })
+      .catch(() => {
+        setRows([]);
+        setNextCursor(null);
+      })
       .finally(() => setLoading(false));
   };
   useEffect(load, []);
@@ -531,7 +584,33 @@ export function AuthorizationsPage() {
               ))}
             </tbody>
           </table>
-          {!loading && rows.length === 0 ? <EmptyState title="暂无授权记录" /> : null}
+          {!loading && rows.length === 0 ? <EmptyState title="暂无授权记录" description="授权由客户端 OAuth 流程产生，可在客户端发起。" /> : null}
+        </div>
+        <div className="table-footer" style={{ justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
+            已加载 {rows.length} 条{nextCursor ? ' · 可能还有更多' : ''}
+          </span>
+          {loading ? null : nextCursor ? (
+            <button
+              className="btn btn--secondary"
+              disabled={loadingMore}
+              onClick={() => {
+                if (!nextCursor || loadingMore) return;
+                setLoadingMore(true);
+                listMyAuthorizations({ cursor: nextCursor, pageSize: 20 })
+                  .then((p) => {
+                    setRows((prev) => [...prev, ...p.items]);
+                    setNextCursor(p.nextCursor);
+                  })
+                  .catch(() => undefined)
+                  .finally(() => setLoadingMore(false));
+              }}
+            >
+              {loadingMore ? '加载中…' : '加载更多'}
+            </button>
+          ) : (
+            <span style={{ fontSize: 12, color: 'var(--ptmcp-text-faint)' }}>没有更多了</span>
+          )}
         </div>
       </div>
     </>

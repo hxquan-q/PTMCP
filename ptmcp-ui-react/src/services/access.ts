@@ -343,8 +343,11 @@ export async function decryptAudit(requestId: string, reason: string, fields: st
 }
 
 /* 个人门户 */
-export function listMyTokens(signal?: AbortSignal): Promise<Page<TokenRow>> {
-  return getPage('/api/v1/me/tokens?pageSize=100', signal);
+export function listMyTokens(params: { status?: string; cursor?: string; pageSize?: number } = {}, signal?: AbortSignal): Promise<Page<TokenRow>> {
+  const q = new URLSearchParams({ pageSize: String(params.pageSize ?? 20) });
+  if (params.status) q.set('status', params.status);
+  if (params.cursor) q.set('cursor', params.cursor);
+  return getPage(`/api/v1/me/tokens?${q}`, signal);
 }
 
 export interface TokenWrite {
@@ -375,8 +378,10 @@ export async function revokeToken(id: string, signal?: AbortSignal): Promise<voi
   await request(`/api/v1/me/tokens/${id}`, { method: 'DELETE', signal, headers: etag ? { 'If-Match': etag } : undefined });
 }
 
-export function listMyAuthorizations(signal?: AbortSignal): Promise<Page<AuthorizationRow>> {
-  return getPage('/api/v1/me/authorizations?pageSize=100', signal);
+export function listMyAuthorizations(params: { cursor?: string; pageSize?: number } = {}, signal?: AbortSignal): Promise<Page<AuthorizationRow>> {
+  const q = new URLSearchParams({ pageSize: String(params.pageSize ?? 20) });
+  if (params.cursor) q.set('cursor', params.cursor);
+  return getPage(`/api/v1/me/authorizations?${q}`, signal);
 }
 
 export async function revokeAuthorization(id: string, signal?: AbortSignal): Promise<void> {
