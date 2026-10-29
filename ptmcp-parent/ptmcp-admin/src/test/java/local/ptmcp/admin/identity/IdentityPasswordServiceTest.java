@@ -97,7 +97,7 @@ class IdentityPasswordServiceTest {
         jdbc.update("INSERT INTO sys_user_login_name (user_id,normalized_name,create_time,update_time)"
                 + " VALUES (42,'synthetic',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
         jdbc.update(
-                "INSERT INTO sys_user_security (user_id,auth_version,identity_version,version,create_time,update_time) VALUES (42,7,1,1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
+                "INSERT INTO sys_user_security (user_id,auth_version,identity_version,identity_state,version,create_time,update_time) VALUES (42,7,1,'READY',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
         hostJdbc.update(
                 "INSERT INTO sys_user VALUES (42,'synthetic','Synthetic',?,'0','0')",
                 ENCODER.encode(OLD));
@@ -326,7 +326,7 @@ class IdentityPasswordServiceTest {
                 intercept(
                         identity,
                         (real, method, args) -> {
-                            if (isHostUpdate(method, args)) {
+                            if (isHostLock(method, args)) {
                                 paused.countDown();
                                 await(resume);
                             }
@@ -365,6 +365,40 @@ class IdentityPasswordServiceTest {
     }
 
     @Test
+    void hostBindingIsLockedBeforeTheHashWriteUntilCommit() throws Exception {
+        createPending();
+        CountDownLatch beforeWrite = new CountDownLatch(1);
+        CountDownLatch releaseWrite = new CountDownLatch(1);
+        DataSource held = intercept(identity, (real, method, args) -> {
+            if (isHostUpdate(method, args)) {
+                beforeWrite.countDown();
+                await(releaseWrite);
+            }
+            return invoke(real, method, args);
+        });
+        CompletableFuture<Long> recovery = CompletableFuture.supplyAsync(
+                () -> service(primary, held).retry(42, 6));
+        try {
+            await(beforeWrite);
+            try (Connection connection = identity.getConnection();
+                    PreparedStatement timeout = connection.prepareStatement("SET SESSION innodb_lock_wait_timeout=1");
+                    PreparedStatement rename = connection.prepareStatement(
+                            "UPDATE sys_user SET user_name='eve' WHERE user_id=42")) {
+                timeout.executeUpdate();
+                SQLException failure = assertThrows(SQLException.class, rename::executeUpdate);
+                assertEquals(1205, failure.getErrorCode());
+            }
+            releaseWrite.countDown();
+            assertEquals(6L, recovery.get(20, TimeUnit.SECONDS));
+            assertReady(NEXT, 8);
+            assertEquals("synthetic", hostJdbc.queryForObject(
+                    "SELECT user_name FROM sys_user WHERE user_id=42", String.class));
+        } finally {
+            releaseWrite.countDown();
+        }
+    }
+
+    @Test
     void concurrentRetriesShareOneTargetAndOneCredentialVersion() throws Exception {
         createPending();
         CountDownLatch beforeCommit = new CountDownLatch(1);
@@ -388,7 +422,7 @@ class IdentityPasswordServiceTest {
                     intercept(
                             identity,
                             (real, method, args) -> {
-                                if (isHostUpdate(method, args)) secondUpdate.countDown();
+                                if (isHostLock(method, args)) secondUpdate.countDown();
                                 return invoke(real, method, args);
                             });
             CompletableFuture<Long> second =
@@ -433,6 +467,11 @@ class IdentityPasswordServiceTest {
                         throw new SQLException("synthetic host write outage");
                     return invoke(real, method, args);
                 });
+    }
+
+    private static boolean isHostLock(Method method, Object[] args) {
+        return method.getName().equals("prepareStatement")
+                && ((String) args[0]).contains("FROM sys_user WHERE user_id=? FOR UPDATE");
     }
 
     private static boolean isHostUpdate(Method method, Object[] args) {

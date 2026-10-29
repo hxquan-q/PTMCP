@@ -488,6 +488,10 @@ class OrgManagementStoreTest {
         assertEquals(1, authority.authVersion());
         assertEquals(deptId, user.deptId());
         assertEquals(List.of(role.id()), user.roleIds());
+        orgStore.updateUser(user.id(), "Edited", deptId, null, null, null, false,
+                List.of(role.id()), user.version(), 1L);
+        assertEquals("UNBOUND", new local.ptmcp.persistence.security.UserSecurityStore(dataSource)
+                .read(user.id()).identityState());
 
         assertEquals(
                 ErrorCode.INVALID_ARGUMENT,

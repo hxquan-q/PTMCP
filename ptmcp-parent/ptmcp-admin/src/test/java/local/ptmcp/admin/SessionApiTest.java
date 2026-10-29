@@ -350,6 +350,21 @@ class SessionApiTest {
             update.setLong(1, BOB);
             assertEquals(1, update.executeUpdate());
         }
+        assertBobLoginRejectedByIdentityBinding();
+    }
+
+    @Test
+    void anUnboundIdentityCannotUseAnIdenticallyNamedHostAccount() throws Exception {
+        seedPortal();
+        try (Connection connection = connect(); PreparedStatement update = connection.prepareStatement(
+                "UPDATE sys_user_security SET identity_state='UNBOUND' WHERE user_id=?")) {
+            update.setLong(1, BOB);
+            assertEquals(1, update.executeUpdate());
+        }
+        assertBobLoginRejectedByIdentityBinding();
+    }
+
+    private void assertBobLoginRejectedByIdentityBinding() throws Exception {
         MvcResult csrf = mockMvc.perform(get("/api/v1/session/csrf"))
                 .andExpect(status().isOk()).andReturn();
         String presession = cookieHeader(csrf, AdminSessionService.PRESESSION_COOKIE)

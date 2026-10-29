@@ -39,6 +39,7 @@ import { AuditDetailPage, DatasourceDetailPage, JobDetailPage, MetadataDetailPag
 import { LoginPage } from './views/auth/LoginPage';
 import { getSession, logout, type SessionInfo } from './services/session';
 import { onSessionExpired } from './services/http';
+import { filterNavGroups, resolveRoute, type PermissionedNavGroup } from './navigation';
 
 /* 轻量 hash 路由:#/me/integrations、#/admin/datasources … */
 function useHashRoute(): [string, (path: string) => void] {
@@ -57,6 +58,7 @@ function useHashRoute(): [string, (path: string) => void] {
 interface RouteDef {
   path: string;
   navKey: string;
+  permission?: string;
   breadcrumb: React.ReactNode;
   realm: 'me' | 'admin';
   /* element(id?) — detail routes receive the trailing path segment */
@@ -107,6 +109,7 @@ const ROUTES: RouteDef[] = [
   { path: '/me/security', navKey: 'me-security', breadcrumb: <>个人门户 &nbsp;›&nbsp; 账号安全</>, realm: 'me', element: () => <SecurityPage /> },
   {
     path: '/admin/datasources',
+    permission: 'ptmcp:datasource:list',
     navKey: 'admin-datasources',
     breadcrumb: <>管理控制台 &nbsp;›&nbsp; 数据源</>,
     realm: 'admin',
@@ -114,6 +117,7 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/datasources',
+    permission: 'ptmcp:datasource:read',
     navKey: 'admin-datasources',
     prefix: true,
     breadcrumb: <>管理控制台 &nbsp;›&nbsp; 数据源 &nbsp;›&nbsp; 详情</>,
@@ -122,6 +126,7 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/metadata',
+    permission: 'ptmcp:metadata:list',
     navKey: 'admin-metadata',
     breadcrumb: <>管理控制台 &nbsp;›&nbsp; 元数据与字典</>,
     realm: 'admin',
@@ -129,6 +134,7 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/permissions',
+    permission: 'ptmcp:acl:list',
     navKey: 'admin-permissions',
     breadcrumb: <>管理控制台 &nbsp;›&nbsp; 权限矩阵</>,
     realm: 'admin',
@@ -136,6 +142,7 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/delegations',
+    permission: 'ptmcp:delegation:list',
     navKey: 'admin-delegations',
     breadcrumb: <>管理控制台 &nbsp;›&nbsp; 管理委派</>,
     realm: 'admin',
@@ -143,23 +150,47 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/departments',
+    permission: 'ptmcp:department:list',
     navKey: 'admin-departments',
     breadcrumb: <>管理控制台 &nbsp;›&nbsp; 部门</>,
     realm: 'admin',
     element: () => <DepartmentsPage />,
   },
-  { path: '/admin/users', navKey: 'admin-users', breadcrumb: <>管理控制台 &nbsp;›&nbsp; 用户</>, realm: 'admin', element: () => <UsersPage /> },
-  { path: '/admin/roles', navKey: 'admin-roles', breadcrumb: <>管理控制台 &nbsp;›&nbsp; 角色管理</>, realm: 'admin', element: () => <RolesPage /> },
+  {
+    path: '/admin/users',
+    permission: 'ptmcp:user:list',
+    navKey: 'admin-users',
+    breadcrumb: <>管理控制台 &nbsp;›&nbsp; 用户</>,
+    realm: 'admin',
+    element: () => <UsersPage />,
+  },
+  {
+    path: '/admin/roles',
+    permission: 'ptmcp:role:list',
+    navKey: 'admin-roles',
+    breadcrumb: <>管理控制台 &nbsp;›&nbsp; 角色管理</>,
+    realm: 'admin',
+    element: () => <RolesPage />,
+  },
   {
     path: '/admin/platforms',
+    permission: 'ptmcp:platform:list',
     navKey: 'admin-platforms',
     breadcrumb: <>管理控制台 &nbsp;›&nbsp; 平台与客户端</>,
     realm: 'admin',
     element: () => <PlatformsPage />,
   },
-  { path: '/admin/audit', navKey: 'admin-audit', breadcrumb: <>管理控制台 &nbsp;›&nbsp; 审计记录</>, realm: 'admin', element: () => <AuditPage /> },
   {
     path: '/admin/audit',
+    permission: 'ptmcp:audit:list',
+    navKey: 'admin-audit',
+    breadcrumb: <>管理控制台 &nbsp;›&nbsp; 审计记录</>,
+    realm: 'admin',
+    element: () => <AuditPage />,
+  },
+  {
+    path: '/admin/audit',
+    permission: 'ptmcp:audit:read',
     navKey: 'admin-audit',
     prefix: true,
     breadcrumb: <>管理控制台 &nbsp;›&nbsp; 审计记录 &nbsp;›&nbsp; 详情</>,
@@ -168,6 +199,7 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/jobs',
+    permission: 'ptmcp:audit:list',
     navKey: 'admin-jobs',
     breadcrumb: <>管理控制台 &nbsp;›&nbsp; 操作日志</>,
     realm: 'admin',
@@ -175,6 +207,7 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/jobs',
+    permission: 'ptmcp:job:read',
     navKey: 'admin-jobs',
     prefix: true,
     breadcrumb: <>管理控制台 &nbsp;›&nbsp; 操作日志 &nbsp;›&nbsp; 任务详情</>,
@@ -183,6 +216,7 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/metadata',
+    permission: 'ptmcp:metadata:read',
     navKey: 'admin-metadata',
     prefix: true,
     breadcrumb: <>管理控制台 &nbsp;›&nbsp; 元数据与字典 &nbsp;›&nbsp; 详情</>,
@@ -205,35 +239,35 @@ const ME_GROUPS: NavGroup[] = [
   },
 ];
 
-const ADMIN_GROUPS: NavGroup[] = [
+const ADMIN_GROUPS: PermissionedNavGroup[] = [
   {
     title: '数据管理',
     items: [
-      { key: 'admin-datasources', label: '数据源', icon: <DatabaseIcon /> },
-      { key: 'admin-metadata', label: '元数据与字典', icon: <DocumentIcon /> },
+      { key: 'admin-datasources', permission: 'ptmcp:datasource:list', label: '数据源', icon: <DatabaseIcon /> },
+      { key: 'admin-metadata', permission: 'ptmcp:metadata:list', label: '元数据与字典', icon: <DocumentIcon /> },
     ],
   },
   {
     title: '访问控制',
     items: [
-      { key: 'admin-permissions', label: '授权矩阵', icon: <CheckboxIcon /> },
-      { key: 'admin-delegations', label: '管理委派', icon: <ListIcon /> },
+      { key: 'admin-permissions', permission: 'ptmcp:acl:list', label: '授权矩阵', icon: <CheckboxIcon /> },
+      { key: 'admin-delegations', permission: 'ptmcp:delegation:list', label: '管理委派', icon: <ListIcon /> },
     ],
   },
   {
     title: '组织与接入',
     items: [
-      { key: 'admin-departments', label: '部门', icon: <UsersIcon /> },
-      { key: 'admin-users', label: '用户', icon: <UserIcon /> },
-      { key: 'admin-roles', label: '角色管理', icon: <TagIcon /> },
-      { key: 'admin-platforms', label: '平台与客户端', icon: <MonitorIcon /> },
+      { key: 'admin-departments', permission: 'ptmcp:department:list', label: '部门', icon: <UsersIcon /> },
+      { key: 'admin-users', permission: 'ptmcp:user:list', label: '用户', icon: <UserIcon /> },
+      { key: 'admin-roles', permission: 'ptmcp:role:list', label: '角色管理', icon: <TagIcon /> },
+      { key: 'admin-platforms', permission: 'ptmcp:platform:list', label: '平台与客户端', icon: <MonitorIcon /> },
     ],
   },
   {
     title: '安全与追踪',
     items: [
-      { key: 'admin-audit', label: '审计记录', icon: <BarChartIcon /> },
-      { key: 'admin-jobs', label: '操作日志', icon: <BoltIcon /> },
+      { key: 'admin-audit', permission: 'ptmcp:audit:list', label: '审计记录', icon: <BarChartIcon /> },
+      { key: 'admin-jobs', permission: 'ptmcp:audit:list', label: '操作日志', icon: <BoltIcon /> },
     ],
   },
 ];
@@ -271,15 +305,12 @@ export function App() {
   );
 
   const [path, navigate] = useHashRoute();
-  const resolved = useMemo(() => {
-    const exact = ROUTES.find((r) => !r.prefix && r.path === path);
-    if (exact) return { route: exact, id: undefined as string | undefined };
-    const prefix = ROUTES.find((r) => r.prefix && path.startsWith(`${r.path}/`));
-    if (prefix) return { route: prefix, id: decodeURIComponent(path.slice(prefix.path.length + 1)) };
-    return { route: ROUTES[0], id: undefined };
-  }, [path]);
-  const { route, id } = resolved;
-  const groups = route.realm === 'me' ? ME_GROUPS : ADMIN_GROUPS;
+  const can = useCallback((code: string) => !!session?.permissions.includes(code), [session]);
+  const resolved = useMemo(() => resolveRoute(path, ROUTES), [path]);
+  const { route } = resolved;
+  const denied = !!route?.permission && !can(route.permission);
+  const baseGroups = route?.realm === 'me' ? ME_GROUPS : ADMIN_GROUPS;
+  const groups = useMemo(() => filterNavGroups(baseGroups, can), [baseGroups, can]);
   const onNavigate = useCallback(
     (key: string) => {
       const target = NAV_TO_PATH[key];
@@ -287,6 +318,22 @@ export function App() {
     },
     [navigate],
   );
+  if (sessionState === 'signed-in' && resolved.match === 'none') {
+    return (
+      <StaticErrorCard code="404" title="页面不存在" description={`没有找到 ${path} 对应的页面。`} onBack={() => navigate('/me/integrations')} />
+    );
+  }
+  if (sessionState === 'signed-in' && denied && route) {
+    return (
+      <StaticErrorCard
+        code="403"
+        title="无权访问"
+        description={`当前账号缺少 ${route.permission} 权限，无法访问该页面。如需开通请联系平台管理员。`}
+        onBack={() => navigate('/me/integrations')}
+      />
+    );
+  }
+
   if (sessionState !== 'signed-in') {
     return (
       <LoginPage
@@ -302,9 +349,9 @@ export function App() {
   return (
     <AppShell
       groups={groups}
-      active={route.navKey}
+      active={route?.navKey ?? ''}
       onNavigate={onNavigate}
-      breadcrumb={route.breadcrumb}
+      breadcrumb={route?.breadcrumb}
       onLogout={() => {
         setExpiredNote('');
         void logout().finally(() => {
@@ -314,7 +361,22 @@ export function App() {
       }}
       user={session ? { displayName: session.displayName, department: session.department?.name ?? '' } : undefined}
     >
-      {route.element(id)}
+      {route ? route.element(resolved.match === 'prefix' ? resolved.id : undefined) : null}
     </AppShell>
+  );
+}
+
+function StaticErrorCard({ code, title, description, onBack }: { code: string; title: string; description: string; onBack: () => void }) {
+  return (
+    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--ptmcp-canvas)' }}>
+      <div className="table-card" style={{ width: 420, padding: '30px 28px', textAlign: 'center' }}>
+        <div style={{ fontSize: 40, fontWeight: 800, color: 'var(--ptmcp-blue)' }}>{code}</div>
+        <h1 style={{ margin: '8px 0 6px', fontSize: 17, color: 'var(--ptmcp-heading)' }}>{title}</h1>
+        <p style={{ margin: '0 0 18px', fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>{description}</p>
+        <button className="btn btn--primary" onClick={onBack}>
+          返回首页
+        </button>
+      </div>
+    </div>
   );
 }

@@ -13,7 +13,6 @@ import org.springframework.util.StringUtils;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 
 /**
@@ -66,7 +65,7 @@ public final class JdbcAccountAuthenticator implements AccountAuthenticator {
         } catch (DataAccessException | DomainException failure) {
             throw new AuthenticationServiceException("Account store unavailable", failure);
         }
-        if (row == null) {
+        if (row == null || !row.boundTo(normalized)) {
             verifyPassword(fakeHash, rawPassword);
             return Optional.empty();
         }
@@ -83,19 +82,7 @@ public final class JdbcAccountAuthenticator implements AccountAuthenticator {
     }
 
     static String normalize(String loginName) {
-        if (loginName == null) {
-            return null;
-        }
-        String trimmed = loginName.trim();
-        if (trimmed.isEmpty() || trimmed.length() > 64) {
-            return null;
-        }
-        for (int index = 0; index < trimmed.length(); index++) {
-            if (trimmed.charAt(index) > 0x7F) {
-                return null;
-            }
-        }
-        return trimmed.toLowerCase(Locale.ROOT);
+        return HostIdentityStore.normalizeLoginName(loginName);
     }
 
     private boolean verifyPassword(String hash, String rawPassword) {

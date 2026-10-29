@@ -30,7 +30,6 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -161,8 +160,8 @@ public final class AdminSessionService {
         if (username == null || password == null || password.isEmpty()) {
             throw new DomainException(ErrorCode.AUTHENTICATION_FAILED);
         }
-        String normalized = username.trim().toLowerCase(Locale.ROOT);
-        if (!normalized.matches("[a-z0-9_.-]{1,30}")) {
+        String normalized = HostIdentityStore.normalizeLoginName(username);
+        if (normalized == null) {
             throw new DomainException(ErrorCode.AUTHENTICATION_FAILED);
         }
         Instant now = Instant.now();
@@ -180,9 +179,9 @@ public final class AdminSessionService {
         UserSecurityStore.State captured = boundUser == null ? null : new UserSecurityStore(primary).read(boundUser);
         Profile profile = captured != null && captured.ready() ? findProfile(normalized) : null;
         HostIdentityStore.Account account=profile==null ? null : host.read(profile.userId());
-        String hash = account == null ? dummyHash : account.hash();
+        String hash = account == null || !account.boundTo(normalized) ? dummyHash : account.hash();
         boolean matches = passwords.matches(password, hash);
-        if (profile == null || account == null || !account.active() || !matches || !"ACTIVE".equals(profile.status())) {
+        if (profile == null || account == null || !account.boundTo(normalized) || !account.active() || !matches || !"ACTIVE".equals(profile.status())) {
             recordFailure(normalized, now);
             throw new DomainException(ErrorCode.AUTHENTICATION_FAILED);
         }

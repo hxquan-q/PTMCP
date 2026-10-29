@@ -11,6 +11,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Objects;
+import java.util.Locale;
 
 import javax.sql.DataSource;
 
@@ -24,16 +25,30 @@ public final class HostIdentityStore {
 
     public record Account(
             long userId, String loginName, String displayName, String hash, boolean active) {
+        public boolean boundTo(String normalizedName) {
+            return normalizedName != null && normalizedName.equals(normalizeLoginName(loginName));
+        }
+
         @Override
         public String toString() {
             return "HostAccount[redacted]";
         }
     }
 
+    /** Shared host-compatible canonical login name; metadata remains the binding authority. */
+    public static String normalizeLoginName(String value) {
+        if (value == null) return null;
+        for (int index = 0; index < value.length(); index++) {
+            if (value.charAt(index) > 0x7f) return null;
+        }
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        return normalized.matches("[a-z0-9_.-]{1,30}") ? normalized : null;
+    }
+
     public Account read(long userId) {
         try (Connection connection = identity.getConnection()) {
             return read(connection, userId, false);
-        } catch (SQLException failure) {
+        } catch (SQLException | RuntimeException failure) {
             throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
     }
@@ -59,8 +74,10 @@ public final class HostIdentityStore {
     }
 
     /** A late operation can only replace its own captured predecessor, never a newer hash. */
-    public void compareAndSetHash(long userId, byte[] expected, String target) {
+    public void compareAndSetHash(long userId, String normalizedName, byte[] expected, String target) {
         if (userId <= 0
+                || normalizedName == null
+                || !normalizedName.equals(normalizeLoginName(normalizedName))
                 || expected == null
                 || expected.length != 32
                 || target == null
@@ -93,6 +110,9 @@ public final class HostIdentityStore {
             }
             connection.setAutoCommit(false);
             started = true;
+            Account bound = read(connection, userId, true);
+            if (bound == null || !bound.active() || !bound.boundTo(normalizedName))
+                throw new DomainException(ErrorCode.VERSION_CONFLICT);
             int updated;
             try (PreparedStatement update =
                     statement(

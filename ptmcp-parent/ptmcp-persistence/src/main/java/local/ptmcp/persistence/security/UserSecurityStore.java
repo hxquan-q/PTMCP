@@ -34,6 +34,26 @@ public final class UserSecurityStore {
         }
     }
 
+    /** The host cannot choose or repair this immutable metadata binding. */
+    public String loginName(long userId) {
+        try (Connection connection = primary.getConnection();
+                PreparedStatement query = connection.prepareStatement(
+                        "SELECT normalized_name FROM sys_user_login_name WHERE user_id=?")) {
+            connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+            query.setQueryTimeout(5);
+            query.setLong(1, userId);
+            try (ResultSet result = query.executeQuery()) {
+                if (!result.next()) throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+                String name = result.getString(1);
+                if (name == null || !name.equals(HostIdentityStore.normalizeLoginName(name)))
+                    throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+                return name;
+            }
+        } catch (SQLException failure) {
+            throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+        }
+    }
+
     /** Caller owns the transaction; a locking read requires the global security lock first. */
     public static State read(Connection connection, long userId, boolean lock) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(

@@ -40,7 +40,8 @@ public final class IdentityPasswordService {
         UserSecurityStore.State captured = new UserSecurityStore(primary).read(userId);
         UserSecurityStore.requireReady(captured, captured.authVersion());
         HostIdentityStore.Account account = host.read(userId);
-        if (account == null || !account.active())
+        String loginName = new UserSecurityStore(primary).loginName(userId);
+        if (account == null || !account.active() || !account.boundTo(loginName))
             throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
         return changes.begin(
                 userId,
@@ -82,7 +83,7 @@ public final class IdentityPasswordService {
                 if (!result.next()) throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
                 long version = result.getLong(1);
                 String state = result.getString(2);
-                if (version <= 0 || !("READY".equals(state) || "CHANGE_PENDING".equals(state)))
+                if (version <= 0 || !("READY".equals(state) || "CHANGE_PENDING".equals(state) || "UNBOUND".equals(state)))
                     throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
                 return new Status(userId, version, state, "CHANGE_PENDING".equals(state));
             }

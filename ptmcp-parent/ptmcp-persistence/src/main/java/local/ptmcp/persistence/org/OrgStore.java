@@ -640,12 +640,12 @@ public final class OrgStore {
             List<Long> roleIds,
             boolean enabled,
             long actorId) {
-        OrgSql.requireText(username, 64);
+        OrgSql.requireText(username, 30);
         OrgSql.requireText(displayName, 64);
         OrgSql.requireText(passwordHash, 100);
         OrgSql.requireActor(actorId);
         String normalized = username.toLowerCase(java.util.Locale.ROOT);
-        if (!normalized.matches("[a-z0-9][a-z0-9._-]{0,63}")) {
+        if (!username.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,29}")) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
         List<Long> roles = normalizedIds(roleIds);
@@ -691,7 +691,7 @@ public final class OrgStore {
                 }
                 try (PreparedStatement security = OrgSql.statement(connection,
                         "INSERT INTO sys_user_security (user_id,auth_version,identity_version,identity_state,version,create_time,update_time)"
-                                + " VALUES (?,1,1,'READY',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))")) {
+                                + " VALUES (?,1,1,'UNBOUND',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))")) {
                     security.setLong(1, userId);
                     security.executeUpdate();
                 }
@@ -773,7 +773,7 @@ public final class OrgStore {
                 UserSecurityStore.State security = UserSecurityStore.read(connection, id, true);
                 if ("CHANGE_PENDING".equals(security.identityState()))
                     throw new DomainException(ErrorCode.VERSION_CONFLICT);
-                if (!security.ready())
+                if (!security.ready() && !"UNBOUND".equals(security.identityState()))
                     throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
                 requireDepartmentExists(connection, deptId);
                 try (PreparedStatement statement =

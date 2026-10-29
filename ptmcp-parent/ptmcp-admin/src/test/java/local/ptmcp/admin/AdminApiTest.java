@@ -2707,6 +2707,8 @@ class AdminApiTest {
                             + target
                             + ", 'pwd-target', '密码用户', '$2a$10$oldoldoldoldoldoldoldoldoldoldoldoldoldoldoldoldoldold',"
                             + " '0', '0') ON DUPLICATE KEY UPDATE password = VALUES(password)");
+            // Trusted synthetic import; metadata creation alone intentionally remains UNBOUND.
+            statement.execute("UPDATE sys_user_security SET identity_state='READY' WHERE user_id=" + target);
             // One ACTIVE refresh family so the revocation has a real target.
             statement.execute(
                     "INSERT INTO oauth2_registered_client (id, client_id, client_name,"

@@ -203,7 +203,8 @@ public final class IdentityPasswordChanges {
                 || current.authVersion() != operation.authVersion())
             throw new DomainException(ErrorCode.VERSION_CONFLICT);
         if (current.completed()) return current.profileVersion();
-        host.compareAndSetHash(current.userId(), current.expected(), current.target());
+        String loginName = new UserSecurityStore(primary).loginName(current.userId());
+        host.compareAndSetHash(current.userId(), loginName, current.expected(), current.target());
         try {
             new SecurityChangeTransaction(primary)
                     .execute(

@@ -94,7 +94,7 @@ host/port先做DNS与网络目的地策略验证，拒绝云元数据/loopback�
 | PUT /metadata/objects/{id}/dictionary | metadata:dictionary | DictionaryWrite+If-Match→ObjectDetail；不能修改真实数据库DDL |
 | /users CRUD | user对应动作 | UserWrite→UserDTO；筛选keyword/departmentId/status；不接受外部org树替换；删除逻辑删除并撤销令牌 |
 | PUT /users/{id}/status | user:status | {status:ACTIVE/DISABLED}+If-Match→UserDTO；不能停用最后一个有效平台管理员 |
-| GET /users/{id}/identity | 平台管理员 | →IdentityState={userId,version,identityState:READY/CHANGE_PENDING,recoveryRequired}；不返回摘要、目标或操作材料 |
+| GET /users/{id}/identity | 平台管理员 | →IdentityState={userId,version,identityState:UNBOUND/READY/CHANGE_PENDING,recoveryRequired}；不返回摘要、目标或操作材料 |
 | PUT /users/{id}/password | user:reset-password，平台管理员 | {newPassword,reason}+If-Match+Idempotency-Key→200 IdentityState；先提权威版本并撤销全部认证，跨库异常保持 Pending，由管理员恢复 |
 | POST /users/{id}/password/retry | user:reset-password，平台管理员 | {}+If-Match+Idempotency-Key→200 IdentityState；只重试持久目标；完成重试不写宿主、不提版本/epoch；不接受新密码；版本与 body 一起绑定幂等摘要 |
 | PUT /users/{id}/roles | user:assign-role | {roleIds:[]}+If-Match→UserDTO；整组替换，全部角色均受管理范围约束 |
@@ -122,6 +122,8 @@ host/port先做DNS与网络目的地策略验证，拒绝云元数据/loopback�
 | GET /audit | audit:list | from/to(单次≤31天)、userId/platformId/datasourceId/tool/result/verdict/errorCode/cursor/pageSize→AuditSummary[]；不能筛sql_raw，不返回密文 |
 | GET /audit/{requestId} | audit:read | →AuditDetail（脱敏SQL、对象、版本、阶段耗时、错误/截断），普通审计员无原文 |
 | POST /audit/{requestId}/decrypt | audit:decrypt，额外明确授权 | {fields:[sqlRaw/sqlFinal],reason:10..500}→{sqlRaw?,sqlFinal?,expiresAt}；每次持久审计后才返回，no-store，服务端不缓存明文；保留期外404 |
+
+身份绑定：新建用户为 UNBOUND；宿主供应/显式导入闭环前，登录、改密和发证均拒绝。普通资料编辑不改变绑定状态；当前尚无供应转换接口。已有 READY/Pending 也核对宿主 ID 与元库规范化登录名，不符时不自动重绑。
 
 身份恢复补充：CHANGE_PENDING 期间用户资料、角色、部门与状态写入返回409 VERSION_CONFLICT，
 先用当前 GET identity 的版本完成恢复再编辑；已完成恢复也拒绝过期 If-Match。

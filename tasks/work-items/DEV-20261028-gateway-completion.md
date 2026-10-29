@@ -60,6 +60,15 @@ wrapper 未设置 executable，使用 bash 调用，不改文件权限。已有�
 
 ## 结果与证据
 
+身份组合 GREEN：`ptmcp-identity-combined-green.log` BUILD SUCCESS，78 tests / 0 failures/errors/skipped；
+覆盖双 MySQL 改密恢复13、真实 ADMIN 改密HTTP2、Session8、Org13、SecurityState13、OAuth27及MCP HTTP2。
+Origin 有效 RED 为 `ptmcp-identity-origin-red.log`（8例中1 failure，跨站Origin携合法CSRF错误返回200）；
+profile 围栏有效 RED 为 `ptmcp-identity-profile-red-real.log`（2 tests / 2 failures / 0 errors），
+此前 fixture 缺登录名的失败不计行为 RED。GREEN 包含非法 Origin/Referer、same-site 拒绝与合法同源成功。
+独立只读复审关闭 Pending 资料漂移与恢复过期版本，但发现新建 READY 只按 ID 匹配宿主的账号碰撞风险。
+当前续接最小安全修复：前向迁移引入 UNBOUND，可靠供应完成前不签发；所有登录/改密/恢复核 ID+元库规范化登录名，
+宿主事务先锁行核绑定再 CAS。新建宿主账号供应仍未完成，不能把本片 GREEN 计作身份全闭环。
+
 双库 CAS 首次 GREEN：`ptmcp-identity-cas-green.log`，10 tests / 0 failures/errors/skipped，BUILD SUCCESS。
 独立实际 diff 复审未发现迟到写/提交不明新增高危阻断；发现恢复 hash 长期保留、控制器 epoch 字段错配及并发完成额外 epoch，已补回归和修复，重验进行中。
 有效生命周期/HTTP RED：`ptmcp-identity-http-lifecycle-red.log`，12 tests / 2 failures / 0 errors/skipped；分别为完成未清 hash、应返回200明确版本但仍204旧头。

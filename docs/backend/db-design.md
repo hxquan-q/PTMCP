@@ -73,7 +73,7 @@ ERD 的 acl_grant 还可以指向数据源/命名空间；多态主体/目标用
 
 | 表 | 字段 | 主键/索引/约束 |
 | --- | --- | --- |
-| sys_user_security | user_id BIGINT；auth_version BIGINT=1；identity_version BIGINT=1；identity_state READY/CHANGE_PENDING；identity_change_id UUID N；version BIGINT；password_changed_at DATETIME(6) N | PK/FK sys_user_profile.user_id；唯一权威；改密同时提升 auth/identity 版本；Pending 拒绝认证，不因超时释放 |
+| sys_user_security | user_id BIGINT；auth_version BIGINT=1；identity_version BIGINT=1；identity_state UNBOUND/READY/CHANGE_PENDING（默认UNBOUND）；identity_change_id UUID N；version BIGINT；password_changed_at DATETIME(6) N | PK/FK sys_user_profile.user_id；唯一权威；改密同时提升 auth/identity 版本；Pending 拒绝认证，不因超时释放 |
 | identity_password_change | operation_id UUID；user_id；auth_version；profile_version；expected_hash BINARY(32) N；target_hash BCrypt N；status PENDING/COMPLETED；requested_by；时间 | PK operation_id；UNIQUE(user_id,profile_version)；FK sys_user_security；Pending 必须保留不可变 hash，完成同事务清空两列，仅保留幂等墓碑 |
 | sys_subject_version | subject_type VARCHAR(16) USER/ROLE/DEPT；subject_id BIGINT；policy_version BIGINT；version BIGINT | PK(type,id)；删除保留 tombstone，不复用主体 ID |
 | sys_security_state | singleton_id TINYINT=1；policy_epoch BIGINT；update_time DATETIME(6) | PK 1，锁住本行分配全局 epoch |
@@ -84,7 +84,7 @@ ERD 的 acl_grant 还可以指向数据源/命名空间；多态主体/目标用
 
 跨库改密按 [ADR-0011](../architecture/adr/0011-跨库身份变更与权威版本.md)先 Pending 与撤证、再宿主 expected-hash CAS、最后完成。
 sys_user_profile.password_hash 是遗留兼容列，不作为认证源；改密时写 external 哨兵，不再复制宿主 BCrypt。
-V11/V12 升级需停旧写方，禁止旧新混跑；已备份的旧恢复材料仍按密码资产控制与清理。
+V11/V12/V13 升级需停旧写方，禁止旧新混跑；已备份的旧恢复材料仍按密码资产控制与清理。
 
 ## 4. 平台、资源与授权表
 
