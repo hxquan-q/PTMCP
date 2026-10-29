@@ -801,8 +801,7 @@ class AdminApiTest {
                                 .header("X-Test-Platform-Admin", "true")
                                 .header("If-Match", 1)
                                 .contentType("application/json")
-                                .content(
-                                        "{\"parentId\":null,\"name\":\"提升为根\",\"enabled\":true}"))
+                                .content("{\"parentId\":null,\"name\":\"提升为根\",\"enabled\":true}"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("ETag", "\"2\""));
         assertEquals(null, orgStore.getDepartment(fixture.targetId()).parentId());

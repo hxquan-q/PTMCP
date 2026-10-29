@@ -96,13 +96,35 @@ GREEN及退出码并复核SHA-256，无新增阻断，未修改文件或重复�
 该片收尾python scripts/check.py与git diff --check均exit0，62项检查器回归通过；
 Skill的tree/format/archived检查均exit0（12份活跃笔记、0份归档）。
 
-当前实施切片：部门完整PUT的新旧目标范围与版本绑定。一次有效委派必须同时包含department:update、
+部门完整PUT的新旧目标范围与版本绑定切片：一次有效委派必须同时包含department:update、
 覆盖旧目标和移动后的新父部门，不能拼接两个范围的委派；提升为根仅平台管理员允许。
 未移动时只要求旧目标，不额外要求当前父在委派中，保留委派根自身改名/重新启用。
 沿用入口精确功能码，目标读取快照须与If-Match相等，存储端CAS继续保留，防未来版本写入跨越并发迁移。
 先补真实MySQL/Servlet越界与拼接委派零副作用反例、合法移动/根编辑及并发未来If-Match，再实现并组合验证。
 本片尚不修缓存驱动的后代写集、事务内actor/委派重验、新父路径并发或epoch；
 完整部门移动验收仍须后续权威树写入及提交前授权闭环，不能随此片升级为完成。
+
+有效RED：`department-command-red.log`于2026-10-30 06:24:55 +08:00 BUILD FAILURE/exit1，
+8 tests /5 failures /0 errors /0 skipped；四个范围/委派拒绝预期403但实际200，
+未来If-Match预期409但实际200，三个合法路径通过，未以闸门超时充当行为失败。
+实现保留读取前旧目标门禁，读取同一目标快照并核If-Match，实际移动由同一条带update的委派
+同时覆盖旧目标与新父；原地编辑委派根不额外要求原父。存储CAS及原子事务保持不变。
+另补平台管理员提升为根的正例，完整组合`department-command-green.log`于
+2026-10-30 06:30:30 +08:00 BUILD SUCCESS/exit0：Org69、Admin98、ToolPermissionDeny12共179项，
+0 failures /0 errors /0 skipped。三个格式化目标文件与构建目录SHA-256逐一一致。
+拒绝反例比较所有可见DepartmentRow的完整字段，以及部门/操作日志/幂等/安全事件/敏感访问计数
+和policy_epoch；不把计数比较描述成逐条日志正文比较。独立只读终审已亲自核读源码、RED/GREEN、
+exit文件及三份SHA-256一致性，无新增阻断，未执行动态测试；上述两个入口缺口局部关闭。
+Skill三项检查均exit0（12份活跃笔记、0份归档）；python scripts/check.py退出0，62项检查器回归通过。
+
+当前实施切片：部门权威写树与安全事务。create/edit/update/move/delete全部先锁sys_security_state，
+再从parent_id读取权威拓扑，不依ancestors防环或确定后代；停用/软删桥仍展开，移动重建真实后代
+（含软删行）并提升版本，伪外部分支不写。现有损坏链拒绝SECURITY_STATE_UNAVAILABLE；
+命令造成环、总深度超64或缓存超VARCHAR(500)拒绝INVALID_ARGUMENT且无提交，不截断。
+复用SecurityChangeTransaction增加类型化命令结果/事件回调，创建使用真实生成ID，
+每个部门命令将行/版本/操作日志、epoch和DEPARTMENT_CHANGED同事务提交，丢确认保持UNKNOWN不重放。
+先补真实MySQL失败反例、事件故障回滚、各命令全局锁顺序及提交丢确认，再实施并组合验证。
+本片不包含事务内actor/委派重验、整子树授权、间接自扩权或部门容量验收；后续不得随此片记为完成。
 
 当前切片：所有admin handler显式声明功能码，统一MVC入口默认拒绝未声明/无功能码请求；
 平台管理员不能绕过端点动作，通用用户PUT仍按实际变化补status/assign-role/move。

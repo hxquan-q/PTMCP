@@ -478,6 +478,30 @@ export function createPreviewServer() {
         absoluteExpiresAt: '2099-01-01T00:00:00Z',
       },
     ],
+    operations: [
+      {
+        id: '1',
+        actorId: '1',
+        requestId: 'preview-op-1',
+        action: 'PLATFORM_CREATE',
+        aggregateType: 'PLATFORM',
+        aggregateId: '1',
+        beforeMasked: null,
+        afterMasked: '{"code":"preview-desktop","name":"合成桌面平台"}',
+        occurredAt: now,
+      },
+      {
+        id: '2',
+        actorId: '1',
+        requestId: 'preview-op-2',
+        action: 'ROLE_CREATE',
+        aggregateType: 'ROLE',
+        aggregateId: '1',
+        beforeMasked: null,
+        afterMasked: '{"key":"PREVIEW_ADMIN","name":"演示管理员"}',
+        occurredAt: now,
+      },
+    ],
     audit: ['SUCCESS', 'UNKNOWN', 'ERROR'].map((result, index) => ({
       requestId: `preview-request-${index + 1}`,
       userId: '2',
@@ -522,6 +546,27 @@ export function createPreviewServer() {
     },
   };
   const sensitiveAccess: Record<string, Row[]> = {};
+  const OP_MAP: Record<string, { type: string; create: string; update: string; delete: string }> = {
+    platforms: { type: 'PLATFORM', create: 'PLATFORM_CREATE', update: 'PLATFORM_UPDATE', delete: 'PLATFORM_DELETE' },
+    clients: { type: 'OAUTH_CLIENT', create: 'CLIENT_CREATE', update: 'CLIENT_UPDATE', delete: 'CLIENT_DELETE' },
+    users: { type: 'USER', create: 'USER_CREATE', update: 'USER_UPDATE', delete: 'USER_DELETE' },
+    departments: { type: 'DEPARTMENT', create: 'DEPARTMENT_CREATE', update: 'DEPARTMENT_UPDATE', delete: 'DEPARTMENT_DELETE' },
+    roles: { type: 'ROLE', create: 'ROLE_CREATE', update: 'ROLE_UPDATE', delete: 'ROLE_DELETE' },
+    delegations: { type: 'ADMIN_DELEGATION', create: 'DELEGATION_CREATE', update: '', delete: 'DELEGATION_REVOKE' },
+  };
+  function recordOperation(action: string, aggregateType: string, aggregateId: string, before?: unknown, after?: unknown): void {
+    tables.operations.push({
+      id: String(++serial),
+      actorId: '1',
+      requestId: `preview-op-${tables.operations.length + 1}`,
+      action,
+      aggregateType,
+      aggregateId,
+      beforeMasked: before != null ? JSON.stringify(before).slice(0, 200) : null,
+      afterMasked: after != null ? JSON.stringify(after).slice(0, 200) : null,
+      occurredAt: new Date().toISOString(),
+    });
+  }
   let serial = 100;
   let signedIn = true;
   let responseSequence = 0;
@@ -553,6 +598,9 @@ export function createPreviewServer() {
         'errorCode',
         'platformId',
         'datasourceId',
+        'aggregateType',
+        'actorId',
+        'action',
       ].every((key) => !query.get(key) || String(row[key]) === query.get(key)),
     );
     const keyword = (query.get('keyword') ?? '').toLowerCase();
@@ -690,6 +738,13 @@ export function createPreviewServer() {
       if (method === 'PUT') {
         if (new Headers(options.headers).get('If-Match') !== `"${current.version}"`) return fail(412, 'VERSION_CONFLICT');
         scope[id] = { items: body.items, scopeVersion: String(Number(current.scopeVersion) + 1), version: String(Number(current.version) + 1) };
+        recordOperation(
+          'PLATFORM_SCOPE_SAVE',
+          'PLATFORM',
+          String(id),
+          { rules: (current.items as unknown[]).length },
+          { rules: Array.isArray(body.items) ? body.items.length : 0 },
+        );
       }
       return response(scope[id] ?? current);
     }
@@ -786,6 +841,8 @@ export function createPreviewServer() {
       if (table === 'platforms') Object.assign(created, { securityVersion: '1', scopeVersion: '1', proofConfigured: body.proofMode !== 'NONE' });
       if (table === 'tokens') Object.assign(created, { prefix: 'preview_', lastUsedAt: null, expiresAt: body.expiresAt ?? '2099-01-01T00:00:00Z' });
       rows.push(created);
+      const opMeta = OP_MAP[table];
+      if (opMeta?.create) recordOperation(opMeta.create, opMeta.type, String(created.id), null, { name: created.name ?? created.code ?? created.id });
       if (table === 'clients')
         return response(
           {
@@ -807,6 +864,8 @@ export function createPreviewServer() {
         row.status = 'REVOKED';
         row.version = String(Number(row.version ?? 0) + 1);
       } else rows.splice(rows.indexOf(row), 1);
+      const delOpMeta = OP_MAP[table];
+      if (delOpMeta?.delete) recordOperation(delOpMeta.delete, delOpMeta.type, String(row.id), { name: row.name ?? row.code }, null);
       return response({ ...row, deleted: true, revoked: true });
     }
     if (method === 'PUT' || method === 'PATCH') {
@@ -827,6 +886,8 @@ export function createPreviewServer() {
         }
       }
       if (table !== 'objects') row.version = typeof row.version === 'number' ? row.version + 1 : String(Number(row.version ?? 0) + 1);
+      const updOpMeta = OP_MAP[table];
+      if (updOpMeta?.update && !subAction) recordOperation(updOpMeta.update, updOpMeta.type, String(row.id), null, body);
       return response(row);
     }
     return fail(501, 'PREVIEW_NOT_IMPLEMENTED');

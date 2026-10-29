@@ -246,6 +246,7 @@ class OrgManagementStoreTest {
                             "api_idempotency")) {
                 statement.execute("DELETE FROM " + table);
             }
+            statement.execute("ALTER TABLE sys_dept AUTO_INCREMENT = 1");
             statement.execute("SET FOREIGN_KEY_CHECKS = 1");
         }
     }
@@ -780,6 +781,14 @@ class OrgManagementStoreTest {
 
     private DataSource statusFaultDataSource(
             String failSqlPrefix, boolean loseCommitAck, Runnable beforeGlobalLock) {
+        return statusFaultDataSource(failSqlPrefix, loseCommitAck, beforeGlobalLock, null);
+    }
+
+    private DataSource statusFaultDataSource(
+            String failSqlPrefix,
+            boolean loseCommitAck,
+            Runnable beforeGlobalLock,
+            Runnable beforeDepartment) {
         return (DataSource)
                 Proxy.newProxyInstance(
                         DataSource.class.getClassLoader(),
@@ -792,6 +801,10 @@ class OrgManagementStoreTest {
                                         Connection.class.getClassLoader(),
                                         new Class<?>[] {Connection.class},
                                         (connectionProxy, method, args) -> {
+                                            if ("prepareStatement".equals(method.getName())
+                                                    && beforeDepartment != null
+                                                    && ((String) args[0]).contains("sys_dept"))
+                                                beforeDepartment.run();
                                             if ("prepareStatement".equals(method.getName())
                                                     && beforeGlobalLock != null
                                                     && ((String) args[0])
@@ -820,6 +833,300 @@ class OrgManagementStoreTest {
     }
 
     // ---- departments -------------------------------------------------------
+
+    private record DepartmentWriteSnapshot(
+            List<String> departments, List<String> events, List<String> operations, long epoch) {}
+
+    private DepartmentWriteSnapshot departmentWriteSnapshot() throws SQLException {
+        try (Connection connection = dataSource.getConnection()) {
+            return new DepartmentWriteSnapshot(
+                    departmentWriteRows(
+                            connection,
+                            "SELECT dept_id,parent_id,ancestors,dept_name,status,del_flag,version,"
+                                    + "create_time,update_time FROM sys_dept ORDER BY dept_id"),
+                    departmentWriteRows(
+                            connection,
+                            "SELECT event_id,epoch,aggregate_type,aggregate_id,event_type,payload,"
+                                    + "occurred_at,create_time,update_time FROM sys_security_event ORDER BY event_id"),
+                    departmentWriteRows(
+                            connection,
+                            "SELECT id,actor_id,action,aggregate_type,aggregate_id,after_masked,"
+                                    + "before_masked,request_id,occurred_at,create_time FROM admin_operation_log ORDER BY id"),
+                    statusScalar("SELECT policy_epoch FROM sys_security_state WHERE singleton_id=?", 1));
+        }
+    }
+
+    private static List<String> departmentWriteRows(Connection connection, String sql)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(sql);
+                ResultSet result = statement.executeQuery()) {
+            List<String> rows = new ArrayList<>();
+            while (result.next()) {
+                StringBuilder row = new StringBuilder();
+                for (int column = 1; column <= result.getMetaData().getColumnCount(); column++) {
+                    String value = result.getString(column);
+                    row.append(value == null ? -1 : value.length()).append(':').append(value);
+                }
+                rows.add(row.toString());
+            }
+            return List.copyOf(rows);
+        }
+    }
+
+    private long insertRawDepartment(Long id, long parentId) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "INSERT INTO sys_dept (dept_id,parent_id,ancestors,dept_name,status,"
+                                        + "del_flag,create_time,update_time) VALUES (?,?,'','合成树节点',"
+                                        + "'0','0',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
+                                Statement.RETURN_GENERATED_KEYS)) {
+            statement.setObject(1, id);
+            statement.setLong(2, parentId);
+            assertEquals(1, statement.executeUpdate());
+            return generatedKey(statement);
+        }
+    }
+
+    private void setDepartmentCache(long id, String cache) throws SQLException {
+        statusExecute("UPDATE sys_dept SET ancestors=? WHERE dept_id=?", cache, id);
+    }
+
+    private OrgStore.DepartmentRow departmentMutation(
+            String command, OrgStore store, OrgStore.DepartmentRow target, long newParent) {
+        return switch (command) {
+            case "CREATE" -> store.createDepartment(target.id(), "新增节点", true, 1);
+            case "UPDATE" -> store.updateDepartment(target.id(), "更新节点", false, target.version(), 1);
+            case "EDIT" ->
+                    store.editDepartment(
+                            target.id(), newParent, "完整编辑", false, target.version(), 1);
+            case "MOVE" -> store.moveDepartment(target.id(), newParent, target.version(), 1);
+            case "DELETE" -> {
+                store.deleteDepartment(target.id(), target.version(), 1);
+                yield null;
+            }
+            default -> throw new AssertionError(command);
+        };
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"987654321", "not-a-number"})
+    void departmentCreateDerivesCacheFromAuthority(String forgedCache) throws Exception {
+        long root = orgStore.createDepartment(null, "真实根", true, 1).id();
+        long parent = orgStore.createDepartment(root, "真实父", false, 1).id();
+        setDepartmentCache(parent, forgedCache);
+        OrgStore.DepartmentRow created = orgStore.createDepartment(parent, "新子级", true, 1);
+        assertAll(
+                () -> assertEquals(root + "," + parent, created.ancestors()),
+                () -> assertEquals(created, orgStore.getDepartment(created.id())),
+                () -> assertEquals(forgedCache, orgStore.getDepartment(parent).ancestors()));
+    }
+
+    @Test
+    void departmentMoveRebuildsOnlyTheAuthoritativeSubtreeIncludingDeletedBridge() throws Exception {
+        long root = orgStore.createDepartment(null, "原根", true, 1).id();
+        long moving = orgStore.createDepartment(root, "移动节点", true, 1).id();
+        long bridge = orgStore.createDepartment(moving, "软删桥", false, 1).id();
+        long leaf = orgStore.createDepartment(bridge, "有效后代", true, 1).id();
+        long outside = orgStore.createDepartment(null, "范围外根", true, 1).id();
+        long foreign = orgStore.createDepartment(outside, "伪缓存外部", true, 1).id();
+        long destination = orgStore.createDepartment(null, "目的根", true, 1).id();
+        long parent = orgStore.createDepartment(destination, "目的父", true, 1).id();
+        setDepartmentState(bridge, "1", "1");
+        setDepartmentCache(bridge, "");
+        setDepartmentCache(leaf, "");
+        setDepartmentCache(parent, String.valueOf(outside));
+        setDepartmentCache(foreign, moving + ",999999");
+        OrgStore.DepartmentRow untouched = orgStore.getDepartment(foreign);
+
+        OrgStore.DepartmentRow moved = orgStore.moveDepartment(moving, parent, 1, 1);
+        String prefix = destination + "," + parent;
+        assertAll(
+                () -> assertEquals(prefix, moved.ancestors()),
+                () -> assertEquals(prefix + "," + moving + "," + bridge, orgStore.getDepartment(leaf).ancestors()),
+                () -> assertEquals(2, orgStore.getDepartment(leaf).version()),
+                () -> assertEquals(untouched, orgStore.getDepartment(foreign)),
+                () -> assertEquals(1, statusScalar("SELECT version FROM sys_dept WHERE dept_id=?", parent)),
+                () -> assertEquals(2, statusScalar("SELECT version FROM sys_dept WHERE dept_id=?", bridge)));
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement statement = connection.prepareStatement(
+                        "SELECT ancestors,del_flag,status FROM sys_dept WHERE dept_id=?")) {
+            statement.setLong(1, bridge);
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                assertEquals(prefix + "," + moving, result.getString(1));
+                assertEquals("1", result.getString(2));
+                assertEquals("1", result.getString(3));
+            }
+        }
+        assertEquals(1, statusScalar(
+                "SELECT COUNT(*) FROM admin_operation_log WHERE aggregate_id=? AND action='DEPARTMENT_MOVE'"
+                        + " AND JSON_EXTRACT(after_masked,'$.descendantsMoved')=2", moving));
+    }
+
+    @Test
+    void departmentMoveRejectsRealCycleHiddenByCache() throws Exception {
+        long root = orgStore.createDepartment(null, "根", true, 1).id();
+        long child = orgStore.createDepartment(root, "子", true, 1).id();
+        long leaf = orgStore.createDepartment(child, "孙", true, 1).id();
+        setDepartmentCache(leaf, "");
+        DepartmentWriteSnapshot before = departmentWriteSnapshot();
+        assertAll(
+                () -> assertEquals(ErrorCode.INVALID_ARGUMENT,
+                        codeOf(() -> orgStore.moveDepartment(root, leaf, 1, 1))),
+                () -> assertEquals(before, departmentWriteSnapshot()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"CREATE", "EDIT", "UPDATE", "MOVE", "DELETE"})
+    void departmentWritesRejectDamagedCurrentPaths(String command) throws Exception {
+        long root = orgStore.createDepartment(null, "坏链根", true, 1).id();
+        OrgStore.DepartmentRow target = orgStore.createDepartment(root, "目标", true, 1);
+        long destination = orgStore.createDepartment(null, "有效目的地", true, 1).id();
+        setDepartmentParent(root, 9_999_999);
+        DepartmentWriteSnapshot before = departmentWriteSnapshot();
+        assertAll(
+                () -> assertEquals(ErrorCode.SECURITY_STATE_UNAVAILABLE,
+                        codeOf(() -> departmentMutation(command, orgStore, target, destination))),
+                () -> assertEquals(before, departmentWriteSnapshot()));
+    }
+
+    @Test
+    void departmentCreateAllows64NodesAndRejectsThe65thWithoutEffects() throws Exception {
+        long leaf = orgStore.createDepartment(null, "深度根", true, 1).id();
+        for (int index = 1; index < 64; index++) {
+            leaf = orgStore.createDepartment(leaf, "深层" + index, true, 1).id();
+        }
+        long parent = leaf;
+        DepartmentWriteSnapshot before = departmentWriteSnapshot();
+        assertAll(
+                () -> assertEquals(ErrorCode.INVALID_ARGUMENT,
+                        codeOf(() -> orgStore.createDepartment(parent, "第65层", true, 1))),
+                () -> assertEquals(before, departmentWriteSnapshot()));
+    }
+
+    @Test
+    void departmentMoveRejectsDeepDescendantEvenWhenTheTargetWouldFit() throws Exception {
+        long parent = orgStore.createDepartment(null, "目的树根", true, 1).id();
+        for (int index = 1; index < 63; index++) {
+            parent = orgStore.createDepartment(parent, "目的树" + index, true, 1).id();
+        }
+        long target = orgStore.createDepartment(null, "移动树根", true, 1).id();
+        orgStore.createDepartment(target, "移动后第65层", true, 1);
+        long destination = parent;
+        DepartmentWriteSnapshot before = departmentWriteSnapshot();
+        assertAll(
+                () -> assertEquals(ErrorCode.INVALID_ARGUMENT,
+                        codeOf(() -> orgStore.moveDepartment(target, destination, 1, 1))),
+                () -> assertEquals(before, departmentWriteSnapshot()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"CREATE", "MOVE"})
+    void departmentWritesRejectCacheOverflowWithoutTruncation(String command) throws Exception {
+        long parent = 0;
+        for (int index = 0; index < 25; index++) {
+            parent = insertRawDepartment(1_000_000_000_000_000_000L + index, parent);
+        }
+        OrgStore.DepartmentRow fitting = orgStore.createDepartment(parent, "499字符缓存", true, 1);
+        assertEquals(499, fitting.ancestors().length());
+        OrgStore.DepartmentRow target = orgStore.createDepartment(null, "待移动根", true, 1);
+        DepartmentWriteSnapshot before = departmentWriteSnapshot();
+        assertAll(
+                () -> assertEquals(ErrorCode.INVALID_ARGUMENT, codeOf(() -> {
+                    if ("CREATE".equals(command)) orgStore.createDepartment(fitting.id(), "超长缓存", true, 1);
+                    else orgStore.moveDepartment(target.id(), fitting.id(), 1, 1);
+                })),
+                () -> assertEquals(before, departmentWriteSnapshot()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"CREATE", "UPDATE", "EDIT", "MOVE", "DELETE"})
+    void departmentWritesCommitOneEpochAndMatchingGeneratedIdEvent(String command) throws Exception {
+        long root = orgStore.createDepartment(null, "原根", true, 1).id();
+        OrgStore.DepartmentRow target = orgStore.createDepartment(root, "待操作", true, 1);
+        long destination = orgStore.createDepartment(null, "目的根", true, 1).id();
+        DepartmentWriteSnapshot before = departmentWriteSnapshot();
+        OrgStore.DepartmentRow written = departmentMutation(command, orgStore, target, destination);
+        DepartmentWriteSnapshot after = departmentWriteSnapshot();
+        long eventId = "CREATE".equals(command) ? written.id() : target.id();
+        long version = "CREATE".equals(command) ? 1 : target.version() + 1;
+        assertAll(
+                () -> assertEquals(before.epoch() + 1, after.epoch()),
+                () -> assertEquals(before.events().size() + 1, after.events().size()),
+                () -> assertEquals(before.operations().size() + 1, after.operations().size()),
+                () -> assertEquals(1, statusScalar(
+                        "SELECT COUNT(*) FROM sys_security_event WHERE aggregate_type='DEPARTMENT'"
+                                + " AND aggregate_id=? AND event_type='DEPARTMENT_CHANGED' AND epoch=" + after.epoch()
+                                + " AND JSON_EXTRACT(payload,'$.version')=" + version
+                                + " AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.aggregateId'))='" + eventId + "'",
+                        String.valueOf(eventId))));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"CREATE", "UPDATE", "EDIT", "MOVE", "DELETE"})
+    void departmentEventFailureRollsBackEveryWrite(String command) throws Exception {
+        long root = orgStore.createDepartment(null, "原根", true, 1).id();
+        OrgStore.DepartmentRow target = orgStore.createDepartment(root, "目标", true, 1);
+        long destination = orgStore.createDepartment(null, "目的根", true, 1).id();
+        DepartmentWriteSnapshot before = departmentWriteSnapshot();
+        OrgStore failing = new OrgStore(statusFaultDataSource("INSERT INTO sys_security_event", false));
+        assertAll(
+                () -> assertEquals(ErrorCode.DEPENDENCY_UNAVAILABLE,
+                        codeOf(() -> departmentMutation(command, failing, target, destination))),
+                () -> assertEquals(before, departmentWriteSnapshot()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"CREATE", "UPDATE", "EDIT", "MOVE", "DELETE"})
+    void departmentCommitAckLossIsUnknownWithoutAutomaticReplay(String command) throws Exception {
+        long root = orgStore.createDepartment(null, "原根", true, 1).id();
+        OrgStore.DepartmentRow target = orgStore.createDepartment(root, "目标", true, 1);
+        long destination = orgStore.createDepartment(null, "目的根", true, 1).id();
+        DepartmentWriteSnapshot before = departmentWriteSnapshot();
+        OrgStore uncertain = new OrgStore(statusFaultDataSource(null, true));
+        assertEquals(ErrorCode.OPERATION_UNKNOWN,
+                codeOf(() -> departmentMutation(command, uncertain, target, destination)));
+        DepartmentWriteSnapshot after = departmentWriteSnapshot();
+        assertAll(
+                () -> assertEquals(before.epoch() + 1, after.epoch()),
+                () -> assertEquals(before.events().size() + 1, after.events().size()),
+                () -> assertEquals(before.operations().size() + 1, after.operations().size()),
+                () -> assertEquals("CREATE".equals(command) ? 4 : 3, after.departments().size()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"CREATE", "UPDATE", "EDIT", "MOVE", "DELETE"})
+    void departmentCommandsHoldGlobalLockBeforeTouchingTheTree(String command) throws Exception {
+        long root = orgStore.createDepartment(null, "原根", true, 1).id();
+        OrgStore.DepartmentRow target = orgStore.createDepartment(root, "目标", true, 1);
+        long destination = orgStore.createDepartment(null, "目的根", true, 1).id();
+        CountDownLatch captured = new CountDownLatch(1);
+        CountDownLatch resume = new CountDownLatch(1);
+        var once = new java.util.concurrent.atomic.AtomicBoolean();
+        OrgStore paused = new OrgStore(statusFaultDataSource(null, false, null, () -> {
+            if (once.compareAndSet(false, true)) awaitStatusRace(captured, resume);
+        }));
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            var mutation = executor.submit(() -> departmentMutation(command, paused, target, destination));
+            try {
+                assertTrue(captured.await(10, TimeUnit.SECONDS));
+                try (Connection competing = dataSource.getConnection()) {
+                    competing.setAutoCommit(false);
+                    try (PreparedStatement lock = competing.prepareStatement(
+                            "SELECT policy_epoch FROM sys_security_state WHERE singleton_id=1 FOR UPDATE NOWAIT")) {
+                        SQLException blocked = assertThrows(SQLException.class, lock::executeQuery);
+                        assertEquals(3572, blocked.getErrorCode(), "the real global row must already be locked");
+                    } finally {
+                        competing.rollback();
+                    }
+                }
+            } finally {
+                resume.countDown();
+            }
+            mutation.get(15, TimeUnit.SECONDS);
+        }
+    }
 
     @Test
     void departmentCreateUpdateAncestorsAndOptimisticVersion() {
@@ -1521,9 +1828,10 @@ class OrgManagementStoreTest {
             }
             default -> {
                 long leaf = fixture.direct();
-                for (int index = 3; index < 65; index++) {
+                for (int index = 3; index < 64; index++) {
                     leaf = orgStore.createDepartment(leaf, "深层" + index, true, 1L).id();
                 }
+                leaf = insertRawDepartment(null, leaf);
                 setUserDepartment(fixture.user(), leaf);
             }
         }
@@ -2183,9 +2491,10 @@ class OrgManagementStoreTest {
             case "MISSING_PARENT" -> setDepartmentParent(root, 9_999_999L);
             case "NEGATIVE_PARENT" -> setDepartmentParent(root, -1);
             default -> {
-                for (int node = 3; node < 65; node++) {
+                for (int node = 3; node < 64; node++) {
                     target = orgStore.createDepartment(target, "深层管理" + node, true, 1L).id();
                 }
+                target = insertRawDepartment(null, target);
             }
         }
         long brokenTarget = target;

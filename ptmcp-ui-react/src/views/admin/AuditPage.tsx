@@ -343,10 +343,7 @@ export function AuditPage({
           )}
           {!loading && tab === 'jobs' && operations.length === 0 ? (
             opsUnavailable ? (
-              <EmptyState
-                title="操作日志端点不可用"
-                description="当前环境（preview 合成后端）未提供管理操作日志接口；接入真实后端后此处展示委派、平台、用户等管理动作记录。"
-              />
+              <EmptyState title="操作日志端点不可用" description="管理操作日志接口暂时不可用，请稍后重试或联系管理员。" />
             ) : (
               <EmptyState title="暂无操作记录" description="调整聚合类型筛选后重试。" />
             )
