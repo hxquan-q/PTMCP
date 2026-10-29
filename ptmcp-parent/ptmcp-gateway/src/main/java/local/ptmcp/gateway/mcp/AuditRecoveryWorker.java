@@ -26,7 +26,8 @@ final class AuditRecoveryWorker implements AutoCloseable {
                         return thread;
                     });
 
-    AuditRecoveryWorker(AuditRepository repository, TerminalWal wal, long maxBytes, long minFreeBytes) {
+    AuditRecoveryWorker(
+            AuditRepository repository, TerminalWal wal, long maxBytes, long minFreeBytes) {
         this.repository = repository;
         this.wal = wal;
         this.maxBytes = maxBytes;

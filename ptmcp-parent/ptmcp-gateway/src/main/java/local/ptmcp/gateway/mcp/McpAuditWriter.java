@@ -48,7 +48,8 @@ final class McpAuditWriter {
             boolean confirmed =
                     wal == null
                             ? repository.confirmStart(requestId)
-                            : repository.confirmExecution(requestId, datasourceId, wal.executionOwner());
+                            : repository.confirmExecution(
+                                    requestId, datasourceId, wal.executionOwner());
             if (!confirmed) {
                 throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
             }

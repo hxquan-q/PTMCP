@@ -250,6 +250,26 @@ export function listDelegations(params?: { userId?: string; pageSize?: number; s
   return getPage(`/api/v1/admin/delegations?${q}`, params?.signal);
 }
 
+export interface DelegationWrite {
+  userId: string;
+  departmentRootId: string;
+  resourceType: string;
+  resourceId: string;
+  allowedActions: string[];
+  validFrom: string;
+  validTo: string;
+}
+
+export async function createDelegation(body: DelegationWrite, signal?: AbortSignal): Promise<DelegationRow> {
+  const { data } = await request<DelegationRow>('/api/v1/admin/delegations', {
+    method: 'POST',
+    body,
+    headers: { 'Idempotency-Key': idempotencyKey() },
+    signal,
+  });
+  return data;
+}
+
 export async function revokeDelegation(id: string, signal?: AbortSignal): Promise<void> {
   const { etag } = await request(`/api/v1/admin/delegations/${id}`, { signal });
   await request(`/api/v1/admin/delegations/${id}`, { method: 'DELETE', signal, headers: etag ? { 'If-Match': etag } : undefined });
