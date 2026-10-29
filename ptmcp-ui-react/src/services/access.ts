@@ -376,8 +376,25 @@ export async function revokeAuthorization(id: string, signal?: AbortSignal): Pro
   await request(`/api/v1/me/authorizations/${id}`, { method: 'DELETE', signal, headers: etag ? { 'If-Match': etag } : undefined });
 }
 
-export function listMyHistory(signal?: AbortSignal): Promise<Page<AuditRow>> {
-  return getPage('/api/v1/me/history?pageSize=100', signal);
+export interface MyHistoryParams {
+  from?: string;
+  to?: string;
+  tool?: string;
+  result?: string;
+  verdict?: string;
+  cursor?: string;
+  pageSize?: number;
+}
+
+export function listMyHistory(params: MyHistoryParams = {}, signal?: AbortSignal): Promise<Page<AuditRow>> {
+  const q = new URLSearchParams({ pageSize: String(params.pageSize ?? 20) });
+  if (params.from) q.set('from', params.from);
+  if (params.to) q.set('to', params.to);
+  if (params.tool) q.set('tool', params.tool);
+  if (params.result) q.set('result', params.result);
+  if (params.verdict) q.set('verdict', params.verdict);
+  if (params.cursor) q.set('cursor', params.cursor);
+  return getPage(`/api/v1/me/history?${q}`, signal);
 }
 
 export async function getMyHistoryDetail(requestId: string, signal?: AbortSignal): Promise<AuditRow> {

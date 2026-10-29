@@ -459,23 +459,130 @@ export function AuthorizationsPage() {
 export function HistoryPage() {
   const [rows, setRows] = useState<AuditRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [from, setFrom] = useState(() => new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10));
+  const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [tool, setTool] = useState('');
+  const [result, setResult] = useState('');
+  const [verdict, setVerdict] = useState('');
+  const [queryTick, setQueryTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    listMyHistory()
-      .then((p) => !cancelled && setRows(p.items))
-      .catch(() => !cancelled && setRows([]))
+    listMyHistory({
+      from: from ? `${from}T00:00:00Z` : undefined,
+      to: to ? `${to}T23:59:59Z` : undefined,
+      tool: tool || undefined,
+      result: result || undefined,
+      verdict: verdict || undefined,
+      pageSize: 20,
+    })
+      .then((p) => {
+        if (cancelled) return;
+        setRows(p.items);
+        setNextCursor(p.nextCursor);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRows([]);
+          setNextCursor(null);
+        }
+      })
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [queryTick, from, to, tool, result, verdict]);
+
+  const loadMore = () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    listMyHistory({
+      from: from ? `${from}T00:00:00Z` : undefined,
+      to: to ? `${to}T23:59:59Z` : undefined,
+      tool: tool || undefined,
+      result: result || undefined,
+      verdict: verdict || undefined,
+      cursor: nextCursor,
+      pageSize: 20,
+    })
+      .then((p) => {
+        setRows((prev) => [...prev, ...p.items]);
+        setNextCursor(p.nextCursor);
+      })
+      .catch(() => undefined)
+      .finally(() => setLoadingMore(false));
+  };
 
   return (
     <>
       <PageHeader title="查询历史" description="你的 MCP 查询与工具调用记录。" />
       <div className="table-card" style={{ flex: 1, minHeight: 0 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '12px 14px',
+            borderBottom: '1px solid var(--ptmcp-border)',
+            flex: 'none',
+            flexWrap: 'wrap',
+          }}
+        >
+          <TextInput value={from} onChange={setFrom} type="date" />
+          <span style={{ color: 'var(--ptmcp-text-faint)' }}>→</span>
+          <TextInput value={to} onChange={setTo} type="date" />
+          <Select
+            value={tool}
+            onChange={setTool}
+            label="工具"
+            options={[
+              { value: '', label: '全部工具' },
+              { value: 'query', label: 'query' },
+              { value: 'catalog', label: 'catalog' },
+              { value: 'schema', label: 'schema' },
+            ]}
+          />
+          <Select
+            value={result}
+            onChange={setResult}
+            label="结果"
+            options={[
+              { value: '', label: '全部结果' },
+              { value: 'SUCCESS', label: '成功' },
+              { value: 'ERROR', label: '失败' },
+              { value: 'UNKNOWN', label: '未知' },
+            ]}
+          />
+          <Select
+            value={verdict}
+            onChange={setVerdict}
+            label="判定"
+            options={[
+              { value: '', label: '全部判定' },
+              { value: 'ALLOW', label: '允许' },
+              { value: 'DENY', label: '拒绝' },
+            ]}
+          />
+          <button className="btn btn--secondary" onClick={() => setQueryTick((t) => t + 1)}>
+            查询
+          </button>
+          <button
+            className="btn btn--secondary"
+            onClick={() => {
+              setFrom(new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10));
+              setTo(new Date().toISOString().slice(0, 10));
+              setTool('');
+              setResult('');
+              setVerdict('');
+              setQueryTick((t) => t + 1);
+            }}
+          >
+            重置
+          </button>
+        </div>
         <div className="table-scroll">
           <table className="data-table">
             <thead>
@@ -517,7 +624,19 @@ export function HistoryPage() {
               ))}
             </tbody>
           </table>
-          {!loading && rows.length === 0 ? <EmptyState title="暂无查询历史" /> : null}
+          {!loading && rows.length === 0 ? <EmptyState title="暂无查询历史" description="调整时间范围或筛选条件后重试。" /> : null}
+        </div>
+        <div className="table-footer" style={{ justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
+            已加载 {rows.length} 条{nextCursor ? ' · 可能还有更多' : ''}
+          </span>
+          {loading ? null : nextCursor ? (
+            <button className="btn btn--secondary" onClick={loadMore} disabled={loadingMore}>
+              {loadingMore ? '加载中…' : '加载更多'}
+            </button>
+          ) : (
+            <span style={{ fontSize: 12, color: 'var(--ptmcp-text-faint)' }}>没有更多了</span>
+          )}
         </div>
       </div>
     </>
