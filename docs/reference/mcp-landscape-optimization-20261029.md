@@ -1,6 +1,6 @@
 # PTMCP 开源项目核验与系统优化规划
 
-研究日期：2026-10-29（Asia/Taipei）。状态：研究建议，尚未实施或替换既有 PRD/ADR。
+研究开始：2026-10-29；交付：2026-10-30（Asia/Taipei）。状态：研究建议，尚未实施或替换既有 PRD/ADR。
 工作记录：[DEV-20261029-mcp-landscape-research](../../tasks/work-items/DEV-20261029-mcp-landscape-research.md)。
 
 ## 1. 建议先做什么
@@ -28,8 +28,9 @@
 不以星数、未归档、最近推送或测试文件存在推导生产成熟度。
 
 本地开工基准为 `dev / 74e5515449c6449024a720aad38750abb8a24e13`；
-整合时复核为 `fc6f27313f01ef482400e9f6f5d233d2f2361d31`。
+整合时复核为 `fc6f27313f01ef482400e9f6f5d233d2f2361d31`，定稿时进一步核对到 `a3776d08b9950472282756768db5223efedd4a51`。
 共享工作区的其他工作期间有提交，本报告不把历史缺口原样套到当前源码。
+定稿时另有 OAuth、WAL/目录 owner 及前端变更继续进行；本报告不把这些未完成差异判为通过或仍未实现。
 引用本地文件反映查阅时的工作树；历史测试只证明其记录的切片和环境。
 本轮没有安装或执行参考仓代码，没有连接业务库、调用收费模型、运行 Maven/pnpm 或完成真实客户端联调。
 
@@ -39,11 +40,45 @@
 
 ### 2.1 可控数据库连接
 
-EXTERNAL_DATABASE_MATRIX_PENDING
+| 项目与固定版本 | 已核验能力和证据 | 许可 / 最近推送 UTC | PTMCP 适用判断 |
+| --- | --- | --- | --- |
+| [mcp-pg-db-reader](https://github.com/riefer02/mcp-pg-db-reader/tree/a6ac88761633ea3f7fd24be0a449d37a54366b06) | S：SQLAlchemy pool、sqlparse token 校验、每次事务只读、局部 statement/lock/idle timeout、max_rows+1 截断、进程内滑窗限流。[限流](https://github.com/riefer02/mcp-pg-db-reader/blob/a6ac88761633ea3f7fd24be0a449d37a54366b06/database_read.py#L71)、[执行](https://github.com/riefer02/mcp-pg-db-reader/blob/a6ac88761633ea3f7fd24be0a449d37a54366b06/database_read.py#L490) | 未识别；根目录未见 LICENSE；2026-10-08 | 可参考执行器资源约束；不是企业用户 ACL 或跨副本配额。许可待确认。 |
+| [mcp-multi-db](https://github.com/mahAnuj/mcp-multi-db/tree/c8a0de62d7c936f03ff7746451d25c18e916b6ae) | R：PG/MySQL/SQLite、多连接 ID。S：PG BEGIN READ ONLY / MySQL START TRANSACTION READ ONLY，分别在同一借出连接执行。[README](https://github.com/mahAnuj/mcp-multi-db/blob/c8a0de62d7c936f03ff7746451d25c18e916b6ae/README.md#L1)、[PG](https://github.com/mahAnuj/mcp-multi-db/blob/c8a0de62d7c936f03ff7746451d25c18e916b6ae/src/adapters/postgres.ts#L89)、[MySQL](https://github.com/mahAnuj/mcp-multi-db/blob/c8a0de62d7c936f03ff7746451d25c18e916b6ae/src/adapters/mysql.ts#L79) | ISC；2026-08-30 | 可参考双方言 adapter；文本 guard 不能代替对象授权。 |
+| [multi-database-mcp-server](https://github.com/HaticeGuzell/multi-database-mcp-server/tree/26caca9334748e5996cfc671dcca6902552b389c) | R：PG/MySQL、单实例单库、get_tables/query、100 行、Docker 示例只读用户。README 明确 NLP 在 AI application。[README](https://github.com/HaticeGuzell/multi-database-mcp-server/blob/26caca9334748e5996cfc671dcca6902552b389c/README.md#L1) | MIT；2026-10-07 | 未读关键执行源码，不能记为写保护动态验证通过。 |
+| [mysql-readonly-mcp](https://github.com/beydemirfurkan/mysql-readonly-mcp/tree/697b67f5ed5e1907ff495a187d6820c8ef3868ba) | R：单 MySQL、schema/关系/预览/查询；README 的 MYSQL_USER 示例为 root，不能据此认定默认最小权限。[README](https://github.com/beydemirfurkan/mysql-readonly-mcp/blob/697b67f5ed5e1907ff495a187d6820c8ef3868ba/README.md#L1) | MIT；2026-06-04 | 仅候选；未核验 SQL 执行安全边界。 |
+| [go-readonly-mcp-sql-db](https://github.com/shakram02/go-readonly-mcp-sql-db/tree/9a4c2c243cbf83b397675a9b9d4206e745ff5d65) | S：PG/MySQL/SQLite adapter，正则/前缀 guard、context 超时、结果截断；启动设置 session 只读，查询直接 sql.DB.QueryContext。[guard](https://github.com/shakram02/go-readonly-mcp-sql-db/blob/9a4c2c243cbf83b397675a9b9d4206e745ff5d65/validation.go#L35)、[初始化](https://github.com/shakram02/go-readonly-mcp-sql-db/blob/9a4c2c243cbf83b397675a9b9d4206e745ff5d65/server.go#L35)、[执行](https://github.com/shakram02/go-readonly-mcp-sql-db/blob/9a4c2c243cbf83b397675a9b9d4206e745ff5d65/handlers.go#L79) | 未识别；根目录未见 LICENSE；2026-03-07 | 原清单“只读事务”过强；见下方池连接疑点。许可待确认。 |
+| [contextflo/postgres-mcp](https://github.com/contextflo/postgres-mcp/tree/f370d7d328bc1bb6d308563030c0aac2122e8a7e) | S：libpg-query 单语句/节点白名单，连接默认只读，每次 BEGIN READ ONLY＋SET LOCAL，cursor maxRows+1，finally ROLLBACK。[parser](https://github.com/contextflo/postgres-mcp/blob/f370d7d328bc1bb6d308563030c0aac2122e8a7e/src/safety/validate.ts#L42)、[executor](https://github.com/contextflo/postgres-mcp/blob/f370d7d328bc1bb6d308563030c0aac2122e8a7e/src/db/pool.ts#L124) | MIT；2026-09-28 | 值得参考 PG 执行链；角色检查仍是警告，非自动最小授权，更非平台/用户 ACL 交集。 |
+| [db-mcp](https://github.com/neverinfamous/db-mcp/tree/bb0dd6f276d708ddc2fd7801ccddf3e557ea5f08) | R/S：标题是 SQLite MCP Server，WASM/better-sqlite3；实现 sqlite_write_query、write scope。S：OAuth 资源元数据、JWT issuer/audience 验证。[README](https://github.com/neverinfamous/db-mcp/blob/bb0dd6f276d708ddc2fd7801ccddf3e557ea5f08/README.md#L1)、[写工具](https://github.com/neverinfamous/db-mcp/blob/bb0dd6f276d708ddc2fd7801ccddf3e557ea5f08/src/adapters/sqlite/tools/core/queries.ts#L365)、[JWT](https://github.com/neverinfamous/db-mcp/blob/bb0dd6f276d708ddc2fd7801ccddf3e557ea5f08/src/auth/token-validator.ts#L103) | MIT；2026-09-29 | 是 SQLite 工具产品，不是 PG/MySQL 只读执行器。OAuth 端是受保护资源服务器；用户/机器主体取决于外部 AS，不应称自带用户 AS。 |
+| AgenticMCP | 没有确切仓库 URL，身份不明，未核验。 | 未核验 | 不猜测实现或许可，暂不纳入可选型对象。 |
+
+R 表示 README 声明，S 表示已读源码路径；本轮没有动态验证。S 仅覆盖引用路径，不扩大为全仓保证。
+Go 项目在 sql.DB 上启动时设置 session 只读，不能证明池中后续每个连接皆只读；这是静态设计疑点，本轮未复现写入。
 
 ### 2.2 OAuth 与企业权限
 
-EXTERNAL_OAUTH_MATRIX_PENDING
+| 项目与固定版本 | 已核验能力和证据 | 许可 / 最近推送 UTC | PTMCP 适用判断 |
+| --- | --- | --- | --- |
+| [mcp-zero-trust-proxy](https://github.com/AnobleSCM/mcp-zero-trust-proxy/tree/0ae5de888b549c92e845ea208dc2fcaa86534094) | S：IdP code+PKCE、userinfo 主体、email→role、方法/工具 RBAC、本地 per-client bucket；HTTP/SSE 删除用户 Authorization。[认证](https://github.com/AnobleSCM/mcp-zero-trust-proxy/blob/0ae5de888b549c92e845ea208dc2fcaa86534094/internal/auth/oauth.go#L168)、[限流](https://github.com/AnobleSCM/mcp-zero-trust-proxy/blob/0ae5de888b549c92e845ea208dc2fcaa86534094/internal/ratelimit/limiter.go#L20)、[token边界](https://github.com/AnobleSCM/mcp-zero-trust-proxy/blob/0ae5de888b549c92e845ea208dc2fcaa86534094/internal/proxy/handler.go#L79) | MIT；2026-04-25 | 可参考中间件与 token 清理；不能直接视为 PTMCP audience-bound 授权服务器。 |
+| [AthenZ/mcp-oauth-proxy](https://github.com/AthenZ/mcp-oauth-proxy/tree/fa2033b175800a643aa8f4fc17616eb62718a50c) | S：S256、资源映射、授权码的客户端与回调校验、下游 token 交换。R：多 IdP、mTLS、DynamoDB/KMS 运维能力。[authorize](https://github.com/AthenZ/mcp-oauth-proxy/blob/fa2033b175800a643aa8f4fc17616eb62718a50c/src/main/java/io/athenz/mop/resource/AuthorizeResource.java#L115)、[交换](https://github.com/AthenZ/mcp-oauth-proxy/blob/fa2033b175800a643aa8f4fc17616eb62718a50c/src/main/java/io/athenz/mop/service/AuthorizerService.java#L380) | Apache-2.0；2026-09-02 | 二期 Java 联邦/资源交换参考；scope/ACL 需按本项目合同收紧。 |
+| [mcp-zero](https://github.com/abwaters/mcp-zero/tree/47fdb3680b24aac6a022f1a9b93cf8ffb54896d6) | S：JWT 签名/issuer/audience 与 exp/iss/aud/sub；policy deny 优先、异常拒绝；OBO 按 server audience 交换。R：脱敏、审计、限流插件。[JWT](https://github.com/abwaters/mcp-zero/blob/47fdb3680b24aac6a022f1a9b93cf8ffb54896d6/src/mcp_zero/identity/jwt.py#L63)、[policy](https://github.com/abwaters/mcp-zero/blob/47fdb3680b24aac6a022f1a9b93cf8ffb54896d6/src/mcp_zero/governance/engine.py#L89)、[OBO](https://github.com/abwaters/mcp-zero/blob/47fdb3680b24aac6a022f1a9b93cf8ffb54896d6/src/mcp_zero/proxy/obo_auth.py#L37) | MIT；2026-10-22 | 值得参考认证/治理/转发分层；工具 ACL 不能代替 SQL 表列行 ACL。 |
+| [Manoj-R-Kulkarni/mcp-oauth-proxy](https://github.com/Manoj-R-Kulkarni/mcp-oauth-proxy/tree/79dfe1ddc84a09081537b52f2054086a29b2fa6c) | S：client_credentials 获取应用 token，STDIO→HTTP 加 Bearer。[grant](https://github.com/Manoj-R-Kulkarni/mcp-oauth-proxy/blob/79dfe1ddc84a09081537b52f2054086a29b2fa6c/lib/proxy.js#L23)、[转发](https://github.com/Manoj-R-Kulkarni/mcp-oauth-proxy/blob/79dfe1ddc84a09081537b52f2054086a29b2fa6c/lib/proxy.js#L66) | MIT；2025-12-08 | 服务到服务客户端桥，不是企业用户登录/RBAC/AS。 |
+
+**Anoble 的身份边界**：[回调](https://github.com/AnobleSCM/mcp-zero-trust-proxy/blob/0ae5de888b549c92e845ea208dc2fcaa86534094/internal/auth/oauth.go#L297)
+返回上游 token；[Authenticate/userinfo](https://github.com/AnobleSCM/mcp-zero-trust-proxy/blob/0ae5de888b549c92e845ea208dc2fcaa86534094/internal/auth/oauth.go#L168)
+路径缓存身份 5 分钟，不能据此证明满足 PTMCP 的资源绑定或撤销目标。
+[反代](https://github.com/AnobleSCM/mcp-zero-trust-proxy/blob/0ae5de888b549c92e845ea208dc2fcaa86534094/internal/proxy/handler.go#L79)
+删除 Authorization，不能将它描述为把员工 token 原样交给后端。
+其 [readonly 角色](https://github.com/AnobleSCM/mcp-zero-trust-proxy/blob/0ae5de888b549c92e845ea208dc2fcaa86534094/internal/rbac/engine.go#L122)
+拒绝 tools/call，并不表示允许执行 SELECT。以上只针对所读路径，不推断全仓不存在其他措施。
+
+**AthenZ 的资源边界**：[authorize](https://github.com/AthenZ/mcp-oauth-proxy/blob/fa2033b175800a643aa8f4fc17616eb62718a50c/src/main/java/io/athenz/mop/resource/AuthorizeResource.java#L115)
+要求已映射 resource；[token 入口](https://github.com/AthenZ/mcp-oauth-proxy/blob/fa2033b175800a643aa8f4fc17616eb62718a50c/src/main/java/io/athenz/mop/resource/TokenResource.java#L149)
+通用检查允许缺失 resource。所读 [code 校验](https://github.com/AthenZ/mcp-oauth-proxy/blob/fa2033b175800a643aa8f4fc17616eb62718a50c/src/main/java/io/athenz/mop/service/AuthorizationCodeService.java#L199)
+未比较 tokenRequestResource 与 code.resource，但实际交换使用
+[authCode.getResource()](https://github.com/AthenZ/mcp-oauth-proxy/blob/fa2033b175800a643aa8f4fc17616eb62718a50c/src/main/java/io/athenz/mop/resource/TokenResource.java#L263)，
+因此不能直接宣布已证实资源替换漏洞。
+[AuthorizerService](https://github.com/AthenZ/mcp-oauth-proxy/blob/fa2033b175800a643aa8f4fc17616eb62718a50c/src/main/java/io/athenz/mop/service/AuthorizerService.java#L346)
+按资源配置交换 token，scope/ACL 还需按本项目合同收紧。
 
 ### 2.3 NL2SQL / 问数
 
@@ -64,6 +99,14 @@ EXTERNAL_OAUTH_MATRIX_PENDING
 **维护状态补充**：上述七仓核验时均未归档；最后推送日期（UTC）依次为
 2026-08-02、2026-04-16、2026-10-29、2026-10-22、2025-11-08、2025-04-14、2026-05-01。
 日期来自各仓 GitHub 元数据，只表示仓库活动，不表示对应版本经过发布、安全或双引擎验证。
+
+### 2.4 优先阅读和吸收的对象
+
+- 连接执行：先看 contextflo/postgres-mcp 的 PG 执行链和 mcp-multi-db 的双方言事务结构；pg-db-reader 补充时间/输出预算设计，许可确认前只参考机制。
+- 身份治理：先看 mcp-zero 的 JWT、Deny 和转发分层；AthenZ 留作二期资源映射/交换研究。现有 PTMCP 的安全裁决继续保留。
+- 问数质量：先看 nlp2sql 的显式业务语义、NL2SQL 的大 schema 召回/歧义评测、nlqueries 的知识库与反馈。先在 PTMCP 字典和外部 Agent 上验证这些机制，再选生成服务。
+
+这个顺序是适配本项目的阅读/借鉴优先级，不是开源项目成熟度排名。证据和约束见上表。
 
 ## 3. 清单里最容易混淆的能力
 
@@ -90,7 +133,7 @@ EXTERNAL_OAUTH_MATRIX_PENDING
 | TLS、代际与目标隔离 | [T15-c](../../tasks/work-items/T15-c.md) 记录 S1～S3 和 S4 目标隔离的实现及历史双引擎证据；统一 [PhysicalConnectionFactory](../../ptmcp-parent/ptmcp-datasource/src/main/java/local/ptmcp/datasource/connection/PhysicalConnectionFactory.java) 已存在 | 10/27 研究中的管理连接/TLS、旧池绑定、出队复核问题已有后续修复，不重复立项；S4 完整候选生命周期仍待完成 |
 | OAuth | [TokenRequestPolicy](../../ptmcp-parent/ptmcp-authz/src/main/java/local/ptmcp/authz/oauth/TokenRequestPolicy.java) 已校验 resource；[授权服务](../../ptmcp-parent/ptmcp-authz/src/main/java/local/ptmcp/authz/oauth/PtmcpOAuth2AuthorizationService.java) 已出现 access JWT 撤族路径；现有工作项仍在收尾 | 以最新源码和实际回归重新判定完成度；不把旧核查的资源不一致/access revoke 缺口继续写成完全未实现 |
 | HTTP 协议入口 | [Controller](../../ptmcp-parent/ptmcp-gateway/src/main/java/local/ptmcp/gateway/mcp/McpToolController.java) 处理认证后的 POST 和消息体上限；查阅主代码未找到 MCP Origin/协议版本校验及取消通知接线 | 按锁定协议补边界与 HTTP 反例，和真实客户端一起验；不把管理会话的 same-origin 检查当作 MCP 检查 |
-| 审计恢复 | [配置](../../ptmcp-parent/ptmcp-gateway/src/main/java/local/ptmcp/gateway/mcp/McpGatewayConfiguration.java) 已装配 TerminalWal/KeyProvider；[WalReplayer](../../ptmcp-parent/ptmcp-persistence/src/main/java/local/ptmcp/persistence/audit/wal/WalReplayer.java) 与测试存在；所查生产装配未见其 owner/调度接线 | G2 补运行时 owner、关闭段回放、幂等、损坏处理和 UNKNOWN 收敛；这不是“完全没有恢复代码” |
+| 审计恢复 | [配置](../../ptmcp-parent/ptmcp-gateway/src/main/java/local/ptmcp/gateway/mcp/McpGatewayConfiguration.java) 已装配 TerminalWal/KeyProvider；定稿时 [WalReplayer](../../ptmcp-parent/ptmcp-persistence/src/main/java/local/ptmcp/persistence/audit/wal/WalReplayer.java) 和 TerminalWal 已接入 [WalDirectoryOwner](../../ptmcp-parent/ptmcp-persistence/src/main/java/local/ptmcp/persistence/audit/wal/WalDirectoryOwner.java) 与 replayClosed；所查 gateway 配置未见运行时回放调度 | G2 复核新 owner/关闭段原语及故障证据，补生产调度、幂等和 UNKNOWN 收敛；不重复开发已新增原语，也不据其存在宣布组合通过 |
 | 候选和健康 | [DatasourceAdminService](../../ptmcp-parent/ptmcp-admin/src/main/java/local/ptmcp/admin/datasource/DatasourceAdminService.java) 有 DraftTarget/草稿测试；update 仍走 active 更新路径，返回 health 为固定 UNKNOWN | G3 建 candidate→probe→CAS publish；健康记录绑定目标、配置/策略版本与时间 |
 | 容量和取消 | [配置](../../ptmcp-parent/ptmcp-gateway/src/main/java/local/ptmcp/gateway/mcp/McpGatewayConfiguration.java) 装配 InMemoryQuotaLimiter；执行时新建 ReadOnlyCancellation，尚未见与请求 owner 的取消注册接线 | G4 补主体隔离、清理完成后归还额度、部署容量合同；底层有取消对象不等于客户端已可取消 |
 | 凭据 | [连接侧 CredentialCipher](../../ptmcp-parent/ptmcp-datasource/src/main/java/local/ptmcp/datasource/connection/CredentialCipher.java) 使用单一 AES-GCM key，storedKeyId 只匹配当前钥，未见 AAD 对象绑定；管理侧另有一份实现 | G5 统一有版本的 envelope/keyring、对象绑定与兼容迁移，验证旧凭据和 WAL 仍可读 |

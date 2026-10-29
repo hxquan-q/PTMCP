@@ -28,7 +28,12 @@ final class McpAuditWriter {
     /** Durable admission; throws {@code AUDIT_UNAVAILABLE} when the primary is unwritable. */
     void start(AuditStart start) {
         try {
-            repository.insertStart(start);
+            if (wal == null) {
+                repository.insertStart(start);
+            } else {
+                wal.requireAdmission();
+                repository.insertStart(start, wal.executionOwner());
+            }
         } catch (DomainException failure) {
             if (unavailable(failure)) {
                 throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
@@ -38,9 +43,13 @@ final class McpAuditWriter {
     }
 
     /** Confirms the START row of this request is durably present before a business checkout. */
-    void confirmStart(java.util.UUID requestId) {
+    void confirmStart(java.util.UUID requestId, long datasourceId) {
         try {
-            if (!repository.confirmStart(requestId)) {
+            boolean confirmed =
+                    wal == null
+                            ? repository.confirmStart(requestId)
+                            : repository.confirmExecution(requestId, datasourceId, wal.executionOwner());
+            if (!confirmed) {
                 throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
             }
         } catch (DomainException failure) {

@@ -83,6 +83,72 @@ export function deleteRole(id: string, version: string | number): Promise<void> 
   return write<void>(`/api/v1/admin/roles/${encodeURIComponent(id)}`, { method: 'DELETE', kind: 'delete', version });
 }
 
+/* ── 部门 ── */
+export interface DepartmentWrite {
+  parentId: string | null;
+  name: string;
+  enabled: boolean;
+}
+
+export function createDepartment(body: DepartmentWrite): Promise<DepartmentRow> {
+  return write<DepartmentRow>('/api/v1/admin/departments', { method: 'POST', kind: 'create', body });
+}
+
+export function updateDepartment(id: string, body: DepartmentWrite, version: string | number): Promise<DepartmentRow> {
+  return write<DepartmentRow>(`/api/v1/admin/departments/${encodeURIComponent(id)}`, { method: 'PUT', kind: 'update', version, body });
+}
+
+export function deleteDepartment(id: string, version: string | number): Promise<void> {
+  return write<void>(`/api/v1/admin/departments/${encodeURIComponent(id)}`, { method: 'DELETE', kind: 'delete', version });
+}
+
+/* ── 用户 ── */
+export interface UserWrite {
+  username: string;
+  displayName: string;
+  deptId: string;
+  roleIds: string[];
+  enabled: boolean;
+}
+
+export function createUser(body: UserWrite): Promise<UserRow> {
+  return write<UserRow>('/api/v1/admin/users', { method: 'POST', kind: 'create', body });
+}
+
+export function getUser(id: string, signal?: AbortSignal): Promise<UserRow> {
+  return get<UserRow>(`/api/v1/admin/users/${encodeURIComponent(id)}`, signal);
+}
+
+export function updateUser(id: string, body: Partial<UserWrite>, version: string | number): Promise<UserRow> {
+  return write<UserRow>(`/api/v1/admin/users/${encodeURIComponent(id)}`, { method: 'PUT', kind: 'update', version, body });
+}
+
+export function setUserStatus(id: string, enabled: boolean, version: string | number): Promise<UserRow> {
+  return write<UserRow>(`/api/v1/admin/users/${encodeURIComponent(id)}/status`, {
+    method: 'PUT',
+    kind: 'update',
+    version,
+    body: { status: enabled ? 'ACTIVE' : 'DISABLED' },
+  });
+}
+
+export function setUserRoles(id: string, roleIds: string[], version: string | number): Promise<UserRow> {
+  return write<UserRow>(`/api/v1/admin/users/${encodeURIComponent(id)}/roles`, { method: 'PUT', kind: 'update', version, body: { roleIds } });
+}
+
+export function setUserDepartment(id: string, departmentId: string, version: string | number): Promise<UserRow> {
+  return write<UserRow>(`/api/v1/admin/users/${encodeURIComponent(id)}/department`, {
+    method: 'PUT',
+    kind: 'update',
+    version,
+    body: { departmentId },
+  });
+}
+
+export function deleteUser(id: string, version: string | number): Promise<void> {
+  return write<void>(`/api/v1/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE', kind: 'delete', version });
+}
+
 export function listDepartments(signal?: AbortSignal): Promise<DepartmentRow[]> {
   return get<DepartmentRow[]>('/api/v1/admin/departments?pageSize=100', signal);
 }

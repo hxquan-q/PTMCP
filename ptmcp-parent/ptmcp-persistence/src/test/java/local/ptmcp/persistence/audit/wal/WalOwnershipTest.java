@@ -3,6 +3,7 @@ package local.ptmcp.persistence.audit.wal;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.persistence.audit.AuditRepository;
@@ -16,12 +17,51 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 /** Real file locks: a live writer cannot share its directory with another owner or replay. */
 class WalOwnershipTest {
     private final WalKeyProvider keys = () -> new WalKey("ownership-test", new byte[32]);
 
     @TempDir Path directory;
+
+    @Test
+    void failedSameJvmContenderCannotReleaseTheOriginalNativeLock() throws Exception {
+        try (TerminalWal first =
+                new TerminalWal(directory, "instance", UUID.randomUUID().toString(), keys)) {
+            assertEquals(23, probeAnotherJvm());
+            assertThrows(
+                    DomainException.class,
+                    () -> new TerminalWal(directory, "other", UUID.randomUUID().toString(), keys));
+            assertEquals(23, probeAnotherJvm());
+            first.append(terminal());
+        }
+        assertEquals(0, probeAnotherJvm());
+    }
+
+    private int probeAnotherJvm() throws Exception {
+        String executable =
+                System.getProperty("os.name", "").toLowerCase().contains("win")
+                        ? "java.exe"
+                        : "java";
+        Process child =
+                new ProcessBuilder(
+                                Path.of(System.getProperty("java.home"), "bin", executable)
+                                        .toString(),
+                                "-cp",
+                                System.getProperty("java.class.path"),
+                                WalLockChild.class.getName(),
+                                directory.toString())
+                        .redirectErrorStream(true)
+                        .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                        .start();
+        try {
+            assertTrue(child.waitFor(20, TimeUnit.SECONDS), "lock probe timed out");
+            return child.exitValue();
+        } finally {
+            child.destroyForcibly();
+        }
+    }
 
     @Test
     void secondWriterCannotAcquireLiveDirectoryButCanAcquireAfterClose() {

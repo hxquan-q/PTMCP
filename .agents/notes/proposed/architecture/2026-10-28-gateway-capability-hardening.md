@@ -52,7 +52,7 @@ Status: proposed
    `ptmcp-mcp` 不一致，而 authorize policy 要求 resource 等于 audience，标准客户端按发现 URL 请求会被拒。
    当前修复候选统一 canonical URI，并在 code/refresh 表单、授权持久化及 JWT 签发处绑定资源；
    旧缺失资源的授权需重新授权，不能根据部署配置补写。保留该兼容代价以阻止旧授权扩展到新资源。
-   仍需统一发现/authorize/token/gateway 资源契约并完成预注册客户端实际接入。
+   canonical资源与换码/刷新/撤销的真实HTTP/MySQL回归现已通过；真实客户端实际接入仍待版本化证据。
    [API 合同](../../../../docs/backend/api-spec.md) 与当前声明的
    [MCP 2025-06-18 授权规范](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization)
    将 Protected Resource Metadata 列为 MUST，DCR 则为 SHOULD，不应混为同一缺口。
@@ -64,8 +64,12 @@ Status: proposed
    这是启用前置条件，不是声称当前已有暴露的 CIMD SSRF 端点。
 3. **WAL 持久化不等于恢复闭环。**
    [WalReplayer](../../../../ptmcp-parent/ptmcp-persistence/src/main/java/local/ptmcp/persistence/audit/wal/WalReplayer.java)
-   有幂等回放、尾帧截断和损坏隔离，调用点目前只见测试；网关生产配置只装配 writer。
-   仓库内未见启动/调度回放及过期 START 收敛装配；若运维另有恢复入口，应补可重复证据。
+   已补OS目录独占owner、`.open`活动段/`.wal`封段、在线回放共享owner和真正halt的故障测试，
+   底层14例通过。网关启动/调度回放及过期START收敛仍在实施。
+   本片采用持久目录内fsync的boot标记证明旧owner已退出；取得同一目录OS锁的新进程才能得到退休boot证明。
+   START与租约同事务，恢复先回放所有封段，再在同一主库事务锁定退休boot的过期租约及RUNNING行并写UNKNOWN。
+   当前boot、其他卷/实例、无归属的历史START、仅租约超时都不能自动判UNKNOWN；不重放SQL。
+   损坏或缺钥段保留并告警，阻止UNKNOWN掩盖尚未恢复的终结；恢复失败可重试，不能静默清理证据。
 4. **客户端取消尚未贯通。** `McpToolService.handle` 对无 id 通知直接 202，
    执行时创建独立 `ReadOnlyCancellation`，未见请求 owner 到取消句柄的映射。
    执行器支持取消不代表 `notifications/cancelled` 或断连能终止查询。

@@ -13,9 +13,14 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** One OS-enforced owner per persistent WAL directory, shared by its writer and recovery worker. */
 final class WalDirectoryOwner implements AutoCloseable {
+    // POSIX record locks are process scoped: closing any second descriptor for .owner can
+    // release the first descriptor's native lock. Reject local contenders before opening it.
+    private static final Set<Path> LOCAL_OWNERS = ConcurrentHashMap.newKeySet();
     private final Path directory;
     private final FileChannel channel;
     private final FileLock lock;
@@ -29,9 +34,15 @@ final class WalDirectoryOwner implements AutoCloseable {
     static WalDirectoryOwner acquire(Path requested) {
         FileChannel channel = null;
         FileLock lock = null;
+        Path directory = null;
+        boolean registered = false;
         try {
             Files.createDirectories(requested);
-            Path directory = requested.toRealPath();
+            directory = requested.toRealPath();
+            registered = LOCAL_OWNERS.add(directory);
+            if (!registered) {
+                throw new IOException("WAL directory is already owned");
+            }
             channel =
                     FileChannel.open(
                             directory.resolve(".owner"),
@@ -49,11 +60,18 @@ final class WalDirectoryOwner implements AutoCloseable {
                 if (lock != null) {
                     lock.release();
                 }
+            } catch (IOException ignored) {
+                // Closing the channel below still releases its OS lock.
+            }
+            try {
                 if (channel != null) {
                     channel.close();
                 }
             } catch (IOException ignored) {
                 // The acquisition fails closed regardless of cleanup outcome.
+            }
+            if (registered) {
+                LOCAL_OWNERS.remove(directory);
             }
             throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
         }
@@ -88,6 +106,8 @@ final class WalDirectoryOwner implements AutoCloseable {
             sync(directory);
         } catch (IOException failure) {
             throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+        } finally {
+            LOCAL_OWNERS.remove(directory);
         }
     }
 
@@ -100,10 +120,13 @@ final class WalDirectoryOwner implements AutoCloseable {
     @Override
     public void close() {
         try {
-            if (lock.isValid()) {
-                lock.release();
+            try {
+                if (lock.isValid()) {
+                    lock.release();
+                }
+            } finally {
+                channel.close();
             }
-            channel.close();
         } catch (IOException failure) {
             throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
         }

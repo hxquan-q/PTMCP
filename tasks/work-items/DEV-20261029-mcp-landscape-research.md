@@ -1,11 +1,11 @@
 # DEV-20261029-mcp-landscape-research：开源项目核验与系统优化规划
 
 ID: DEV-20261029-mcp-landscape-research
-Status: in_progress
+Status: done
 Owner: current-agent
 Acceptance: not-required
-Verification: NOT_RUN
-Updated: 2026-10-29
+Verification: PASS
+Updated: 2026-10-30
 
 ## 目标与边界
 
@@ -33,9 +33,28 @@ research 技能明确要求后台 Agent 调查，因此委派外部数据库/OAu
 
 ## 结果与证据
 
-调研进行中；外部源码与内部事实待整合。仅记录实际观察，不预填通过。
+已完成 [项目核验与优化规划](../../docs/reference/mcp-landscape-optimization-20261029.md) 并整合外部调查。
+覆盖用户清单的18个明确仓库及缺URL的AgenticMCP，明确固定SHA、一手引用、许可与证据层级；
+纠正SQLite写工具、池连接只读、代理身份/resource、外部服务依赖和作者自报准确率等边界。
+对照当前源码及T15-c/G1～G7，区分已修、实施中与待验；给出优化优先级、依赖、反例和合成问数评测门。
+
+整合时HEAD为 `fc6f27313f01ef482400e9f6f5d233d2f2361d31`，定稿复核到 `a3776d08b9950472282756768db5223efedd4a51`，其间其他窗口已有提交；
+随后OAuth、WAL/目录owner及React继续出现修改，均保留且未纳入本调研实现。
+已将新增WalDirectoryOwner/replayClosed的事实补入报告，避免重复报为未实现；生产恢复调度和组合运行证据仍单列待验。
+本Agent仅新增研究报告、更新本工作项；未执行提交、推送或发布。
+
+本轮实际验证：
+
+- `python scripts/check.py`：exit 0，文档/本地引用、流程、质量配置、HEAD提交格式及62项检查器回归通过。
+- `git diff --check`：exit 0，无空白错误。
+- 一次性文档核对：exit 0，19个项目条目、18个带固定SHA来源的仓库，无草稿占位。
+- 文档自审：确认三类全覆盖、一手来源与README分级、当前源码/历史证据/建议分开、承接现有工作项；修正了定稿期间新增WAL原语的描述。
+
+本轮检查是研究文档验收；没有运行外部项目、Maven/pnpm、业务数据库、真实客户端、性能或问数评测。
+自审不是独立安全评审，未声明业务实现、人工接受或发布完成。
 
 ## 交接
 
-继续读取当前实现及官方协议，核验用户清单后产出单份研究报告，再完成适用检查和自审。
+研究交付完成。实施仍续接DEV-20261028-gateway-completion与T15-c，按报告的身份/运行闭环、上下文、评测顺序推进；
+本轮没有启动这些业务实现，也没有将其pending项改为完成。共享工作区其他窗口的变更由原工作负责，未重置或覆盖。
 本工作项为内部研究交付，Acceptance not-required 不代表用户接受方案、业务功能或发布。

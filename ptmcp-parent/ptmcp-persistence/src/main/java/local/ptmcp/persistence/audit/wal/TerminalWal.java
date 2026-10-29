@@ -252,9 +252,11 @@ public final class TerminalWal implements AutoCloseable {
         if (channel == null) {
             return;
         }
-        channel.force(true);
-        channel.close();
+        FileChannel sealing = channel;
         channel = null;
+        try (sealing) {
+            sealing.force(true);
+        }
         String name = activeSegment.getFileName().toString();
         Path target = activeSegment.resolveSibling(name.substring(0, name.length() - 5) + ".wal");
         if (Files.exists(target)) {

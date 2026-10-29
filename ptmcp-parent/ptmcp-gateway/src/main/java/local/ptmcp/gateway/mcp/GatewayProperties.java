@@ -29,7 +29,9 @@ public record GatewayProperties(
         String issuer,
         String resource,
         String jwksUri,
-        String resourceMetadataUri) {
+        String resourceMetadataUri,
+        long walMaxBytes,
+        long walMinFreeBytes) {
 
     public GatewayProperties {
         metadataUrl = orEmpty(metadataUrl);
@@ -48,6 +50,11 @@ public record GatewayProperties(
         resource = orEmpty(resource);
         jwksUri = orEmpty(jwksUri);
         resourceMetadataUri = orEmpty(resourceMetadataUri);
+        if (walMaxBytes < 0 || walMinFreeBytes < 0) {
+            throw new IllegalArgumentException("WAL capacity must be positive");
+        }
+        walMaxBytes = walMaxBytes == 0 ? 512L * 1024 * 1024 : walMaxBytes;
+        walMinFreeBytes = walMinFreeBytes == 0 ? 128L * 1024 * 1024 : walMinFreeBytes;
     }
 
     private static String orEmpty(String value) {

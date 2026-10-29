@@ -100,6 +100,16 @@ class McpGatewayConfiguration {
     }
 
     @Bean
+    AuditRecoveryWorker auditRecoveryWorker(
+            AuditRepository repository, TerminalWal wal, GatewayProperties properties) {
+        AuditRecoveryWorker worker =
+                new AuditRecoveryWorker(
+                        repository, wal, properties.walMaxBytes(), properties.walMinFreeBytes());
+        worker.start();
+        return worker;
+    }
+
+    @Bean
     WalKeyProvider walKeyProvider(GatewayProperties properties) {
         byte[] raw = Base64.getDecoder().decode(properties.walKey());
         if (raw.length != 32) {

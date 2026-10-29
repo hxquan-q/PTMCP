@@ -288,7 +288,7 @@ final class McpToolService {
                                     approved,
                                     datasource -> {
                                         revalidateExecution(identity, executionPlan);
-                                        audit.confirmStart(requestId);
+                                        audit.confirmStart(requestId, datasourceId);
                                     },
                                     new ReadOnlyCancellation());
                     encoded = ToolResultEncoder.encode(result, result.limitReached());
@@ -299,7 +299,7 @@ final class McpToolService {
                                     handle,
                                     datasource -> {
                                         revalidateExecution(identity, executionPlan);
-                                        audit.confirmStart(requestId);
+                                        audit.confirmStart(requestId, datasourceId);
                                     },
                                     new ReadOnlyCancellation());
                     encoded = ToolResultEncoder.encode(result);

@@ -5,7 +5,7 @@ Status: in_progress
 Owner: current-agent
 Acceptance: pending
 Verification: NOT_RUN
-Updated: 2026-10-29
+Updated: 2026-10-30
 
 ## 目标与边界
 
@@ -69,14 +69,24 @@ Windows Docker mTLS 转发仍不可用，改在专属 WSL 的 Unix socket 内运
 使用 OpenJDK 21.0.12.1、Maven 3.9.9 与共享依赖缓存，不关闭 TLS 或连接真实业务库。
 
 OAuth canonical resource 修复已通过 authz 定向测试：真实 HTTP/MySQL 18/18、配置9/9、
-token表单策略1/1，均0失败/0错误/0跳过；gateway元数据单测21/21，HTTP发现测试仍在执行。
+token表单策略1/1，均0失败/0错误/0跳过；gateway元数据单测21/21及HTTP发现测试均已BUILD SUCCESS。
 覆盖换码/刷新遗漏、错误、重复resource不消费凭证，以及持久resource被篡改或旧授权缺失时拒绝重新绑定。
 独立只读安全评审未发现本片新的安全阻断；已修正撤销后refresh测试参数和注释时序，
 补充legacy缺失与refresh存储资源篡改反例。评审未运行动态测试，动态结果来自本执行环境。
 资源切片日志 `ptmcp-resource-green-final.log`；整体目标仍在实施，不能据此宣布后端完成。
 
-下一片先复现并修复access JWT撤族，以及撤销他人已消费refresh触发重放撤族的越权副作用；
-随后续接权威用户版本/ADMIN与AS会话、G2～G7。保留另一窗口的React、Vue测试辅助和.auto改动。
+2026-10-30 OAuth撤销与WAL底层组合验证：`ptmcp-oauth-wal-green.log`，BUILD SUCCESS，
+真实HTTP/MySQL OAuth 22/22、配置9/9、token表单策略1/1；WAL回放10/10、owner/在线封段4/4，
+全部0失败/0错误/0跳过。撤销归属两项及旧快照save回滚撤族已先取得真实RED。
+修复先验client归属再处理refresh摘要、JWT本地验签与canonical audience/主体/family绑定；
+全局epoch先锁与统一撤族锁序，重放在grant写入前提交撤销，拒绝旧快照复活授权。
+独立复审进行中，不能用作者测试代替评审结论。
+
+G2底层已加入OS目录锁、活动`.open`与封段`.wal`隔离、在线恢复共享owner和关闭后拒写；
+崩溃测试改为在writer关闭前真正halt。异常清理的最后小修尚待重验。
+G2仍未完成：需要网关恢复调度、同START事务的执行租约、旧boot有据UNKNOWN收敛与故障测试；
+当前不调用仅凭超时的UNKNOWN扫描。随后续接权威用户版本/ADMIN与AS会话、G3～G7。
+保留另一窗口的React、Vue测试辅助和.auto改动；其他窗口的提交可能已包含早期后端改动，不回退历史。
 
 G1 已完成：`McpResourceMetadata` 由四处部署配置（`resource-uri`、`resource`、`issuer`、
 `resource-metadata-uri`）生成 RFC 9728 文档，只允许 HTTPS 或回环 HTTP，拒绝 userinfo/query/fragment/

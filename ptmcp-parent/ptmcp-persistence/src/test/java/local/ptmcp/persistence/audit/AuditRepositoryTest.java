@@ -488,7 +488,7 @@ class AuditRepositoryTest {
     }
 
     @Test
-    void staleStartBecomesUnknownOnlyWithoutActiveLease() throws Exception {
+    void timeoutAloneCannotProveThatAnOwningBootIsDead() throws Exception {
         Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         Instant oldStart = now.minus(10, ChronoUnit.MINUTES);
         AuditRepository repository = repository();
@@ -509,18 +509,17 @@ class AuditRepositoryTest {
         }
 
         int recovered = repository.markUnknownIfStale(now.minusSeconds(60), 100);
-        assertEquals(2, recovered);
+        assertEquals(0, recovered);
         assertEquals(0, repository.markUnknownIfStale(now.minusSeconds(60), 100));
 
         try (Connection connection = open()) {
-            assertOutcome(connection, noLease, "UNKNOWN", "UNKNOWN", "EXECUTION_OUTCOME_UNKNOWN");
+            assertOutcome(connection, noLease, "RUNNING", "UNKNOWN", null);
             assertOutcome(connection, activeLease, "RUNNING", "UNKNOWN", null);
-            assertOutcome(
-                    connection, expiredLease, "UNKNOWN", "UNKNOWN", "EXECUTION_OUTCOME_UNKNOWN");
+            assertOutcome(connection, expiredLease, "RUNNING", "UNKNOWN", null);
             assertOutcome(connection, completed, "SUCCESS", "ALLOW", null);
-            assertEquals(1, terminalOutbox(connection, noLease));
+            assertEquals(0, terminalOutbox(connection, noLease));
             assertEquals(0, terminalOutbox(connection, activeLease));
-            assertEquals(1, terminalOutbox(connection, expiredLease));
+            assertEquals(0, terminalOutbox(connection, expiredLease));
             assertEquals(1, terminalOutbox(connection, completed));
         }
     }
