@@ -42,10 +42,12 @@ final class AuditRecoveryWorker implements AutoCloseable {
     void recover() {
         try {
             repository.heartbeat(wal.executionOwner());
+            wal.verifyRecoveryCapacity(maxBytes, minFreeBytes);
             wal.sealForRecovery();
             WalReplayer.ReplayReport report = wal.replayClosed(repository::submitTerminal);
             wal.verifyRecoveryCapacity(maxBytes, minFreeBytes);
-            wal.recoverRetiredBoots(proof -> repository.markUnknownForRetiredBoot(proof, 100));
+            wal.recoverRetiredBootsAndPrune(
+                    proof -> repository.recoverRetiredBoot(proof, 100).collectable());
             wal.recoveryAvailable(true);
             if (report.truncatedBytes() > 0) {
                 LOG.warn("Audit WAL torn tail recovered; bytes={}", report.truncatedBytes());

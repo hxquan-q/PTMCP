@@ -1,6 +1,7 @@
 package local.ptmcp.gateway.mcp;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -98,6 +99,7 @@ class AuditRecoveryWorkerTest {
         try (Connection connection = primary.getConnection();
                 var sql = connection.createStatement()) {
             sql.executeUpdate("DELETE FROM execution_lease");
+            sql.executeUpdate("DELETE FROM audit_boot_owner");
             sql.executeUpdate("DELETE FROM audit_outbox");
             sql.executeUpdate("DELETE FROM audit_log");
         }
@@ -108,7 +110,10 @@ class AuditRecoveryWorkerTest {
         AuditRepository repository = new AuditRepository(primary);
         AuditStart completed = start();
         AuditStart lost = start();
+        Path retiredMarker;
         try (TerminalWal retired = wal()) {
+            retiredMarker =
+                    directory.resolve("boot-" + retired.executionOwner().bootId() + ".boot");
             repository.insertStart(completed, retired.executionOwner());
             repository.insertStart(lost, retired.executionOwner());
             retired.append(success(completed));
@@ -128,6 +133,11 @@ class AuditRecoveryWorkerTest {
             writer.start(admitted);
             assertEquals("SUCCESS", outcome(completed.requestId()));
             assertEquals("UNKNOWN", outcome(lost.requestId()));
+            assertFalse(Files.exists(retiredMarker));
+            assertTrue(
+                    Files.exists(
+                            directory.resolve(
+                                    "boot-" + current.executionOwner().bootId() + ".boot")));
             assertEquals("RUNNING", outcome(live.requestId()));
             assertEquals(1, count("execution_lease", admitted.requestId()));
             try (Connection connection = primary.getConnection();

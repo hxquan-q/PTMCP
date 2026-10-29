@@ -42,6 +42,6 @@ export const mePortalApi = {
     platforms: (cursor?: string, signal?: AbortSignal) =>
       request<AccessContext<PlatformItem>>(`/api/v1/me/access-context${query({ level: 'PLATFORM', cursor })}`, { signal }),
   },
-  mcpConfig: (platformId: string, clientType: string, signal?: AbortSignal) =>
+  mcpConfig: (platformId: string, clientType: string, signal?: AbortSignal): Promise<McpConfig> =>
     request<McpConfig>(`/api/v1/me/mcp-config${query({ platformId, clientType })}`, { signal }),
 };

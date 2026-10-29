@@ -23,6 +23,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -223,6 +224,15 @@ public final class TerminalWal implements AutoCloseable {
 
     /** The monitor keeps ownership held throughout the caller's recovery transactions. */
     public synchronized void recoverRetiredBoots(Consumer<RetiredBoot> recovery) {
+        recoverRetiredBootsAndPrune(
+                proof -> {
+                    recovery.accept(proof);
+                    return false;
+                });
+    }
+
+    /** The callback returns true only after committing retirement with no pending leases. */
+    public synchronized void recoverRetiredBootsAndPrune(Predicate<RetiredBoot> recovery) {
         owner.requireHeld();
         try (DirectoryStream<Path> pending = Files.newDirectoryStream(directory, "wal-*")) {
             for (Path file : pending) {
@@ -244,7 +254,8 @@ public final class TerminalWal implements AutoCloseable {
                 }
                 try (DataInputStream input =
                         new DataInputStream(new ByteArrayInputStream(Files.readAllBytes(file)))) {
-                    if (input.readUnsignedByte() != 1) {
+                    int version = input.readUnsignedByte();
+                    if (version != 1 && version != 2) {
                         throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
                     }
                     ExecutionOwner retired = new ExecutionOwner(input.readUTF(), input.readUTF());
@@ -255,7 +266,12 @@ public final class TerminalWal implements AutoCloseable {
                         throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
                     }
                     if (!retired.bootId().equals(bootId)) {
-                        recovery.accept(new RetiredBoot(owner, retired));
+                        boolean collectable = recovery.test(new RetiredBoot(owner, retired));
+                        if (version == 2 && collectable) {
+                            owner.requireHeld();
+                            Files.delete(file);
+                            WalDirectoryOwner.sync(directory);
+                        }
                     }
                 }
             }
@@ -274,7 +290,7 @@ public final class TerminalWal implements AutoCloseable {
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             try (DataOutputStream output = new DataOutputStream(bytes)) {
-                output.writeByte(1);
+                output.writeByte(2);
                 output.writeUTF(gatewayInstanceId);
                 output.writeUTF(bootId);
             }

@@ -40,11 +40,11 @@ UI 改动涵盖 App、PageState、useCursorPage、styles、权限/审计/数据�
 | 切片 | 承接 | 完成标准 | 当前状态 |
 | --- | --- | --- | --- |
 | G1 资源发现 | T19/T13/T14 | 真实 HTTP 401 能发现受信资源与 AS，URI 配置严格验证，预注册路径明确 | completed |
-| G2 审计恢复 | T09/T20 | 唯一目录 owner、仅回放关闭段、幂等恢复/损坏告警/UNKNOWN 收敛与故障测试 | pending |
+| G2 审计恢复 | T09/T20 | 唯一目录 owner、仅回放关闭段、幂等恢复/损坏告警/UNKNOWN 收敛与故障测试 | completed |
 | G3 候选与健康 | T15-c S4 | 错候选不替换 active、CAS 发布、健康绑定版本与目标 | pending |
 | G4 取消与容量 | T15-c S5/T19-d | 主体隔离取消、执行清理后归还额度、部署预算语义明确且有边界测试 | pending |
 | G5 密钥兼容 | T15-c S6 | 新旧钥兼容、对象绑定与迁移格式、日志不泄漏、恢复仍可读 | pending |
-| G6 字典上下文 | T15-c S7 | 三工具契约说明、授权后字典/关系/预算、撤权与恶意注释测试 | [in_progress](DEV-20261030-schema-context.md) |
+| G6 字典上下文 | T15-c S7 | 三工具契约说明、授权后字典/关系/预算、撤权与恶意注释测试 | [verifying；定向 PASS](DEV-20261030-schema-context.md) |
 | G7 组合验收 | T19-e/T20 | 双引擎、OAuth、恢复、前后端适用门禁；真实客户端与部署证据单列 | pending |
 
 G1 写入范围为 gateway 元数据/过滤器/测试、API 合同、相关工作项与笔记。
@@ -89,12 +89,26 @@ G2新增两项真实RED：`ptmcp-unknown-owner-red.log`为超时错误恢复2条
 owner5/5、gateway McpAuditWriter 3/3，均无失败/错误/跳过。
 已经接入网关恢复worker、START/执行租约同主库事务、先回放封段再处理有据退休boot的过期START、
 损坏/容量/主库故障暂停新准入。仅凭超时的旧API无副作用，当前boot及无归属历史不自动UNKNOWN。
-G2仍未完成：正在补网关worker真实元库故障测试；独立复审发现UNKNOWN数据源ID遗漏及boot标记回收边界，
-需补元库退休围栏避免迟到START在删除证据后提交。随后续接权威用户版本/ADMIN与AS会话、G3～G7。
+G2已完成本片工程验证：V10元库退休围栏拒绝迟到START/heartbeat/confirm，UNKNOWN保留已确认数据源；
+v2 boot证据在退休事务提交且全部租约终结后回收，v1保留。旧写方不查围栏，不支持新旧网关混跑。
+随后续接权威用户版本/ADMIN与AS会话、G3～G7，整体尚未完成。
 worker首轮`ptmcp-recovery-worker-red.log`实际为5例、1 failure、3 errors：
 failure为容量不足仍回放并删除封段；3 errors为新测试夹具只改lease_until而未同步heartbeat_at，违反CHECK，
 属于测试编写错误，不计产品缺陷。已修正夹具，续加退休后迟到START零副作用及UNKNOWN保留数据源的回归。
+有效围栏RED为`ptmcp-recovery-fence-red-valid.log`：12例、2 failures、0 errors/0 skipped，
+分别证明UNKNOWN丢失数据源及退休后迟到START被错误接受；此前夹具CHECK错误已单独纠正。
+最终`ptmcp-recovery-fence-green.log` BUILD SUCCESS/exit 0：AuditRepository16/16、WAL回放10/10、
+owner5/5、worker5/5、McpAuditWriter3/3，共39例、0失败/错误/跳过。
+覆盖START先提交的真实闩锁竞争、退休先赢、未过期租约保留证据、真实commit后丢回包、v1保留、
+元库/损坏/容量故障暂停与恢复。独立只读复审针对实际diff并读取GREEN日志，无新增阻断；
+复审未重复构建。Windows/部署卷durability、真实多副本部署仍未验证。
 保留另一窗口的React、Vue测试辅助和.auto改动；其他窗口的提交可能已包含早期后端改动，不回退历史。
+
+G6 本地实现与定向验证已完成，人工接受待定，见[授权字典上下文](DEV-20261030-schema-context.md)。
+2026-10-30 00:57:08 +08:00 隔离 `clean verify` BUILD SUCCESS：37 tests / 0 failures / 0 errors / 0 skipped；
+含真实 MySQL/PG HTTP、工具合同一致性、字典撤权/到期与 Unicode 预算。独立只读安全复审无新增阻断，
+`python scripts/check.py`及`git diff --check`均退出0。宽表总读取内存、真实客户端与人工接受仍未验证；
+G6 为 verifying，不代表 G2～G5 或 G7 完成。
 
 G1 已完成：`McpResourceMetadata` 由四处部署配置（`resource-uri`、`resource`、`issuer`、
 `resource-metadata-uri`）生成 RFC 9728 文档，只允许 HTTPS 或回环 HTTP，拒绝 userinfo/query/fragment/
@@ -147,6 +161,7 @@ React交接另确认：权限树为fixture，部分写/预览操作未接；接�
 未实际请求MCP，真实模式也未隔离该回调。应由前端窗口在接管前限制为明确预览或接入真实验证，不能以UI成功宣称连通。
 
 下一实施焦点为G1后的OAuth资源契约与身份闭环，随后继续G2；
-G3～G6及G7完整验收仍待完成。React窗口可直接按报告的真实接口和安全行为迁移，不能继承Vue的测试通过状态。
+G3～G5及G7完整验收仍待完成，G6局部验证已通过、人工接受待定。
+React窗口可直接按报告的真实接口和安全行为迁移，不能继承Vue的测试通过状态。
 整体保持 in_progress，不把立项、计划或局部测试通过报告为完整交付。
 尚未提交、推送、部署或发布；原有 UI 修改归原工作所有者。

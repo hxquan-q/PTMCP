@@ -150,7 +150,7 @@ host/port先做DNS与网络目的地策略验证，拒绝云元数据/loopback�
 ~~~json
 {
   "name":"list_databases_and_tables",
-  "inputSchema":{"type":"object","additionalProperties":false,"required":["datasource_id"],"properties":{"datasource_id":{"type":"string","pattern":"^[0-9]+$"},"database_name":{"type":"string","minLength":1,"maxLength":128},"schema_name":{"type":"string","minLength":1,"maxLength":128},"keyword":{"type":"string","maxLength":128},"cursor":{"type":"string","maxLength":2048},"page_size":{"type":"integer","minimum":1,"maximum":100,"default":20}}}
+  "inputSchema":{"type":"object","additionalProperties":false,"required":["datasource_id"],"properties":{"datasource_id":{"type":"string","pattern":"^[0-9]+$"},"database_name":{"type":"string","minLength":1,"maxLength":128},"schema_name":{"type":"string","minLength":1,"maxLength":128},"keyword":{"type":"string","minLength":1,"maxLength":128},"cursor":{"type":"string","minLength":1,"maxLength":2048},"page_size":{"type":"integer","minimum":1,"maximum":100,"default":20}}}
 }
 ~~~
 
@@ -191,7 +191,7 @@ Dictionary={source:"business_dictionary",version:十进制字符串,title:字符
 业务字典标题/说明可表达业务词义与单位，独立于物理 tableComment/comment；不返回维护人等管理身份。
 只有整批表 READ 通过才读指定对象字典；列字典必须仍匹配当前发布快照的列，旧列词条不披露。
 读取后重新加载权限，返回前复核身份、主库安全状态、发布版本及当前时间的 READ（含已披露外键目标）；
-在途撤权、到期或版本变化时整批拒绝。
+返回前复核观察到在途撤权、到期或版本变化时整批拒绝；不承诺与网络发送瞬间的零时延同步。
 
 schema 中每个注释、字典 title/description 最多 2048 UTF-8 字节；本次所有这些文本共享
 32768 UTF-8 字节预算，按表名自然排序、每表物理注释→表字典→列 ordinal 顺序分配，列内先物理注释再字典。

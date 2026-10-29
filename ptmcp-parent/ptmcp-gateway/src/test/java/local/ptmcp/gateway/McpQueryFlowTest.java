@@ -30,8 +30,8 @@ import local.ptmcp.datasource.MysqlReadOnlyExecutor;
 import local.ptmcp.datasource.PoolHandle;
 import local.ptmcp.datasource.connection.CredentialCipher;
 import local.ptmcp.datasource.metadata.MysqlMetadataCollector;
-import local.ptmcp.persistence.schema.SchemaSnapshotStore;
 import local.ptmcp.persistence.schema.PublishedSnapshotReader;
+import local.ptmcp.persistence.schema.SchemaSnapshotStore;
 import local.ptmcp.persistence.security.QuotaLimiter;
 
 import org.flywaydb.core.Flyway;
@@ -937,8 +937,11 @@ class McpQueryFlowTest {
         assertEquals("list_databases_and_tables", tools.get(0).path("name").asText());
         assertEquals("get_table_schema", tools.get(1).path("name").asText());
         assertEquals("execute_readonly_sql", tools.get(2).path("name").asText());
-        JsonNode contract = JSON.readTree(Files.readString(
-                Path.of("..", "..", "docs", "backend", "mcp-tools.json"))).path("tools");
+        JsonNode contract =
+                JSON.readTree(
+                                Files.readString(
+                                        Path.of("..", "..", "docs", "backend", "mcp-tools.json")))
+                        .path("tools");
         assertEquals(contract, tools, "tools/list must match the checked-in input contract");
         for (JsonNode tool : tools) {
             assertFalse(tool.path("description").asText().isBlank());
@@ -1136,15 +1139,28 @@ class McpQueryFlowTest {
     void schemaContextDeniesRevocationDuringDictionaryRead() throws Exception {
         try {
             writeDictionary("orders", "", "订单", "in-flight-dictionary-marker");
-            doAnswer(invocation -> {
-                Object dictionaries = invocation.callRealMethod();
-                updateDatasourceReadGrantStatus("REVOKED");
-                return dictionaries;
-            }).when(snapshotReader).loadDictionaries(any(), any());
-            HttpResponse<String> response = toolCall("get_table_schema",
-                    Map.of("datasource_id", "1", "database_name", BUSINESS.container.getDatabaseName(),
-                            "table_names", List.of("orders")), PAT);
-            assertTrue(JSON.readTree(response.body()).path("result").path("isError").asBoolean(), response.body());
+            doAnswer(
+                            invocation -> {
+                                Object dictionaries = invocation.callRealMethod();
+                                updateDatasourceReadGrantStatus("REVOKED");
+                                return dictionaries;
+                            })
+                    .when(snapshotReader)
+                    .loadDictionaries(any(), any());
+            HttpResponse<String> response =
+                    toolCall(
+                            "get_table_schema",
+                            Map.of(
+                                    "datasource_id",
+                                    "1",
+                                    "database_name",
+                                    BUSINESS.container.getDatabaseName(),
+                                    "table_names",
+                                    List.of("orders")),
+                            PAT);
+            assertTrue(
+                    JSON.readTree(response.body()).path("result").path("isError").asBoolean(),
+                    response.body());
             assertFalse(response.body().contains("in-flight-dictionary-marker"));
         } finally {
             doCallRealMethod().when(snapshotReader).loadDictionaries(any(), any());
@@ -1157,26 +1173,41 @@ class McpQueryFlowTest {
     void schemaContextDeniesGrantExpiryDuringDictionaryReadWithoutEpochChange() throws Exception {
         try {
             writeDictionary("orders", "", "订单", "expired-dictionary-marker");
-            doAnswer(invocation -> {
-                Object dictionaries = invocation.callRealMethod();
-                try (Connection meta = PRIMARY.getConnection(); Statement sql = meta.createStatement()) {
-                    sql.executeUpdate("UPDATE acl_grant SET valid_to = UTC_TIMESTAMP(6)"
-                            + " WHERE subject_type = 'USER' AND subject_id = 1 AND action = 'READ'"
-                            + " AND effect = 'ALLOW' AND resource_type = 'DATASOURCE' AND resource_id = 1");
-                }
-                return dictionaries;
-            }).when(snapshotReader).loadDictionaries(any(), any());
-            HttpResponse<String> response = toolCall("get_table_schema",
-                    Map.of("datasource_id", "1", "database_name", BUSINESS.container.getDatabaseName(),
-                            "table_names", List.of("orders")), PAT);
+            doAnswer(
+                            invocation -> {
+                                Object dictionaries = invocation.callRealMethod();
+                                try (Connection meta = PRIMARY.getConnection();
+                                        Statement sql = meta.createStatement()) {
+                                    sql.executeUpdate(
+                                            "UPDATE acl_grant SET valid_to = UTC_TIMESTAMP(6)"
+                                                    + " WHERE subject_type = 'USER' AND subject_id = 1 AND action = 'READ'"
+                                                    + " AND effect = 'ALLOW' AND resource_type = 'DATASOURCE' AND resource_id = 1");
+                                }
+                                return dictionaries;
+                            })
+                    .when(snapshotReader)
+                    .loadDictionaries(any(), any());
+            HttpResponse<String> response =
+                    toolCall(
+                            "get_table_schema",
+                            Map.of(
+                                    "datasource_id",
+                                    "1",
+                                    "database_name",
+                                    BUSINESS.container.getDatabaseName(),
+                                    "table_names",
+                                    List.of("orders")),
+                            PAT);
             assertTrue(response.body().contains("TABLE_NOT_AUTHORIZED"), response.body());
             assertFalse(response.body().contains("expired-dictionary-marker"));
         } finally {
             doCallRealMethod().when(snapshotReader).loadDictionaries(any(), any());
-            try (Connection meta = PRIMARY.getConnection(); Statement sql = meta.createStatement()) {
-                sql.executeUpdate("UPDATE acl_grant SET valid_to = NULL WHERE subject_type = 'USER'"
-                        + " AND subject_id = 1 AND action = 'READ' AND effect = 'ALLOW'"
-                        + " AND resource_type = 'DATASOURCE' AND resource_id = 1");
+            try (Connection meta = PRIMARY.getConnection();
+                    Statement sql = meta.createStatement()) {
+                sql.executeUpdate(
+                        "UPDATE acl_grant SET valid_to = NULL WHERE subject_type = 'USER'"
+                                + " AND subject_id = 1 AND action = 'READ' AND effect = 'ALLOW'"
+                                + " AND resource_type = 'DATASOURCE' AND resource_id = 1");
             }
             clearContextDictionaries();
         }
@@ -1186,33 +1217,92 @@ class McpQueryFlowTest {
     void dictionaryReadRejectsChangedSnapshotAndResourceVersion() throws Exception {
         PublishedSnapshotReader reader = new PublishedSnapshotReader(PRIMARY);
         PublishedSnapshotReader.Published published = reader.load(1);
-        long orders = published.namespaces().stream().flatMap(namespace -> namespace.objects().stream())
-                .filter(object -> object.objectNorm().equals("orders")).findFirst().orElseThrow().id();
+        long orders =
+                published.namespaces().stream()
+                        .flatMap(namespace -> namespace.objects().stream())
+                        .filter(object -> object.objectNorm().equals("orders"))
+                        .findFirst()
+                        .orElseThrow()
+                        .id();
         assertTrue(reader.loadDictionaries(published, Set.of(orders)).isEmpty());
-        assertEquals(ErrorCode.INVALID_ARGUMENT, assertThrows(DomainException.class,
-                () -> reader.loadDictionaries(published, Set.of(Long.MAX_VALUE))).errorCode());
-        try (Connection meta = PRIMARY.getConnection(); PreparedStatement update = meta.prepareStatement(
-                "UPDATE datasource SET resource_version = ? WHERE id = 1")) {
+        assertEquals(
+                ErrorCode.INVALID_ARGUMENT,
+                assertThrows(
+                                DomainException.class,
+                                () -> reader.loadDictionaries(published, Set.of(Long.MAX_VALUE)))
+                        .errorCode());
+        try (Connection meta = PRIMARY.getConnection();
+                PreparedStatement update =
+                        meta.prepareStatement(
+                                "UPDATE datasource SET resource_version = ? WHERE id = 1")) {
             try {
                 update.setLong(1, published.resourceVersion() + 1);
                 assertEquals(1, update.executeUpdate());
-                assertEquals(ErrorCode.RESOURCE_VERSION_CHANGED, assertThrows(DomainException.class,
-                        () -> reader.loadDictionaries(published, Set.of(orders))).errorCode());
+                assertEquals(
+                        ErrorCode.RESOURCE_VERSION_CHANGED,
+                        assertThrows(
+                                        DomainException.class,
+                                        () -> reader.loadDictionaries(published, Set.of(orders)))
+                                .errorCode());
             } finally {
                 update.setLong(1, published.resourceVersion());
                 update.executeUpdate();
             }
         }
-        try (Connection meta = PRIMARY.getConnection(); PreparedStatement update = meta.prepareStatement(
-                "UPDATE datasource SET active_snapshot_id = ? WHERE id = 1")) {
+        try (Connection meta = PRIMARY.getConnection();
+                PreparedStatement update =
+                        meta.prepareStatement(
+                                "UPDATE datasource SET active_snapshot_id = ? WHERE id = 1")) {
             try {
                 update.setNull(1, java.sql.Types.BIGINT);
                 assertEquals(1, update.executeUpdate());
-                assertEquals(ErrorCode.SCHEMA_STALE, assertThrows(DomainException.class,
-                        () -> reader.loadDictionaries(published, Set.of(orders))).errorCode());
+                assertEquals(
+                        ErrorCode.SCHEMA_STALE,
+                        assertThrows(
+                                        DomainException.class,
+                                        () -> reader.loadDictionaries(published, Set.of(orders)))
+                                .errorCode());
             } finally {
                 update.setLong(1, published.snapshotId());
                 update.executeUpdate();
+            }
+        }
+    }
+
+    @Test
+    void schemaForeignKeysRequireReadOnReferencedTable() throws Exception {
+        try (Connection meta = PRIMARY.getConnection();
+                Statement sql = meta.createStatement()) {
+            try {
+                sql.executeUpdate(
+                        "UPDATE resource_column rc JOIN resource_object ro ON ro.id = rc.object_id"
+                                + " SET rc.foreign_key = JSON_OBJECT('referencedTable','secret','referencedColumn','id')"
+                                + " WHERE ro.object_norm = 'orders' AND rc.column_norm = 'amount'");
+                HttpResponse<String> response =
+                        toolCall(
+                                "get_table_schema",
+                                Map.of(
+                                        "datasource_id",
+                                        "1",
+                                        "database_name",
+                                        BUSINESS.container.getDatabaseName(),
+                                        "table_names",
+                                        List.of("orders")),
+                                PAT);
+                JsonNode table =
+                        JSON.readTree(response.body())
+                                .path("result")
+                                .path("structuredContent")
+                                .path("data")
+                                .path("tables")
+                                .get(0);
+                assertTrue(table.path("foreignKeysRestricted").asBoolean(), response.body());
+                assertEquals(0, table.path("foreignKeys").size());
+                assertFalse(response.body().contains("secret"));
+            } finally {
+                sql.executeUpdate(
+                        "UPDATE resource_column rc JOIN resource_object ro ON ro.id = rc.object_id"
+                                + " SET rc.foreign_key = NULL WHERE ro.object_norm = 'orders' AND rc.column_norm = 'amount'");
             }
         }
     }

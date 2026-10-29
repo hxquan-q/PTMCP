@@ -67,7 +67,8 @@ public final class AuditRepository {
     private static final String SELECT_TERMINAL =
             "SELECT result, verdict, error_code, completed_at FROM audit_log WHERE request_id = ?";
     private static final String SELECT_STALE =
-            "SELECT l.request_id, l.user_id, l.platform_id, l.tool, l.datasource_id, l.started_at "
+            "SELECT l.request_id, l.user_id, l.platform_id, l.tool, "
+                    + "COALESCE(l.datasource_id, e.datasource_id), l.started_at "
                     + "FROM audit_log l JOIN execution_lease e ON e.request_id = l.request_id "
                     + "WHERE l.result = 'RUNNING' AND e.gateway_instance_id = ? AND e.boot_id = ? "
                     + "AND e.state IN ('QUEUED', 'RUNNING', 'CANCELLING') "
@@ -99,6 +100,9 @@ public final class AuditRepository {
         AuditPayloads.Payload payload = AuditPayloads.start(start);
         transaction.execute(
                 connection -> {
+                    if (owner != null) {
+                        lockBoot(connection, owner, false);
+                    }
                     lockAuditRow(connection, start.requestId());
                     boolean inserted =
                             insertOutbox(connection, start.requestId(), "START", 0, payload);
@@ -166,12 +170,21 @@ public final class AuditRepository {
 
     /** Only a new owner of the same persistent directory can recover a retired boot. */
     public int markUnknownForRetiredBoot(RetiredBoot proof, int limit) {
+        return recoverRetiredBoot(proof, limit).recoveredCount();
+    }
+
+    /** The result becomes usable for filesystem cleanup only after a confirmed commit. */
+    public record BootRecovery(int recoveredCount, boolean collectable) {}
+
+    public BootRecovery recoverRetiredBoot(RetiredBoot proof, int limit) {
         if (proof == null || limit < 1 || limit > 1000) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
         ExecutionOwner retired = proof.identity();
         return transaction.execute(
                 connection -> {
+                    proof.requireHeld();
+                    lockBoot(connection, retired, true);
                     int recovered = 0;
                     for (AuditTerminal terminal : selectStale(connection, retired, limit)) {
                         if (!lockAuditRow(connection, terminal.requestId())) {
@@ -202,7 +215,7 @@ public final class AuditRepository {
                         }
                     }
                     proof.requireHeld();
-                    return recovered;
+                    return new BootRecovery(recovered, noPendingLeases(connection, retired));
                 });
     }
 
@@ -210,6 +223,7 @@ public final class AuditRepository {
         Objects.requireNonNull(owner, "owner");
         transaction.execute(
                 connection -> {
+                    lockBoot(connection, owner, false);
                     try (PreparedStatement statement =
                             AuditTransaction.statement(
                                     connection,
@@ -232,6 +246,7 @@ public final class AuditRepository {
         }
         return transaction.execute(
                 connection -> {
+                    lockBoot(connection, owner, false);
                     if (!lockAuditRow(connection, requestId)) {
                         return false;
                     }
@@ -252,6 +267,66 @@ public final class AuditRepository {
                         return statement.executeUpdate() == 1;
                     }
                 });
+    }
+
+    /** Owner writes and retirement serialize here, before audit/outbox/lease locks. */
+    private static void lockBoot(Connection connection, ExecutionOwner owner, boolean retire)
+            throws SQLException {
+        try (PreparedStatement statement =
+                AuditTransaction.statement(
+                        connection,
+                        "INSERT INTO audit_boot_owner (gateway_instance_id, boot_id, state, "
+                                + "create_time, update_time) VALUES (?, ?, ?, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6)) "
+                                + "ON DUPLICATE KEY UPDATE boot_id = boot_id")) {
+            statement.setString(1, owner.instanceId());
+            statement.setString(2, owner.bootId());
+            statement.setString(3, retire ? "RETIRED" : "OPEN");
+            statement.executeUpdate();
+        }
+        String state;
+        try (PreparedStatement statement =
+                AuditTransaction.statement(
+                        connection,
+                        "SELECT state FROM audit_boot_owner WHERE gateway_instance_id = ? AND boot_id = ? FOR UPDATE")) {
+            statement.setString(1, owner.instanceId());
+            statement.setString(2, owner.bootId());
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+                }
+                state = result.getString(1);
+            }
+        }
+        if (retire && "OPEN".equals(state)) {
+            try (PreparedStatement statement =
+                    AuditTransaction.statement(
+                            connection,
+                            "UPDATE audit_boot_owner SET state = 'RETIRED', update_time = UTC_TIMESTAMP(6) "
+                                    + "WHERE gateway_instance_id = ? AND boot_id = ? AND state = 'OPEN'")) {
+                statement.setString(1, owner.instanceId());
+                statement.setString(2, owner.bootId());
+                if (statement.executeUpdate() != 1) {
+                    throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+                }
+            }
+        } else if (!((retire && "RETIRED".equals(state)) || (!retire && "OPEN".equals(state)))) {
+            throw new DomainException(ErrorCode.AUDIT_UNAVAILABLE);
+        }
+    }
+
+    private static boolean noPendingLeases(Connection connection, ExecutionOwner owner)
+            throws SQLException {
+        try (PreparedStatement statement =
+                AuditTransaction.statement(
+                        connection,
+                        "SELECT request_id FROM execution_lease WHERE gateway_instance_id = ? AND boot_id = ? "
+                                + "AND state <> 'TERMINAL' LIMIT 1")) {
+            statement.setString(1, owner.instanceId());
+            statement.setString(2, owner.bootId());
+            try (ResultSet result = statement.executeQuery()) {
+                return !result.next();
+            }
+        }
     }
 
     private static boolean lockAuditRow(Connection connection, UUID requestId) throws SQLException {

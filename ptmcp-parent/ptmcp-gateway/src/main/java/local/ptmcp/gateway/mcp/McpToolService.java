@@ -570,7 +570,9 @@ final class McpToolService {
                                     .map(PublishedSnapshotReader.TableObject::id)
                                     .collect(java.util.stream.Collectors.toSet()));
             // The dictionary read is a separate transaction. Do not reuse its earlier ACL cache.
-            session = permissions.open(identity.userId(), identity.platformId(), datasourceId, published);
+            session =
+                    permissions.open(
+                            identity.userId(), identity.platformId(), datasourceId, published);
             SchemaContextText context = new SchemaContextText();
             Set<Long> disclosed = new TreeSet<>();
             List<Map<String, Object>> tables = new ArrayList<>(authorized.size());
@@ -759,14 +761,14 @@ final class McpToolService {
                 || current.resourceVersion() != expected.resourceVersion()) {
             throw new DomainException(ErrorCode.RESOURCE_VERSION_CHANGED);
         }
+        if (!before.sameState(freshSnapshot(currentIdentity))) {
+            throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+        }
         ToolPermissionService.Session timed = session.atCurrentTime();
         for (long objectId : disclosed) {
             if (!timed.decide(objectId).read()) {
                 throw new DomainException(ErrorCode.TABLE_NOT_AUTHORIZED);
             }
-        }
-        if (!before.sameState(freshSnapshot(currentIdentity))) {
-            throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
         }
     }
 
@@ -890,7 +892,9 @@ final class McpToolService {
     }
 
     private static DatabaseEngine requireDialect(
-            PublishedSnapshotReader.Published published, String schemaName, boolean schemaRequired) {
+            PublishedSnapshotReader.Published published,
+            String schemaName,
+            boolean schemaRequired) {
         DatabaseEngine engine;
         if ("MYSQL".equals(published.engine())) {
             engine = DatabaseEngine.MYSQL;

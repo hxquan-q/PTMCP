@@ -74,20 +74,23 @@ Status: proposed
    boot标记回收还需元库单调OPEN→RETIRED围栏：START先锁boot再写审计及lease；退休事务先封禁旧boot，
    再处理过期lease。旧START先赢则退休等待其提交，退休先赢则迟到START拒绝，不能只凭一次空扫描删除证据。
    仅参与该围栏的新格式boot、全部lease终结且封段回放完成后才回收文件；DB墓碑保留，旧格式标记不自动删除。
+   落盘为V10 audit_boot_owner及v2标记；退休结果同时返回recoveredCount与collectable，只有事务明确commit后才用后者删除文件。
+   提交结果不明时保留标记重试，不能用“本批恢复0条”替代全部lease已终结；普通TERMINAL不反向获取boot锁。
 4. **客户端取消尚未贯通。** `McpToolService.handle` 对无 id 通知直接 202，
    执行时创建独立 `ReadOnlyCancellation`，未见请求 owner 到取消句柄的映射。
    执行器支持取消不代表 `notifications/cancelled` 或断连能终止查询。
-5. **连接管理完整 S4、密钥 S6 和字典 S7 尚未完成。**
+5. **连接管理完整 S4、密钥 S6 尚未完成，字典 S7 已有局部验证。**
    目标切换撤旧权限已修，候选验证/CAS 发布/同版本健康诊断仍待实施；
    [CredentialCipher](../../../../ptmcp-parent/ptmcp-datasource/src/main/java/local/ptmcp/datasource/connection/CredentialCipher.java)
    仍为单 key、无对象 AAD，WAL key provider/replayer 也只识别当前 key。
-   `McpToolService.descriptor` 把 description 置空，schema 输出主要为物理注释，管理字典尚未进入模型上下文。
+   G6/S7 已补三工具与参数说明，并在 schema 返回中提供已授权表/列的业务字典；
+   双方言定向验证与独立只读安全复审已通过，人工接受、真实客户端及宽表读取内存仍未验证。
 
 ## Proposal
 
 保留现有网关安全内核，先补接入与可恢复性，再改善问数上下文，最后按需求扩数据库。
 所有方案均须维持 guard 前零业务连接、平台与用户权限交集、Deny 优先、审计持久准入和版本复核。
-本轮不改业务实现、不开放新端点、不增加依赖、不推进生产或发布。
+首次评估不改业务实现；后续实现由关联工作项逐片记录，本提案不授权生产或发布。
 
 | 顺序与承接 | 最小可验收切片 | 不扩张的边界 |
 | --- | --- | --- |
@@ -121,9 +124,16 @@ G6 的实施细化见[字典上下文工作项](../../../../tasks/work-items/DEV
 整次 schema 的注释与字典文本共享 32768 字节预算，保留截断标记，列名/类型/键不截断。
 字典仅在整批 READ 授权后读取，绑定同一 published snapshot/config/resource version；
 只匹配快照内现存列。业务字典可存单位和业务词义，不从说明文字推导可执行指令。
+读取后重新加载权限，返回前复核身份、发布版本与安全状态，再按当前时间评估请求表及已披露外键目标。
+这会增加短元库读取，但可拒绝复核观察到的在途撤权、授权到期及版本变化；不承诺网络发送瞬间的零时延同步。
 相较于把字典直接并入全库快照（一次读取、接线简单），按已授权对象读取多一次短元库事务，
 但不把未授权字典搬入返回构建路径；相较于新增上下文工具，复用 schema 保留三工具协议和既有审计边界。
 本篇其余 G1～G7 仍按各自证据推进，不随 G6 转为整体 implemented。
+
+G6 的实际 RED/GREEN、实现范围和复审结论见上述工作项：最终隔离 `clean verify` 为
+37 tests / 0 failures / 0 errors / 0 skipped，三工具合同与真实 tools/list 完整比较。
+文本预算只约束输出；宽表字典仍在限幅前物化。若大规模列/字典成为交付场景，需先补总读取预算或流式读取
+及内存边界测试，不能用现有 32KiB 输出上限证明聚合内存有界。
 
 1. **整体采用参考仓的 MCP/驱动层**：能快速获得丰富驱动、工具和上下文体验；但其主体、策略和执行面
    不等价于 PTMCP，替换需要重新证明 guard、对象绑定和审计准入。保留当前内核，只吸收具体机制。
@@ -135,7 +145,7 @@ G6 的实施细化见[字典上下文工作项](../../../../tasks/work-items/DEV
 
 ## Acceptance criteria
 
-以下是后续实施的验收条件，不是本轮已执行的测试：
+以下定义各切片的验收条件；实际已执行项与未验证项以关联工作项为准，不能把条件本身当作通过证据：
 
 1. 真实目标客户端从 401 challenge 取到可用资源元数据及授权服务器元数据，完成 PKCE/refresh；
    错 audience/resource、过期、撤销和冒用平台均拒绝。保留 DCR 关闭时给出明确预注册路径。

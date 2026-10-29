@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   CellIcon,
@@ -37,6 +37,8 @@ import {
   LockIcon,
   type IconComponent,
 } from '../../components/Icons';
+import { mePortalApi, type McpConfig, type PlatformItem } from '../../services/mePortalApi';
+import { authAvailability, templatesFromConfig } from './mcpTemplate';
 import { testDatasource } from '../../services/access';
 
 /* ─── 视图模型 ─── */
@@ -446,27 +448,54 @@ function Wizard({ onExit }: { onExit: () => void }) {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<'ok' | 'fail' | null>(null);
   const [done, setDone] = useState(false);
+  const [platformItems, setPlatformItems] = useState<PlatformItem[]>([]);
+  const [mcpCfg, setMcpCfg] = useState<McpConfig | null>(null);
+  const [cfgLoading, setCfgLoading] = useState(false);
+  const [cfgError, setCfgError] = useState('');
+  const cfgKey = `${platform}:${client}`;
 
   const platformMeta = PLATFORMS.find((p) => p.value === platform)!;
   const clientMeta = CLIENT_TYPES.find((c) => c.value === client)!;
   const authMeta = AUTHS.find((a) => a.value === auth)!;
   const inferredName = name || `${clientMeta.label}接入`;
 
-  const templateJson = `{
-  "mcpServers": {
-    "synthetic": {
-      "url": "https://mcp.example.test/mcp",
-      "headers": {
-        "Authorization": "Bearer <YOUR_PAT>"
-      }
-    }
-  }
-}`;
-  const templateYaml = `mcpServers:
-  synthetic:
-    url: https://mcp.example.test/mcp
-    headers:
-      Authorization: "Bearer <YOUR_PAT>"`;
+  /* 平台目录一次拉取：向导的平台选择映射到服务端平台 id */
+  useEffect(() => {
+    mePortalApi.accessContext
+      .platforms()
+      .then((ctx) => setPlatformItems(ctx.items))
+      .catch(() => setPlatformItems([]));
+  }, []);
+
+  /* 进入连接方式/模板步骤时按（平台, 客户端）拉服务端 mcp-config；同键已拉则跳过 */
+  useEffect(() => {
+    if (step < 2 || mcpCfg) return;
+    let cancelled = false;
+    setCfgLoading(true);
+    setCfgError('');
+    const serverPlatformId = platformItems.find((p) => p.tier === platformMeta.tier)?.id ?? platformItems[0]?.id ?? '1';
+    mePortalApi
+      .mcpConfig(serverPlatformId, client)
+      .then((cfg) => !cancelled && setMcpCfg(cfg))
+      .catch(() => !cancelled && setCfgError('服务端模板获取失败，下方展示通用模板。'))
+      .finally(() => !cancelled && setCfgLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [step, cfgKey, mcpCfg, platformItems, platformMeta]);
+
+  /* 换平台/客户端后旧配置作废，重新拉取 */
+  useEffect(() => {
+    setMcpCfg(null);
+  }, [cfgKey]);
+
+  const templates = (mcpCfg && templatesFromConfig(mcpCfg.configTemplate)) || {
+    json: '{\n  "mcpServers": {\n    "synthetic": {\n      "url": "https://mcp.example.test/mcp",\n      "headers": {\n        "Authorization": "Bearer <YOUR_PAT>"\n      }\n    }\n  }\n}',
+    yaml: 'mcpServers:\n  synthetic:\n    url: https://mcp.example.test/mcp\n    headers:\n      Authorization: "Bearer <YOUR_PAT>"',
+  };
+  const templateJson = templates.json;
+  const templateYaml = templates.yaml;
+  const authAllowed = authAvailability(mcpCfg?.authentication);
 
   const canNext = (step === 0 && !!platform) || (step === 1 && !!client) || (step === 2 && !!transport && !!auth) || step === 3;
 
@@ -689,8 +718,9 @@ function Wizard({ onExit }: { onExit: () => void }) {
                       icon={a.icon}
                       title={a.label}
                       description={a.desc}
+                      tag={authAllowed[a.value as keyof typeof authAllowed] ? undefined : '该平台不支持'}
                       selected={auth === a.value}
-                      onSelect={() => setAuth(a.value)}
+                      onSelect={() => authAllowed[a.value as keyof typeof authAllowed] && setAuth(a.value)}
                     />
                   ))}
                 </div>
@@ -702,6 +732,20 @@ function Wizard({ onExit }: { onExit: () => void }) {
         {step === 3 && (
           <>
             <StepHeading n={4} title="获取配置模板" desc="复制下方配置模板到您的客户端配置文件中，并替换相应的访问令牌" />
+            {cfgLoading ? (
+              <p style={{ margin: '0 0 8px', fontSize: 12.5, color: 'var(--ptmcp-text-muted)' }}>正在从服务端获取当前平台/客户端的配置模板…</p>
+            ) : null}
+            {cfgError ? (
+              <Alert kind="warning" title="模板来源">
+                {cfgError}
+              </Alert>
+            ) : null}
+            {!cfgLoading && mcpCfg ? (
+              <p style={{ margin: '0 0 8px', fontSize: 12.5, color: 'var(--ptmcp-text-muted)' }}>
+                模板由服务端按所选平台与客户端生成；验证版本：
+                {mcpCfg.compatibilityStatus === 'NOT_VALIDATED' ? '尚未验证（PAT 仅作为占位符使用）' : (mcpCfg.validatedVersion ?? '未知')}。
+              </p>
+            ) : null}
             <Alert kind="warning" title="模板包含凭证占位符">
               使用 PAT 时，先创建 PAT，再在客户端配置中替换凭证占位符；使用 OAuth 时由客户端完成授权。
               <button className="link" style={{ marginLeft: 6 }}>

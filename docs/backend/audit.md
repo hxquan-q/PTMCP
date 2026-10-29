@@ -41,7 +41,11 @@ audit_outbox非分区，UNIQUE(request_id,event_kind)，START seq=0、TERMINAL s
 
 audit_log.request_id为全局唯一主键，一期不月分区。MySQL分区要求与全局唯一request_id之间存在设计冲突，不能随意把started_at加进唯一键后声称仍全局幂等。未来规模演进需新ADR、去重账本/归档索引方案与迁移测试；当前按保留期索引批量删除+归档。
 
-START更新RUNNING时写execution lease owner与心跳（可放扩展执行租约表）；活跃任务不因审计消费者延迟被误判UNKNOWN。进程重启扫描旧START，结合网关实例bootId/执行租约/数据库连接确认无活跃任务后，在恢复事务中写TERMINAL(result=UNKNOWN,verdict=UNKNOWN,errorCode=EXECUTION_OUTCOME_UNKNOWN)。不能看到START就推定“失败未执行”或“成功”，也不能据此自动重放SQL。
+START、outbox与QUEUED execution_lease在同一元库事务提交；guard之前datasource_id为空，guard通过后confirmExecution才绑定已批准的数据源并进入RUNNING。TERMINAL与租约TERMINAL同事务提交。UNKNOWN从审计行或租约保留已批准的数据源归属，不因恢复而丢失。
+
+恢复必须持有同一持久WAL目录的OS独占锁，并从fsync的旧boot标记取得退休证明；当前boot、其他卷与无归属历史START不自动恢复。先回放所有封段，再对已退休boot的过期非终结租约写TERMINAL(result=UNKNOWN,verdict=UNKNOWN,errorCode=EXECUTION_OUTCOME_UNKNOWN)。仅超时不能证明执行进程退出；旧markUnknownIfStale入口不产生写入，不重放业务SQL，也不推定成功或失败。
+
+V10的audit_boot_owner按实例与boot保留OPEN→RETIRED单调围栏。START、心跳和执行确认先锁boot，再按audit→outbox→lease顺序写入；退休事务先封禁旧boot，再恢复过期租约并检查所有非TERMINAL租约。START先赢则退休等其提交，退休先赢则迟到START零副作用拒绝。普通TERMINAL不反向锁boot，允许真实终结补偿。只有退休事务确认提交、所有租约终结、封段全部回放且标记为v2时，才删除标记并fsync目录；提交结果不明、未过期租约或v1标记均保留证据，DB退休墓碑不删除。
 
 ## 3. 本地加密 WAL
 
@@ -50,6 +54,8 @@ WAL只存需要补偿的TERMINAL与审计敏感读取事件，不存查询结果
 写入顺序：分配event ID→序列化版本化payload→加密→追加完整frame→FileChannel.force(true)/受测平台等价fsync→返回durable ack。分组提交可以提高吞吐，但每个等待者必须在覆盖其offset的fsync成功后被唤醒；超时不能假定落盘。segment新建/rename/checkpoint涉及目录元数据持久性，Windows/Linux分别做断电/重启恢复测试；仅API返回不等于存储设备真的持久，部署卷需支持已验收的durability。
 
 写WAL失败/磁盘满/key服务不可用导致无法安全加密时拒绝，不写明文临时文件。启动时无法解密现存segment只读隔离并告警，不删除后继续假装恢复完成；如果审计积压达到容量阈值停止新SQL。WAL密钥按keyId保留至所有segment消费完且审计保留要求满足，密钥撤销/轮换与备份恢复联动。
+
+网关AuditRecoveryWorker启动时及每10秒执行心跳、容量检查、封段、回放、容量复查与退休恢复；全部成功后才允许新START。默认目录上限512MiB、最低空闲128MiB；元库不可用、损坏隔离或容量不足均暂停准入，恢复后可重试。WAL目录按realPath在同JVM预登记后才打开OS锁文件，避免失败竞争者关闭句柄时释放Linux进程锁。V10升级须让所有写方一起采用围栏；不支持与不检查围栏的旧网关混跑。Linux隔离故障测试与Windows/部署卷durability分别报告，当前证据见[收尾工作项](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
 
 恢复worker按segment/offset验证frame长度、GCM tag、payload hash；最后不完整frame截断至最后有效fsync边界并产生恢复安全事件；中段校验失败隔离整个segment，人工处理不能跳过丢失事件后宣称审计完整。有效frame按event ID/request ID幂等补写audit_outbox；确认MySQL提交后推进持久checkpoint。只有segment所有frame已入库且checkpoint持久化才删除，删除/重启重复扫描不会重复物化。
 

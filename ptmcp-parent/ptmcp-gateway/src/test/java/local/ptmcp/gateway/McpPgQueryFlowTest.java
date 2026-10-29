@@ -130,17 +130,17 @@ class McpPgQueryFlowTest {
     }
 
     @Test
-    void pgCatalogRequiresSchemaAndReturnsSchemaQualifiedItems() throws Exception {
-        HttpResponse<String> missingSchema =
+    void pgCatalogWithDatabaseFilterReturnsSchemaQualifiedItems() throws Exception {
+        HttpResponse<String> databaseOnly =
                 toolCall(
                         "list_databases_and_tables",
                         Map.of("datasource_id", "1", "database_name", DATABASE_NAME),
                         PAT);
-        assertEquals(200, missingSchema.statusCode(), missingSchema.body());
-        assertEquals(
-                "DIALECT_CONTEXT_INVALID",
-                error(missingSchema).path("code").asText(),
-                missingSchema.body());
+        assertEquals(200, databaseOnly.statusCode(), databaseOnly.body());
+        assertFalse(
+                JSON.readTree(databaseOnly.body()).path("result").path("isError").asBoolean(true),
+                databaseOnly.body());
+        assertEquals("public", data(databaseOnly).path("items").get(0).path("schemaName").asText());
 
         HttpResponse<String> listed =
                 toolCall(
@@ -158,16 +158,23 @@ class McpPgQueryFlowTest {
         assertFalse(items.isEmpty(), listed.body());
         assertEquals("public", items.get(0).path("schemaName").asText());
         assertEquals("orders", items.get(0).path("tableName").asText());
+        assertEquals(data(databaseOnly).path("items"), items);
     }
 
     @Test
     void pgCatalogDiscoversNamespaceBeforeSchemaIsKnown() throws Exception {
-        HttpResponse<String> listed = toolCall("list_databases_and_tables", Map.of("datasource_id", "1"), PAT);
+        HttpResponse<String> listed =
+                toolCall("list_databases_and_tables", Map.of("datasource_id", "1"), PAT);
         assertEquals(200, listed.statusCode(), listed.body());
-        assertFalse(JSON.readTree(listed.body()).path("result").path("isError").asBoolean(true), listed.body());
+        assertFalse(
+                JSON.readTree(listed.body()).path("result").path("isError").asBoolean(true),
+                listed.body());
         assertEquals("public", data(listed).path("items").get(0).path("schemaName").asText());
-        HttpResponse<String> incomplete = toolCall("list_databases_and_tables",
-                Map.of("datasource_id", "1", "schema_name", "public"), PAT);
+        HttpResponse<String> incomplete =
+                toolCall(
+                        "list_databases_and_tables",
+                        Map.of("datasource_id", "1", "schema_name", "public"),
+                        PAT);
         assertTrue(incomplete.body().contains("DIALECT_CONTEXT_INVALID"), incomplete.body());
     }
 
@@ -281,6 +288,51 @@ class McpPgQueryFlowTest {
             try (Connection connection = PRIMARY.getConnection();
                     var statement = connection.createStatement()) {
                 statement.executeUpdate("DELETE FROM acl_grant WHERE reason='synthetic-pg-deny'");
+            }
+        }
+    }
+
+    @Test
+    void pgSchemaReturnsCurrentColumnDictionaryWithoutBusinessCheckout() throws Exception {
+        try (Connection meta = PRIMARY.getConnection();
+                var sql = meta.createStatement()) {
+            try {
+                sql.executeUpdate(
+                        "INSERT INTO business_dictionary (object_id,column_norm,title,description,version,"
+                                + "create_time,update_time,created_by,updated_by) SELECT id,'amount','金额','单位：元',3,"
+                                + "UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),1,1 FROM resource_object WHERE object_norm = 'orders'");
+                HttpResponse<String> response =
+                        toolCall(
+                                "get_table_schema",
+                                Map.of(
+                                        "datasource_id",
+                                        "1",
+                                        "database_name",
+                                        DATABASE_NAME,
+                                        "schema_name",
+                                        "public",
+                                        "table_names",
+                                        List.of("orders")),
+                                PAT);
+                assertFalse(
+                        JSON.readTree(response.body()).path("result").path("isError").asBoolean(),
+                        response.body());
+                JsonNode dictionary =
+                        data(response)
+                                .path("tables")
+                                .get(0)
+                                .path("columns")
+                                .get(1)
+                                .path("businessDictionary");
+                assertEquals("金额", dictionary.path("title").asText());
+                assertEquals("单位：元", dictionary.path("description").asText());
+                assertEquals("3", dictionary.path("version").asText());
+                assertEquals("business_dictionary", dictionary.path("source").asText());
+                verifyNoInteractions(pools, pgAdapter);
+            } finally {
+                sql.executeUpdate(
+                        "DELETE bd FROM business_dictionary bd JOIN resource_object ro ON ro.id = bd.object_id"
+                                + " WHERE ro.object_norm = 'orders' AND bd.column_norm = 'amount'");
             }
         }
     }

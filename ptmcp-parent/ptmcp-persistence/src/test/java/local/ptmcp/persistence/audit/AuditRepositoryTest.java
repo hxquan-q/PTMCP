@@ -26,6 +26,7 @@ import org.testcontainers.mysql.MySQLContainer;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -43,9 +44,12 @@ import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -107,6 +111,7 @@ class AuditRepositoryTest {
             update(connection, "DELETE FROM audit_outbox");
             update(connection, "DELETE FROM audit_log");
             update(connection, "DELETE FROM execution_lease");
+            update(connection, "DELETE FROM audit_boot_owner");
             update(connection, "DELETE FROM datasource");
             update(
                     connection,
@@ -622,6 +627,215 @@ class AuditRepositoryTest {
     }
 
     @Test
+    void retirementWaitsForAnAdmittedStartToCommitBeforeRemovingItsMarker() throws Exception {
+        CountDownLatch startAtCommit = new CountDownLatch(1);
+        CountDownLatch allowCommit = new CountDownLatch(1);
+        CountDownLatch retirementTrying = new CountDownLatch(1);
+        WalKeyProvider keys = () -> new WalKey("recovery-test", new byte[32]);
+        UUID requestId = UUID.randomUUID();
+        AuditStart start =
+                new AuditStart(requestId, 7L, 3L, "get_table_schema", null, null, pastMinutes(10));
+        DataSource delayedCommit =
+                source(
+                        connection ->
+                                (Connection)
+                                        Proxy.newProxyInstance(
+                                                Connection.class.getClassLoader(),
+                                                new Class<?>[] {Connection.class},
+                                                (proxy, method, args) -> {
+                                                    if (method.getName().equals("commit")) {
+                                                        expireLease(connection, requestId);
+                                                        startAtCommit.countDown();
+                                                        if (!allowCommit.await(
+                                                                10, TimeUnit.SECONDS)) {
+                                                            throw new SQLException(
+                                                                    "commit gate timed out");
+                                                        }
+                                                    }
+                                                    return invoke(connection, method, args);
+                                                }),
+                        new AtomicInteger());
+        DataSource observedRetirement =
+                source(
+                        connection ->
+                                (Connection)
+                                        Proxy.newProxyInstance(
+                                                Connection.class.getClassLoader(),
+                                                new Class<?>[] {Connection.class},
+                                                (proxy, method, args) -> {
+                                                    if (method.getName().equals("prepareStatement")
+                                                            && args[0] instanceof String sql
+                                                            && sql.startsWith(
+                                                                    "INSERT INTO audit_boot_owner")) {
+                                                        retirementTrying.countDown();
+                                                    }
+                                                    return invoke(connection, method, args);
+                                                }),
+                        new AtomicInteger());
+        try (TerminalWal old =
+                        new TerminalWal(
+                                recoveryDirectory, "instance", UUID.randomUUID().toString(), keys);
+                var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            ExecutionOwner oldOwner = old.executionOwner();
+            Path marker = recoveryDirectory.resolve("boot-" + oldOwner.bootId() + ".boot");
+            var admission =
+                    executor.submit(
+                            () -> new AuditRepository(delayedCommit).insertStart(start, oldOwner));
+            try {
+                assertTrue(startAtCommit.await(5, TimeUnit.SECONDS));
+                old.close();
+                try (TerminalWal current =
+                        new TerminalWal(
+                                recoveryDirectory,
+                                "instance",
+                                UUID.randomUUID().toString(),
+                                keys)) {
+                    AtomicReference<AuditRepository.BootRecovery> recovered =
+                            new AtomicReference<>();
+                    var retirement =
+                            executor.submit(
+                                    () ->
+                                            current.recoverRetiredBootsAndPrune(
+                                                    proof -> {
+                                                        var outcome =
+                                                                new AuditRepository(
+                                                                                observedRetirement)
+                                                                        .recoverRetiredBoot(
+                                                                                proof, 100);
+                                                        recovered.set(outcome);
+                                                        return outcome.collectable();
+                                                    }));
+                    assertTrue(retirementTrying.await(5, TimeUnit.SECONDS));
+                    assertThrows(
+                            TimeoutException.class,
+                            () -> retirement.get(200, TimeUnit.MILLISECONDS));
+                    assertTrue(Files.exists(marker));
+                    allowCommit.countDown();
+                    admission.get(5, TimeUnit.SECONDS);
+                    retirement.get(5, TimeUnit.SECONDS);
+                    assertEquals(1, recovered.get().recoveredCount());
+                    assertTrue(recovered.get().collectable());
+                    assertFalse(Files.exists(marker));
+                    try (Connection connection = open()) {
+                        assertOutcome(
+                                connection,
+                                requestId,
+                                "UNKNOWN",
+                                "UNKNOWN",
+                                "EXECUTION_OUTCOME_UNKNOWN");
+                    }
+                }
+            } finally {
+                allowCommit.countDown();
+            }
+        }
+    }
+
+    @Test
+    void unexpiredRetiredLeaseKeepsItsMarkerUntilTerminalAndTombstoneCannotReopen()
+            throws Exception {
+        AuditRepository repository = repository();
+        WalKeyProvider keys = () -> new WalKey("recovery-test", new byte[32]);
+        ExecutionOwner oldOwner;
+        Instant startedAt = pastMinutes(10);
+        UUID requestId;
+        try (TerminalWal old =
+                new TerminalWal(
+                        recoveryDirectory, "instance", UUID.randomUUID().toString(), keys)) {
+            oldOwner = old.executionOwner();
+            requestId = ownedStart(repository, oldOwner, startedAt);
+        }
+        Path marker = recoveryDirectory.resolve("boot-" + oldOwner.bootId() + ".boot");
+        try (TerminalWal current =
+                new TerminalWal(
+                        recoveryDirectory, "instance", UUID.randomUUID().toString(), keys)) {
+            current.recoverRetiredBootsAndPrune(
+                    proof -> repository.recoverRetiredBoot(proof, 100).collectable());
+            assertTrue(Files.exists(marker));
+            assertThrows(DomainException.class, () -> repository.heartbeat(oldOwner));
+            repository.submitTerminal(terminal(requestId, startedAt, AuditTerminal.Result.SUCCESS));
+            current.recoverRetiredBootsAndPrune(
+                    proof -> repository.recoverRetiredBoot(proof, 100).collectable());
+            assertFalse(Files.exists(marker));
+        }
+        try (TerminalWal reused =
+                new TerminalWal(
+                        recoveryDirectory, oldOwner.instanceId(), oldOwner.bootId(), keys)) {
+            assertThrows(
+                    DomainException.class, () -> repository.heartbeat(reused.executionOwner()));
+        }
+    }
+
+    @Test
+    void uncertainRetirementCommitKeepsMarkerAndRetryConfirmsTheTombstone() throws Exception {
+        WalKeyProvider keys = () -> new WalKey("recovery-test", new byte[32]);
+        Path marker;
+        try (TerminalWal old =
+                new TerminalWal(
+                        recoveryDirectory, "instance", UUID.randomUUID().toString(), keys)) {
+            marker = recoveryDirectory.resolve("boot-" + old.executionOwner().bootId() + ".boot");
+        }
+        AtomicBoolean uncertain = new AtomicBoolean(true);
+        DataSource lostCommitReply =
+                source(
+                        connection ->
+                                (Connection)
+                                        Proxy.newProxyInstance(
+                                                Connection.class.getClassLoader(),
+                                                new Class<?>[] {Connection.class},
+                                                (proxy, method, args) -> {
+                                                    Object value = invoke(connection, method, args);
+                                                    if (method.getName().equals("commit")
+                                                            && uncertain.getAndSet(false)) {
+                                                        throw new SQLException(
+                                                                "synthetic lost commit acknowledgement");
+                                                    }
+                                                    return value;
+                                                }),
+                        new AtomicInteger());
+        try (TerminalWal current =
+                new TerminalWal(
+                        recoveryDirectory, "instance", UUID.randomUUID().toString(), keys)) {
+            assertEquals(
+                    ErrorCode.OPERATION_UNKNOWN,
+                    assertThrows(
+                                    DomainException.class,
+                                    () ->
+                                            current.recoverRetiredBootsAndPrune(
+                                                    proof ->
+                                                            new AuditRepository(lostCommitReply)
+                                                                    .recoverRetiredBoot(proof, 100)
+                                                                    .collectable()))
+                            .errorCode());
+            assertTrue(Files.exists(marker));
+            current.recoverRetiredBootsAndPrune(
+                    proof -> repository().recoverRetiredBoot(proof, 100).collectable());
+            assertFalse(Files.exists(marker));
+        }
+    }
+
+    @Test
+    void legacyMarkerIsNeverAutomaticallyDeleted() throws Exception {
+        WalKeyProvider keys = () -> new WalKey("recovery-test", new byte[32]);
+        Path marker;
+        try (TerminalWal old =
+                new TerminalWal(
+                        recoveryDirectory, "instance", UUID.randomUUID().toString(), keys)) {
+            marker = recoveryDirectory.resolve("boot-" + old.executionOwner().bootId() + ".boot");
+        }
+        byte[] legacy = Files.readAllBytes(marker);
+        legacy[0] = 1;
+        Files.write(marker, legacy);
+        try (TerminalWal current =
+                new TerminalWal(
+                        recoveryDirectory, "instance", UUID.randomUUID().toString(), keys)) {
+            current.recoverRetiredBootsAndPrune(
+                    proof -> repository().recoverRetiredBoot(proof, 100).collectable());
+            assertTrue(Files.exists(marker));
+        }
+    }
+
+    @Test
     void startReplayCannotReassignAnExecutionOwner() throws Exception {
         AuditRepository repository = repository();
         ExecutionOwner owner = new ExecutionOwner("instance", UUID.randomUUID().toString());
@@ -669,7 +883,9 @@ class AuditRepositoryTest {
     private static void expireLease(Connection connection, UUID id) throws SQLException {
         update(
                 connection,
-                "UPDATE execution_lease SET heartbeat_at = DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 3 MINUTE), "
+                "UPDATE execution_lease SET execution_started_at = IF(execution_started_at IS NULL, NULL, "
+                        + "DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 4 MINUTE)), "
+                        + "heartbeat_at = DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 3 MINUTE), "
                         + "lease_until = DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 2 MINUTE) WHERE request_id = ?",
                 id.toString());
     }

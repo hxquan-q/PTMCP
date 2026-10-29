@@ -8,3 +8,4 @@
 - ~~本机 MySQL 8.4 验证~~ 已完成（9c4e723）：pinned 8.4.13 digest 拉取成功，全量测试默认参数（无覆盖）全绿，8.4 版本断言实证；measure.sh 恢复默认 8.4 目标。
 - ~~**browser 端到端走查**~~ 大部分完成（真实模式14/18组，见 T17-ui-business）；AS 全闭环未做：解禁后的委派/平台/客户端/Scope/审计解密页面在 5173 + Dev-Linux 后端做真实浏览器走查（合成账号 + Testcontainers 库），截图存 .playwright-mcp/，补 T17-ui-business 的浏览器证据表。
 - ~~**UI 打磨切片池**（用户主线 1，逐轮做）~~ 已完成（U1-U6 全落地+跨范围角色门控）：委派列表管理列窄屏折行、平台表单 proof 配置的留空保持提示、客户端创建后的 secret 一次性弹窗（对照 PAT 模式）、Scope 差异确认框的 diff 可读性、审计解密倒计时的可访问性（aria-live）、EffectiveAccessPane 空态文案。
+- **React 接管遗留（2026-10-30 会话后）**：①推送 dev→origin/codeup（本机代理 127.0.0.1:7897 已死且直连超时，网络恢复后 `git push origin dev && git push codeup dev`）；②AuthorizationsPage（授权管理）仅有撤销，缺按授权码新建授权流（Vue AuthorizationsView 有）；③窄屏 390px 与键盘可达性全量自查（Vue 侧有 .playwright-mcp 390 截图基线，React 无）；④MetadataPage 字典编辑（Vue 有 dictionary 子资源 PUT + 版本）；⑤接入向导完成后落库为真实接入配置（当前 INTEGRATIONS 为静态种子，向导 done 后不写列表）；⑥真实后端（非 preview）联调与权限门控（managementScope）在 React 侧的等价实现。
