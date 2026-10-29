@@ -38,6 +38,7 @@ export function AppShell({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
       <header
+        className="app-shell-top"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -54,8 +55,10 @@ export function AppShell({
           PTMCP
         </span>
         <span style={{ width: 1, height: 20, background: 'var(--ptmcp-border-strong)' }} />
-        <span style={{ fontSize: 14, color: 'var(--ptmcp-text-muted)' }}>数据访问管理平台</span>
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+        <span className="app-shell-subtitle" style={{ fontSize: 14, color: 'var(--ptmcp-text-muted)' }}>
+          数据访问管理平台
+        </span>
+        <div className="app-shell-search" style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
           <GlobalSearch onOpen={() => setSearchOpen(true)} />
         </div>
         <button className="btn btn--link" aria-label="通知" style={{ color: 'var(--ptmcp-text-muted)', fontSize: 17 }}>
@@ -87,6 +90,7 @@ export function AppShell({
       </header>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <nav
+          className="app-shell-nav"
           style={{
             width: 208,
             flex: 'none',
@@ -132,7 +136,7 @@ export function AppShell({
                         />
                       ) : null}
                       <span style={{ fontSize: 15, opacity: 0.9 }}>{item.icon}</span>
-                      {item.label}
+                      <span className="nav-label">{item.label}</span>
                     </button>
                   );
                 })}
@@ -140,6 +144,7 @@ export function AppShell({
             ))}
           </div>
           <div
+            className="app-shell-workspace"
             style={{
               flex: 'none',
               margin: '8px 4px 4px',

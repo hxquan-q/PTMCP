@@ -357,3 +357,66 @@ select {
 .link:hover {
   text-decoration: underline;
 }
+
+/* ─── 响应式：平板收窄为图标栏，手机隐藏全局搜索与副标题 ─── */
+.app-shell-nav .nav-label,
+.app-shell-nav .app-shell-workspace {
+  transition: opacity 0.15s ease;
+}
+@media (max-width: 900px) {
+  .app-shell-nav {
+    width: 60px !important;
+    padding: 12px 6px !important;
+  }
+  .app-shell-nav .nav-label {
+    display: none;
+  }
+  .app-shell-nav .app-shell-workspace {
+    display: none;
+  }
+  .app-shell-nav button {
+    justify-content: center;
+    padding-inline: 0 !important;
+  }
+  .app-shell-subtitle {
+    display: none;
+  }
+}
+@media (max-width: 620px) {
+  .app-shell-search {
+    display: none !important;
+  }
+  .app-shell-top {
+    gap: 8px !important;
+  }
+  /* 窄屏下表格保持最小可读宽度，横向滚动而不是把列压成竖排 */
+  .table-scroll .data-table {
+    min-width: 720px;
+  }
+  /* 统计卡 2 列；pill 单个不换行；单元格不压成竖排，整表横向滚动 */
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .data-table th,
+  .data-table td {
+    white-space: nowrap;
+  }
+  .pill-tabs {
+    flex-wrap: wrap;
+  }
+  .pill-tabs > button {
+    white-space: nowrap;
+  }
+}
+
+/* ─── 键盘可达性：统一可见焦点（WCAG 2.2 AA 2.4.7） ─── */
+.btn:focus-visible,
+.link:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role='tab']:focus-visible {
+  outline: 2px solid var(--ptmcp-blue);
+  outline-offset: 2px;
+}

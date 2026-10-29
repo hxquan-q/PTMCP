@@ -1625,6 +1625,8 @@ class OAuthAuthorizationCodeFlowTest {
                     now);
             execute(connection,
                     "INSERT INTO sys_user_security (user_id, auth_version, identity_version, version, create_time, update_time) VALUES (?, 1, 1, 1, ?, ?)", USER_ID, now, now);
+            execute(connection, "INSERT INTO sys_dept (dept_id, parent_id, ancestors, dept_name, status, create_time, update_time) VALUES (42, 0, '0', 'OAuth department', '0', ?, ?)", now, now);
+            execute(connection, "INSERT INTO sys_user_profile (user_id, dept_id, display_name, password_hash, status, create_time, update_time) VALUES (?, 42, 'Alice', ?, 'ACTIVE', ?, ?)", USER_ID, new BCryptPasswordEncoder().encode(PASSWORD), now, now);
             insertClient(
                     connection,
                     CONFIDENTIAL_CLIENT_ROW,

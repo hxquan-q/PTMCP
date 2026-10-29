@@ -11,7 +11,6 @@ final class OAuthAttributes {
     /** Client-supplied state; the state column holds the server-generated consent state. */
     static final String CLIENT_STATE = "ptmcp.authz.client_state";
 
-    static final long INITIAL_AUTH_VERSION = 1L;
 
     private OAuthAttributes() {}
 }

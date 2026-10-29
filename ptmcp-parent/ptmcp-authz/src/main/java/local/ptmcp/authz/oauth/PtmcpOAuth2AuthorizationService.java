@@ -201,7 +201,11 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
         }
         long authVersion = existing != null ? existing.authVersion() : account.authVersion();
         try {
-            UserSecurityStore.State subject = jdbc.execute((ConnectionCallback<UserSecurityStore.State>) connection -> UserSecurityStore.read(connection, account.userId(), true));
+            UserSecurityStore.State subject = jdbc.execute((ConnectionCallback<UserSecurityStore.State>) connection -> {
+                UserSecurityStore.State value = UserSecurityStore.read(connection, account.userId(), true);
+                UserSecurityStore.requireActiveProfile(connection, account.userId());
+                return value;
+            });
             UserSecurityStore.requireReady(subject, authVersion);
             if (account.authVersion() != authVersion) {
                 throw invalidGrant();
@@ -729,6 +733,14 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
             String refreshValue,
             Instant refreshIssuedAt,
             Instant refreshExpiresAt) {
+        if (row.userId() == null) {
+            return null;
+        }
+        try {
+            UserSecurityStore.requireReady(new UserSecurityStore(jdbc.getDataSource()).read(row.userId()), row.authVersion());
+        } catch (DomainException stale) {
+            return null;
+        }
         RegisteredClient client = registeredClients.findById(row.registeredClientId());
         if (client == null) {
             return null;

@@ -6,6 +6,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import local.ptmcp.admin.api.AdminPrincipal;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
+import local.ptmcp.persistence.security.UserSecurityStore;
+import local.ptmcp.persistence.security.HostIdentityStore;
+import local.ptmcp.persistence.security.IdentityPasswordChanges;
+import local.ptmcp.persistence.security.WebSessionStore;
 
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -32,13 +36,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import javax.sql.DataSource;
 
-/**
- * Opaque ADMIN web session and CSRF handling. Session content lives in this process; the metadata
- * {@code web_session_index} row is the durable revocation record checked on every request. A
- * restart therefore invalidates live sessions, which is fail-closed. There is no Redis (deployment
- * does not provide it) and no user-level {@code auth_version} table, so password change revokes the
- * concrete session, PAT and OAuth rows instead of bumping a shared counter.
- */
+/** Opaque ADMIN sessions; every request verifies the durable index and authoritative user version. */
 public final class AdminSessionService {
     public static final String SESSION_COOKIE = "PTMCP_ADMIN_SESSION";
     public static final String PRESESSION_COOKIE = "PTMCP_ADMIN_PRESESSION";
@@ -58,6 +56,7 @@ public final class AdminSessionService {
     private static final ZoneOffset UTC = ZoneOffset.UTC;
 
     private final DataSource primary;
+    private final HostIdentityStore host;
     private final BCryptPasswordEncoder passwords = new BCryptPasswordEncoder();
     private final SecureRandom random = new SecureRandom();
     private final String dummyHash =
@@ -67,7 +66,10 @@ public final class AdminSessionService {
     private final Map<String, Failures> failures = new ConcurrentHashMap<>();
 
     public AdminSessionService(DataSource primary) {
-        this.primary = primary;
+        this(primary,primary);
+    }
+    public AdminSessionService(DataSource primary,DataSource identity) {
+        this.primary=primary; this.host=new HostIdentityStore(identity);
     }
 
     public record CsrfIssued(String presessionId, String csrfToken, Instant expiresAt) {}
@@ -97,6 +99,7 @@ public final class AdminSessionService {
 
     private record SessionEntry(
             long userId,
+            long authVersion,
             boolean platformAdmin,
             Instant issuedAt,
             Instant expiresAt,
@@ -123,6 +126,7 @@ public final class AdminSessionService {
             SessionEntry rotated =
                     new SessionEntry(
                             session.userId(),
+                            session.authVersion(),
                             session.platformAdmin(),
                             session.issuedAt(),
                             session.expiresAt(),
@@ -172,16 +176,19 @@ public final class AdminSessionService {
                 failures.remove(normalized);
             }
         }
-        Profile profile = findProfile(normalized);
-        String hash = profile == null ? dummyHash : profile.passwordHash();
+        Long boundUser = findUserId(normalized);
+        UserSecurityStore.State captured = boundUser == null ? null : new UserSecurityStore(primary).read(boundUser);
+        Profile profile = captured != null && captured.ready() ? findProfile(normalized) : null;
+        HostIdentityStore.Account account=profile==null ? null : host.read(profile.userId());
+        String hash = account == null ? dummyHash : account.hash();
         boolean matches = passwords.matches(password, hash);
-        if (profile == null || !matches || !"ACTIVE".equals(profile.status())) {
+        if (profile == null || account == null || !account.active() || !matches || !"ACTIVE".equals(profile.status())) {
             recordFailure(normalized, now);
             throw new DomainException(ErrorCode.AUTHENTICATION_FAILED);
         }
         failures.remove(normalized);
         preSessions.remove(preSessionId);
-        SessionEntry created = newEntry(profile, now);
+        SessionEntry created = newEntry(profile, now, captured.authVersion());
         String sessionId = newToken();
         insertSessionIndex(sessionId, profile.userId(), created);
         sessions.put(key(sessionId), created);
@@ -246,11 +253,22 @@ public final class AdminSessionService {
                 || newPassword.equals(oldPassword)) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
-        Profile profile = findProfileById(session.userId());
-        if (profile == null || !passwords.matches(oldPassword, profile.passwordHash())) {
+        UserSecurityStore.State captured=new UserSecurityStore(primary).read(session.userId());
+        UserSecurityStore.requireReady(captured,session.authVersion());
+        HostIdentityStore.Account account=host.read(session.userId());
+        if(account==null || !account.active() || !passwords.matches(oldPassword,account.hash())) {
             throw new DomainException(ErrorCode.AUTHENTICATION_FAILED);
         }
-        revokeAfterPasswordChange(session.userId(), passwords.encode(newPassword));
+        long profileVersion;
+        try(Connection connection=primary.getConnection();PreparedStatement query=connection.prepareStatement("SELECT version FROM sys_user_profile WHERE user_id=?")) {
+            query.setQueryTimeout(5);query.setLong(1,session.userId());
+            try(ResultSet result=query.executeQuery()) {
+                if(!result.next()) throw new DomainException(ErrorCode.AUTHENTICATION_FAILED);
+                profileVersion=result.getLong(1);
+            }
+        }catch(SQLException failure){throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);}
+        new IdentityPasswordChanges(primary,host).begin(session.userId(),profileVersion,session.authVersion(),
+                HostIdentityStore.fingerprint(account.hash()),passwords.encode(newPassword),session.userId());
         sessions.entrySet().removeIf(entry -> entry.getValue().userId() == session.userId());
     }
 
@@ -293,6 +311,10 @@ public final class AdminSessionService {
         return requireSession(request).userId();
     }
 
+    public long requireSessionAuthVersion(HttpServletRequest request) {
+        return requireSession(request).authVersion();
+    }
+
     public ResponseCookie sessionCookie(String sessionId, boolean secure) {
         return ResponseCookie.from(SESSION_COOKIE, sessionId)
                 .httpOnly(true)
@@ -332,7 +354,7 @@ public final class AdminSessionService {
             sessions.remove(key);
             return null;
         }
-        boolean indexed = activeSessionIndex(key, session.expiresAt());
+        boolean indexed = new WebSessionStore(primary).active("ADMIN", sessionId, session.userId(), session.authVersion());
         if (!indexed) {
             sessions.remove(key);
             return null;
@@ -354,9 +376,10 @@ public final class AdminSessionService {
         request.removeAttribute(SESSION_AUTHENTICATED_ATTRIBUTE);
     }
 
-    private SessionEntry newEntry(Profile profile, Instant now) {
+    private SessionEntry newEntry(Profile profile, Instant now, long authVersion) {
         return new SessionEntry(
                 profile.userId(),
+                authVersion,
                 platformAdmin(profile.userId()),
                 now,
                 now.plus(SESSION_TTL),
@@ -398,40 +421,8 @@ public final class AdminSessionService {
         return id;
     }
 
-    private boolean activeSessionIndex(String sessionHash, Instant expiresAt) {
-        try (Connection connection = primary.getConnection();
-                PreparedStatement statement =
-                        connection.prepareStatement(
-                                "SELECT 1 FROM web_session_index WHERE session_hash = ?"
-                                        + " AND kind = 'ADMIN' AND revoked_at IS NULL"
-                                        + " AND expires_at > ?")) {
-            statement.setBytes(1, hexToBytes(sessionHash));
-            statement.setObject(2, utc(Instant.now()));
-            try (ResultSet result = statement.executeQuery()) {
-                return result.next();
-            }
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
-        }
-    }
-
     private void insertSessionIndex(String sessionId, long userId, SessionEntry session) {
-        try (Connection connection = primary.getConnection();
-                PreparedStatement statement =
-                        connection.prepareStatement(
-                                "INSERT INTO web_session_index (session_hash, kind, user_id,"
-                                        + " auth_version, issued_at, expires_at, create_time,"
-                                        + " update_time) VALUES (?, 'ADMIN', ?, 1, ?, ?, ?, ?)")) {
-            statement.setBytes(1, hashBytes(sessionId.getBytes(StandardCharsets.UTF_8)));
-            statement.setLong(2, userId);
-            statement.setObject(3, utc(session.issuedAt()));
-            statement.setObject(4, utc(session.expiresAt()));
-            statement.setObject(5, utc(Instant.now()));
-            statement.setObject(6, utc(Instant.now()));
-            statement.executeUpdate();
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
-        }
+        new WebSessionStore(primary).issue("ADMIN", sessionId, userId, session.authVersion(), session.issuedAt(), session.expiresAt());
     }
 
     private void revokeIndex(String sessionHash) {
@@ -450,76 +441,16 @@ public final class AdminSessionService {
         }
     }
 
-    private void revokeAfterPasswordChange(long userId, String passwordHash) {
-        Instant now = Instant.now();
-        try (Connection connection = primary.getConnection()) {
-            connection.setAutoCommit(false);
-            try {
-                try (PreparedStatement statement =
-                        connection.prepareStatement(
-                                "UPDATE sys_user_profile SET password_hash = ?,"
-                                        + " version = version + 1, update_time = ?"
-                                        + " WHERE user_id = ?")) {
-                    statement.setString(1, passwordHash);
-                    statement.setObject(2, utc(now));
-                    statement.setLong(3, userId);
-                    if (statement.executeUpdate() != 1) {
-                        throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
-                    }
-                }
-                try (PreparedStatement statement =
-                        connection.prepareStatement(
-                                "UPDATE web_session_index SET revoked_at = ?,"
-                                        + " version = version + 1, update_time = ?"
-                                        + " WHERE user_id = ? AND kind = 'ADMIN'"
-                                        + " AND revoked_at IS NULL")) {
-                    statement.setObject(1, utc(now));
-                    statement.setObject(2, utc(now));
-                    statement.setLong(3, userId);
-                    statement.executeUpdate();
-                }
-                try (PreparedStatement statement =
-                        connection.prepareStatement(
-                                "UPDATE personal_token SET status = 'REVOKED', revoked_at = ?,"
-                                        + " version = version + 1, update_time = ?"
-                                        + " WHERE user_id = ? AND status = 'ACTIVE'")) {
-                    statement.setObject(1, utc(now));
-                    statement.setObject(2, utc(now));
-                    statement.setLong(3, userId);
-                    statement.executeUpdate();
-                }
-                try (PreparedStatement statement =
-                        connection.prepareStatement(
-                                "UPDATE oauth_refresh_family SET status = 'REVOKED',"
-                                        + " revoked_at = ?, revoke_reason = ?,"
-                                        + " version = version + 1, update_time = ?"
-                                        + " WHERE user_id = ? AND status = 'ACTIVE'")) {
-                    statement.setObject(1, utc(now));
-                    statement.setString(2, "PASSWORD_CHANGED");
-                    statement.setObject(3, utc(now));
-                    statement.setLong(4, userId);
-                    statement.executeUpdate();
-                }
-                try (PreparedStatement statement =
-                        connection.prepareStatement(
-                                "UPDATE oauth2_authorization SET status = 'REVOKED',"
-                                        + " version = version + 1, update_time = ?"
-                                        + " WHERE user_id = ? AND status = 'ACTIVE'")) {
-                    statement.setObject(1, utc(now));
-                    statement.setLong(2, userId);
-                    statement.executeUpdate();
-                }
-                connection.commit();
-            } catch (SQLException | RuntimeException failure) {
-                try {
-                    connection.rollback();
-                } catch (SQLException ignored) {
-                    // Keep the original failure.
-                }
-                throw failure;
+    private Long findUserId(String normalizedName) {
+        try (Connection connection = primary.getConnection(); PreparedStatement statement = connection.prepareStatement(
+                "SELECT user_id FROM sys_user_login_name WHERE normalized_name = ?")) {
+            statement.setQueryTimeout(5);
+            statement.setString(1, normalizedName);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? result.getLong(1) : null;
             }
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        } catch (SQLException failure) {
+            throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
         }
     }
 

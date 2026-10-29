@@ -86,8 +86,10 @@ public class AdminStoresConfiguration {
     }
 
     @Bean
-    public AdminSessionService adminSessionService(DataSource dataSource) {
-        return new AdminSessionService(dataSource);
+    public AdminSessionService adminSessionService(DataSource dataSource,
+            @org.springframework.beans.factory.annotation.Qualifier("identityDataSource")
+            org.springframework.beans.factory.ObjectProvider<DataSource> identity) {
+        return new AdminSessionService(dataSource, identity.getIfAvailable(() -> dataSource));
     }
 
     @Bean

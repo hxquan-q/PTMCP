@@ -20,6 +20,7 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.DispatcherTypeRequestMatcher;
@@ -71,10 +72,12 @@ public class OAuthSecurityConfiguration {
             OAuth2AuthorizationConsentService consents,
             OAuth2TokenGenerator<?> tokenGenerator,
             AuthorizationServerSettings settings,
-            JwtDecoder revocationJwtDecoder)
+            JwtDecoder revocationJwtDecoder,
+            AsSessionSecurity sessionSecurity)
             throws Exception {
         OAuth2AuthorizationServerConfigurer server = new OAuth2AuthorizationServerConfigurer();
         http.securityMatcher(server.getEndpointsMatcher())
+                .addFilterAfter(sessionSecurity.filter(), SecurityContextHolderFilter.class)
                 .with(
                         server,
                         configurer ->
@@ -136,9 +139,10 @@ public class OAuthSecurityConfiguration {
     @Bean
     @Order(3)
     SecurityFilterChain pages(
-            HttpSecurity http, AccountAuthenticationProvider accountAuthenticationProvider)
+            HttpSecurity http, AccountAuthenticationProvider accountAuthenticationProvider, AsSessionSecurity sessionSecurity)
             throws Exception {
         http.securityMatcher(pageMatcher())
+                .addFilterAfter(sessionSecurity.filter(), SecurityContextHolderFilter.class)
                 .authorizeHttpRequests(
                         authorize ->
                                 authorize
@@ -148,11 +152,12 @@ public class OAuthSecurityConfiguration {
                                         .permitAll()
                                         .anyRequest()
                                         .authenticated())
-                .formLogin(form -> form.loginPage(LOGIN_PAGE).permitAll())
+                .formLogin(form -> form.loginPage(LOGIN_PAGE).successHandler(sessionSecurity::onSuccess).permitAll())
                 .authenticationProvider(accountAuthenticationProvider)
                 .logout(
                         logout ->
                                 logout.logoutUrl("/logout")
+                                        .addLogoutHandler(sessionSecurity::onLogout)
                                         .logoutSuccessUrl(LOGIN_PAGE + "?logout")
                                         .deleteCookies(SESSION_COOKIE)
                                         .invalidateHttpSession(true)

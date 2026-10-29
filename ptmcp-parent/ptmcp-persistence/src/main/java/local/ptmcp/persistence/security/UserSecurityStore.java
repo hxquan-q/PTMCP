@@ -71,4 +71,29 @@ public final class UserSecurityStore {
             }
         }
     }
+
+    public static void requireActiveProfile(Connection connection, long userId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT status FROM sys_user_profile WHERE user_id = ?")) {
+            statement.setQueryTimeout(5);
+            statement.setLong(1, userId);
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next() || !"ACTIVE".equals(result.getString(1))) {
+                    throw new DomainException(ErrorCode.TOKEN_REVOKED);
+                }
+            }
+        }
+    }
+    public static void revokeCredentials(Connection connection,long userId) throws SQLException {
+        for (String sql : new String[] {
+                "UPDATE web_session_index SET revoked_at=UTC_TIMESTAMP(6),version=version+1,update_time=UTC_TIMESTAMP(6) WHERE user_id=? AND revoked_at IS NULL",
+                "UPDATE personal_token SET status='REVOKED',revoked_at=UTC_TIMESTAMP(6),version=version+1,update_time=UTC_TIMESTAMP(6) WHERE user_id=? AND status='ACTIVE'",
+                "UPDATE oauth_refresh_family SET status='REVOKED',revoked_at=UTC_TIMESTAMP(6),revoke_reason='USER_SECURITY_CHANGED',version=version+1,update_time=UTC_TIMESTAMP(6) WHERE user_id=? AND status='ACTIVE'",
+                "UPDATE oauth2_authorization SET status='REVOKED',version=version+1,update_time=UTC_TIMESTAMP(6) WHERE user_id=? AND status='ACTIVE'"}) {
+            try (PreparedStatement statement=connection.prepareStatement(sql)) {
+                statement.setQueryTimeout(5);statement.setLong(1,userId);statement.executeUpdate();
+            }
+        }
+    }
+
 }

@@ -34,6 +34,7 @@ public final class WebSessionStore {
             try {
                 UserSecurityStore.lockGlobal(connection);
                 UserSecurityStore.requireReady(UserSecurityStore.read(connection, userId, true), authVersion);
+                UserSecurityStore.requireActiveProfile(connection, userId);
                 try (PreparedStatement statement = connection.prepareStatement(
                         "INSERT INTO web_session_index (session_hash, kind, user_id, auth_version,"
                                 + " issued_at, expires_at, create_time, update_time) VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))")) {

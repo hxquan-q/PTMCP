@@ -98,6 +98,7 @@ public class MeController {
                 .body(
                         tokens.create(
                                 userId(request),
+                                sessions.requireSessionAuthVersion(request),
                                 body.name(),
                                 body.platformId(),
                                 body.scopes(),

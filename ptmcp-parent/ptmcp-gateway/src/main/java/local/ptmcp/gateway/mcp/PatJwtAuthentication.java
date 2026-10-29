@@ -70,6 +70,10 @@ final class PatJwtAuthentication implements McpAuthentication {
         if (!snapshot.isFresh(Instant.now())) {
             throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
         }
+        requireUserVersion(snapshot, identity.userId(), identity.authVersion());
+        if (!identity.expiresAt().isAfter(Instant.now())) {
+            throw new DomainException(ErrorCode.TOKEN_INVALID);
+        }
         if (!identities.userActive(identity.userId())) {
             throw new DomainException(ErrorCode.TOKEN_INVALID);
         }
@@ -92,10 +96,9 @@ final class PatJwtAuthentication implements McpAuthentication {
         if (!snapshot.familyVersions().containsKey(familyId)) {
             throw new DomainException(ErrorCode.TOKEN_REVOKED);
         }
-        identities
-                .findFamily(familyId)
-                .ifPresent(
-                        family -> {
+        IdentityStore.FamilyRecord family = identities.findFamily(familyId)
+                .orElseThrow(() -> new DomainException(ErrorCode.TOKEN_REVOKED));
+        {
                             if (family.authVersion() != identity.authVersion()
                                     || !"ACTIVE".equals(family.status())
                                     || !family.withinWindow()
@@ -104,7 +107,7 @@ final class PatJwtAuthentication implements McpAuthentication {
                                     || !family.clientActive()) {
                                 throw new DomainException(ErrorCode.TOKEN_REVOKED);
                             }
-                        });
+        }
         return new McpIdentity(
                 identity.userId(),
                 identity.platformId(),
@@ -144,6 +147,7 @@ final class PatJwtAuthentication implements McpAuthentication {
                 security.read(
                         new SecurityStateReader.SubjectRequest(
                                 record.platformId(), record.userId(), List.of()));
+        requireUserVersion(snapshot, record.userId(), record.authVersion());
         return new McpIdentity(
                 record.userId(),
                 record.platformId(),
@@ -200,6 +204,7 @@ final class PatJwtAuthentication implements McpAuthentication {
                 security.read(
                         new SecurityStateReader.SubjectRequest(
                                 platformId, userId, List.of(familyId)));
+        requireUserVersion(snapshot, userId, authVersion);
         return new McpIdentity(
                 userId,
                 platformId,
@@ -210,6 +215,15 @@ final class PatJwtAuthentication implements McpAuthentication {
                 jwt.getExpiresAt(),
                 snapshot.policyEpoch(),
                 snapshot.checkedAt());
+    }
+
+    private static void requireUserVersion(SecuritySnapshot snapshot, long userId, long authVersion) {
+        if (!snapshot.isFresh(Instant.now())) {
+            throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+        }
+        if (authVersion <= 0 || snapshot.subjectVersions().getOrDefault(userId, 0L) != authVersion) {
+            throw new DomainException(ErrorCode.TOKEN_REVOKED);
+        }
     }
 
     private static long numericClaim(Jwt jwt, String claim) {

@@ -230,13 +230,14 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
   const tabs = [
     { key: 'all', label: `全部 (${INTEGRATIONS.length})` },
     { key: 'enabled', label: `已启用 (${INTEGRATIONS.filter((r) => r.status === '已生效').length})` },
-    { key: 'pending', label: `待验证 (${INTEGRATIONS.filter((r) => r.status === '未验证').length})` },
+    { key: 'pending', label: `待验证 (${INTEGRATIONS.filter((r) => r.status === '未验证' || r.status === '配置中').length})` },
     { key: 'error', label: `异常 (${INTEGRATIONS.filter((r) => r.status === '异常').length})` },
   ];
   const rows = useMemo(() => {
     let list = INTEGRATIONS;
     if (tab === 'enabled') list = list.filter((r) => r.status === '已生效');
-    if (tab === 'pending') list = list.filter((r) => r.status === '未验证');
+    // 待验证口径与统计卡一致：未验证 + 配置中（已配置但尚未生效）
+    if (tab === 'pending') list = list.filter((r) => r.status === '未验证' || r.status === '配置中');
     if (tab === 'error') list = list.filter((r) => r.status === '异常');
     if (platformFilter) list = list.filter((r) => (platformFilter === 'T3' ? r.platform.includes('Tier 3') : !r.platform.includes('Tier')));
     if (statusFilter) list = list.filter((r) => r.status === statusFilter);
@@ -259,7 +260,7 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
         }
       />
       {/* 统计卡 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 14 }}>
+      <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 14 }}>
         {stats.map((s) => (
           <StatCard key={s.label} icon={s.icon} value={s.value} label={s.label} hint={s.hint} tone={s.tone} />
         ))}
@@ -279,6 +280,7 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
         >
           <div
             role="tablist"
+            className="pill-tabs"
             style={{
               display: 'inline-flex',
               gap: 6,

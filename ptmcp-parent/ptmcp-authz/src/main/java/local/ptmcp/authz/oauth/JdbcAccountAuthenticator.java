@@ -51,7 +51,7 @@ public final class JdbcAccountAuthenticator implements AccountAuthenticator {
         try {
             // Capture the credential version BEFORE reading the host hash. Rechecking after
             // validation cannot safely attach a new version to an old-password result.
-            List<Long> bindings = jdbc.queryForList("SELECT user_id FROM sys_user_login_name WHERE normalized_name = ?", Long.class, normalized);
+            List<Long> bindings = jdbc.queryForList("SELECT n.user_id FROM sys_user_login_name n JOIN sys_user_profile p ON p.user_id = n.user_id WHERE n.normalized_name = ? AND p.status = 'ACTIVE'", Long.class, normalized);
             if (bindings.size() != 1) {
                 verifyPassword(fakeHash, rawPassword);
                 return Optional.empty();

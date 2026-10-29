@@ -56,6 +56,11 @@ public class OAuthDataConfiguration {
     }
 
     @Bean
+    AsSessionSecurity asSessionSecurity(DataSource dataSource) {
+        return new AsSessionSecurity(new local.ptmcp.persistence.security.WebSessionStore(dataSource));
+    }
+
+    @Bean
     public JdbcTemplate oauthJdbcTemplate(DataSource dataSource) {
         return new JdbcTemplate(dataSource);
     }

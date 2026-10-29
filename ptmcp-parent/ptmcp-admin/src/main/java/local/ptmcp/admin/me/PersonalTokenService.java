@@ -2,6 +2,7 @@ package local.ptmcp.admin.me;
 
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
+import local.ptmcp.persistence.security.UserSecurityStore;
 
 import tools.jackson.databind.json.JsonMapper;
 
@@ -64,7 +65,7 @@ public final class PersonalTokenService {
     public record TokenPage(List<TokenView> items, String nextCursor) {}
 
     public Created create(
-            long userId, String name, Long platformId, List<String> scopes, Instant expiresAt) {
+            long userId, long expectedAuthVersion, String name, Long platformId, List<String> scopes, Instant expiresAt) {
         if (name == null || name.isBlank() || name.length() > 64 || platformId == null) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
@@ -85,29 +86,37 @@ public final class PersonalTokenService {
                                 "INSERT INTO personal_token (user_id, platform_id, token_prefix,"
                                         + " token_hash, name, scopes, auth_version, expires_at,"
                                         + " status, version, create_time, update_time, created_by,"
-                                        + " updated_by) VALUES (?, ?, ?, ?, ?, ?, 1, ?, 'ACTIVE',"
+                                        + " updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE',"
                                         + " 1, ?, ?, ?, ?)",
                                 PreparedStatement.RETURN_GENERATED_KEYS)) {
+            connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+            connection.setAutoCommit(false);
+            UserSecurityStore.lockGlobal(connection);
+            UserSecurityStore.requireReady(UserSecurityStore.read(connection, userId, true), expectedAuthVersion);
+            UserSecurityStore.requireActiveProfile(connection, userId);
             statement.setLong(1, userId);
             statement.setLong(2, platformId);
             statement.setString(3, prefix);
             statement.setBytes(4, hash);
             statement.setString(5, name.trim());
             statement.setString(6, JSON.writeValueAsString(requested));
-            statement.setObject(7, utc(expiry));
-            statement.setObject(8, utc(now));
+            statement.setLong(7, expectedAuthVersion);
+            statement.setObject(8, utc(expiry));
             statement.setObject(9, utc(now));
-            statement.setLong(10, userId);
+            statement.setObject(10, utc(now));
             statement.setLong(11, userId);
+            statement.setLong(12, userId);
             statement.executeUpdate();
             try (ResultSet keys = statement.getGeneratedKeys()) {
                 if (!keys.next()) {
                     throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
                 }
+                long createdId = keys.getLong(1);
+                connection.commit();
                 return new Created(
                         token,
                         new TokenView(
-                                keys.getLong(1),
+                                createdId,
                                 name.trim(),
                                 prefix,
                                 requested,

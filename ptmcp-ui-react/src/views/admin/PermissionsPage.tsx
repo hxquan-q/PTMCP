@@ -31,41 +31,11 @@ import {
 } from '../../components/Icons';
 import { createGrant, deleteGrant, listGrants, previewAccess, type Grant, type SubjectType } from '../../services/access';
 import { listDatasources, listMetadata, type DatasourceRead, type MetadataObject } from '../../services/data';
+import { buildTree, type ResourceNode } from './resourceTree';
 import { mePortalApi, type PlatformItem } from '../../services/mePortalApi';
 import { listDepartments, listRoles, listUsers, type DepartmentRow, type RoleRow, type UserRow } from '../../services/orgPortalApi';
 
 /* ─── 资源树 ─── */
-interface ResourceNode {
-  key: string;
-  label: string;
-  sub?: string;
-  kind: 'DATASOURCE' | 'SCHEMA' | 'OBJECT';
-  /** OBJECT 节点才携带 — 对应预览 resourceId */
-  resourceId?: string;
-  children?: ResourceNode[];
-}
-
-function buildTree(objects: MetadataObject[]): ResourceNode[] {
-  const bySchema = new Map<string, MetadataObject[]>();
-  for (const obj of objects) {
-    const schema = obj.schemaName ?? obj.databaseName ?? 'default';
-    if (!bySchema.has(schema)) bySchema.set(schema, []);
-    bySchema.get(schema)!.push(obj);
-  }
-  return [...bySchema.entries()].map(([schema, objs]) => ({
-    key: `schema:${schema}`,
-    label: schema,
-    kind: 'SCHEMA' as const,
-    children: objs.map((o) => ({
-      key: `obj:${o.id}`,
-      label: o.objectName ?? o.tableName,
-      sub: o.objectType,
-      kind: 'OBJECT' as const,
-      resourceId: o.id,
-    })),
-  }));
-}
-
 const SUBJECT_TABS = [
   { key: 'USER', label: '用户' },
   { key: 'ROLE', label: '角色' },

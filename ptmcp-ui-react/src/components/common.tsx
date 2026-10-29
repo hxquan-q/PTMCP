@@ -17,6 +17,7 @@ export function Dialog({
   width?: number;
   children: ReactNode;
 }) {
+  const trapRef = useFocusTrap(open);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -44,6 +45,7 @@ export function Dialog({
       }}
     >
       <div
+        ref={trapRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -152,7 +154,7 @@ export function Badge({ tone, children }: { tone: 'success' | 'warning' | 'dange
 
 export function PageHeader({ title, description, actions }: { title: string; description?: string; actions?: ReactNode }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 18 }}>
+    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 18, flexWrap: 'wrap' }}>
       <div>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--ptmcp-heading)', lineHeight: 1.25 }}>{title}</h1>
         {description ? <p style={{ margin: '5px 0 0', fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>{description}</p> : null}
@@ -416,6 +418,7 @@ export function Drawer({
   footer?: ReactNode;
   width?: number;
 }) {
+  const trapRef = useFocusTrap(open);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -427,6 +430,7 @@ export function Drawer({
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(11,27,40,.28)', zIndex: 40 }} />
       <aside
+        ref={trapRef}
         role="dialog"
         aria-modal="true"
         style={{
@@ -577,6 +581,42 @@ export function GlobalSearch({ onOpen }: { onOpen: () => void }) {
       </kbd>
     </button>
   );
+}
+
+/** 焦点圈禁：打开时聚焦首个可操作元素、Tab 循环、关闭时归还焦点。供 Dialog/Drawer 共用。 */
+export function useFocusTrap(open: boolean) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const container = ref.current;
+    if (!container) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const focusables = () =>
+      Array.from(container.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter(
+        (el) => !el.hasAttribute('disabled') && el.offsetParent !== null,
+      );
+    window.setTimeout(() => focusables()[0]?.focus(), 0);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0]!;
+      const last = items[items.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    container.addEventListener('keydown', onKeyDown);
+    return () => {
+      container.removeEventListener('keydown', onKeyDown);
+      previouslyFocused?.focus?.();
+    };
+  }, [open]);
+  return ref;
 }
 
 export function useDebounced<T>(value: T, ms = 300): T {
