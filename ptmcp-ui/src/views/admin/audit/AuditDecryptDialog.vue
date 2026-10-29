@@ -114,7 +114,7 @@ onBeforeUnmount(() => {
 </template>
 <style scoped>
 .decrypt-form {
-  margin-top: 20px;
+  margin-top: 16px;
 }
 .plaintext {
   margin-top: 16px;

@@ -156,12 +156,12 @@ function sourceName(id: string | null): string {
 </script>
 
 <template>
-  <div class="admin-page">
+  <div class="admin-page fill-page">
     <PageHeader title="全局审计" description="按时间、员工、平台和结果追踪工具调用；默认只展示脱敏摘要和可见版本。" />
     <ElAlert v-if="directoryError" type="error" :closable="false" :title="directoryError"
       ><ElButton @click="loadDirectories">重试加载选项</ElButton></ElAlert
     >
-    <ElCard class="filter-card ptmcp-filter-bar" shadow="never">
+    <div class="ptmcp-filter-strip is-dense">
       <div class="filter-heading">
         <div>
           <h2>查询范围</h2>
@@ -206,76 +206,75 @@ function sourceName(id: string | null): string {
         <ElButton @click="advancedOpen = !advancedOpen"
           >{{ advancedOpen ? '收起高级筛选' : '高级筛选' }}<span v-if="advancedCount" class="advanced-count">{{ advancedCount }}</span></ElButton
         ><ElButton @click="clearFilters">清空</ElButton
-        ><ElButton type="primary" :disabled="!auditReady || !!dateRange" :loading="loading" @click="query">查询审计</ElButton>
+        ><ElButton type="primary" plain :disabled="!auditReady || !!dateRange" :loading="loading" @click="query">查询审计</ElButton>
       </div>
-    </ElCard>
+    </div>
     <div class="audit-workspace" :class="{ 'has-preview': session.can('ptmcp:audit:read') && !!quickId }">
-      <ElCard class="table-card ptmcp-table-section ptmcp-table-region" shadow="never">
-        <div class="section-heading">
-          <div>
-            <h2>调用记录</h2>
-            <p>列表应由服务端按审计范围过滤后返回；前端不先拉全量再筛选。</p>
-          </div>
+      <ElCard class="table-card ptmcp-table-section ptmcp-table-region ptmcp-fill-card" shadow="never" :body-style="{ padding: '0' }">
+        <div class="ptmcp-table-heading">
+          <h2 class="ptmcp-section-title">调用记录</h2>
           <ElTag v-if="frontendPreview || !auditReady" type="info" effect="plain">{{ frontendPreview ? '合成数据预览' : '审计服务未就绪' }}</ElTag>
-          <span v-else>已加载 {{ rows.length }} 条</span>
+          <span v-else class="ptmcp-meta-note">共 {{ rows.length }} 条</span>
         </div>
-        <p class="ptmcp-scroll-hint">左右滑动表格查看结果、判定与操作列。</p>
         <PageState v-if="error" kind="error" title="审计读取失败" :description="error" :request-id="requestId" action-label="重试" @action="retry" />
         <ElSkeleton v-if="loading && !rows.length" :rows="6" animated />
-        <ElTable
-          v-else-if="!error || rows.length"
-          :data="rows"
-          class="empty-table audit-table"
-          aria-label="调用记录"
-          row-key="requestId"
-          scrollbar-tabindex="0"
-          highlight-current-row
-          :current-row-key="quickId"
-          @row-click="showQuick"
-        >
-          <ElTableColumn label="时间（台北）" width="150"
-            ><template #default="{ row }">{{ formatDate(row.startedAt) }}</template></ElTableColumn
+        <div v-else-if="!error || rows.length" class="ptmcp-table-wrap">
+          <ElTable
+            :data="rows"
+            class="ptmcp-data-table empty-table audit-table"
+            size="small"
+            height="100%"
+            aria-label="调用记录"
+            row-key="requestId"
+            scrollbar-tabindex="0"
+            highlight-current-row
+            :current-row-key="quickId"
+            @row-click="showQuick"
           >
-          <ElTableColumn label="工具 / 请求" width="150"
-            ><template #default="{ row }"
-              ><span class="cell-primary">{{ row.tool }}</span
-              ><span class="cell-secondary" :title="row.requestId">{{ row.requestId }}</span></template
-            ></ElTableColumn
-          >
-          <ElTableColumn label="结果" width="120"
-            ><template #default="{ row }"><StatusBadge domain="execution" :value="row.result" /></template
-          ></ElTableColumn>
-          <ElTableColumn label="判定" width="120"
-            ><template #default="{ row }"><StatusBadge domain="verdict" :value="row.verdict" /></template
-          ></ElTableColumn>
-          <ElTableColumn label="员工" width="90"
-            ><template #default="{ row }">{{ row.userId || '—' }}</template></ElTableColumn
-          >
-          <ElTableColumn label="平台" width="120"
-            ><template #default="{ row }">{{ platformName(row.platformId) }}</template></ElTableColumn
-          >
-          <ElTableColumn label="数据源" width="130"
-            ><template #default="{ row }">{{ sourceName(row.datasourceId) }}</template></ElTableColumn
-          >
-          <ElTableColumn label="错误码" width="120"
-            ><template #default="{ row }">{{ row.errorCode || '—' }}</template></ElTableColumn
-          >
-          <ElTableColumn label="操作" width="70" align="right" fixed="right"
-            ><template #default="{ row }"
-              ><ElButton
-                v-if="session.can('ptmcp:audit:read')"
-                link
-                type="primary"
-                :aria-label="`速览调用 ${row.requestId}`"
-                @click.stop="showQuick(row)"
-                >速览</ElButton
-              ></template
-            ></ElTableColumn
-          >
-          <template #empty
-            ><PageState :title="loaded ? '当前条件下没有审计记录' : '审计记录尚未读取'" description="可调整时间和筛选条件；未读取不代表没有记录。"
-          /></template>
-        </ElTable>
+            <ElTableColumn label="时间（台北）" width="150"
+              ><template #default="{ row }">{{ formatDate(row.startedAt) }}</template></ElTableColumn
+            >
+            <ElTableColumn label="工具 / 请求" width="150"
+              ><template #default="{ row }"
+                ><span class="cell-primary">{{ row.tool }}</span
+                ><span class="cell-secondary" :title="row.requestId">{{ row.requestId }}</span></template
+              ></ElTableColumn
+            >
+            <ElTableColumn label="结果" width="120"
+              ><template #default="{ row }"><StatusBadge domain="execution" :value="row.result" /></template
+            ></ElTableColumn>
+            <ElTableColumn label="判定" width="120"
+              ><template #default="{ row }"><StatusBadge domain="verdict" :value="row.verdict" /></template
+            ></ElTableColumn>
+            <ElTableColumn label="员工" width="90"
+              ><template #default="{ row }">{{ row.userId || '—' }}</template></ElTableColumn
+            >
+            <ElTableColumn label="平台" width="120"
+              ><template #default="{ row }">{{ platformName(row.platformId) }}</template></ElTableColumn
+            >
+            <ElTableColumn label="数据源" width="130"
+              ><template #default="{ row }">{{ sourceName(row.datasourceId) }}</template></ElTableColumn
+            >
+            <ElTableColumn label="错误码" width="120"
+              ><template #default="{ row }">{{ row.errorCode || '—' }}</template></ElTableColumn
+            >
+            <ElTableColumn label="操作" width="70" align="right" fixed="right"
+              ><template #default="{ row }"
+                ><ElButton
+                  v-if="session.can('ptmcp:audit:read')"
+                  link
+                  type="primary"
+                  :aria-label="`速览调用 ${row.requestId}`"
+                  @click.stop="showQuick(row)"
+                  >速览</ElButton
+                ></template
+              ></ElTableColumn
+            >
+            <template #empty
+              ><PageState :title="loaded ? '当前条件下没有审计记录' : '审计记录尚未读取'" description="可调整时间和筛选条件；未读取不代表没有记录。"
+            /></template>
+          </ElTable>
+        </div>
         <CursorFooter v-if="loaded || rows.length" :count="rows.length" :has-more="!!cursor" :loading="loading" @more="load(true)" />
       </ElCard>
       <aside v-if="session.can('ptmcp:audit:read') && quickId" class="audit-preview" aria-label="审计排障速览" :aria-busy="quickLoading">
@@ -337,7 +336,8 @@ function sourceName(id: string | null): string {
 .audit-workspace {
   display: grid;
   min-width: 0;
-  gap: 20px;
+  min-height: 0;
+  gap: 16px;
 }
 .audit-workspace.has-preview {
   grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
@@ -347,7 +347,7 @@ function sourceName(id: string | null): string {
   min-width: 0;
 }
 .audit-preview {
-  padding: 20px;
+  padding: 16px;
   background: var(--ptmcp-chrome);
 }
 .preview-navigation,
@@ -374,7 +374,7 @@ function sourceName(id: string | null): string {
 }
 .audit-preview h3 {
   font-size: 14px;
-  margin-top: 20px;
+  margin-top: 16px;
 }
 @media (max-width: 1100px) {
   .audit-workspace.has-preview {
@@ -385,6 +385,14 @@ function sourceName(id: string | null): string {
   display: grid;
   gap: 16px;
 }
+.admin-page.fill-page > .audit-workspace {
+  flex: 1;
+  min-height: 0;
+  grid-auto-rows: minmax(0, 1fr);
+}
+.audit-workspace > .ptmcp-fill-card {
+  min-height: 0;
+}
 .filter-card,
 .table-card,
 .legend-card {
@@ -393,7 +401,7 @@ function sourceName(id: string | null): string {
 .legend-card {
   border: 0;
   border-top: 1px solid var(--ptmcp-border);
-  padding: 20px 0 0;
+  padding: 16px 0 0;
 }
 .filter-heading,
 .section-heading {

@@ -84,6 +84,6 @@ async function save(): Promise<void> {
 </template>
 <style scoped>
 .password-form {
-  margin-top: 20px;
+  margin-top: 16px;
 }
 </style>

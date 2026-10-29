@@ -130,7 +130,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="page-shell" aria-labelledby="metadata-title">
+  <section class="page-shell fill-page" aria-labelledby="metadata-title">
     <PageHeader title-id="metadata-title" title="元数据与业务字典" description="查看已发布快照中的物理结构，并维护纯文本业务说明。" />
     <ElAlert v-if="sourceDenied" type="warning" :closable="false" show-icon class="state-alert"
       >你没有数据源列表权限。请通过可访问对象入口进入元数据。</ElAlert
@@ -144,8 +144,8 @@ onBeforeUnmount(() => {
       action-label="重试数据源目录"
       @action="loadSources()"
     />
-    <ElCard class="filter-card ptmcp-filter-bar" shadow="never">
-      <ElForm :inline="true">
+    <div class="ptmcp-filter-strip is-dense">
+      <ElForm :inline="true" @submit.prevent="applyFilters">
         <ElFormItem label="数据源"
           ><ElSelect v-model="datasourceId" filterable :loading="sourceLoading" placeholder="先选择数据源" @change="selectSource"
             ><ElOption v-for="source in datasources" :key="source.id" :label="sourceLabel(source)" :value="source.id" /></ElSelect
@@ -158,9 +158,9 @@ onBeforeUnmount(() => {
           ><ElSelect v-model="filters.kind" clearable placeholder="全部"
             ><ElOption label="表" value="TABLE" /><ElOption label="视图" value="VIEW" /></ElSelect
         ></ElFormItem>
-        <ElButton type="primary" :disabled="!datasourceId" @click="applyFilters">查询</ElButton>
+        <ElButton type="primary" plain :disabled="!datasourceId" native-type="submit">查询</ElButton>
       </ElForm>
-    </ElCard>
+    </div>
     <div v-if="sourceNextCursor" class="source-pages">
       <span>已加载 {{ datasources.length }} 个数据源</span><ElButton :loading="sourceLoading" @click="moreSources">加载更多数据源</ElButton>
     </div>
@@ -181,48 +181,58 @@ onBeforeUnmount(() => {
       action-label="重新读取"
       @action="applyFilters"
     />
-    <ElCard shadow="never" class="table-card ptmcp-table-section" :body-style="{ padding: '0' }">
-      <h2 class="ptmcp-section-title">元数据对象</h2>
-      <ElTable v-loading="loading" :data="rows" row-key="id" empty-text="">
-        <ElTableColumn label="对象" min-width="270"
-          ><template #default="scope"
-            ><button class="link-button" type="button" :disabled="!session.can('ptmcp:metadata:read')" @click="openDetail(scope.row as MetadataItem)">
-              <strong>{{ formatObject(scope.row as MetadataItem) }}</strong
-              ><small>{{ scope.row.databaseName }} · ID {{ scope.row.id }} · 命名空间 {{ scope.row.namespaceId }}</small>
-            </button></template
-          ></ElTableColumn
-        >
-        <ElTableColumn label="类型" width="110"
-          ><template #default="scope"
-            ><ElTag :type="kindType(scope.row.objectType)" effect="light">{{ scope.row.objectType === 'TABLE' ? '表' : '视图' }}</ElTag></template
-          ></ElTableColumn
-        >
-        <ElTableColumn prop="tableComment" label="数据库注释" min-width="230" show-overflow-tooltip />
-        <ElTableColumn label="快照" width="150"
-          ><template #default="scope">{{ scope.row.snapshotVersion }} / {{ scope.row.generation }}</template></ElTableColumn
-        >
-        <ElTableColumn label="操作" width="100" fixed="right"
-          ><template #default="scope"
-            ><ElButton v-if="session.can('ptmcp:metadata:read')" link type="primary" @click="openDetail(scope.row as MetadataItem)"
-              >查看</ElButton
-            ></template
-          ></ElTableColumn
-        >
-        <template #empty
-          ><PageState
-            :description="
-              !datasourceId
-                ? '选择数据源后查看元数据'
-                : loading
-                  ? '正在加载…'
-                  : awaitingSnapshot
-                    ? '元数据待同步'
-                    : error
-                      ? '元数据读取失败，请重试'
-                      : '当前快照中没有匹配对象'
-            "
-        /></template>
-      </ElTable>
+    <ElCard shadow="never" class="table-card ptmcp-table-section ptmcp-fill-card" :body-style="{ padding: '0' }">
+      <div class="ptmcp-table-heading">
+        <h2 class="ptmcp-section-title">元数据对象</h2>
+        <span class="ptmcp-meta-note">共 {{ rows.length }} 条</span>
+      </div>
+      <div class="ptmcp-table-wrap">
+        <ElTable class="ptmcp-data-table" v-loading="loading" :data="rows" row-key="id" size="small" height="100%" empty-text="">
+          <ElTableColumn label="对象" min-width="270"
+            ><template #default="scope"
+              ><button
+                class="link-button"
+                type="button"
+                :disabled="!session.can('ptmcp:metadata:read')"
+                @click="openDetail(scope.row as MetadataItem)"
+              >
+                <strong>{{ formatObject(scope.row as MetadataItem) }}</strong
+                ><small>{{ scope.row.databaseName }} · ID {{ scope.row.id }} · 命名空间 {{ scope.row.namespaceId }}</small>
+              </button></template
+            ></ElTableColumn
+          >
+          <ElTableColumn label="类型" width="110"
+            ><template #default="scope"
+              ><ElTag :type="kindType(scope.row.objectType)" effect="light">{{ scope.row.objectType === 'TABLE' ? '表' : '视图' }}</ElTag></template
+            ></ElTableColumn
+          >
+          <ElTableColumn prop="tableComment" label="数据库注释" min-width="230" show-overflow-tooltip />
+          <ElTableColumn label="快照" width="150"
+            ><template #default="scope">{{ scope.row.snapshotVersion }} / {{ scope.row.generation }}</template></ElTableColumn
+          >
+          <ElTableColumn label="操作" width="90" align="right" fixed="right"
+            ><template #default="scope"
+              ><div class="ptmcp-row-actions">
+                <ElButton v-if="session.can('ptmcp:metadata:read')" link type="primary" @click="openDetail(scope.row as MetadataItem)">查看</ElButton>
+              </div></template
+            ></ElTableColumn
+          >
+          <template #empty
+            ><PageState
+              :description="
+                !datasourceId
+                  ? '选择数据源后查看元数据'
+                  : loading
+                    ? '正在加载…'
+                    : awaitingSnapshot
+                      ? '元数据待同步'
+                      : error
+                        ? '元数据读取失败，请重试'
+                        : '当前快照中没有匹配对象'
+              "
+          /></template>
+        </ElTable>
+      </div>
       <CursorFooter v-if="datasourceId" :count="rows.length" :has-more="!!nextCursor" :loading="loading" @more="nextPage" />
     </ElCard>
     <p class="privacy-note">结构与数据库注释为只读数据；保存业务字典不会执行 DDL。没有活动快照时会显示待同步状态。</p>

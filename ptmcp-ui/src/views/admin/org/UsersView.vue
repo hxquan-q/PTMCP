@@ -330,7 +330,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="portal-page" aria-labelledby="users-title">
+  <section class="portal-page fill-page" aria-labelledby="users-title">
     <PageHeader title-id="users-title" title="用户" description="管理用户状态、部门归属和角色。每项变更都携带资源版本。">
       <template #actions><ElButton v-if="session.can('ptmcp:user:create')" type="primary" @click="openCreate">新建用户</ElButton></template>
     </PageHeader>
@@ -338,12 +338,18 @@ onMounted(async () => {
       ><template #default><ElButton link type="danger" @click="load">重新加载</ElButton></template></ElAlert
     >
     <section class="users-table-section ptmcp-table-region" aria-labelledby="users-table-title">
-      <div class="filters ptmcp-filter-bar" role="search">
-        <ElInput v-model="keyword" clearable placeholder="搜索用户名或显示名称" aria-label="搜索用户名或显示名称" @keyup.enter="load" />
-        <ElSelect v-model="departmentFilter" clearable placeholder="全部部门" aria-label="部门筛选" @change="load"
-          ><ElOption v-for="item in departments" :key="item.id" :label="item.name" :value="item.id"
-        /></ElSelect>
-        <ElButton type="primary" plain @click="load">筛选</ElButton>
+      <div class="ptmcp-filter-strip" role="search">
+        <ElForm :inline="true" @submit.prevent="load">
+          <ElFormItem label="搜索">
+            <ElInput v-model="keyword" clearable placeholder="搜索用户名或显示名称" aria-label="搜索用户名或显示名称" @keyup.enter="load" />
+          </ElFormItem>
+          <ElFormItem label="部门">
+            <ElSelect v-model="departmentFilter" clearable placeholder="全部部门" aria-label="部门筛选" @change="load"
+              ><ElOption v-for="item in departments" :key="item.id" :label="item.name" :value="item.id"
+            /></ElSelect>
+          </ElFormItem>
+          <ElButton type="primary" plain native-type="submit">筛选</ElButton>
+        </ElForm>
       </div>
       <div class="ptmcp-table-heading">
         <h2 id="users-table-title" class="ptmcp-section-title">用户列表</h2>
@@ -358,6 +364,8 @@ onMounted(async () => {
         class="users-table ptmcp-data-table"
         :data="users"
         row-key="id"
+        size="small"
+        height="100%"
         table-layout="fixed"
         scrollbar-tabindex="0"
         aria-label="用户列表"
@@ -392,7 +400,8 @@ onMounted(async () => {
             ><div class="ptmcp-row-actions">
               <ElButton
                 v-if="['ptmcp:user:update', 'ptmcp:user:move', 'ptmcp:user:assign-role'].some(session.can)"
-                class="ptmcp-edit-action"
+                link
+                type="primary"
                 :aria-label="`编辑用户：${row.displayName}`"
                 @click="openEdit(row as User)"
                 >编辑</ElButton
@@ -516,7 +525,6 @@ onMounted(async () => {
   font-size: 13px;
   font-weight: 600;
 }
-.filters,
 .form-grid {
   display: flex;
   align-items: center;
@@ -538,16 +546,6 @@ onMounted(async () => {
 .users-table {
   width: 100%;
 }
-.filters {
-  margin-bottom: 18px;
-  flex-wrap: wrap;
-}
-.filters .el-input {
-  width: min(320px, 100%);
-}
-.filters .el-select {
-  width: 220px;
-}
 .form-grid > * {
   flex: 1;
 }
@@ -563,10 +561,6 @@ onMounted(async () => {
   margin-bottom: 16px;
 }
 @media (max-width: 640px) {
-  .filters .el-input,
-  .filters .el-select {
-    width: 100%;
-  }
   .form-grid {
     align-items: stretch;
     flex-direction: column;

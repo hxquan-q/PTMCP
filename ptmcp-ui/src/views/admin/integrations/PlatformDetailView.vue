@@ -228,7 +228,7 @@ onBeforeUnmount(() => {
             ><ElButton :loading="clientsLoading" :disabled="!clientReady || !item" @click="loadClients()">查询</ElButton>
           </div>
           <ElAlert v-if="clientsError" :title="clientsError" type="error" :closable="false"><ElButton @click="retryClients">重试</ElButton></ElAlert>
-          <ElTable :data="clients" aria-label="客户端列表"
+          <ElTable class="ptmcp-data-table" :data="clients" aria-label="客户端列表"
             ><ElTableColumn label="名称 / Client ID" min-width="220"
               ><template #default="{ row }">{{ row.name }} / {{ row.clientId }}</template></ElTableColumn
             ><ElTableColumn prop="type" label="类型" width="160" /><ElTableColumn prop="authMethods" label="认证方式" min-width="170" /><ElTableColumn
@@ -236,12 +236,14 @@ onBeforeUnmount(() => {
               label="Scope"
               min-width="170" /><ElTableColumn label="secret" width="110"
               ><template #default="{ row }">{{ row.secretConfigured ? '已配置' : '无' }}</template></ElTableColumn
-            ><ElTableColumn prop="status" label="状态" width="100" /><ElTableColumn label="操作" min-width="160"
+            ><ElTableColumn prop="status" label="状态" width="100" /><ElTableColumn label="操作" width="120" align="right" fixed="right"
               ><template #default="{ row }"
-                ><ElButton v-if="session.can('ptmcp:client:update')" link type="primary" @click="openClient(String(row.id))">编辑</ElButton
-                ><ElButton v-if="session.can('ptmcp:client:delete')" link type="danger" :disabled="removing" @click="removeClient(String(row.id))"
-                  >删除</ElButton
-                ></template
+                ><div class="ptmcp-row-actions">
+                  <ElButton v-if="session.can('ptmcp:client:update')" link type="primary" @click="openClient(String(row.id))">编辑</ElButton
+                  ><ElButton v-if="session.can('ptmcp:client:delete')" link type="danger" :disabled="removing" @click="removeClient(String(row.id))"
+                    >删除</ElButton
+                  >
+                </div></template
               ></ElTableColumn
             ><template #empty
               ><PageState

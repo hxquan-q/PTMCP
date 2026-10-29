@@ -95,7 +95,10 @@ export async function mountDataPage(path: string, api: Api) {
     '../../../composables/useCursorPage': new URL('../../src/composables/useCursorPage.ts', import.meta.url).href,
     '../../../components/common/CursorFooter.vue': dataUrl('export default {};'),
     '../../../components/common/PageHeader.vue': dataUrl('export default {};'),
+    '../../../components/common/PageState.vue': dataUrl('export default {};'),
     '../../../components/data/VersionConflictPanel.vue': dataUrl('export default {};'),
+    '../../portalUtils': dataUrl('export const formatDate=(value)=>String(value);'),
+    '../portalUtils': dataUrl('export const formatDate=(value)=>String(value);'),
   };
   const file = new URL(`../../src/views/${path}`, import.meta.url);
   const { descriptor } = parse(await readFile(file, 'utf8'));

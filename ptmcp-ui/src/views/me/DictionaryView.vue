@@ -130,7 +130,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="portal-page" aria-labelledby="dictionary-title">
+  <section class="portal-page fill-page" aria-labelledby="dictionary-title">
     <PageHeader
       title-id="dictionary-title"
       title="我的数据字典"
@@ -172,8 +172,8 @@ onMounted(() => {
       action-label="重试字典"
       @action="retryObjects"
     />
-    <ElCard shadow="never" class="portal-card context-card ptmcp-filter-bar"
-      ><div class="filters">
+    <ElCard shadow="never" class="portal-card context-card"
+      ><div class="ptmcp-filter-strip">
         <ElFormItem label="平台"
           ><ElSelect v-model="platformId" :loading="loadingPlatforms" placeholder="选择平台" class="select"
             ><template #loading><span class="cascade-loading">正在读取平台目录…</span></template
@@ -202,48 +202,49 @@ onMounted(() => {
         >
       </div></ElCard
     >
-    <ElCard shadow="never" class="portal-card ptmcp-table-section">
-      <h2 class="ptmcp-section-title">可见对象</h2>
-      <div class="filters second ptmcp-filter-bar">
-        <ElInput v-model="keyword" placeholder="搜索表名或业务说明" clearable class="keyword" @keyup.enter="loadObjects()" /><ElButton
-          type="primary"
-          plain
-          :disabled="!datasourceId"
-          @click="loadObjects()"
-          >查询</ElButton
-        >
+    <ElCard shadow="never" class="portal-card ptmcp-table-section ptmcp-fill-card">
+      <div class="ptmcp-table-heading">
+        <h2 class="ptmcp-section-title">可见对象</h2>
+        <span class="ptmcp-meta-note">共 {{ objects.length }} 条</span>
+      </div>
+      <div class="ptmcp-filter-strip">
+        <ElForm :inline="true" @submit.prevent="loadObjects()">
+          <ElFormItem label="搜索">
+            <ElInput v-model="keyword" placeholder="搜索表名或业务说明" clearable class="keyword" @keyup.enter="loadObjects()" />
+          </ElFormItem>
+          <ElButton type="primary" plain :disabled="!datasourceId" native-type="submit">查询</ElButton>
+        </ElForm>
       </div>
       <ElSkeleton v-if="loading && !objects.length" :rows="6" animated /><PageState
         v-else-if="!datasourceId"
         kind="idle"
         description="先选择平台和数据源，再读取可见对象。"
-      /><PageState v-else-if="!objects.length && !loadError" kind="empty" description="当前筛选没有可见对象" /><ElTable
-        v-else-if="objects.length"
-        :data="objects"
-        row-key="objectId"
-        aria-label="个人数据字典"
-        ><ElTableColumn label="对象" min-width="220"
-          ><template #default="{ row }"
-            ><button
-              class="object-link"
-              type="button"
-              :disabled="!row.authorized"
-              @click="router.push({ name: 'me-dictionary-detail', params: { objectId: row.objectId }, query: { platformId } })"
-            >
-              {{ row.tableName }}</button
-            ><span class="subtext">{{ [row.databaseName, row.schemaName].filter(Boolean).join(' / ') }}</span></template
-          ></ElTableColumn
-        ><ElTableColumn prop="objectType" label="类型" width="100" /><ElTableColumn
-          prop="tableComment"
-          label="业务说明"
-          min-width="260"
-          show-overflow-tooltip
-        /><ElTableColumn label="可读取" width="110"
-          ><template #default="{ row }"
-            ><ElTag :type="row.authorized ? 'success' : 'warning'">{{ row.authorized ? '是' : '仅目录可见' }}</ElTag></template
-          ></ElTableColumn
-        ></ElTable
-      >
+      /><PageState v-else-if="!objects.length && !loadError" kind="empty" description="当前筛选没有可见对象" />
+      <div v-else-if="objects.length" class="ptmcp-table-wrap">
+        <ElTable class="ptmcp-data-table" size="small" height="100%" :data="objects" row-key="objectId" aria-label="个人数据字典"
+          ><ElTableColumn label="对象" min-width="220"
+            ><template #default="{ row }"
+              ><button
+                class="object-link"
+                type="button"
+                :disabled="!row.authorized"
+                @click="router.push({ name: 'me-dictionary-detail', params: { objectId: row.objectId }, query: { platformId } })"
+              >
+                {{ row.tableName }}</button
+              ><span class="subtext">{{ [row.databaseName, row.schemaName].filter(Boolean).join(' / ') }}</span></template
+            ></ElTableColumn
+          ><ElTableColumn prop="objectType" label="类型" width="100" /><ElTableColumn
+            prop="tableComment"
+            label="业务说明"
+            min-width="260"
+            show-overflow-tooltip
+          /><ElTableColumn label="可读取" width="110"
+            ><template #default="{ row }"
+              ><ElTag :type="row.authorized ? 'success' : 'warning'">{{ row.authorized ? '是' : '仅目录可见' }}</ElTag></template
+            ></ElTableColumn
+          ></ElTable
+        >
+      </div>
       <CursorFooter v-if="objectsLoaded" :count="objects.length" :has-more="!!nextCursor" :loading="loading" @more="loadObjects(true)" />
     </ElCard>
   </section>
@@ -258,15 +259,6 @@ onMounted(() => {
   margin-bottom: 16px;
   border-color: var(--ptmcp-border);
 }
-.filters {
-  display: flex;
-  align-items: flex-end;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-.filters :deep(.el-form-item) {
-  margin: 0;
-}
 .cascade-loading {
   display: inline-flex;
   align-items: center;
@@ -277,14 +269,7 @@ onMounted(() => {
 .select {
   min-width: 210px;
 }
-.filters :deep(.el-select) {
-  width: 100%;
-}
 @media (max-width: 640px) {
-  .filters {
-    align-items: stretch;
-    flex-direction: column;
-  }
   .select {
     min-width: 0;
     width: 100%;

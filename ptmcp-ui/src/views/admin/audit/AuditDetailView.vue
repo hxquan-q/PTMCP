@@ -171,7 +171,7 @@ h2 {
 }
 h3 {
   font-size: 14px;
-  margin: 20px 0 8px;
+  margin: 16px 0 8px;
 }
 .descriptions,
 .notice {

@@ -175,7 +175,7 @@ onBeforeUnmount(() => {
   margin-top: 8px;
 }
 .login-error {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 .password-toggle {
   display: inline-flex;

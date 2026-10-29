@@ -109,8 +109,8 @@ onMounted(() => {
       action-label="重新读取"
       @action="platforms.length ? loadConfig() : loadPlatforms()"
     />
-    <ElCard shadow="never" class="portal-card ptmcp-filter-bar"
-      ><div class="filters">
+    <ElCard shadow="never" class="portal-card"
+      ><div class="ptmcp-filter-strip">
         <ElFormItem label="平台"
           ><ElSelect v-model="platformId" :loading="platformLoading" placeholder="选择平台" class="select"
             ><ElOption v-for="item in platforms" :key="item.id" :label="`${item.name} · Tier ${item.tier}`" :value="item.id" /><template
@@ -176,7 +176,7 @@ onMounted(() => {
 
 <style scoped>
 .client-heading {
-  margin: 20px 0 12px;
+  margin: 16px 0 12px;
   font-size: 14px;
 }
 .client-options {
@@ -214,14 +214,6 @@ onMounted(() => {
 .portal-card {
   margin-bottom: 16px;
   border-color: var(--ptmcp-border);
-}
-.filters {
-  display: flex;
-  gap: 18px;
-  flex-wrap: wrap;
-}
-.filters :deep(.el-form-item) {
-  margin: 0;
 }
 .select {
   min-width: 240px;

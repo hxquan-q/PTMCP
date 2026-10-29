@@ -16,6 +16,7 @@ import {
 import { newUuid } from '../../../services/uuid';
 import { useSessionStore } from '../../../stores/session';
 import { datasourceDifferences, isVersionConflict } from '../../../adapters/edit-conflict';
+import { formatDate } from '../../portalUtils';
 import VersionConflictPanel from '../../../components/data/VersionConflictPanel.vue';
 
 const route = useRoute();
@@ -77,9 +78,6 @@ function emptyForm(): DatasourceWrite {
     poolMax: 4,
     status: 'DRAFT',
   };
-}
-function formatDate(value: string | null | undefined): string {
-  return value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
 }
 function errorMessage(value: unknown): string {
   if (value instanceof DataRequestError) {

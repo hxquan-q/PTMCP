@@ -164,43 +164,55 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="portal-page" aria-labelledby="tokens-title">
+  <section class="portal-page fill-page" aria-labelledby="tokens-title">
     <PageHeader title-id="tokens-title" title="我的 PAT" description="PAT 明文只在创建响应中出现一次，关闭提示后无法找回。">
       <template #actions><ElButton type="primary" @click="openCreate">创建 PAT</ElButton></template>
     </PageHeader>
     <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError" />
-    <ElCard shadow="never" class="portal-card ptmcp-table-section"
-      ><h2 class="ptmcp-section-title">个人访问令牌</h2>
-      <div class="filters ptmcp-filter-bar">
-        <ElSelect v-model="status" clearable placeholder="全部状态" @change="load(false)"
-          ><ElOption label="活跃" value="ACTIVE" /><ElOption label="已撤销" value="REVOKED" /><ElOption label="已过期" value="EXPIRED"
-        /></ElSelect>
+    <ElCard shadow="never" class="portal-card ptmcp-table-section ptmcp-fill-card"
+      ><div class="ptmcp-table-heading">
+        <h2 class="ptmcp-section-title">个人访问令牌</h2>
+        <span class="ptmcp-meta-note">共 {{ tokens.length }} 条</span>
+      </div>
+      <div class="ptmcp-filter-strip">
+        <ElForm :inline="true" @submit.prevent="load(false)">
+          <ElFormItem label="状态">
+            <ElSelect v-model="status" clearable placeholder="全部状态" @change="load(false)"
+              ><ElOption label="活跃" value="ACTIVE" /><ElOption label="已撤销" value="REVOKED" /><ElOption label="已过期" value="EXPIRED"
+            /></ElSelect>
+          </ElFormItem>
+        </ElForm>
       </div>
       <ElSkeleton v-if="loading" :rows="6" animated /><PageState v-else-if="!tokens.length" description="尚无 PAT，可创建一个用于 MCP 接入"
         ><ElButton type="primary" plain @click="openCreate">创建 PAT</ElButton></PageState
-      ><ElTable v-else :data="tokens" stripe row-key="id" aria-label="PAT 列表"
-        ><ElTableColumn prop="name" label="名称" min-width="160" /><ElTableColumn label="前缀" width="150"
-          ><template #default="{ row }"
-            ><code>{{ row.prefix }}</code></template
-          ></ElTableColumn
-        ><ElTableColumn label="平台" min-width="140"
-          ><template #default="{ row }">{{ platformName(row.platformId) }}</template></ElTableColumn
-        ><ElTableColumn label="Scope" min-width="240"
-          ><template #default="{ row }"
-            ><ElTag v-for="scope in row.scopes" :key="scope" size="small" effect="plain" class="scope-tag">{{ scope }}</ElTag></template
-          ></ElTableColumn
-        ><ElTableColumn label="到期（台北）" min-width="170"
-          ><template #default="{ row }">{{ formatDate(row.expiresAt) }}</template></ElTableColumn
-        ><ElTableColumn label="最近使用" min-width="170"
-          ><template #default="{ row }">{{ formatDate(row.lastUsedAt) }}</template></ElTableColumn
-        ><ElTableColumn label="状态" width="100"
-          ><template #default="{ row }"><StatusBadge domain="pat" :value="row.status" /></template></ElTableColumn
-        ><ElTableColumn label="操作" width="100"
-          ><template #default="{ row }"
-            ><ElButton v-if="row.status === 'ACTIVE'" link type="danger" @click="revoke(row as TokenView)">撤销</ElButton></template
-          ></ElTableColumn
-        ></ElTable
       >
+      <div v-else class="ptmcp-table-wrap">
+        <ElTable class="ptmcp-data-table" size="small" height="100%" :data="tokens" row-key="id" aria-label="PAT 列表"
+          ><ElTableColumn prop="name" label="名称" min-width="160" /><ElTableColumn label="前缀" width="150"
+            ><template #default="{ row }"
+              ><code>{{ row.prefix }}</code></template
+            ></ElTableColumn
+          ><ElTableColumn label="平台" min-width="140"
+            ><template #default="{ row }">{{ platformName(row.platformId) }}</template></ElTableColumn
+          ><ElTableColumn label="Scope" min-width="240"
+            ><template #default="{ row }"
+              ><ElTag v-for="scope in row.scopes" :key="scope" size="small" effect="plain" class="scope-tag">{{ scope }}</ElTag></template
+            ></ElTableColumn
+          ><ElTableColumn label="到期（台北）" min-width="170"
+            ><template #default="{ row }">{{ formatDate(row.expiresAt) }}</template></ElTableColumn
+          ><ElTableColumn label="最近使用" min-width="170"
+            ><template #default="{ row }">{{ formatDate(row.lastUsedAt) }}</template></ElTableColumn
+          ><ElTableColumn label="状态" width="100"
+            ><template #default="{ row }"><StatusBadge domain="pat" :value="row.status" /></template></ElTableColumn
+          ><ElTableColumn label="操作" width="90" align="right" fixed="right"
+            ><template #default="{ row }"
+              ><div class="ptmcp-row-actions">
+                <ElButton v-if="row.status === 'ACTIVE'" link type="danger" @click="revoke(row as TokenView)">撤销</ElButton>
+              </div></template
+            ></ElTableColumn
+          ></ElTable
+        >
+      </div>
       <CursorFooter :count="tokens.length" :has-more="!!nextCursor" :loading="loading" @more="load(true)"
     /></ElCard>
     <ElDialog v-model="dialogVisible" title="创建 PAT" :before-close="closeCreate" width="min(520px, calc(100vw - 32px))"
@@ -254,11 +266,6 @@ onMounted(async () => {
 }
 .portal-card {
   border-color: var(--ptmcp-border);
-}
-.filters {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 18px;
 }
 .scope-tag {
   margin-right: 4px;

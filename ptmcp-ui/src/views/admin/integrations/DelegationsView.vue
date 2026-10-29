@@ -173,7 +173,7 @@ onMounted(() => {
 });
 </script>
 <template>
-  <div class="admin-page">
+  <div class="admin-page fill-page">
     <PageHeader title="管理委派" description="部门子树 ∩ 资源范围 ∩ 动作 ∩ 服务器有效期。"
       ><template #actions
         ><ElButton v-if="session.can('ptmcp:delegation:create')" type="primary" @click="openCreate">新建委派</ElButton></template
@@ -182,8 +182,8 @@ onMounted(() => {
     <ElAlert v-if="directoryError" type="error" :title="directoryError" :closable="false"
       ><ElButton @click="loadDirectories">重新加载目录</ElButton></ElAlert
     >
-    <ElCard shadow="never" class="ptmcp-filter-bar"
-      ><ElForm class="filters" label-position="top" @submit.prevent="load()"
+    <div class="ptmcp-filter-strip">
+      <ElForm :inline="true" @submit.prevent="load()"
         ><ElFormItem label="管理员"><ElInput v-model="filter.userId" clearable placeholder="管理员 ID" /></ElFormItem
         ><ElFormItem label="状态"
           ><ElSelect v-model="filter.status" clearable placeholder="全部状态"
@@ -195,7 +195,7 @@ onMounted(() => {
             ><ElOption label="数据源" value="DATASOURCE" /><ElOption label="命名空间" value="NAMESPACE" /><ElOption
               label="对象"
               value="OBJECT" /></ElSelect></ElFormItem
-        ><ElButton native-type="submit" type="primary" :disabled="!delegationReady" :loading="loading">查询</ElButton
+        ><ElButton native-type="submit" type="primary" plain :disabled="!delegationReady" :loading="loading">查询</ElButton
         ><ElButton
           @click="
             Object.assign(filter, { userId: '', status: '', resourceType: '' });
@@ -203,10 +203,13 @@ onMounted(() => {
           "
           >重置</ElButton
         ></ElForm
-      ></ElCard
-    >
-    <ElCard shadow="never" class="ptmcp-table-section"
-      ><h2 class="ptmcp-section-title">委派记录</h2>
+      >
+    </div>
+    <ElCard shadow="never" class="ptmcp-table-section ptmcp-fill-card" :body-style="{ padding: '0' }">
+      <div class="ptmcp-table-heading">
+        <h2 class="ptmcp-section-title">委派记录</h2>
+        <span class="ptmcp-meta-note">共 {{ rows.length }} 条</span>
+      </div>
       <PageState
         v-if="error"
         kind="error"
@@ -214,35 +217,38 @@ onMounted(() => {
         :description="error"
         :request-id="requestId"
         action-label="重试"
-        @action="retry" /><ElSkeleton v-if="loading" :rows="5" animated /><ElTable
-        v-else-if="!error || rows.length"
-        :data="rows"
-        aria-label="委派记录"
-        ><ElTableColumn prop="userId" label="管理员" min-width="120" /><ElTableColumn
-          prop="departmentRootId"
-          label="部门根"
-          min-width="120" /><ElTableColumn label="资源范围" min-width="170"
-          ><template #default="{ row }">{{ row.resourceType }}:{{ row.resourceId }}</template></ElTableColumn
-        ><ElTableColumn prop="allowedActions" label="动作" min-width="200" /><ElTableColumn label="有效期（台北）" min-width="260"
-          ><template #default="{ row }">{{ formatDate(row.validFrom) }} 至 {{ formatDate(row.validTo) }}</template></ElTableColumn
-        ><ElTableColumn prop="status" label="状态" width="100"
-          ><template #default="{ row }"><StatusBadge domain="delegation" :value="row.status" /></template></ElTableColumn
-        ><ElTableColumn prop="version" label="版本" width="80" /><ElTableColumn label="操作" width="90"
-          ><template #default="{ row }"
-            ><ElButton
-              v-if="session.can('ptmcp:delegation:delete') && row.status === 'ACTIVE'"
-              link
-              type="danger"
-              :disabled="saving || row.userId === session.user?.userId"
-              @click="revoke(String(row.id))"
-              >撤销</ElButton
-            ></template
-          ></ElTableColumn
-        ><template #empty
-          ><PageState
-            :title="loaded ? '没有符合条件的委派' : '委派尚未读取'"
-            description="可调整条件或新建委派；未读取不代表没有委派。" /></template></ElTable
-      ><CursorFooter v-if="loaded || rows.length" :count="rows.length" :has-more="!!cursor" :loading="loading" @more="load(true)"
+        @action="retry" /><ElSkeleton v-if="loading" :rows="5" animated />
+      <div v-else-if="!error || rows.length" class="ptmcp-table-wrap">
+        <ElTable :data="rows" class="ptmcp-data-table" size="small" height="100%" aria-label="委派记录"
+          ><ElTableColumn prop="userId" label="管理员" min-width="120" /><ElTableColumn
+            prop="departmentRootId"
+            label="部门根"
+            min-width="120" /><ElTableColumn label="资源范围" min-width="170"
+            ><template #default="{ row }">{{ row.resourceType }}:{{ row.resourceId }}</template></ElTableColumn
+          ><ElTableColumn prop="allowedActions" label="动作" min-width="200" /><ElTableColumn label="有效期（台北）" min-width="260"
+            ><template #default="{ row }">{{ formatDate(row.validFrom) }} 至 {{ formatDate(row.validTo) }}</template></ElTableColumn
+          ><ElTableColumn prop="status" label="状态" width="100"
+            ><template #default="{ row }"><StatusBadge domain="delegation" :value="row.status" /></template></ElTableColumn
+          ><ElTableColumn prop="version" label="版本" width="80" /><ElTableColumn label="操作" width="90" align="right" fixed="right"
+            ><template #default="{ row }"
+              ><div class="ptmcp-row-actions">
+                <ElButton
+                  v-if="session.can('ptmcp:delegation:delete') && row.status === 'ACTIVE'"
+                  link
+                  type="danger"
+                  :disabled="saving || row.userId === session.user?.userId"
+                  @click="revoke(String(row.id))"
+                  >撤销</ElButton
+                >
+              </div></template
+            ></ElTableColumn
+          ><template #empty
+            ><PageState
+              :title="loaded ? '没有符合条件的委派' : '委派尚未读取'"
+              description="可调整条件或新建委派；未读取不代表没有委派。" /></template
+        ></ElTable>
+      </div>
+      <CursorFooter v-if="loaded || rows.length" :count="rows.length" :has-more="!!cursor" :loading="loading" @more="load(true)"
     /></ElCard>
     <ElAlert
       type="info"
@@ -299,17 +305,6 @@ onMounted(() => {
 .admin-page {
   display: grid;
   gap: 16px;
-}
-.filters {
-  display: flex;
-  align-items: flex-end;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-.filters .el-form-item {
-  margin: 0;
-  flex: 1 1 180px;
-  min-width: 0;
 }
 .el-select {
   width: 100%;

@@ -186,7 +186,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="portal-page" aria-labelledby="roles-title">
+  <section class="portal-page fill-page" aria-labelledby="roles-title">
     <PageHeader title-id="roles-title" title="角色" description="角色只管理功能码；数据权限在授权矩阵中单独维护。">
       <template #actions
         ><ElButton v-if="roleGate.canWrite && session.can('ptmcp:role:create')" type="primary" @click="openCreate">新建角色</ElButton></template
@@ -209,6 +209,8 @@ onMounted(async () => {
         class="roles-table ptmcp-data-table"
         :data="roles"
         row-key="id"
+        size="small"
+        height="100%"
         table-layout="fixed"
         scrollbar-tabindex="0"
         aria-label="角色列表"
@@ -260,16 +262,19 @@ onMounted(async () => {
             ><div class="ptmcp-row-actions">
               <ElButton
                 v-if="roleGate.canWrite && session.can('ptmcp:role:update')"
-                class="ptmcp-edit-action"
+                link
+                type="primary"
                 :aria-label="`编辑角色：${row.name}`"
                 @click="openEdit(row as Role)"
                 >编辑</ElButton
-              ><ElDropdown v-if="roleGate.canWrite && session.can('ptmcp:role:delete')" trigger="click" @command="remove(row as Role)"
-                ><button type="button" class="ptmcp-more-actions" :aria-label="`更多角色操作：${row.name}`" title="更多角色操作">
-                  <IconEpMoreFilled aria-hidden="true" /></button
-                ><template #dropdown
-                  ><ElDropdownMenu><ElDropdownItem command="delete">删除角色</ElDropdownItem></ElDropdownMenu></template
-                ></ElDropdown
+              >
+              ><ElButton
+                v-if="roleGate.canWrite && session.can('ptmcp:role:delete')"
+                link
+                type="danger"
+                :aria-label="`删除角色：${row.name}`"
+                @click="remove(row as Role)"
+                >删除</ElButton
               >
             </div></template
           ></ElTableColumn

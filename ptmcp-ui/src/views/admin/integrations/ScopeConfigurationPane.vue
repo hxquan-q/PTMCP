@@ -193,7 +193,7 @@ onMounted(() => {
       >
     </ElForm>
     <p class="helper">PG catalog 仅分组；命名空间缺少可信实时 generation，暂不可选。最多100条，不使用手填 ID 替代当前资源身份。</p>
-    <ElTable :data="draft" aria-label="Scope 规则"
+    <ElTable class="ptmcp-data-table" :data="draft" aria-label="Scope 规则"
       ><ElTableColumn prop="resourceType" label="资源类型" min-width="140" /><ElTableColumn
         prop="resourceId"
         label="资源 ID"
@@ -204,11 +204,13 @@ onMounted(() => {
         width="100"
       /><ElTableColumn label="继承" width="100"
         ><template #default="{ row }">{{ row.includeDescendants ? '包含子级' : '仅当前' }}</template></ElTableColumn
-      ><ElTableColumn label="操作" width="90"
+      ><ElTableColumn label="操作" width="80" align="right"
         ><template #default="{ $index }"
-          ><ElButton v-if="session.can('ptmcp:platform:scope')" link type="danger" :disabled="saving" @click="draft.splice($index, 1)"
-            >移除</ElButton
-          ></template
+          ><div class="ptmcp-row-actions">
+            <ElButton v-if="session.can('ptmcp:platform:scope')" link type="danger" :disabled="saving" @click="draft.splice($index, 1)"
+              >移除</ElButton
+            >
+          </div></template
         ></ElTableColumn
       ><template #empty>{{ current ? 'Scope 为空：平台不可读库' : 'Scope 尚未读取' }}</template></ElTable
     >
@@ -269,7 +271,7 @@ h2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
-  margin: 20px 0;
+  margin: 16px 0;
 }
 .scope-form .el-select {
   width: 100%;

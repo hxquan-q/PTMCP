@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import CursorFooter from '../../components/common/CursorFooter.vue';
 import PageHeader from '../../components/common/PageHeader.vue';
+import StatusBadge from '../../components/common/StatusBadge.vue';
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -58,36 +59,43 @@ onMounted(load);
 </script>
 
 <template>
-  <section class="portal-page" aria-labelledby="authorizations-title">
+  <section class="portal-page fill-page" aria-labelledby="authorizations-title">
     <PageHeader title-id="authorizations-title" title="我的授权" description="查看和撤销外部客户端的 OAuth 授权。退出控制台不会自动撤销这些授权。" />
     <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="loadError"
       ><ElButton @click="load()">重新读取授权</ElButton></ElAlert
-    ><ElCard shadow="never" class="portal-card ptmcp-table-section"
-      ><h2 class="ptmcp-section-title">OAuth 授权</h2>
+    ><ElCard shadow="never" class="portal-card ptmcp-table-section ptmcp-fill-card"
+      ><div class="ptmcp-table-heading">
+        <h2 class="ptmcp-section-title">OAuth 授权</h2>
+        <span class="ptmcp-meta-note">共 {{ items.length }} 条</span>
+      </div>
       <ElSkeleton v-if="loading" :rows="6" animated /><PageState v-else-if="!items.length && !loadError" description="尚无 OAuth 授权"
         ><ElButton type="primary" plain @click="router.push('/me/integrations')">查看接入说明</ElButton></PageState
-      ><ElTable v-else-if="items.length" :data="items" stripe row-key="id" aria-label="OAuth 授权列表"
-        ><ElTableColumn prop="clientName" label="客户端" min-width="180" /><ElTableColumn
-          prop="platformId"
-          label="平台 ID"
-          width="120"
-        /><ElTableColumn label="授权时间" min-width="180"
-          ><template #default="{ row }">{{ formatDate(row.issuedAt) }}</template></ElTableColumn
-        ><ElTableColumn label="最近使用" min-width="180"
-          ><template #default="{ row }">{{ formatDate(row.lastUsedAt) }}</template></ElTableColumn
-        ><ElTableColumn label="到期时间" min-width="180"
-          ><template #default="{ row }">{{ formatDate(row.absoluteExpiresAt) }}</template></ElTableColumn
-        ><ElTableColumn label="状态" width="110"
-          ><template #default="{ row }"
-            ><ElTag :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ row.status }}</ElTag></template
-          ></ElTableColumn
-        ><ElTableColumn label="操作" width="100"
-          ><template #default="{ row }"
-            ><ElButton v-if="row.status === 'ACTIVE'" link type="danger" :disabled="revoking" @click="revoke(row as AuthorizationView)">撤销</ElButton
-            ><ElButton v-else link type="primary" @click="router.push('/me/integrations')">重新接入</ElButton></template
-          ></ElTableColumn
-        ></ElTable
       >
+      <div v-else-if="items.length" class="ptmcp-table-wrap">
+        <ElTable :data="items" class="ptmcp-data-table" size="small" height="100%" row-key="id" aria-label="OAuth 授权列表"
+          ><ElTableColumn prop="clientName" label="客户端" min-width="180" /><ElTableColumn
+            prop="platformId"
+            label="平台 ID"
+            width="120"
+          /><ElTableColumn label="授权时间" min-width="180"
+            ><template #default="{ row }">{{ formatDate(row.issuedAt) }}</template></ElTableColumn
+          ><ElTableColumn label="最近使用" min-width="180"
+            ><template #default="{ row }">{{ formatDate(row.lastUsedAt) }}</template></ElTableColumn
+          ><ElTableColumn label="到期时间" min-width="180"
+            ><template #default="{ row }">{{ formatDate(row.absoluteExpiresAt) }}</template></ElTableColumn
+          ><ElTableColumn label="状态" width="110"
+            ><template #default="{ row }"><StatusBadge domain="pat" :value="row.status" /></template></ElTableColumn
+          ><ElTableColumn label="操作" width="110" align="right" fixed="right"
+            ><template #default="{ row }"
+              ><div class="ptmcp-row-actions">
+                <ElButton v-if="row.status === 'ACTIVE'" link type="danger" :disabled="revoking" @click="revoke(row as AuthorizationView)"
+                  >撤销</ElButton
+                ><ElButton v-else link type="primary" @click="router.push('/me/integrations')">重新接入</ElButton>
+              </div></template
+            ></ElTableColumn
+          ></ElTable
+        >
+      </div>
       <CursorFooter :count="items.length" :has-more="!!nextCursor" :loading="loading" @more="load(true)"
     /></ElCard>
   </section>

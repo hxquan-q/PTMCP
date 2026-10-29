@@ -62,79 +62,84 @@ onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearP
 </script>
 
 <template>
-  <div class="admin-page">
+  <div class="admin-page fill-page">
     <PageHeader title="平台与客户端" description="维护受信平台、目录 Scope 和 OAuth 客户端，机密值只由服务端一次性返回。">
       <template #actions
         ><ElButton v-if="session.can('ptmcp:platform:create')" type="primary" @click="dialogVisible = true">新建平台</ElButton></template
       >
     </PageHeader>
-    <ElCard class="filter-card ptmcp-filter-bar" shadow="never">
-      <div class="filter-row">
-        <ElInput v-model="filter.keyword" clearable placeholder="平台名称或 code" aria-label="平台名称或 code" />
-        <ElSelect v-model="filter.tier" clearable placeholder="全部 Tier" aria-label="平台 Tier"
-          ><ElOption label="Tier 1" value="1" /><ElOption label="Tier 2" value="2" /><ElOption label="Tier 3" value="3"
-        /></ElSelect>
-        <ElSelect v-model="filter.status" clearable placeholder="全部状态" aria-label="平台状态"
-          ><ElOption label="启用" value="ACTIVE" /><ElOption label="停用" value="DISABLED"
-        /></ElSelect>
-        <div>
-          <ElButton type="primary" :loading="loading" :disabled="!platformReady" @click="load()">查询</ElButton
-          ><ElButton
-            @click="
-              Object.assign(filter, { keyword: '', tier: '', status: '' });
-              platformReady && load();
-            "
-            >重置</ElButton
-          >
-        </div>
-      </div>
-    </ElCard>
-    <ElCard class="table-card ptmcp-table-section" shadow="never">
-      <div class="section-heading">
-        <div>
-          <h2>平台目录</h2>
-          <p>平台、Scope 和客户端应由后端授权接口返回。</p>
-        </div>
+    <div class="ptmcp-filter-strip">
+      <ElForm :inline="true" @submit.prevent="load()">
+        <ElFormItem label="关键词">
+          <ElInput v-model="filter.keyword" clearable placeholder="平台名称或 code" aria-label="平台名称或 code" @keyup.enter="load()" />
+        </ElFormItem>
+        <ElFormItem label="Tier">
+          <ElSelect v-model="filter.tier" clearable placeholder="全部 Tier" aria-label="平台 Tier"
+            ><ElOption label="Tier 1" value="1" /><ElOption label="Tier 2" value="2" /><ElOption label="Tier 3" value="3"
+          /></ElSelect>
+        </ElFormItem>
+        <ElFormItem label="状态">
+          <ElSelect v-model="filter.status" clearable placeholder="全部状态" aria-label="平台状态"
+            ><ElOption label="启用" value="ACTIVE" /><ElOption label="停用" value="DISABLED"
+          /></ElSelect>
+        </ElFormItem>
+        <ElButton type="primary" plain :loading="loading" :disabled="!platformReady" native-type="submit">查询</ElButton>
+        <ElButton
+          @click="
+            Object.assign(filter, { keyword: '', tier: '', status: '' });
+            platformReady && load();
+          "
+          >重置</ElButton
+        >
+      </ElForm>
+    </div>
+    <ElCard class="table-card ptmcp-table-section ptmcp-fill-card" shadow="never" :body-style="{ padding: '0' }">
+      <div class="ptmcp-table-heading">
+        <h2 class="ptmcp-section-title">平台目录</h2>
         <ElTag v-if="frontendPreview || !platformReady" effect="plain" type="info">{{ frontendPreview ? '合成数据预览' : '平台服务未就绪' }}</ElTag>
-        <span v-else>已加载 {{ rows.length }} 条</span>
+        <span v-else class="ptmcp-meta-note">共 {{ rows.length }} 条</span>
       </div>
       <PageState v-if="error" kind="error" title="平台读取失败" :description="error" :request-id="requestId" action-label="重试" @action="retry" />
       <ElSkeleton v-if="loading && !rows.length" :rows="5" animated />
-      <ElTable v-else-if="!error || rows.length" :data="rows" class="empty-table" aria-label="平台目录">
-        <ElTableColumn prop="code" label="Code" min-width="150" />
-        <ElTableColumn prop="name" label="名称" min-width="170" />
-        <ElTableColumn prop="tier" label="Tier" width="90" />
-        <ElTableColumn prop="catalogMode" label="目录模式" min-width="120" />
-        <ElTableColumn label="逐调用证明" min-width="130"
-          ><template #default="{ row }">{{ row.proofMode }} · {{ row.proofConfigured ? '已配置' : '未配置' }}</template></ElTableColumn
-        >
-        <ElTableColumn label="状态" min-width="100"
-          ><template #default="{ row }"><StatusBadge domain="lifecycle" :value="row.status" /></template
-        ></ElTableColumn>
-        <ElTableColumn label="操作" min-width="150"
-          ><template #default="{ row }"
-            ><ElButton
-              v-if="session.can('ptmcp:platform:read')"
-              link
-              type="primary"
-              @click="router.push(`/admin/platforms/${encodeURIComponent(row.id)}`)"
-              >详情</ElButton
-            ><ElButton
-              v-if="session.can('ptmcp:platform:delete')"
-              link
-              type="danger"
-              :disabled="removing || row.status !== 'DISABLED'"
-              @click="remove(String(row.id))"
-              >删除</ElButton
-            ></template
-          ></ElTableColumn
-        >
-        <template #empty
-          ><PageState
-            :title="error ? '平台读取失败' : loaded ? '没有符合条件的平台' : '平台目录尚未读取'"
-            :description="platformReady ? '可调整筛选、查询或创建平台。' : filterText"
-        /></template>
-      </ElTable>
+      <div v-else-if="!error || rows.length" class="ptmcp-table-wrap">
+        <ElTable :data="rows" class="ptmcp-data-table empty-table" size="small" height="100%" aria-label="平台目录">
+          <ElTableColumn prop="code" label="Code" min-width="150" />
+          <ElTableColumn prop="name" label="名称" min-width="170" />
+          <ElTableColumn prop="tier" label="Tier" width="90" />
+          <ElTableColumn prop="catalogMode" label="目录模式" min-width="120" />
+          <ElTableColumn label="逐调用证明" min-width="130"
+            ><template #default="{ row }">{{ row.proofMode }} · {{ row.proofConfigured ? '已配置' : '未配置' }}</template></ElTableColumn
+          >
+          <ElTableColumn label="状态" min-width="100"
+            ><template #default="{ row }"><StatusBadge domain="lifecycle" :value="row.status" /></template
+          ></ElTableColumn>
+          <ElTableColumn label="操作" width="110" align="right" fixed="right"
+            ><template #default="{ row }"
+              ><div class="ptmcp-row-actions">
+                <ElButton
+                  v-if="session.can('ptmcp:platform:read')"
+                  link
+                  type="primary"
+                  @click="router.push(`/admin/platforms/${encodeURIComponent(row.id)}`)"
+                  >详情</ElButton
+                ><ElButton
+                  v-if="session.can('ptmcp:platform:delete')"
+                  link
+                  type="danger"
+                  :disabled="removing || row.status !== 'DISABLED'"
+                  @click="remove(String(row.id))"
+                  >删除</ElButton
+                >
+              </div></template
+            ></ElTableColumn
+          >
+          <template #empty
+            ><PageState
+              :title="error ? '平台读取失败' : loaded ? '没有符合条件的平台' : '平台目录尚未读取'"
+              :description="platformReady ? '可调整筛选、查询或创建平台。' : filterText"
+          /></template>
+        </ElTable>
+      </div>
       <CursorFooter v-if="loaded || rows.length" :count="rows.length" :has-more="!!cursor" :loading="loading" @more="load(true)" />
     </ElCard>
     <ElCard class="guide-card" shadow="never">
@@ -170,13 +175,6 @@ onBeforeUnmount(() => window.removeEventListener('ptmcp:sensitive-clear', clearP
 .guide-card {
   border-radius: 8px;
 }
-.filter-row {
-  display: grid;
-  grid-template-columns: minmax(190px, 1.5fr) repeat(2, minmax(150px, 0.7fr)) minmax(220px, 1fr);
-  align-items: center;
-  gap: 10px;
-}
-.filter-row > span,
 .section-heading p,
 .guide-grid p {
   color: var(--ptmcp-text-muted);
@@ -245,7 +243,6 @@ h2 {
   clip: rect(0, 0, 0, 0);
 }
 @media (max-width: 760px) {
-  .filter-row,
   .guide-grid {
     grid-template-columns: 1fr;
   }

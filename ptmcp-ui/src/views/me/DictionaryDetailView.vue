@@ -72,7 +72,7 @@ watch(
           ><div class="card-header">
             <span>列结构</span><span class="muted">{{ detail.columns.length }} 列</span>
           </div></template
-        ><ElTable :data="detail.columns" stripe row-key="ordinal" aria-label="列结构"
+        ><ElTable class="ptmcp-data-table" :data="detail.columns" row-key="ordinal" aria-label="列结构"
           ><ElTableColumn prop="ordinal" label="#" width="70" /><ElTableColumn prop="name" label="列名" min-width="170" /><ElTableColumn
             prop="databaseType"
             label="类型"

@@ -304,7 +304,7 @@ onBeforeUnmount(() => {
           </div></template
         >
         <div class="table-scroll">
-          <ElTable :data="columns" row-key="name" size="small"
+          <ElTable class="ptmcp-data-table" :data="columns" row-key="name" size="small"
             ><ElTableColumn prop="ordinal" label="#" width="65" /><ElTableColumn prop="name" label="列名" min-width="170" /><ElTableColumn
               prop="databaseType"
               label="类型"
@@ -354,7 +354,7 @@ onBeforeUnmount(() => {
             <ElAlert type="warning" :closable="false"
               >以下列已不在最新结构中，草稿暂存于本页，不会提交。请先将需要的说明复制到保留字段，处理后再保存。</ElAlert
             >
-            <ElTable :data="removedDraft" row-key="columnName" size="small"
+            <ElTable class="ptmcp-data-table" :data="removedDraft" row-key="columnName" size="small"
               ><ElTableColumn prop="columnName" label="失效列" min-width="140" /><ElTableColumn
                 prop="title"
                 label="草稿标题"

@@ -43,10 +43,10 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="admin-page">
+  <div class="admin-page fill-page">
     <PageHeader title="操作日志" description="管理面变更轨迹：委派、平台、客户端与身份操作。留痕不可删除。" />
-    <ElCard shadow="never" class="ptmcp-filter-bar">
-      <ElForm class="filters" label-position="top" @submit.prevent="load()">
+    <div class="ptmcp-filter-strip">
+      <ElForm :inline="true" @submit.prevent="load()">
         <ElFormItem label="动作">
           <ElInput v-model="filter.action" clearable placeholder="如 DELEGATION_CREATE" />
         </ElFormItem>
@@ -58,7 +58,7 @@ onMounted(() => {
         <ElFormItem label="操作者 ID">
           <ElInput v-model="filter.actorId" clearable placeholder="操作者 ID" />
         </ElFormItem>
-        <ElButton native-type="submit" type="primary" :disabled="!ready" :loading="loading">查询</ElButton>
+        <ElButton native-type="submit" type="primary" plain :disabled="!ready" :loading="loading">查询</ElButton>
         <ElButton
           @click="
             Object.assign(filter, { action: '', aggregateType: '', actorId: '' });
@@ -67,9 +67,12 @@ onMounted(() => {
           >重置</ElButton
         >
       </ElForm>
-    </ElCard>
-    <ElCard shadow="never" class="ptmcp-table-section">
-      <h2 class="ptmcp-section-title">管理操作日志</h2>
+    </div>
+    <ElCard shadow="never" class="ptmcp-table-section ptmcp-fill-card">
+      <div class="ptmcp-table-heading">
+        <h2 class="ptmcp-section-title">管理操作日志</h2>
+        <span class="ptmcp-meta-note">共 {{ rows.length }} 条</span>
+      </div>
       <PageState
         v-if="error"
         kind="error"
@@ -80,28 +83,31 @@ onMounted(() => {
         @action="retry"
       />
       <ElSkeleton v-if="loading" :rows="6" animated />
-      <ElTable v-else-if="!error || rows.length" :data="rows" aria-label="管理操作日志">
-        <ElTableColumn prop="occurredAt" label="时间" min-width="170"
-          ><template #default="{ row }">{{ formatDate(row.occurredAt) }}</template></ElTableColumn
-        >
-        <ElTableColumn prop="action" label="动作" min-width="180"
-          ><template #default="{ row }"
-            ><ElTag size="small" type="info">{{ operationActionText(row.action) }}</ElTag> <span class="action-code">{{ row.action }}</span></template
-          ></ElTableColumn
-        >
-        <ElTableColumn label="聚合" min-width="200"
-          ><template #default="{ row }">{{ operationAggregateText(row.aggregateType) }}:{{ row.aggregateId }}</template></ElTableColumn
-        >
-        <ElTableColumn prop="actorId" label="操作者" width="100" />
-        <ElTableColumn label="变更内容" min-width="120"
-          ><template #default="{ row }"
-            ><ElButton link type="primary" @click="toggle(row.id)">{{ expanded === row.id ? '收起' : '查看' }}</ElButton></template
-          ></ElTableColumn
-        >
-        <template #empty
-          ><PageState :title="loaded ? '没有符合条件的操作日志' : '操作日志尚未读取'" description="可调整条件查询；留痕由管理操作自动写入。"
-        /></template>
-      </ElTable>
+      <div class="ptmcp-table-wrap">
+        <ElTable class="ptmcp-data-table" v-if="!error || rows.length" :data="rows" size="small" height="100%" aria-label="管理操作日志">
+          <ElTableColumn prop="occurredAt" label="时间" min-width="170"
+            ><template #default="{ row }">{{ formatDate(row.occurredAt) }}</template></ElTableColumn
+          >
+          <ElTableColumn prop="action" label="动作" min-width="180"
+            ><template #default="{ row }"
+              ><ElTag size="small" type="info">{{ operationActionText(row.action) }}</ElTag>
+              <span class="action-code">{{ row.action }}</span></template
+            ></ElTableColumn
+          >
+          <ElTableColumn label="聚合" min-width="200"
+            ><template #default="{ row }">{{ operationAggregateText(row.aggregateType) }}:{{ row.aggregateId }}</template></ElTableColumn
+          >
+          <ElTableColumn prop="actorId" label="操作者" width="100" />
+          <ElTableColumn label="变更内容" min-width="120"
+            ><template #default="{ row }"
+              ><ElButton link type="primary" @click="toggle(row.id)">{{ expanded === row.id ? '收起' : '查看' }}</ElButton></template
+            ></ElTableColumn
+          >
+          <template #empty
+            ><PageState :title="loaded ? '没有符合条件的操作日志' : '操作日志尚未读取'" description="可调整条件查询；留痕由管理操作自动写入。"
+          /></template>
+        </ElTable>
+      </div>
       <CursorFooter v-if="loaded || rows.length" :count="rows.length" :has-more="!!cursor" :loading="loading" @more="load(true)" />
     </ElCard>
     <ElCard v-if="expanded !== null" shadow="never">
@@ -116,17 +122,6 @@ onMounted(() => {
 .admin-page {
   display: grid;
   gap: 16px;
-}
-.filters {
-  display: flex;
-  align-items: flex-end;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-.filters .el-form-item {
-  margin: 0;
-  flex: 1 1 200px;
-  min-width: 0;
 }
 .action-code {
   margin-left: 6px;

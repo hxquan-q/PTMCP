@@ -86,7 +86,7 @@ onBeforeUnmount(() => {
   border-color: var(--ptmcp-border);
 }
 .account-summary {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 .security-form {
   max-width: 520px;

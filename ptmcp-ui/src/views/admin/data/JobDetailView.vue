@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { DataRequestError, getJob, type JobView } from '../../../services/data';
 import { useSessionStore } from '../../../stores/session';
+import { formatDate } from '../../portalUtils';
 const route = useRoute();
 const router = useRouter();
 const session = useSessionStore();
@@ -30,7 +31,7 @@ function stateType(value: string): 'success' | 'warning' | 'danger' | 'info' {
   return value === 'SUCCEEDED' ? 'success' : value === 'FAILED' ? 'danger' : value === 'RUNNING' ? 'warning' : 'info';
 }
 function date(value: string | null): string {
-  return value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date(value)) : '—';
+  return value ? formatDate(value) : '—';
 }
 function isTerminal(value: string): boolean {
   return ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(value);
@@ -300,7 +301,7 @@ dd {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 20px;
+  margin-top: 16px;
 }
 @media (max-width: 680px) {
   .facts {

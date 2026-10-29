@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import CursorFooter from '../../../components/common/CursorFooter.vue';
 import PageHeader from '../../../components/common/PageHeader.vue';
+import PageState from '../../../components/common/PageState.vue';
 import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
@@ -8,6 +9,7 @@ import { createDatasource, DataRequestError, listDatasources, type DatasourceRea
 import { newUuid } from '../../../services/uuid';
 import { useCursorPage } from '../../../composables/useCursorPage';
 import { useSessionStore } from '../../../stores/session';
+import { formatDate } from '../../portalUtils';
 
 const router = useRouter();
 const session = useSessionStore();
@@ -88,9 +90,6 @@ function emptyForm(): DatasourceWrite {
     poolMax: 4,
     status: 'DRAFT',
   };
-}
-function formatDate(value: string | null | undefined): string {
-  return value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
 }
 function requestErrorMessage(value: unknown): string {
   return value instanceof Error ? value.message : '请求失败，请稍后重试';
@@ -180,7 +179,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="page-shell" aria-labelledby="datasource-title">
+  <section class="page-shell fill-page" aria-labelledby="datasource-title">
     <PageHeader title-id="datasource-title" title="数据源" description="管理受控数据连接、健康状态和元数据同步。">
       <template #actions>
         <ElButton v-if="session.can('ptmcp:datasource:create')" type="primary" @click="openCreate">
@@ -199,7 +198,7 @@ onBeforeUnmount(() => {
       @action="load()"
     />
 
-    <ElCard class="filter-card ptmcp-filter-bar" shadow="never">
+    <div class="ptmcp-filter-strip">
       <ElForm :inline="true" @submit.prevent="applyFilters">
         <ElFormItem label="关键词">
           <ElInput v-model="filters.keyword" clearable placeholder="名称或编码" @keyup.enter="applyFilters" />
@@ -217,60 +216,77 @@ onBeforeUnmount(() => {
             <ElOption label="已停用" value="DISABLED" />
           </ElSelect>
         </ElFormItem>
-        <ElButton @click="applyFilters">查询</ElButton>
+        <ElButton type="primary" plain @click="applyFilters">查询</ElButton>
       </ElForm>
-    </ElCard>
+    </div>
 
-    <ElCard class="table-card ptmcp-table-section" shadow="never" :body-style="{ padding: '0' }">
-      <h2 class="ptmcp-section-title">数据源列表</h2>
-      <ElSkeleton v-if="loading && !rows.length" :rows="5" animated />
-      <ElTable v-else-if="rows.length || (loaded && !error)" v-loading="loading" :data="rows" row-key="id" table-layout="auto" empty-text="">
-        <ElTableColumn prop="name" label="数据源" min-width="210">
-          <template #default="scope">
-            <button
-              class="link-button"
-              type="button"
-              :disabled="!session.can('ptmcp:datasource:read')"
-              @click="router.push(`/admin/datasources/${scope.row.id}`)"
-            >
-              <strong>{{ scope.row.name }}</strong>
-              <small>{{ scope.row.code }} · ID {{ scope.row.id }}</small>
-            </button>
-          </template>
-        </ElTableColumn>
-        <ElTableColumn prop="engine" label="引擎" width="130" />
-        <ElTableColumn prop="databaseName" label="数据库" min-width="160" show-overflow-tooltip />
-        <ElTableColumn label="状态" width="130">
-          <template #default="scope">
-            <StatusBadge domain="lifecycle" :value="scope.row.status" />
-          </template>
-        </ElTableColumn>
-        <ElTableColumn label="健康" width="120">
-          <template #default="scope"><StatusBadge domain="connection" :value="scope.row.health" /></template>
-        </ElTableColumn>
-        <ElTableColumn label="凭据" width="120">
-          <template #default="scope">{{ scope.row.credentialConfigured ? '已配置' : '未配置' }}</template>
-        </ElTableColumn>
-        <ElTableColumn label="最近同步" min-width="170">
-          <template #default="scope">{{ formatDate(scope.row.lastSyncAt) }}</template>
-        </ElTableColumn>
-        <ElTableColumn prop="poolMax" label="连接池上限" width="110" />
-        <ElTableColumn label="活动快照" min-width="130"
-          ><template #default="scope">{{ scope.row.activeSnapshotId || '待同步' }}</template></ElTableColumn
+    <ElCard class="table-card ptmcp-table-section ptmcp-fill-card" shadow="never" :body-style="{ padding: '0' }">
+      <div class="ptmcp-table-heading">
+        <h2 class="ptmcp-section-title">数据源列表</h2>
+        <span class="ptmcp-meta-note">共 {{ rows.length }} 条</span>
+      </div>
+      <div class="ptmcp-table-wrap">
+        <ElSkeleton v-if="loading && !rows.length" :rows="5" animated />
+        <ElTable
+          v-else-if="rows.length || (loaded && !error)"
+          v-loading="loading"
+          :data="rows"
+          class="ptmcp-data-table"
+          size="small"
+          height="100%"
+          row-key="id"
+          table-layout="auto"
+          empty-text=""
         >
-        <ElTableColumn label="操作" width="110" fixed="right">
-          <template #default="scope">
-            <ElButton v-if="session.can('ptmcp:datasource:read')" link type="primary" @click="router.push(`/admin/datasources/${scope.row.id}`)"
-              >查看</ElButton
-            >
+          <ElTableColumn prop="name" label="数据源" min-width="210">
+            <template #default="scope">
+              <button
+                class="link-button"
+                type="button"
+                :disabled="!session.can('ptmcp:datasource:read')"
+                @click="router.push(`/admin/datasources/${scope.row.id}`)"
+              >
+                <strong>{{ scope.row.name }}</strong>
+                <small>{{ scope.row.code }} · ID {{ scope.row.id }}</small>
+              </button>
+            </template>
+          </ElTableColumn>
+          <ElTableColumn prop="engine" label="引擎" width="130" />
+          <ElTableColumn prop="databaseName" label="数据库" min-width="160" show-overflow-tooltip />
+          <ElTableColumn label="状态" width="130">
+            <template #default="scope">
+              <StatusBadge domain="lifecycle" :value="scope.row.status" />
+            </template>
+          </ElTableColumn>
+          <ElTableColumn label="健康" width="120">
+            <template #default="scope"><StatusBadge domain="connection" :value="scope.row.health" /></template>
+          </ElTableColumn>
+          <ElTableColumn label="凭据" width="120">
+            <template #default="scope">{{ scope.row.credentialConfigured ? '已配置' : '未配置' }}</template>
+          </ElTableColumn>
+          <ElTableColumn label="最近同步" min-width="170">
+            <template #default="scope">{{ formatDate(scope.row.lastSyncAt) }}</template>
+          </ElTableColumn>
+          <ElTableColumn prop="poolMax" label="连接池上限" width="110" />
+          <ElTableColumn label="活动快照" min-width="130"
+            ><template #default="scope">{{ scope.row.activeSnapshotId || '待同步' }}</template></ElTableColumn
+          >
+          <ElTableColumn label="操作" width="80" align="right" fixed="right">
+            <template #default="scope">
+              <div class="ptmcp-row-actions">
+                <ElButton v-if="session.can('ptmcp:datasource:read')" link type="primary" @click="router.push(`/admin/datasources/${scope.row.id}`)"
+                  >查看</ElButton
+                >
+              </div>
+            </template>
+          </ElTableColumn>
+          <template #empty>
+            <PageState kind="empty" :description="loaded ? '暂无符合条件的数据源' : '数据源尚未读取'">
+              <ElButton v-if="!loading && session.can('ptmcp:datasource:create')" type="primary" @click="openCreate">新建数据源</ElButton>
+            </PageState>
           </template>
-        </ElTableColumn>
-        <template #empty>
-          <PageState kind="empty" :description="loaded ? '暂无符合条件的数据源' : '数据源尚未读取'">
-            <ElButton v-if="!loading && session.can('ptmcp:datasource:create')" type="primary" @click="openCreate">新建数据源</ElButton>
-          </PageState>
-        </template>
-      </ElTable>
+        </ElTable>
+      </div>
       <CursorFooter v-if="loaded || rows.length" :count="rows.length" :has-more="!!nextCursor" :loading="loading" @more="nextPage" />
     </ElCard>
 

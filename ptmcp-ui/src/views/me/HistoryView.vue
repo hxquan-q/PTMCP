@@ -117,63 +117,71 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="portal-page" aria-labelledby="history-title">
+  <section class="portal-page fill-page" aria-labelledby="history-title">
     <PageHeader title-id="history-title" title="我的查询历史" description="仅显示本人脱敏记录。原始 SQL、结果集和下载能力不会在个人门户展示。" />
-    <ElCard shadow="never" class="portal-card ptmcp-table-section">
-      <h2 class="ptmcp-section-title">查询记录</h2>
-      <ElForm class="filters ptmcp-filter-bar" label-position="top" @submit.prevent="load()">
-        <ElFormItem label="开始时间（本机时区）"><ElDatePicker v-model="filters.from" type="datetime" /></ElFormItem
-        ><ElFormItem label="结束时间（本机时区）"><ElDatePicker v-model="filters.to" type="datetime" /></ElFormItem
-        ><ElFormItem label="工具"><ElInput v-model="filters.tool" clearable placeholder="可选" /></ElFormItem
-        ><ElFormItem label="结果"><ElInput v-model="filters.result" clearable placeholder="可选" /></ElFormItem
-        ><ElFormItem label="判定"><ElInput v-model="filters.verdict" clearable placeholder="可选" /></ElFormItem>
-        <div class="filter-actions">
-          <ElButton type="primary" native-type="submit" :loading="loading">查询</ElButton
-          ><ElButton :disabled="loading" @click="resetFilters">重置</ElButton>
-        </div>
-      </ElForm>
+    <ElCard shadow="never" class="portal-card ptmcp-table-section ptmcp-fill-card">
+      <div class="ptmcp-table-heading">
+        <h2 class="ptmcp-section-title">查询记录</h2>
+        <span class="ptmcp-meta-note">共 {{ items.length }} 条</span>
+      </div>
+      <div class="ptmcp-filter-strip is-dense">
+        <ElForm label-position="top" @submit.prevent="load()">
+          <ElFormItem label="开始时间（本机时区）"><ElDatePicker v-model="filters.from" type="datetime" /></ElFormItem
+          ><ElFormItem label="结束时间（本机时区）"><ElDatePicker v-model="filters.to" type="datetime" /></ElFormItem
+          ><ElFormItem label="工具"><ElInput v-model="filters.tool" clearable placeholder="可选" /></ElFormItem
+          ><ElFormItem label="结果"><ElInput v-model="filters.result" clearable placeholder="可选" /></ElFormItem
+          ><ElFormItem label="判定"><ElInput v-model="filters.verdict" clearable placeholder="可选" /></ElFormItem>
+          <div class="filter-actions">
+            <ElButton type="primary" plain native-type="submit" :loading="loading">查询</ElButton
+            ><ElButton :disabled="loading" @click="resetFilters">重置</ElButton>
+          </div>
+        </ElForm>
+      </div>
       <p class="time-note">筛选时间：{{ inputTimezone }}；记录时间：Asia/Taipei。每次最多查询 31 天。</p>
       <ElAlert v-if="loadError" type="error" :closable="false" class="mb-4" :title="failedAppend ? '加载更多失败，已保留当前记录' : '查询失败'">
         <p>{{ loadError }}</p>
         <ElButton :disabled="loading" @click="retry">{{ failedAppend ? '重试加载更多' : '重试查询' }}</ElButton>
       </ElAlert>
-      <div :aria-busy="loading" aria-live="polite">
+      <div :aria-busy="loading" aria-live="polite" class="history-live-region">
         <ElSkeleton v-if="loading && !items.length" :rows="6" animated /><PageState
           v-else-if="!items.length && !loadError"
           :description="emptyText"
-        /><ElTable v-else-if="items.length" :data="items" stripe row-key="requestId" aria-label="我的查询历史"
-          ><ElTableColumn label="时间" min-width="170"
-            ><template #default="{ row }">{{ formatDate(row.startedAt) }}</template></ElTableColumn
-          ><ElTableColumn label="平台 / 数据源" min-width="160"
-            ><template #default="{ row }">{{ row.platformId ?? '—' }} / {{ row.datasourceId ?? '—' }}</template></ElTableColumn
-          ><ElTableColumn prop="tool" label="工具" width="130" /><ElTableColumn label="脱敏 SQL" min-width="260" show-overflow-tooltip
-            ><template #default="{ row }"
-              ><code>{{ row.sqlMasked || '—' }}</code></template
-            ></ElTableColumn
-          ><ElTableColumn prop="result" label="结果" width="110" /><ElTableColumn prop="verdict" label="判定" width="120" /><ElTableColumn
-            label="原因"
-            min-width="180"
-            show-overflow-tooltip
-            ><template #default="{ row }"
-              ><span v-if="row.errorCode" :class="{ 'deny-reason': row.verdict === 'DENY' }">{{ queryErrorText(row.errorCode) }}</span
-              ><span v-else>—</span></template
-            ></ElTableColumn
-          ><ElTableColumn label="行数" width="90"
-            ><template #default="{ row }"
-              >{{ row.rowsReturned ?? '—' }}<ElTag v-if="row.truncated" size="small" type="warning" class="truncated">已截断</ElTag></template
-            ></ElTableColumn
-          ><ElTableColumn prop="durationMs" label="耗时(ms)" width="110" /><ElTableColumn
-            prop="requestId"
-            label="requestId"
-            min-width="220"
-          /><ElTableColumn label="详情" width="90"
-            ><template #default="{ row }"
-              ><ElButton link type="primary" @click="router.push({ name: 'me-history-detail', params: { requestId: row.requestId } })"
-                >查看</ElButton
-              ></template
-            ></ElTableColumn
-          ></ElTable
-        >
+        />
+        <div v-else-if="items.length" class="ptmcp-table-wrap">
+          <ElTable class="ptmcp-data-table" size="small" height="100%" :data="items" row-key="requestId" aria-label="我的查询历史"
+            ><ElTableColumn label="时间" min-width="170"
+              ><template #default="{ row }">{{ formatDate(row.startedAt) }}</template></ElTableColumn
+            ><ElTableColumn label="平台 / 数据源" min-width="160"
+              ><template #default="{ row }">{{ row.platformId ?? '—' }} / {{ row.datasourceId ?? '—' }}</template></ElTableColumn
+            ><ElTableColumn prop="tool" label="工具" width="130" /><ElTableColumn label="脱敏 SQL" min-width="260" show-overflow-tooltip
+              ><template #default="{ row }"
+                ><code>{{ row.sqlMasked || '—' }}</code></template
+              ></ElTableColumn
+            ><ElTableColumn prop="result" label="结果" width="110" /><ElTableColumn prop="verdict" label="判定" width="120" /><ElTableColumn
+              label="原因"
+              min-width="180"
+              show-overflow-tooltip
+              ><template #default="{ row }"
+                ><span v-if="row.errorCode" :class="{ 'deny-reason': row.verdict === 'DENY' }">{{ queryErrorText(row.errorCode) }}</span
+                ><span v-else>—</span></template
+              ></ElTableColumn
+            ><ElTableColumn label="行数" width="90"
+              ><template #default="{ row }"
+                >{{ row.rowsReturned ?? '—' }}<ElTag v-if="row.truncated" size="small" type="warning" class="truncated">已截断</ElTag></template
+              ></ElTableColumn
+            ><ElTableColumn prop="durationMs" label="耗时(ms)" width="110" /><ElTableColumn
+              prop="requestId"
+              label="requestId"
+              min-width="220"
+            /><ElTableColumn label="详情" width="90"
+              ><template #default="{ row }"
+                ><ElButton link type="primary" @click="router.push({ name: 'me-history-detail', params: { requestId: row.requestId } })"
+                  >查看</ElButton
+                ></template
+              ></ElTableColumn
+            ></ElTable
+          >
+        </div>
         <CursorFooter v-if="!loadError" :count="items.length" :has-more="!!nextCursor" :loading="loading" @more="load(true)" /></div
     ></ElCard>
   </section>
@@ -185,22 +193,6 @@ onMounted(() => {
 }
 .portal-card {
   border-color: var(--ptmcp-border);
-}
-.filters {
-  display: flex;
-  align-items: flex-end;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-.filters :deep(.el-form-item) {
-  margin: 0;
-  min-width: 0;
-  flex: 1 1 180px;
-}
-.filters :deep(.el-input),
-.filters :deep(.el-date-editor) {
-  width: 100%;
 }
 .filter-actions {
   display: flex;
@@ -217,5 +209,14 @@ onMounted(() => {
 }
 .mb-4 {
   margin-bottom: 16px;
+}
+/* aria-live 容器在 fill-card body 里被全局规则设为 flex:none；此选择器借
+   .history-live-region 自身 + el-card__body 父级把特异性抬过全局，让它恢复为
+   可伸缩的 flex 链，使内部 .ptmcp-table-wrap 的 flex:1 与表格 height:100% 有锚点。 */
+.ptmcp-fill-card .history-live-region.history-live-region {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 </style>
