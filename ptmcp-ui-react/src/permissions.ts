@@ -12,6 +12,7 @@ export const SENSITIVE_ACTIONS = {
   roleCreate: 'ptmcp:role:create',
   roleDelete: 'ptmcp:role:delete',
   delegationCreate: 'ptmcp:delegation:create',
+  platformScope: 'ptmcp:platform:scope',
   aclGrant: 'ptmcp:acl:create',
 } as const;
 

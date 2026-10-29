@@ -9,6 +9,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -22,11 +23,25 @@ import javax.sql.DataSource;
  * rollout — controllers adopt it slice by slice; nothing here changes platform-admin behavior. A
  * delegation is effective when its stored status is ACTIVE and {@code validFrom <= now < validTo};
  * the derived EXPIRED projection is a read model and never grants anything. Department containment
- * uses the {@code sys_dept.ancestors} chain (root row id or membership in the ancestor path);
+ * validates the complete authoritative {@code sys_dept.parent_id} chain in one snapshot;
  * action containment is a subset check; resource containment is an exact type+id+generation match
  * (DATASOURCE generation is pinned to 1 by convention, mirroring acl_grant).
  */
 public final class DelegationScopeResolver {
+    private static final int MAX_DEPARTMENT_NODES = 64;
+    private static final String DEPARTMENT_PATH_SQL =
+            """
+            WITH RECURSIVE department_path AS (
+                SELECT dept_id, parent_id, del_flag, 1 AS hop
+                FROM sys_dept WHERE dept_id = ?
+                UNION ALL
+                SELECT d.dept_id, d.parent_id, d.del_flag, p.hop + 1
+                FROM department_path p
+                JOIN sys_dept d ON d.dept_id = p.parent_id
+                WHERE p.hop < ? AND p.parent_id <> 0
+            )
+            SELECT dept_id, parent_id, del_flag FROM department_path ORDER BY hop
+            """;
     private final DataSource primary;
 
     public DelegationScopeResolver(DataSource primary) {
@@ -133,37 +148,51 @@ public final class DelegationScopeResolver {
         return departmentWithin(delegation.departmentRootId(), target.departmentId());
     }
 
-    /** ancestors chain check; the root itself also covers (departmentWithin(root, root) = true). */
+    /**
+     * Validates the entire parent chain, even when the target equals the delegation root. Disabled
+     * departments remain manageable; only deleted targets or roots lose scope membership.
+     */
     private boolean departmentWithin(long rootId, Long departmentId) {
         if (departmentId == null || departmentId <= 0) {
             return false;
         }
-        if (departmentId == rootId) {
-            return true;
-        }
         try (Connection connection = OrgSql.configure(primary);
                 PreparedStatement statement =
-                        OrgSql.statement(
-                                connection,
-                                "SELECT ancestors FROM sys_dept WHERE dept_id = ? AND del_flag = '0'")) {
+                        OrgSql.statement(connection, DEPARTMENT_PATH_SQL)) {
             statement.setLong(1, departmentId);
+            statement.setInt(2, MAX_DEPARTMENT_NODES);
             try (ResultSet result = statement.executeQuery()) {
-                if (!result.next()) {
-                    return false;
-                }
-                for (String token : result.getString(1).split(",")) {
-                    String trimmed = token.trim();
-                    if (!trimmed.isEmpty() && !"0".equals(trimmed)) {
-                        try {
-                            if (Long.parseLong(trimmed) == rootId) {
-                                return true;
-                            }
-                        } catch (NumberFormatException ignored) {
-                            // Malformed chain entries simply do not match.
-                        }
+                Set<Long> seen = new HashSet<>();
+                long expected = departmentId;
+                boolean targetNotDeleted = false;
+                boolean rootMatchedNotDeleted = false;
+                while (result.next()) {
+                    boolean first = seen.isEmpty();
+                    Long dept = result.getObject(1, Long.class);
+                    Long parent = result.getObject(2, Long.class);
+                    if (dept == null
+                            || dept <= 0
+                            || dept != expected
+                            || parent == null
+                            || parent < 0
+                            || !seen.add(dept)
+                            || seen.size() > MAX_DEPARTMENT_NODES) {
+                        throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
                     }
+                    boolean notDeleted = "0".equals(result.getString(3));
+                    if (first) {
+                        targetNotDeleted = notDeleted;
+                    }
+                    if (dept == rootId && notDeleted) {
+                        rootMatchedNotDeleted = true;
+                    }
+                    expected = parent;
                 }
-                return false;
+                if (!seen.isEmpty() && expected != 0) {
+                    // Missing parents and depth truncation cannot yield a partial scope.
+                    throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+                }
+                return targetNotDeleted && rootMatchedNotDeleted;
             }
         } catch (SQLException error) {
             throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);

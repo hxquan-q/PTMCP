@@ -18,6 +18,7 @@ import {
   type PlatformRow,
 } from '../../services/access';
 import { scopeChangeText, scopeChanges, scopeKey, scopeRuleText } from './scopeDiff';
+import { useSensitivePermissions } from '../../permissionsContext';
 
 const TIER_LABEL: Record<number, string> = { 1: '一级', 2: '二级', 3: '三级' };
 const CATALOG_MODES = ['BLACKLIST', 'WHITELIST', 'FULL'];
@@ -42,6 +43,7 @@ interface ClientForm {
 }
 
 export function PlatformsPage() {
+  const { can } = useSensitivePermissions();
   const [platforms, setPlatforms] = useState<PlatformRow[]>([]);
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -160,7 +162,12 @@ export function PlatformsPage() {
                       <StatusDot tone={p.status === 'ACTIVE' ? 'success' : 'neutral'}>{p.status === 'ACTIVE' ? '启用' : '停用'}</StatusDot>
                     </td>
                     <td style={{ whiteSpace: 'nowrap' }}>
-                      <button className="link" onClick={() => setScopePlatform(p)} aria-label={`管理 ${p.name} 授权范围`}>
+                      <button
+                        className="link"
+                        onClick={() => can('platformScope') && setScopePlatform(p)}
+                        disabled={!can('platformScope')}
+                        aria-label={`管理 ${p.name} 授权范围`}
+                      >
                         Scope
                       </button>
                       <button className="link" style={{ marginLeft: 10 }} onClick={() => setPlatformDialog({ mode: 'edit', row: p })}>

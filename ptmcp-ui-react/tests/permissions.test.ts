@@ -21,7 +21,7 @@ test('canPerform grants only the exact permission code for the action', () => {
 
 test('SENSITIVE_ACTIONS covers all write domains; codes align with backend permission naming', () => {
   const actions = Object.keys(SENSITIVE_ACTIONS) as SensitiveAction[];
-  assert.ok(actions.length >= 11);
+  assert.ok(actions.length >= 12);
   for (const action of actions) {
     const code = SENSITIVE_ACTIONS[action];
     assert.match(code, /^ptmcp:[a-z]+:[a-z-]+$/, `${action} code must follow ptmcp:domain:action pattern`);
@@ -50,10 +50,23 @@ test('datasourceTest is a distinct permission from sync; CRUD actions map to uni
   assert.notEqual(SENSITIVE_ACTIONS.datasourceTest, SENSITIVE_ACTIONS.datasourceSync);
   assert.equal(SENSITIVE_ACTIONS.datasourceTest, 'ptmcp:datasource:test');
   // 门控的写操作覆盖所有破坏性域
-  for (const domain of ['datasource', 'user', 'role', 'delegation', 'acl', 'audit']) {
+  for (const domain of ['datasource', 'user', 'role', 'delegation', 'acl', 'audit', 'platform']) {
     assert.ok(
       codes.some((c) => c.startsWith(`ptmcp:${domain}:`)),
       `${domain} domain must be covered`,
     );
   }
+});
+
+test('platformScope gates a narrower capability than platform CRUD', () => {
+  assert.equal(SENSITIVE_ACTIONS.platformScope, 'ptmcp:platform:scope');
+  // scope ≠ generic CRUD：改范围不是改平台本身
+  const platformCodes = Object.entries(SENSITIVE_ACTIONS)
+    .filter(([, code]) => code.startsWith('ptmcp:platform:'))
+    .map(([, code]) => code);
+  assert.deepEqual(platformCodes, ['ptmcp:platform:scope'], 'platform domain should only gate scope editing, not basic CRUD (those are route-level)');
+  // scope 权限单独授予不隐含平台增删
+  const scopeOnly = ['ptmcp:platform:scope'];
+  assert.equal(canPerform(scopeOnly, 'platformScope'), true);
+  assert.equal(canPerform(scopeOnly, 'datasourceCreate'), false);
 });

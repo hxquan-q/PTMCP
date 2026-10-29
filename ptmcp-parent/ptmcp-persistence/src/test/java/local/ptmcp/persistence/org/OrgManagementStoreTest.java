@@ -2218,6 +2218,45 @@ class OrgManagementStoreTest {
         assertDepartmentAndSubjectScope(orgStore.getDepartment(target).parentId(), target, true);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"ROOT", "TARGET"})
+    void delegationScopeValidatesDeletedNodesBeforeDenyingMembership(String deletedNode)
+            throws Exception {
+        long root = orgStore.createDepartment(null, "已删坏链根", true, 1L).id();
+        long target = orgStore.createDepartment(root, "已删坏链目标", true, 1L).id();
+        setDepartmentParent(root, root);
+        setDepartmentState("ROOT".equals(deletedNode) ? root : target, "0", "1");
+        for (DelegationScopeResolver.Target scopeTarget : scopeTargets(target)) {
+            assertEquals(
+                    ErrorCode.SECURITY_STATE_UNAVAILABLE,
+                    codeOf(
+                            () ->
+                                    scopeResolver.covers(
+                                            scopeDelegation(root),
+                                            scopeTarget,
+                                            "ptmcp:department:update",
+                                            Instant.now())));
+        }
+    }
+
+    @Test
+    void delegationScopeMapsSqlFailureEvenForTheRoot() throws Exception {
+        long root = orgStore.createDepartment(null, "故障管理根", true, 1L).id();
+        DelegationScopeResolver unavailable =
+                new DelegationScopeResolver(statusFaultDataSource("WITH RECURSIVE", false));
+        for (DelegationScopeResolver.Target scopeTarget : scopeTargets(root)) {
+            assertEquals(
+                    ErrorCode.DEPENDENCY_UNAVAILABLE,
+                    codeOf(
+                            () ->
+                                    unavailable.covers(
+                                            scopeDelegation(root),
+                                            scopeTarget,
+                                            "ptmcp:department:update",
+                                            Instant.now())));
+        }
+    }
+
     private void assertDepartmentAndSubjectScope(long root, long target, boolean expected) {
         DelegationScopeResolver.EffectiveDelegation delegation = scopeDelegation(root);
         for (DelegationScopeResolver.Target scopeTarget : scopeTargets(target)) {

@@ -2111,8 +2111,7 @@ class AdminApiTest {
     void delegatedUserEditUsesRealParentDespiteMissingOrMalformedCache(String ancestors)
             throws Exception {
         UserEditFixture fixture = userEditFixture(List.of("ptmcp:user:update"));
-        long child =
-                orgStore.createDepartment(fixture.departmentId(), "真实子级", true, ADMIN_ID).id();
+        long child = orgStore.createDepartment(fixture.departmentId(), "真实子级", true, ADMIN_ID).id();
         moveScopeTestUser(fixture.targetId(), child);
         setScopeTestDepartment(child, "ancestors", ancestors);
 
@@ -2162,17 +2161,26 @@ class AdminApiTest {
     private void moveScopeTestUser(long userId, long department) {
         OrgStore.UserRow user = orgStore.getUser(userId);
         orgStore.updateUser(
-                user.id(), user.displayName(), department, user.email(), user.phoneNumber(),
-                user.remark(), null, null, user.version(), ADMIN_ID);
+                user.id(),
+                user.displayName(),
+                department,
+                user.email(),
+                user.phoneNumber(),
+                user.remark(),
+                null,
+                null,
+                user.version(),
+                ADMIN_ID);
     }
 
     private void setScopeTestDepartment(long department, String field, String value)
             throws Exception {
-        String sql = switch (field) {
-            case "parent_id" -> "UPDATE sys_dept SET parent_id = ? WHERE dept_id = ?";
-            case "del_flag" -> "UPDATE sys_dept SET del_flag = ? WHERE dept_id = ?";
-            default -> "UPDATE sys_dept SET ancestors = ? WHERE dept_id = ?";
-        };
+        String sql =
+                switch (field) {
+                    case "parent_id" -> "UPDATE sys_dept SET parent_id = ? WHERE dept_id = ?";
+                    case "del_flag" -> "UPDATE sys_dept SET del_flag = ? WHERE dept_id = ?";
+                    default -> "UPDATE sys_dept SET ancestors = ? WHERE dept_id = ?";
+                };
         try (Connection connection = connect();
                 PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, value);
