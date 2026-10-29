@@ -87,6 +87,8 @@ gateway进入请求读取/核验安全快照；排队出队时和JDBC执行提�
 
 admin_delegation是平台管理员给组织授权管理员的管理授权，包含userId、departmentRootId、resourceType/resourceId/generation、allowedActions、validFrom/validTo、status/version。服务端把多个委派分别校验，不能把“委派A的部门”与“委派B的资源”交叉拼出没有授予的新组合。管理命令必须由至少一个完整委派覆盖该命令的所有目标及动作；批量多目标逐项校验，任一失败整个事务不提交。
 
+部门和主体的范围归属从target的parent_id权威链判定，不使用ancestors缓存。单条有界查询读取完整链，含target最多64节点，只parent_id=0为正常根；缺父、负父、环或需第65节点拒绝SECURITY_STATE_UNAVAILABLE，匹配委派根或target等于根也不能提前结束。未知target返回不覆盖；已存在target先校验完整链，再要求target和命中的根都未软删。停用但未删除的节点仍可受委派管理以重新启用；中间节点停用/软删不改父边拓扑，不能套用业务DEPT主体过滤。SQL故障维持DEPENDENCY_UNAVAILABLE。这一片仅定义单目标范围读取，不代表完整PUT同一委派覆盖新旧父/子树、事务提交前重验、写树或epoch闭环已实现；实际验证见[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
+
 创建Allow的动作/对象/主体范围与最长有效期不能超委派；DENY也需管理权，不允许范围外干扰。全局平台管理员分配委派可选READ/META管理动作并明确是否有撤销权。用户移动需旧/新部门均可管理，部门移动需整棵子树权限、无环；共享角色有范围外成员时禁止组织管理员修改角色授权/成员，以防间接扩权。委派授予管理权不自动给管理员本人业务READ。
 
 组织授权管理员还受“不得自扩业务权限”约束。服务端在同一命令的提交前计算修改前/后本人EffectiveMeta/EffectiveRead，覆盖本人USER、本人所属ROLE/DEPT及上级、成员关系/部门树改变、移除本人命中DENY等间接路径；只要任一资源本人META或READ增加即拒SELF_PRIVILEGE_ESCALATION，不能靠先改role membership再改grant分步绕过。对不易有限展开的祖先范围规则，用策略差异证明或保守拒绝，不只检查subject_id==当前userId。需要给组织管理员自身增权时由平台管理员另行显式操作并审计；平台管理员菜单角色本身仍不自动READ。该检查与委派范围共同执行，不能用其中一项替代另一项。

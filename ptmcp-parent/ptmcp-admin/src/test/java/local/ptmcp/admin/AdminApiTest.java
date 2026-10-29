@@ -2092,6 +2092,95 @@ class AdminApiTest {
     private record UserWriteEffects(
             OrgStore.UserRow row, long epoch, long events, long operations) {}
 
+    @Test
+    void delegatedUserEditCannotUseForgedDepartmentCache() throws Exception {
+        UserEditFixture fixture = userEditFixture(List.of("ptmcp:user:update"));
+        long outside = createDepartment("真实父链在范围外");
+        moveScopeTestUser(fixture.targetId(), outside);
+        setScopeTestDepartment(outside, "ancestors", "0," + fixture.departmentId());
+        UserWriteEffects before = userWriteEffects(fixture.targetId());
+
+        performScopeTestEdit(fixture, outside)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+        assertEquals(before, userWriteEffects(fixture.targetId()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0", "not-a-number"})
+    void delegatedUserEditUsesRealParentDespiteMissingOrMalformedCache(String ancestors)
+            throws Exception {
+        UserEditFixture fixture = userEditFixture(List.of("ptmcp:user:update"));
+        long child =
+                orgStore.createDepartment(fixture.departmentId(), "真实子级", true, ADMIN_ID).id();
+        moveScopeTestUser(fixture.targetId(), child);
+        setScopeTestDepartment(child, "ancestors", ancestors);
+
+        performScopeTestEdit(fixture, child)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deptId").value(child));
+        assertEquals(child, orgStore.getUser(fixture.targetId()).deptId());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"BROKEN_ROOT", "DELETED_ROOT"})
+    void delegatedUserEditValidatesTheRootInsteadOfTakingShortcut(String defect) throws Exception {
+        UserEditFixture fixture = userEditFixture(List.of("ptmcp:user:update"));
+        boolean broken = "BROKEN_ROOT".equals(defect);
+        setScopeTestDepartment(
+                fixture.departmentId(),
+                broken ? "parent_id" : "del_flag",
+                broken ? Long.toString(fixture.departmentId()) : "1");
+        UserWriteEffects before = userWriteEffects(fixture.targetId());
+
+        performScopeTestEdit(fixture, fixture.departmentId())
+                .andExpect(broken ? status().isServiceUnavailable() : status().isForbidden())
+                .andExpect(
+                        jsonPath("$.code")
+                                .value(
+                                        broken
+                                                ? "SECURITY_STATE_UNAVAILABLE"
+                                                : "MANAGEMENT_SCOPE_DENIED"));
+        assertEquals(before, userWriteEffects(fixture.targetId()));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions performScopeTestEdit(
+            UserEditFixture fixture, long department) throws Exception {
+        return mockMvc.perform(
+                put("/api/v1/admin/users/" + fixture.targetId())
+                        .header("X-Test-User-Id", fixture.delegateId())
+                        .header("X-Test-Platform-Admin", "false")
+                        .header("If-Match", orgStore.getUser(fixture.targetId()).version())
+                        .contentType("application/json")
+                        .content(
+                                userEditBody(fixture, true, null)
+                                        .replace(
+                                                "\"deptId\":" + fixture.departmentId(),
+                                                "\"deptId\":" + department)));
+    }
+
+    private void moveScopeTestUser(long userId, long department) {
+        OrgStore.UserRow user = orgStore.getUser(userId);
+        orgStore.updateUser(
+                user.id(), user.displayName(), department, user.email(), user.phoneNumber(),
+                user.remark(), null, null, user.version(), ADMIN_ID);
+    }
+
+    private void setScopeTestDepartment(long department, String field, String value)
+            throws Exception {
+        String sql = switch (field) {
+            case "parent_id" -> "UPDATE sys_dept SET parent_id = ? WHERE dept_id = ?";
+            case "del_flag" -> "UPDATE sys_dept SET del_flag = ? WHERE dept_id = ?";
+            default -> "UPDATE sys_dept SET ancestors = ? WHERE dept_id = ?";
+        };
+        try (Connection connection = connect();
+                PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, value);
+            statement.setLong(2, department);
+            assertEquals(1, statement.executeUpdate());
+        }
+    }
+
     private UserWriteEffects userWriteEffects(long targetId) throws Exception {
         OrgStore.UserRow row = orgStore.getUser(targetId);
         try (Connection connection = connect();

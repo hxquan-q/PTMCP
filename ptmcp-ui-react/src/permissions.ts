@@ -6,6 +6,7 @@ export const SENSITIVE_ACTIONS = {
   datasourceCreate: 'ptmcp:datasource:create',
   datasourceDelete: 'ptmcp:datasource:delete',
   datasourceSync: 'ptmcp:datasource:sync',
+  datasourceTest: 'ptmcp:datasource:test',
   userCreate: 'ptmcp:user:create',
   userDelete: 'ptmcp:user:delete',
   roleCreate: 'ptmcp:role:create',

@@ -65,15 +65,25 @@ wrapper 未设置 executable，使用 bash 调用，不改文件权限。已有�
 含直属最多64节点，环/缺父/缺直属/超深拒绝SECURITY_STATE_UNAVAILABLE；
 继承关闭仍校验完整链但只贡献直属主体（可用性收紧），不增加部署开关或epoch切换实现。
 先补真实MySQL缓存污染、状态组合、合法64层/非法链及网关决定回归，获得有效RED后实施。
-独立只读设计核阅已提出上述边界与null直属部门预览要求，实际实现和GREEN仍待复核。
+独立只读设计核阅已提出上述边界与null直属部门预览要求，实际实现已完成终审。
 有效RED：`department-subject-gateway-red.log` BUILD FAILURE/exit1，2026-10-30 05:50:04 +08:00，
 12 tests/11 failures/0 errors/0 skipped；证明停用节点仍授予READ、中层停用漏根DENY及非法链被接受。
 持久层首轮21 errors来自测试roleKey夹具连字符，不计产品RED；修正后
 `department-subject-red2.log` BUILD FAILURE/exit1，2026-10-30 05:53:54 +08:00，
 21 tests/20 failures/0 errors/0 skipped，覆盖缓存污染、各节点状态、缺父/缺直属/环/超深。
 共享读取器及null安全比较已实施，补充继承关闭所有Directory入口和无效用户错误映射兼容测试，
-正在隔离Testcontainers运行Org全量、AdminApi及MCP权限组合；实际GREEN与独立终审尚待。
-上一片根检查已重新实际执行，python scripts/check.py与git diff --check均exit0，62项检查器回归通过。
+隔离Testcontainers组合`department-subject-green.log`于2026-10-30 05:59:42 +08:00
+BUILD SUCCESS/exit0：Org50、Admin84、ToolPermissionDeny12共146项，0失败/错误/跳过。
+独立只读终审实际核阅实现、有效RED、GREEN及exit文件，并比较本片5个源码/测试文件与构建工作区一致，
+无新增阻断；评审未重复运行动态测试。局部部门主体读取缺口关闭，不外推整体授权快照或管理委派。
+上一轮根检查已实际执行，python scripts/check.py与git diff --check均exit0，62项检查器回归通过。
+
+下一切片：修复DelegationScopeResolver仍信任ancestors及root==target无条件放行。
+部门/主体管理范围从target的parent_id完整链判定，不信任缓存；未知或软删target不覆盖，
+匹配根须实际存在且未软删。停用但未删除部门仍允许受委派管理，供重新启用，不能照搬业务主体过滤。
+64节点与坏链拒绝规则复用同一边界，root==target也完整验链；中间状态不改变父边拓扑。
+范围仅为委派读取，不修完整PUT单委派覆盖新旧父/子树、提交前重验、写树防环、epoch或间接自扩权。
+计划先补缓存污染/无效根/坏链真实MySQL及HTTP零副作用RED，再最小实现、组合GREEN与独立终审。
 
 当前切片：所有admin handler显式声明功能码，统一MVC入口默认拒绝未声明/无功能码请求；
 平台管理员不能绕过端点动作，通用用户PUT仍按实际变化补status/assign-role/move。

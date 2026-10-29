@@ -514,6 +514,7 @@ function dsHealthLabel(health: string): string {
 }
 
 export function DatasourceDetailPage({ id }: { id: string }) {
+  const { can } = useSensitivePermissions();
   const [datasource, setDatasource] = useState<DatasourceRead | null>(null);
   const [etag, setEtag] = useState('');
   const [form, setForm] = useState<DsForm | null>(null);
@@ -776,12 +777,16 @@ export function DatasourceDetailPage({ id }: { id: string }) {
         actions={
           datasource ? (
             <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn btn--secondary" disabled={saving || actionLoading || conflictRequired} onClick={() => void runTest()}>
+              <button
+                className="btn btn--secondary"
+                disabled={saving || actionLoading || conflictRequired || !can('datasourceTest')}
+                onClick={() => can('datasourceTest') && void runTest()}
+              >
                 {actionLoading ? '处理中…' : '测试连接'}
               </button>
               <button
                 className="btn btn--primary"
-                disabled={datasource.status !== 'ACTIVE' || saving || actionLoading || conflictRequired}
+                disabled={datasource.status !== 'ACTIVE' || saving || actionLoading || conflictRequired || !can('datasourceSync')}
                 onClick={() => void runSync()}
               >
                 同步元数据
@@ -977,7 +982,12 @@ export function DatasourceDetailPage({ id }: { id: string }) {
               <button className="btn btn--primary" disabled={formDisabled} onClick={() => void save()}>
                 {saving ? '保存中…' : '保存更改'}
               </button>
-              <button className="btn btn--secondary" style={{ color: 'var(--ptmcp-red)' }} disabled={formDisabled} onClick={remove}>
+              <button
+                className="btn btn--secondary"
+                style={{ color: 'var(--ptmcp-red)' }}
+                disabled={formDisabled || !can('datasourceDelete')}
+                onClick={can('datasourceDelete') ? remove : undefined}
+              >
                 删除数据源
               </button>
             </div>

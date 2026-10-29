@@ -2104,4 +2104,147 @@ class OrgManagementStoreTest {
         delegationStore.revoke(active.id(), active.version(), 1L, "scope-test-revoke");
         assertEquals(0, scopeResolver.effectiveDelegations(delegate, now).size());
     }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"FOREIGN", "EMPTY", "MALFORMED"})
+    void delegationScopeIgnoresCachedAncestors(String cache) throws Exception {
+        long root = orgStore.createDepartment(null, "权威委派根", true, 1L).id();
+        long target = orgStore.createDepartment(root, "权威委派目标", true, 1L).id();
+        long outside = orgStore.createDepartment(null, "缓存伪造根", true, 1L).id();
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "UPDATE sys_dept SET ancestors = ? WHERE dept_id = ?")) {
+            statement.setString(
+                    1,
+                    switch (cache) {
+                        case "FOREIGN" -> "0," + outside;
+                        case "EMPTY" -> "0";
+                        default -> "not-a-number";
+                    });
+            statement.setLong(2, target);
+            assertEquals(1, statement.executeUpdate());
+        }
+        assertAll(
+                () -> assertDepartmentAndSubjectScope(root, target, true),
+                () -> assertDepartmentAndSubjectScope(outside, target, false));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"MISSING", "DELETED_ROOT", "DELETED_TARGET"})
+    void delegationScopeRejectsUnavailableRootsAndTargets(String state) throws Exception {
+        if ("MISSING".equals(state)) {
+            assertDepartmentAndSubjectScope(9_999_999L, 9_999_999L, false);
+            return;
+        }
+        long root = orgStore.createDepartment(null, "委派根状态", true, 1L).id();
+        long target = orgStore.createDepartment(root, "委派目标状态", true, 1L).id();
+        if ("DELETED_ROOT".equals(state)) {
+            setDepartmentState(root, "0", "1");
+            assertAll(
+                    () -> assertDepartmentAndSubjectScope(root, root, false),
+                    () -> assertDepartmentAndSubjectScope(root, target, false));
+        } else {
+            setDepartmentState(target, "0", "1");
+            assertDepartmentAndSubjectScope(root, target, false);
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"ROOT,1,0", "MIDDLE,1,0", "TARGET,1,0", "MIDDLE,0,1"})
+    void delegationScopePreservesDisabledDepartmentManagement(
+            String node, String status, String deleted) throws Exception {
+        long root = orgStore.createDepartment(null, "可恢复管理根", true, 1L).id();
+        long middle = orgStore.createDepartment(root, "可恢复管理中间", true, 1L).id();
+        long target = orgStore.createDepartment(middle, "可恢复管理目标", true, 1L).id();
+        setDepartmentState(
+                switch (node) {
+                    case "ROOT" -> root;
+                    case "MIDDLE" -> middle;
+                    default -> target;
+                },
+                status,
+                deleted);
+        assertDepartmentAndSubjectScope(root, target, true);
+        if ("ROOT".equals(node)) {
+            assertDepartmentAndSubjectScope(root, root, true);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"SELF", "CYCLE", "MISSING_PARENT", "NEGATIVE_PARENT", "DEPTH_65"})
+    void delegationScopeRejectsDamagedPathsAfterMatchingRoot(String defect) throws Exception {
+        long root = orgStore.createDepartment(null, "完整管理链根", true, 1L).id();
+        long middle = orgStore.createDepartment(root, "完整管理链中间", true, 1L).id();
+        long target = orgStore.createDepartment(middle, "完整管理链目标", true, 1L).id();
+        switch (defect) {
+            case "SELF" -> setDepartmentParent(root, root);
+            case "CYCLE" -> setDepartmentParent(root, target);
+            case "MISSING_PARENT" -> setDepartmentParent(root, 9_999_999L);
+            case "NEGATIVE_PARENT" -> setDepartmentParent(root, -1);
+            default -> {
+                for (int node = 3; node < 65; node++) {
+                    target = orgStore.createDepartment(target, "深层管理" + node, true, 1L).id();
+                }
+            }
+        }
+        long brokenTarget = target;
+        long immediateParent = orgStore.getDepartment(target).parentId();
+        // Matching the target itself or its immediate parent must not hide a bad upper path.
+        for (long delegatedRoot : Set.of(brokenTarget, immediateParent)) {
+            for (DelegationScopeResolver.Target scopeTarget : scopeTargets(brokenTarget)) {
+                assertEquals(
+                        ErrorCode.SECURITY_STATE_UNAVAILABLE,
+                        codeOf(
+                                () ->
+                                        scopeResolver.covers(
+                                                scopeDelegation(delegatedRoot),
+                                                scopeTarget,
+                                                "ptmcp:department:update",
+                                                Instant.now())));
+            }
+        }
+    }
+
+    @Test
+    void delegationScopeAcceptsExactly64Nodes() throws Exception {
+        long root = orgStore.createDepartment(null, "64层管理根", true, 1L).id();
+        long target = root;
+        for (int node = 1; node < 64; node++) {
+            target = orgStore.createDepartment(target, "64层管理" + node, true, 1L).id();
+        }
+        assertDepartmentAndSubjectScope(root, target, true);
+        assertDepartmentAndSubjectScope(target, target, true);
+        assertDepartmentAndSubjectScope(orgStore.getDepartment(target).parentId(), target, true);
+    }
+
+    private void assertDepartmentAndSubjectScope(long root, long target, boolean expected) {
+        DelegationScopeResolver.EffectiveDelegation delegation = scopeDelegation(root);
+        for (DelegationScopeResolver.Target scopeTarget : scopeTargets(target)) {
+            assertEquals(
+                    expected,
+                    scopeResolver.covers(
+                            delegation, scopeTarget, "ptmcp:department:update", Instant.now()),
+                    scopeTarget.kind().name());
+        }
+    }
+
+    private static List<DelegationScopeResolver.Target> scopeTargets(long department) {
+        return List.of(
+                DelegationScopeResolver.Target.department(department),
+                new DelegationScopeResolver.Target(
+                        DelegationScopeResolver.TargetKind.SUBJECT, null, 0, department));
+    }
+
+    private static DelegationScopeResolver.EffectiveDelegation scopeDelegation(long root) {
+        return new DelegationScopeResolver.EffectiveDelegation(
+                1,
+                root,
+                "DATASOURCE",
+                1,
+                1,
+                Set.of("ptmcp:department:update"),
+                Instant.parse("2020-01-01T00:00:00Z"),
+                null);
+    }
 }

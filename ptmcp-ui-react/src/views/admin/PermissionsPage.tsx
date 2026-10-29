@@ -32,6 +32,7 @@ import {
 import { createGrant, deleteGrant, listGrants, previewAccess, type Grant, type SubjectType } from '../../services/access';
 import { listDatasources, listMetadata, type DatasourceRead, type MetadataObject } from '../../services/data';
 import { buildTree, type ResourceNode } from './resourceTree';
+import { useSensitivePermissions } from '../../permissionsContext';
 import { resizeColumns } from './columnResize';
 import { mePortalApi, type PlatformItem } from '../../services/mePortalApi';
 import { listDepartments, listRoles, listUsers, type DepartmentRow, type RoleRow, type UserRow } from '../../services/orgPortalApi';
@@ -50,6 +51,7 @@ interface SubjectItem {
 }
 
 export function PermissionsPage() {
+  const { can } = useSensitivePermissions();
   const [subjectType, setSubjectType] = useState<SubjectType>('USER');
   const [subjects, setSubjects] = useState<SubjectItem[]>([]);
   const [subjectId, setSubjectId] = useState('');
@@ -304,7 +306,7 @@ export function PermissionsPage() {
         title="权限矩阵"
         description="选择主体与资源，管理规则并计算平台范围内的有效权限。"
         actions={
-          <button className="btn btn--primary" disabled={!subjectId} onClick={openGrantDialog}>
+          <button className="btn btn--primary" disabled={!subjectId || !can('aclGrant')} onClick={can('aclGrant') ? openGrantDialog : undefined}>
             + 新增规则
           </button>
         }

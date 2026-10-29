@@ -21,7 +21,7 @@ test('canPerform grants only the exact permission code for the action', () => {
 
 test('SENSITIVE_ACTIONS covers all write domains; codes align with backend permission naming', () => {
   const actions = Object.keys(SENSITIVE_ACTIONS) as SensitiveAction[];
-  assert.ok(actions.length >= 10);
+  assert.ok(actions.length >= 11);
   for (const action of actions) {
     const code = SENSITIVE_ACTIONS[action];
     assert.match(code, /^ptmcp:[a-z]+:[a-z-]+$/, `${action} code must follow ptmcp:domain:action pattern`);
@@ -42,4 +42,18 @@ test('canPerformAll returns a complete boolean map', () => {
   // null → 全 false
   const empty = canPerformAll(null);
   for (const a of actions) assert.equal(empty[a], false);
+});
+
+test('datasourceTest is a distinct permission from sync; CRUD actions map to unique codes', () => {
+  const codes = Object.values(SENSITIVE_ACTIONS);
+  assert.equal(new Set(codes).size, codes.length, 'every action must map to a unique permission code');
+  assert.notEqual(SENSITIVE_ACTIONS.datasourceTest, SENSITIVE_ACTIONS.datasourceSync);
+  assert.equal(SENSITIVE_ACTIONS.datasourceTest, 'ptmcp:datasource:test');
+  // 门控的写操作覆盖所有破坏性域
+  for (const domain of ['datasource', 'user', 'role', 'delegation', 'acl', 'audit']) {
+    assert.ok(
+      codes.some((c) => c.startsWith(`ptmcp:${domain}:`)),
+      `${domain} domain must be covered`,
+    );
+  }
 });
