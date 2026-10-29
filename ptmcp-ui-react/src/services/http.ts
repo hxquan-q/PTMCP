@@ -39,6 +39,18 @@ export class ApiError extends Error {
 }
 
 const base = '/backend/admin';
+
+/* 会话过期广播：401（登录/CSRF 引导除外）通知注册方（App 切换到登录页）。 */
+type ExpiredListener = () => void;
+const expiredListeners = new Set<ExpiredListener>();
+export function onSessionExpired(listener: ExpiredListener): () => void {
+  expiredListeners.add(listener);
+  return () => expiredListeners.delete(listener);
+}
+function notifySessionExpired(path: string): void {
+  if (path === '/api/v1/session/login' || path === '/api/v1/session/csrf') return;
+  for (const listener of expiredListeners) listener();
+}
 let csrfToken: string | null = null;
 let csrfPromise: Promise<string> | null = null;
 
@@ -143,6 +155,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   if (!response.ok || (wrapped && root?.code !== 200)) {
     const code = typeof root?.code === 'string' ? root.code : typeof nested?.errorCode === 'string' ? nested.errorCode : 'REQUEST_FAILED';
     if (code === 'CSRF_INVALID') csrfToken = null;
+    if (response.status === 401) notifySessionExpired(path);
     throw new ApiError(response.status, code, failureMessage(response.status, code, root, nested), requestId, !!nested?.retryable, nested ?? {});
   }
   const data = wrapped ? root?.data : body;

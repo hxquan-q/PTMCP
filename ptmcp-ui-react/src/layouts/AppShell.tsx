@@ -27,12 +27,16 @@ export function AppShell({
   onNavigate,
   breadcrumb,
   children,
+  onLogout,
+  user,
 }: {
   groups: NavGroup[];
   active: string;
   onNavigate: (key: string) => void;
   breadcrumb: ReactNode;
   children: ReactNode;
+  onLogout?: () => void;
+  user?: { displayName: string; department: string };
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   return (
@@ -80,13 +84,19 @@ export function AppShell({
             <UserIcon />
           </span>
           <span className="cell-stack">
-            <strong style={{ fontSize: 12 }}>前端演示管理员</strong>
-            <span style={{ fontSize: 11 }}>演示总部</span>
+            <strong style={{ fontSize: 12 }}>{user?.displayName ?? '未登录'}</strong>
+            <span style={{ fontSize: 11 }}>{user?.department ?? ''}</span>
           </span>
         </span>
-        <button className="btn btn--link" aria-label="更多" style={{ color: 'var(--ptmcp-text-muted)', fontSize: 17 }}>
-          <DotsIcon />
-        </button>
+        {onLogout ? (
+          <button className="btn btn--secondary" onClick={onLogout} style={{ padding: '4px 12px', fontSize: 12.5 }}>
+            退出登录
+          </button>
+        ) : (
+          <button className="btn btn--link" aria-label="更多" style={{ color: 'var(--ptmcp-text-muted)', fontSize: 17 }}>
+            <DotsIcon />
+          </button>
+        )}
       </header>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <nav

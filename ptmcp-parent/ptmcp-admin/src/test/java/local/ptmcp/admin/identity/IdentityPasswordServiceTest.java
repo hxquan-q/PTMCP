@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
+import local.ptmcp.persistence.org.OrgStore;
 import local.ptmcp.persistence.security.HostIdentityStore;
 import local.ptmcp.persistence.security.IdentityPasswordChanges;
 import local.ptmcp.persistence.security.UserSecurityStore;
@@ -93,6 +94,8 @@ class IdentityPasswordServiceTest {
         jdbc.update(
                 "INSERT INTO sys_user_profile (user_id,dept_id,display_name,password_hash,status,version,create_time,update_time) VALUES (42,42,'Synthetic',?,'ACTIVE',5,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
                 ENCODER.encode(OLD));
+        jdbc.update("INSERT INTO sys_user_login_name (user_id,normalized_name,create_time,update_time)"
+                + " VALUES (42,'synthetic',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
         jdbc.update(
                 "INSERT INTO sys_user_security (user_id,auth_version,identity_version,version,create_time,update_time) VALUES (42,7,1,1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
         hostJdbc.update(
@@ -115,10 +118,47 @@ class IdentityPasswordServiceTest {
                 "UPDATE sys_user_profile SET password_hash=?,version=5,status='ACTIVE' WHERE user_id=42",
                 ENCODER.encode(OLD));
         hostJdbc.update(
-                "UPDATE sys_user SET password=?,status='0',del_flag='0' WHERE user_id=42",
+                "UPDATE sys_user SET user_name='synthetic',password=?,status='0',del_flag='0' WHERE user_id=42",
                 ENCODER.encode(OLD));
         jdbc.update("UPDATE sys_security_state SET policy_epoch=20 WHERE singleton_id=1");
         jdbc.update("DELETE FROM web_session_index");
+    }
+
+    @Test
+    void aHostIdCollisionCannotResetAnotherLoginName() {
+        hostJdbc.update("UPDATE sys_user SET user_name='eve' WHERE user_id=42");
+        DomainException failure = assertThrows(DomainException.class,
+                () -> service(primary, identity).reset(42, 5, NEXT, "Synthetic collision test", 99));
+        assertEquals(ErrorCode.RESOURCE_NOT_FOUND, failure.errorCode());
+        assertEquals("READY", service(primary, identity).status(42).identityState());
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM identity_password_change", Integer.class));
+        assertTrue(ENCODER.matches(OLD, hostHash()));
+    }
+
+    @Test
+    void aHostRenameBeforeRecoveryCannotChangeTheOtherAccount() {
+        createPending();
+        hostJdbc.update("UPDATE sys_user SET user_name='eve' WHERE user_id=42");
+        DomainException failure = assertThrows(DomainException.class,
+                () -> service(primary, identity).retry(42, 6));
+        assertEquals(ErrorCode.VERSION_CONFLICT, failure.errorCode());
+        assertPending();
+        assertTrue(ENCODER.matches(OLD, hostHash()));
+    }
+
+    @Test
+    void anUnboundNewUserCannotResetEvenAnIdenticallyNamedHostAccount() {
+        long userId = new OrgStore(primary).createUser("fresh", "Fresh", 42,
+                "external", java.util.List.of(), true, 99).id();
+        hostJdbc.update("INSERT INTO sys_user VALUES (?,'fresh','Fresh',?,'0','0')",
+                userId, ENCODER.encode(OLD));
+        DomainException failure = assertThrows(DomainException.class,
+                () -> service(primary, identity).reset(userId, 1, NEXT, "Synthetic unbound test", 99));
+        assertEquals(ErrorCode.TOKEN_REVOKED, failure.errorCode());
+        assertEquals("UNBOUND", service(primary, identity).status(userId).identityState());
+        assertFalse(service(primary, identity).status(userId).recoveryRequired());
+        assertTrue(ENCODER.matches(OLD, hostJdbc.queryForObject(
+                "SELECT password FROM sys_user WHERE user_id=?", String.class, userId)));
     }
 
     @Test
@@ -139,6 +179,32 @@ class IdentityPasswordServiceTest {
                         Integer.class));
         assertTrue(ENCODER.matches(OLD, hostHash()));
         assertEquals(6, service(primary, identity).retry(42, 6));
+        assertReady(NEXT, 8);
+    }
+
+    @Test
+    void pendingProfileEditsCannotStrandRecovery() {
+        createPending();
+        DomainException failure = assertThrows(DomainException.class, () ->
+                new OrgStore(primary).updateUser(42, "Changed", 42, null, null, null,
+                        null, null, 6, 99));
+        assertEquals(ErrorCode.VERSION_CONFLICT, failure.errorCode());
+        IdentityPasswordService.Status status = service(primary, identity).status(42);
+        assertEquals(6, status.version());
+        assertEquals("CHANGE_PENDING", status.identityState());
+        assertEquals(6, service(primary, identity).retry(42, status.version()));
+        assertReady(NEXT, 8);
+    }
+
+    @Test
+    void completedRecoveryStillRejectsAStaleAggregateVersion() {
+        service(primary, identity).reset(42, 5, NEXT, "Synthetic completed recovery", 99);
+        new OrgStore(primary).updateUser(42, "Changed", 42, null, null, null,
+                null, null, 6, 99);
+        assertEquals(7, service(primary, identity).status(42).version());
+        DomainException failure = assertThrows(DomainException.class,
+                () -> service(primary, identity).retry(42, 6));
+        assertEquals(ErrorCode.VERSION_CONFLICT, failure.errorCode());
         assertReady(NEXT, 8);
     }
 

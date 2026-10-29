@@ -123,6 +123,11 @@ host/port先做DNS与网络目的地策略验证，拒绝云元数据/loopback�
 | GET /audit/{requestId} | audit:read | →AuditDetail（脱敏SQL、对象、版本、阶段耗时、错误/截断），普通审计员无原文 |
 | POST /audit/{requestId}/decrypt | audit:decrypt，额外明确授权 | {fields:[sqlRaw/sqlFinal],reason:10..500}→{sqlRaw?,sqlFinal?,expiresAt}；每次持久审计后才返回，no-store，服务端不缓存明文；保留期外404 |
 
+身份恢复补充：CHANGE_PENDING 期间用户资料、角色、部门与状态写入返回409 VERSION_CONFLICT，
+先用当前 GET identity 的版本完成恢复再编辑；已完成恢复也拒绝过期 If-Match。
+Cookie 管理写的 Origin/Referer 必须与请求的 scheme/host/port 一致；Sec-Fetch-Site 只接受 same-origin/none。
+部署代理必须只从受信代理恢复外部请求地址，不能信任客户端自行提供的转发头。
+
 业务对象不存在404、授权目标不可见404；可见对象但动作不足403 MANAGEMENT_SCOPE_DENIED。全局列表的actor过滤在持久查询层执行，禁止先分页再前端过滤。平台/数据源健康测试和同步运行的系统账号同样受凭证、目的地及审计约束。
 
 身份动作响应中的 version 是用户 aggregate version，首个响应带 ETag；幂等重放以持久 body 中的 version 为准。

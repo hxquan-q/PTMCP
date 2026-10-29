@@ -114,6 +114,7 @@ export function TextInput({
   type,
   disabled,
   maxLength,
+  autoComplete,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -121,6 +122,7 @@ export function TextInput({
   type?: string;
   disabled?: boolean;
   maxLength?: number;
+  autoComplete?: string;
 }) {
   return (
     <input
@@ -130,6 +132,7 @@ export function TextInput({
       value={value}
       disabled={disabled}
       maxLength={maxLength}
+      autoComplete={autoComplete}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
     />

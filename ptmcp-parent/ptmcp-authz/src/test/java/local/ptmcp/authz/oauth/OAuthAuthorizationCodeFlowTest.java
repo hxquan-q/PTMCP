@@ -161,12 +161,30 @@ class OAuthAuthorizationCodeFlowTest {
     @BeforeEach
     void clearAuthorizationState() throws SQLException {
         try (Connection connection = db()) {
+            execute(connection, "UPDATE sys_user SET user_name = ? WHERE user_id = ?", USERNAME, USER_ID);
             execute(connection, "UPDATE sys_user_security SET auth_version = 1, identity_state = 'READY', identity_change_id = NULL WHERE user_id = ?", USER_ID);
             execute(connection, "DELETE FROM web_session_index");
             execute(connection, "DELETE FROM oauth_refresh_token");
             execute(connection, "DELETE FROM oauth_refresh_family");
             execute(connection, "DELETE FROM oauth2_authorization_consent");
             execute(connection, "DELETE FROM oauth2_authorization");
+        }
+    }
+
+    @Test
+    void aHostIdCollisionCannotAuthenticateAnotherLoginName() throws Exception {
+        try (Connection connection = db()) {
+            execute(connection, "UPDATE sys_user SET user_name = 'eve' WHERE user_id = ?", USER_ID);
+        }
+        HttpSession session = new HttpSession();
+        Response page = session.get("/login");
+        assertEquals(200, page.status());
+        Response result = session.postForm("/login", form(Map.of(
+                "username", USERNAME, "password", PASSWORD, "_csrf", csrf(page.body()))), Map.of());
+        assertEquals(302, result.status());
+        assertTrue(result.first("Location").contains("error"));
+        try (Connection connection = db()) {
+            assertEquals(0, scalar(connection, "SELECT COUNT(*) FROM web_session_index"));
         }
     }
 

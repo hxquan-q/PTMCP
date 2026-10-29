@@ -36,6 +36,9 @@ import {
   TokensPage,
 } from './views/me/MePages';
 import { AuditDetailPage, DatasourceDetailPage, JobDetailPage, MetadataDetailPage } from './views/admin/DetailPages';
+import { LoginPage } from './views/auth/LoginPage';
+import { getSession, logout, type SessionInfo } from './services/session';
+import { onSessionExpired } from './services/http';
 
 /* 轻量 hash 路由:#/me/integrations、#/admin/datasources … */
 function useHashRoute(): [string, (path: string) => void] {
@@ -238,6 +241,35 @@ const ADMIN_GROUPS: NavGroup[] = [
 const NAV_TO_PATH: Record<string, string> = Object.fromEntries(ROUTES.map((r) => [r.navKey, r.path]));
 
 export function App() {
+  const [session, setSession] = useState<SessionInfo | null>(null);
+  const [sessionState, setSessionState] = useState<'probing' | 'anonymous' | 'signed-in'>('probing');
+  const [expiredNote, setExpiredNote] = useState('');
+
+  const probe = useCallback(() => {
+    setSessionState('probing');
+    getSession()
+      .then((info) => {
+        setSession(info);
+        setSessionState('signed-in');
+      })
+      .catch(() => {
+        setSession(null);
+        setSessionState('anonymous');
+      });
+  }, []);
+
+  useEffect(probe, [probe]);
+
+  useEffect(
+    () =>
+      onSessionExpired(() => {
+        setSession(null);
+        setSessionState('anonymous');
+        setExpiredNote('会话已过期或未登录，请重新登录。');
+      }),
+    [],
+  );
+
   const [path, navigate] = useHashRoute();
   const resolved = useMemo(() => {
     const exact = ROUTES.find((r) => !r.prefix && r.path === path);
@@ -255,8 +287,33 @@ export function App() {
     },
     [navigate],
   );
+  if (sessionState !== 'signed-in') {
+    return (
+      <LoginPage
+        reason={sessionState === 'anonymous' ? expiredNote || undefined : undefined}
+        onLoggedIn={() => {
+          setExpiredNote('');
+          probe();
+        }}
+      />
+    );
+  }
+
   return (
-    <AppShell groups={groups} active={route.navKey} onNavigate={onNavigate} breadcrumb={route.breadcrumb}>
+    <AppShell
+      groups={groups}
+      active={route.navKey}
+      onNavigate={onNavigate}
+      breadcrumb={route.breadcrumb}
+      onLogout={() => {
+        setExpiredNote('');
+        void logout().finally(() => {
+          setSession(null);
+          setSessionState('anonymous');
+        });
+      }}
+      user={session ? { displayName: session.displayName, department: session.department?.name ?? '' } : undefined}
+    >
       {route.element(id)}
     </AppShell>
   );

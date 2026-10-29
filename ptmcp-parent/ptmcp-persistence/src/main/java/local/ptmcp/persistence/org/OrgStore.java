@@ -2,6 +2,7 @@ package local.ptmcp.persistence.org;
 
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
+import local.ptmcp.persistence.security.UserSecurityStore;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -688,6 +689,12 @@ public final class OrgStore {
                     statement.setObject(10, OrgSql.nowUtc());
                     statement.executeUpdate();
                 }
+                try (PreparedStatement security = OrgSql.statement(connection,
+                        "INSERT INTO sys_user_security (user_id,auth_version,identity_version,identity_state,version,create_time,update_time)"
+                                + " VALUES (?,1,1,'READY',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))")) {
+                    security.setLong(1, userId);
+                    security.executeUpdate();
+                }
                 insertUserRoles(connection, userId, roles);
                 writeOperationLog(
                         connection,
@@ -762,6 +769,12 @@ public final class OrgStore {
         try (Connection connection = OrgSql.configure(primary)) {
             connection.setAutoCommit(false);
             try {
+                UserSecurityStore.lockGlobal(connection);
+                UserSecurityStore.State security = UserSecurityStore.read(connection, id, true);
+                if ("CHANGE_PENDING".equals(security.identityState()))
+                    throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                if (!security.ready())
+                    throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
                 requireDepartmentExists(connection, deptId);
                 try (PreparedStatement statement =
                         OrgSql.statement(

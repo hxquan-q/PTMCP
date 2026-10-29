@@ -55,6 +55,9 @@ public final class IdentityPasswordService {
      * Retries the persisted target; no new password, operation, version bump or credential revival.
      */
     public long retry(long userId, long expectedVersion) {
+        if (expectedVersion <= 0) throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        if (status(userId).version() != expectedVersion)
+            throw new DomainException(ErrorCode.VERSION_CONFLICT);
         IdentityPasswordChanges.Pending operation = changes.operation(userId, expectedVersion);
         if (operation.profileVersion() != expectedVersion)
             throw new DomainException(ErrorCode.VERSION_CONFLICT);

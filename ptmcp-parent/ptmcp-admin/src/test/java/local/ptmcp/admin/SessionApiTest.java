@@ -343,6 +343,35 @@ class SessionApiTest {
     }
 
     @Test
+    void aHostIdCollisionCannotAuthenticateAnotherLoginName() throws Exception {
+        seedPortal();
+        try (Connection connection = connect(); PreparedStatement update = connection.prepareStatement(
+                "UPDATE sys_user SET user_name='eve' WHERE user_id=?")) {
+            update.setLong(1, BOB);
+            assertEquals(1, update.executeUpdate());
+        }
+        MvcResult csrf = mockMvc.perform(get("/api/v1/session/csrf"))
+                .andExpect(status().isOk()).andReturn();
+        String presession = cookieHeader(csrf, AdminSessionService.PRESESSION_COOKIE)
+                .split(";", 2)[0].split("=", 2)[1];
+        mockMvc.perform(post("/api/v1/session/login")
+                        .cookie(new Cookie(AdminSessionService.PRESESSION_COOKIE, presession))
+                        .header("X-CSRF-Token", json(csrf).get("csrfToken").asString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"bob\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_FAILED"));
+        try (Connection connection = connect(); PreparedStatement query = connection.prepareStatement(
+                "SELECT COUNT(*) FROM web_session_index WHERE user_id=?")) {
+            query.setLong(1, BOB);
+            try (ResultSet result = query.executeQuery()) {
+                assertTrue(result.next());
+                assertEquals(0, result.getInt(1));
+            }
+        }
+    }
+
+    @Test
     void loginFailuresAreUniformAndTheFifthFailureLocksTheAccount() throws Exception {
         seedPortal();
         MvcResult csrf =
@@ -483,7 +512,30 @@ class SessionApiTest {
                         .header("X-CSRF-Token",admin.csrf()).header("Sec-Fetch-Site","cross-site")
                         .header("Idempotency-Key","retry-cross-origin").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("CSRF_INVALID"));
+        for (String invalidOrigin : java.util.List.of("null", "https://localhost", "http://localhost:8080",
+                "http://localhost/", "http://user@localhost", "http://localhost?query", "http://localhost/#fragment")) {
+            mockMvc.perform(put(uri).cookie(admin.cookie()).header("If-Match", "1")
+                            .header("X-CSRF-Token", admin.csrf()).header("Origin", invalidOrigin)
+                            .header("Idempotency-Key", "reset-invalid-origin")
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("CSRF_INVALID"));
+        }
+        mockMvc.perform(put(uri).cookie(admin.cookie()).header("If-Match", "1")
+                        .header("X-CSRF-Token", admin.csrf()).header("Sec-Fetch-Site", "same-site")
+                        .header("Origin", "http://localhost").header("Idempotency-Key", "reset-sibling-site")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("CSRF_INVALID"));
+        mockMvc.perform(put(uri).cookie(admin.cookie()).header("If-Match", "1")
+                        .header("X-CSRF-Token", admin.csrf()).header("Referer", "https://attacker.example.test/page")
+                        .header("Idempotency-Key", "reset-other-referer")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("CSRF_INVALID"));
         assertEquals("1",scalar("SELECT auth_version FROM sys_user_security WHERE user_id="+BOB));
+        mockMvc.perform(put(uri).cookie(admin.cookie()).header("If-Match", "1")
+                        .header("X-CSRF-Token", admin.csrf()).header("Sec-Fetch-Site", "same-origin")
+                        .header("Origin", "http://localhost").header("Idempotency-Key", "reset-same-origin")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.version").value(2));
     }
 
     // ------------------------------------------------------------------ personal tokens

@@ -213,7 +213,8 @@ class OrgManagementStoreTest {
                             "platform_scope",
                             "admin_delegation",
                             "sys_user_role",
-                            "sys_user_profile",
+                            "sys_user_security",
+                        "sys_user_profile",
                             "sys_user_login_name",
                             "sys_role_permission",
                             "sys_role",
@@ -480,6 +481,11 @@ class OrgManagementStoreTest {
                 orgStore.createUser(
                         "Alice", "爱丽丝", deptId, "bcrypt-hash", List.of(role.id()), true, 1L);
         assertEquals("alice", user.username(), "login name must be normalized to lower case");
+        local.ptmcp.persistence.security.UserSecurityStore.State authority =
+                new local.ptmcp.persistence.security.UserSecurityStore(dataSource).read(user.id());
+        assertFalse(authority.ready());
+        assertEquals("UNBOUND", authority.identityState());
+        assertEquals(1, authority.authVersion());
         assertEquals(deptId, user.deptId());
         assertEquals(List.of(role.id()), user.roleIds());
 

@@ -2707,10 +2707,6 @@ class AdminApiTest {
                             + target
                             + ", 'pwd-target', '密码用户', '$2a$10$oldoldoldoldoldoldoldoldoldoldoldoldoldoldoldoldoldold',"
                             + " '0', '0') ON DUPLICATE KEY UPDATE password = VALUES(password)");
-            statement.execute(
-                    "INSERT INTO sys_user_security (user_id,auth_version,identity_version,identity_state,version,create_time,update_time) VALUES ("
-                            + target
-                            + ",1,1,'READY',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
             // One ACTIVE refresh family so the revocation has a real target.
             statement.execute(
                     "INSERT INTO oauth2_registered_client (id, client_id, client_name,"
@@ -2929,11 +2925,8 @@ class AdminApiTest {
                 insert.executeUpdate();
             }
             sql.execute(
-                    "INSERT INTO sys_user_security (user_id,auth_version,identity_version,identity_state,identity_change_id,version,create_time,update_time) VALUES ("
-                            + target
-                            + ",2,2,'CHANGE_PENDING','"
-                            + operation
-                            + "',2,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
+                    "UPDATE sys_user_security SET auth_version=2,identity_version=2,identity_state='CHANGE_PENDING',identity_change_id='"
+                            + operation + "',version=2 WHERE user_id=" + target);
             sql.execute("UPDATE sys_user_profile SET version=2 WHERE user_id=" + target);
             try (PreparedStatement insert =
                     connection.prepareStatement(
@@ -2947,6 +2940,14 @@ class AdminApiTest {
             }
         }
         String uri = "/api/v1/admin/users/" + target;
+        mockMvc.perform(put(uri)
+                        .header("X-Test-User-Id", ADMIN_ID)
+                        .header("X-Test-Platform-Admin", "true")
+                        .header("If-Match", "2")
+                        .contentType("application/json")
+                        .content("{\"displayName\":\"Changed\",\"deptId\":"+deptId+",\"enabled\":true}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
         mockMvc.perform(
                         get(uri + "/identity")
                                 .header("X-Test-User-Id", ADMIN_ID)
