@@ -23,8 +23,8 @@ import javax.sql.DataSource;
  * rollout — controllers adopt it slice by slice; nothing here changes platform-admin behavior. A
  * delegation is effective when its stored status is ACTIVE and {@code validFrom <= now < validTo};
  * the derived EXPIRED projection is a read model and never grants anything. Department containment
- * validates the complete authoritative {@code sys_dept.parent_id} chain in one snapshot;
- * action containment is a subset check; resource containment is an exact type+id+generation match
+ * validates the complete authoritative {@code sys_dept.parent_id} chain in one snapshot; action
+ * containment is a subset check; resource containment is an exact type+id+generation match
  * (DATASOURCE generation is pinned to 1 by convention, mirroring acl_grant).
  */
 public final class DelegationScopeResolver {
@@ -157,8 +157,7 @@ public final class DelegationScopeResolver {
             return false;
         }
         try (Connection connection = OrgSql.configure(primary);
-                PreparedStatement statement =
-                        OrgSql.statement(connection, DEPARTMENT_PATH_SQL)) {
+                PreparedStatement statement = OrgSql.statement(connection, DEPARTMENT_PATH_SQL)) {
             statement.setLong(1, departmentId);
             statement.setInt(2, MAX_DEPARTMENT_NODES);
             try (ResultSet result = statement.executeQuery()) {

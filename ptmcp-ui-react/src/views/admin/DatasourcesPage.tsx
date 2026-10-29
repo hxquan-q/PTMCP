@@ -22,6 +22,7 @@ import { fmtTime as fmt, healthOf, statusOf } from './datasourceStatus';
 import { dsCreateValidate, emptyDsForm, type DsForm } from './dsForm';
 import { createDatasource } from '../../services/data';
 import { useSensitivePermissions } from '../../permissionsContext';
+import { showToast } from '../../toast';
 import { listDatasources, type DatasourceRead } from '../../services/data';
 
 const ENGINE_OPTIONS = [
@@ -370,6 +371,7 @@ function DsCreateDialog({ onClose, onCreated }: { onClose: () => void; onCreated
     try {
       const { data } = await createDatasource({ ...form, code: form.code.trim(), name: form.name.trim() });
       onCreated(data.id);
+      showToast('数据源已创建');
     } catch (err) {
       const status = (err as { status?: number }).status;
       if (status === 409) setSubmitError('编码已存在，请更换数据源编码。');

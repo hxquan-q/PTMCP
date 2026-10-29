@@ -78,12 +78,31 @@ BUILD SUCCESS/exit0：Org50、Admin84、ToolPermissionDeny12共146项，0失败/
 无新增阻断；评审未重复运行动态测试。局部部门主体读取缺口关闭，不外推整体授权快照或管理委派。
 上一轮根检查已实际执行，python scripts/check.py与git diff --check均exit0，62项检查器回归通过。
 
-下一切片：修复DelegationScopeResolver仍信任ancestors及root==target无条件放行。
+委派范围读取切片：修复DelegationScopeResolver信任ancestors及root==target无条件放行。
 部门/主体管理范围从target的parent_id完整链判定，不信任缓存；未知或软删target不覆盖，
 匹配根须实际存在且未软删。停用但未删除部门仍允许受委派管理，供重新启用，不能照搬业务主体过滤。
 64节点与坏链拒绝规则复用同一边界，root==target也完整验链；中间状态不改变父边拓扑。
 范围仅为委派读取，不修完整PUT单委派覆盖新旧父/子树、提交前重验、写树防环、epoch或间接自扩权。
-计划先补缓存污染/无效根/坏链真实MySQL及HTTP零副作用RED，再最小实现、组合GREEN与独立终审。
+已存在的软删target/root仍先验证完整链，坏链优先报安全状态不可用；合法链才按软删状态返回不覆盖。
+有效RED：`delegation-path-red.log`于2026-10-30 06:07:10 +08:00为BUILD FAILURE，
+Org16项10 failures、Admin5项5 failures，0 errors/0 skipped；该轮使用-fn，进程及.exit为0，
+不能据退出码声称通过。补充`delegation-path-red2.log`于06:11:47为BUILD FAILURE/exit1，
+3项全部failure、0 errors/0 skipped，覆盖软删根/目标上方坏链及root自身SQL故障不得绕过依赖读取。
+最小实现及格式回拷后，隔离MySQL组合`delegation-path-green.log`于2026-10-30 06:16:51 +08:00
+BUILD SUCCESS/exit0：Org69、Admin89、ToolPermissionDeny12共170项，0失败/错误/跳过。
+本片resolver与两份测试已同构建工作区逐字节核对一致；独立只读终审实际核阅源码、两轮RED、
+GREEN及退出码并复核SHA-256，无新增阻断，未修改文件或重复运行动态测试。
+委派单目标范围读取缺口关闭；整子树、完整命令单一委派、提交前重验、写树防环及epoch仍未闭环。
+该片收尾python scripts/check.py与git diff --check均exit0，62项检查器回归通过；
+Skill的tree/format/archived检查均exit0（12份活跃笔记、0份归档）。
+
+当前实施切片：部门完整PUT的新旧目标范围与版本绑定。一次有效委派必须同时包含department:update、
+覆盖旧目标和移动后的新父部门，不能拼接两个范围的委派；提升为根仅平台管理员允许。
+未移动时只要求旧目标，不额外要求当前父在委派中，保留委派根自身改名/重新启用。
+沿用入口精确功能码，目标读取快照须与If-Match相等，存储端CAS继续保留，防未来版本写入跨越并发迁移。
+先补真实MySQL/Servlet越界与拼接委派零副作用反例、合法移动/根编辑及并发未来If-Match，再实现并组合验证。
+本片尚不修缓存驱动的后代写集、事务内actor/委派重验、新父路径并发或epoch；
+完整部门移动验收仍须后续权威树写入及提交前授权闭环，不能随此片升级为完成。
 
 当前切片：所有admin handler显式声明功能码，统一MVC入口默认拒绝未声明/无功能码请求；
 平台管理员不能绕过端点动作，通用用户PUT仍按实际变化补status/assign-role/move。

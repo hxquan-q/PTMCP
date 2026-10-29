@@ -5,6 +5,7 @@ import { request } from '../../services/http';
 import { createRole, deleteRole, listRoles, updateRole, type RoleRow } from '../../services/orgPortalApi';
 import { validateRoleForm, type RoleFormValues } from './roleForm';
 import { useSensitivePermissions } from '../../permissionsContext';
+import { showToast } from '../../toast';
 
 interface SessionInfo {
   userId: string;
@@ -194,6 +195,7 @@ export function RolesPage() {
                 setBusy(true);
                 try {
                   await deleteRole(deleting.id, deleting.version);
+                  showToast('角色已删除');
                   setDeleting(null);
                   reload();
                 } finally {
@@ -268,6 +270,7 @@ function RoleDialog({
       if (role) await updateRole(role.id, body, role.version);
       else await createRole({ ...body, key: values.key.trim() });
       onSaved();
+      showToast(role ? '角色已更新' : '角色已创建');
     } catch (e) {
       const status = (e as { status?: number }).status;
       if (status === 412) setConflict('该角色已被他人修改。请复制本地修改后刷新，再重新提交。');

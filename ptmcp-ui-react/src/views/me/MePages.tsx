@@ -31,6 +31,7 @@ import type { MetadataObject } from '../../services/data';
 import { mePortalApi, type DatasourceItem, type DictionaryItem, type PlatformItem } from '../../services/mePortalApi';
 import { changePassword } from '../../services/session';
 import { validatePasswordForm } from './passwordForm';
+import { showToast } from '../../toast';
 import { BackBar } from '../admin/DetailPages';
 
 function fmt(at: string | null | undefined): string {
@@ -418,6 +419,7 @@ function TokenDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
     try {
       const result = await createToken({ name: name.trim(), platformId, scopes, expiresAt: expiry.toISOString() });
       setCreated(result);
+      showToast('令牌已创建');
     } catch (e) {
       setFormError((e as Error).message || '创建失败，请稍后重试。');
     } finally {
@@ -894,6 +896,7 @@ export function SecurityPage() {
               try {
                 await changePassword(pwForm.oldPassword, pwForm.newPassword);
                 setPwForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
+                showToast('密码已修改，全部会话已失效');
                 window.dispatchEvent(new CustomEvent('ptmcp:password-changed'));
               } catch (e) {
                 setPwError(e instanceof Error ? e.message : '修改失败，请稍后重试。');

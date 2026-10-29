@@ -49,6 +49,7 @@ import { getSession, logout, type SessionInfo } from './services/session';
 import { onSessionExpired } from './services/http';
 import { ADMIN_ROUTE_PERMISSIONS, filterNavGroups, resolveRoute, safeReturnTo, type PermissionedNavGroup } from './navigation';
 import { PermissionsContext, createPermissionsValue } from './permissionsContext';
+import { ToastContainer } from './components/Toast';
 
 /* 轻量 hash 路由:#/me/integrations、#/admin/datasources … */
 function useHashRoute(): [string, (path: string) => void] {
@@ -410,25 +411,28 @@ export function App() {
   }
 
   return (
-    <PermissionsContext.Provider value={permissionsValue}>
-      <AppShell
-        groups={groups}
-        active={route?.navKey ?? ''}
-        onNavigate={onNavigate}
-        breadcrumb={route?.breadcrumb}
-        onLogout={() => {
-          setExpiredNote('');
-          setReturnTo('/me/integrations');
-          void logout().finally(() => {
-            setSession(null);
-            setSessionState('anonymous');
-          });
-        }}
-        user={session ? { displayName: session.displayName, department: session.department?.name ?? '' } : undefined}
-      >
-        {route ? route.element(resolved.match === 'prefix' ? resolved.id : undefined) : null}
-      </AppShell>
-    </PermissionsContext.Provider>
+    <>
+      <PermissionsContext.Provider value={permissionsValue}>
+        <AppShell
+          groups={groups}
+          active={route?.navKey ?? ''}
+          onNavigate={onNavigate}
+          breadcrumb={route?.breadcrumb}
+          onLogout={() => {
+            setExpiredNote('');
+            setReturnTo('/me/integrations');
+            void logout().finally(() => {
+              setSession(null);
+              setSessionState('anonymous');
+            });
+          }}
+          user={session ? { displayName: session.displayName, department: session.department?.name ?? '' } : undefined}
+        >
+          {route ? route.element(resolved.match === 'prefix' ? resolved.id : undefined) : null}
+        </AppShell>
+      </PermissionsContext.Provider>
+      <ToastContainer />
+    </>
   );
 }
 

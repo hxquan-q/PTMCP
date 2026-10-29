@@ -19,6 +19,7 @@ import com.mysql.cj.jdbc.exceptions.CommunicationsException;
 import local.ptmcp.admin.api.AdminAction;
 import local.ptmcp.admin.api.AdminPrincipal;
 import local.ptmcp.admin.api.ApiExceptionAdvice;
+import local.ptmcp.admin.api.DepartmentAdminController;
 import local.ptmcp.admin.api.UserAdminController;
 import local.ptmcp.persistence.org.DelegationScopeResolver;
 import local.ptmcp.persistence.org.DelegationStore;
@@ -720,6 +721,253 @@ class AdminApiTest {
     }
 
     private record DepartmentEditFixture(long destinationId, long childId, long grandchildId) {}
+
+    @ParameterizedTest
+    @ValueSource(strings = {"OUTSIDE", "ROOT"})
+    void delegatedDepartmentCommandCannotMoveOutsideItsScope(String destination) throws Exception {
+        DepartmentCommandFixture fixture = departmentCommandFixture();
+        DepartmentWriteEffects before = departmentWriteEffects();
+        Long parent = "ROOT".equals(destination) ? null : fixture.outsideId();
+
+        mockMvc.perform(departmentCommandRequest(fixture, fixture.targetId(), parent, 1))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+        assertEquals(before, departmentWriteEffects());
+    }
+
+    @Test
+    void delegatedDepartmentCommandCannotCombineTwoDelegations() throws Exception {
+        DepartmentCommandFixture fixture = departmentCommandFixture();
+        grantDepartmentCommand(fixture, fixture.outsideId(), List.of("ptmcp:department:update"));
+        assertEquals(
+                2,
+                delegationScopeResolver
+                        .effectiveDelegations(fixture.delegateId(), Instant.now())
+                        .size());
+        DepartmentWriteEffects before = departmentWriteEffects();
+
+        mockMvc.perform(
+                        departmentCommandRequest(
+                                fixture, fixture.targetId(), fixture.outsideId(), 1))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+        assertEquals(before, departmentWriteEffects());
+    }
+
+    @Test
+    void delegatedDepartmentCommandCannotBorrowActionFromANarrowerDelegation() throws Exception {
+        DepartmentCommandFixture fixture = departmentCommandFixture();
+        try (Connection connection = connect();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "UPDATE admin_delegation SET allowed_actions=? WHERE user_id=?")) {
+            statement.setString(1, "[\"ptmcp:department:read\"]");
+            statement.setLong(2, fixture.delegateId());
+            assertEquals(1, statement.executeUpdate());
+        }
+        grantDepartmentCommand(fixture, fixture.targetId(), List.of("ptmcp:department:update"));
+        DepartmentWriteEffects before = departmentWriteEffects();
+
+        mockMvc.perform(
+                        departmentCommandRequest(
+                                fixture, fixture.targetId(), fixture.destinationId(), 1))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+        assertEquals(before, departmentWriteEffects());
+    }
+
+    @Test
+    void delegatedDepartmentCommandMovesWithinOneDelegation() throws Exception {
+        DepartmentCommandFixture fixture = departmentCommandFixture();
+
+        mockMvc.perform(
+                        departmentCommandRequest(
+                                fixture, fixture.targetId(), fixture.destinationId(), 1))
+                .andExpect(status().isOk())
+                .andExpect(header().string("ETag", "\"2\""))
+                .andExpect(jsonPath("$.parentId").value(fixture.destinationId()));
+        assertEquals(
+                fixture.destinationId(), orgStore.getDepartment(fixture.targetId()).parentId());
+        assertEquals(2, orgStore.getDepartment(fixture.descendantId()).version());
+    }
+
+    @Test
+    void platformDepartmentCommandCanPromoteDepartmentToRoot() throws Exception {
+        DepartmentCommandFixture fixture = departmentCommandFixture();
+
+        mockMvc.perform(
+                        put("/api/v1/admin/departments/" + fixture.targetId())
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", 1)
+                                .contentType("application/json")
+                                .content(
+                                        "{\"parentId\":null,\"name\":\"提升为根\",\"enabled\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("ETag", "\"2\""));
+        assertEquals(null, orgStore.getDepartment(fixture.targetId()).parentId());
+        assertEquals(
+                String.valueOf(fixture.targetId()),
+                orgStore.getDepartment(fixture.descendantId()).ancestors());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void delegatedDepartmentCommandCanEditItsRootWithoutCoveringTheParent(boolean topLevel)
+            throws Exception {
+        DepartmentCommandFixture fixture = departmentCommandFixture();
+        if (topLevel) {
+            orgStore.moveDepartment(fixture.rootId(), null, 1, ADMIN_ID);
+        }
+        OrgStore.DepartmentRow before = orgStore.getDepartment(fixture.rootId());
+        orgStore.updateDepartment(before.id(), before.name(), false, before.version(), ADMIN_ID);
+        OrgStore.DepartmentRow disabled = orgStore.getDepartment(fixture.rootId());
+
+        mockMvc.perform(
+                        departmentCommandRequest(
+                                fixture, disabled.id(), disabled.parentId(), disabled.version()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("部门命令已编辑"))
+                .andExpect(jsonPath("$.enabled").value(true));
+        assertEquals(disabled.parentId(), orgStore.getDepartment(disabled.id()).parentId());
+    }
+
+    @Test
+    void departmentCommandRejectsFutureVersionBeforeConcurrentOutOfScopeMove() throws Exception {
+        DepartmentCommandFixture fixture = departmentCommandFixture();
+        OrgStore.DepartmentRow original = orgStore.getDepartment(fixture.targetId());
+        CountDownLatch requestReady = new CountDownLatch(1);
+        CountDownLatch concurrentMoveCommitted = new CountDownLatch(1);
+        OrgStore observedStore = spy(orgStore);
+        doAnswer(
+                        invocation -> {
+                            requestReady.countDown();
+                            assertTrue(concurrentMoveCommitted.await(15, TimeUnit.SECONDS));
+                            return invocation.callRealMethod();
+                        })
+                .when(observedStore)
+                .editDepartment(
+                        fixture.targetId(),
+                        fixture.rootId(),
+                        "部门命令已编辑",
+                        true,
+                        original.version() + 1,
+                        fixture.delegateId());
+        MockMvc isolatedMvc =
+                MockMvcBuilders.standaloneSetup(
+                                new DepartmentAdminController(
+                                        observedStore,
+                                        idempotencyRecorder,
+                                        delegationScopeResolver))
+                        .setControllerAdvice(new ApiExceptionAdvice())
+                        .build();
+        try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+            var request =
+                    executor.submit(
+                            () -> {
+                                try {
+                                    return isolatedMvc
+                                            .perform(
+                                                    departmentCommandRequest(
+                                                                    fixture,
+                                                                    original.id(),
+                                                                    original.parentId(),
+                                                                    original.version() + 1)
+                                                            .requestAttr(
+                                                                    AdminPrincipal.ATTRIBUTE,
+                                                                    new AdminPrincipal(
+                                                                            fixture.delegateId(),
+                                                                            false)))
+                                            .andReturn();
+                                } finally {
+                                    // A fixed controller can reject before entering the store.
+                                    requestReady.countDown();
+                                }
+                            });
+            try {
+                assertTrue(requestReady.await(15, TimeUnit.SECONDS));
+                orgStore.moveDepartment(
+                        original.id(), fixture.outsideId(), original.version(), ADMIN_ID);
+                DepartmentWriteEffects committed = departmentWriteEffects();
+                concurrentMoveCommitted.countDown();
+                MvcResult result = request.get(15, TimeUnit.SECONDS);
+                assertEquals(409, result.getResponse().getStatus());
+                assertTrue(result.getResponse().getContentAsString().contains("VERSION_CONFLICT"));
+                assertEquals(committed, departmentWriteEffects());
+            } finally {
+                concurrentMoveCommitted.countDown();
+            }
+        }
+    }
+
+    private DepartmentCommandFixture departmentCommandFixture() throws Exception {
+        long top = orgStore.createDepartment(null, "上级范围外", true, ADMIN_ID).id();
+        long root = orgStore.createDepartment(top, "部门命令范围", true, ADMIN_ID).id();
+        long target = orgStore.createDepartment(root, "原部门", true, ADMIN_ID).id();
+        long descendant = orgStore.createDepartment(target, "原后代", true, ADMIN_ID).id();
+        long destination = orgStore.createDepartment(root, "范围内目标", true, ADMIN_ID).id();
+        long outside = orgStore.createDepartment(null, "范围外目标", true, ADMIN_ID).id();
+        long delegate = createUser("department-command-delegate", "部门管理员", root);
+        try (Connection connection = connect()) {
+            AdminActionTestSupport.grant(connection, delegate, "ptmcp:department:update");
+        }
+        DepartmentCommandFixture fixture =
+                new DepartmentCommandFixture(
+                        root,
+                        target,
+                        descendant,
+                        destination,
+                        outside,
+                        delegate,
+                        insertActiveDatasource());
+        grantDepartmentCommand(fixture, root, List.of("ptmcp:department:update"));
+        assertTrue(delegationStore.permissionsOf(delegate).contains("ptmcp:department:update"));
+        assertEquals(
+                1, delegationScopeResolver.effectiveDelegations(delegate, Instant.now()).size());
+        return fixture;
+    }
+
+    private void grantDepartmentCommand(
+            DepartmentCommandFixture fixture, long rootId, List<String> actions) {
+        delegationStore.create(
+                ADMIN_ID,
+                UUID.randomUUID().toString(),
+                new DelegationStore.DelegationDraft(
+                        fixture.delegateId(),
+                        rootId,
+                        "DATASOURCE",
+                        fixture.datasourceId(),
+                        actions,
+                        Instant.now().minusSeconds(60),
+                        Instant.now().plusSeconds(3600)),
+                java.util.Set.copyOf(actions));
+    }
+
+    private static org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder
+            departmentCommandRequest(
+                    DepartmentCommandFixture fixture, long targetId, Long parentId, long version) {
+        return put("/api/v1/admin/departments/" + targetId)
+                .header("X-Test-User-Id", fixture.delegateId())
+                .header("X-Test-Platform-Admin", "false")
+                .header("If-Match", version)
+                .contentType("application/json")
+                .content("{\"parentId\":" + parentId + ",\"name\":\"部门命令已编辑\",\"enabled\":true}");
+    }
+
+    private DepartmentWriteEffects departmentWriteEffects() throws Exception {
+        return new DepartmentWriteEffects(orgStore.listDepartments(), adminActionWriteEffects());
+    }
+
+    private record DepartmentWriteEffects(List<OrgStore.DepartmentRow> rows, String otherWrites) {}
+
+    private record DepartmentCommandFixture(
+            long rootId,
+            long targetId,
+            long descendantId,
+            long destinationId,
+            long outsideId,
+            long delegateId,
+            long datasourceId) {}
 
     @Test
     void roleAndUserLifecycleWithDuplicateKey() throws Exception {

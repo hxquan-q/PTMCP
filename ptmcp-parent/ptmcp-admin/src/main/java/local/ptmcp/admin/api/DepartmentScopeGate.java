@@ -9,6 +9,7 @@ import local.ptmcp.persistence.org.OrgStore;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Delegation-aware gate for the departments console. Platform admins keep full access; everyone
@@ -58,6 +59,40 @@ public final class DepartmentScopeGate {
             HttpServletRequest request, long departmentId, String capability) {
         requireCovered(
                 request, DelegationScopeResolver.Target.department(departmentId), capability);
+    }
+
+    /** A complete edit must fit one delegation, including the new parent only when moving. */
+    public void requireDepartmentUpdate(
+            HttpServletRequest request, OrgStore.DepartmentRow before, Long parentId) {
+        AdminPrincipal principal = AdminPrincipal.require(request);
+        if (principal.platformAdmin()) {
+            return;
+        }
+        boolean moved = !Objects.equals(before.parentId(), parentId);
+        if (moved && parentId == null) {
+            throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
+        }
+        Instant now = Instant.now();
+        boolean covered =
+                effective(principal).stream()
+                        .anyMatch(
+                                delegation ->
+                                        resolver.covers(
+                                                        delegation,
+                                                        DelegationScopeResolver.Target.department(
+                                                                before.id()),
+                                                        "ptmcp:department:update",
+                                                        now)
+                                                && (!moved
+                                                        || resolver.covers(
+                                                                delegation,
+                                                                DelegationScopeResolver.Target
+                                                                        .department(parentId),
+                                                                null,
+                                                                now)));
+        if (!covered) {
+            throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
+        }
     }
 
     /** Create check: the parent must sit inside a delegation subtree (roots stay platform-only). */

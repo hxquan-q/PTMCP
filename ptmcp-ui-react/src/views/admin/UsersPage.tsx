@@ -31,6 +31,7 @@ import {
 import { departmentDepth, validateUserForm, type UserFormValues } from './orgForms';
 import { passwordError } from '../me/passwordForm';
 import { useSensitivePermissions } from '../../permissionsContext';
+import { showToast } from '../../toast';
 
 export function UsersPage() {
   const { can } = useSensitivePermissions();
@@ -90,6 +91,7 @@ export function UsersPage() {
     try {
       await setUserStatus(r.id, !r.enabled, r.version);
       reload();
+      showToast('用户状态已更新');
     } finally {
       setBusy(false);
     }
@@ -245,6 +247,7 @@ export function UsersPage() {
                 setBusy(true);
                 try {
                   await deleteUser(deleting.id, deleting.version);
+                  showToast('用户已删除');
                   setDeleting(null);
                   reload();
                 } finally {
@@ -321,6 +324,7 @@ function UserDialog({
         });
       }
       onSaved();
+      showToast(user ? '用户已更新' : '用户已创建');
       onClose();
     } catch (e) {
       const status = (e as { status?: number }).status;

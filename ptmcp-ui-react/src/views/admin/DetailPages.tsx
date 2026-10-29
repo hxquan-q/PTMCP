@@ -40,6 +40,7 @@ import { updateDictionary, type DictionaryWrite } from '../../services/data';
 import { dsForm, dsValidate, type DsForm } from './dsForm';
 import { EditIcon, LockIcon } from '../../components/Icons';
 import { useSensitivePermissions } from '../../permissionsContext';
+import { showToast } from '../../toast';
 import { ApiError } from '../../services/http';
 import { newUuid } from '../../services/uuid';
 
@@ -1084,6 +1085,7 @@ export function AuditDecryptDialog({
     try {
       const data = await decryptAudit(requestId, reason.trim(), fields);
       setResult(data);
+      showToast('解密成功，明文将在 30 秒后自动清除', 'warning');
       onDecrypted?.();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '解密失败，请稍后重试。');

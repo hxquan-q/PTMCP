@@ -105,6 +105,11 @@ public class DepartmentAdminController {
             @PathVariable long id, @RequestBody DepartmentWrite write, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
         scopeGate.requireDepartmentAction(request, id, "ptmcp:department:update");
+        OrgStore.DepartmentRow before = orgStore.getDepartment(id);
+        if (before.version() != expectedVersion) {
+            throw new DomainException(ErrorCode.VERSION_CONFLICT);
+        }
+        scopeGate.requireDepartmentUpdate(request, before, write.parentId());
         DepartmentRead updated =
                 toRead(
                         orgStore.editDepartment(
