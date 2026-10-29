@@ -7,7 +7,8 @@
       "branch": "dev",
       "cloneDepth": 0,
       "triggerEvents": [
-        "push"
+        "push",
+        "mergeRequestOpenedOrUpdate"
       ],
       "branchesFilter": "^dev$",
       "certificate": {
@@ -18,41 +19,65 @@
   },
   "stages": {
     "quality": {
-      "name": "质量检查（dev）",
+      "name": "质量检查（dev / MR）",
       "jobs": {
         "docs": {
           "name": "文档与流程检查",
           "runsOn": {
             "group": "public/cn-beijing",
             "container": "build-steps-public-registry.cn-beijing.cr.aliyuncs.com/build-steps/alinux3:latest",
-            "instanceType": "LARGE_4C8G"
+            "instanceType": "SMALL_1C2G"
           },
           "steps": {
+            "setup_python": {
+              "name": "安装 Python 3.11",
+              "step": "SetupPython",
+              "with": {
+                "pythonVersion": "3.11"
+              }
+            },
             "docs": {
-              "name": "Repository checks",
+              "name": "Repository checks with archive baseline",
               "step": "Command",
               "with": {
-                "run": "set -euo pipefail\ndnf install -y python3.11\npython3.11 --version\npython3.11 scripts/check.py\n"
+                "run": "set -euo pipefail\npython --version\nif [ -n \"${AGENT_ARCHIVE_BASE:-}\" ]; then\n  git rev-parse --verify --end-of-options \"${AGENT_ARCHIVE_BASE}^{commit}\" >/dev/null\nelif [ \"${CI_COMMIT_REF_NAME:-}\" != \"dev\" ]; then\n  git fetch --no-tags origin refs/heads/dev\n  AGENT_ARCHIVE_BASE=\"$(git merge-base HEAD FETCH_HEAD)\"\nelif git rev-parse --verify HEAD^ >/dev/null 2>&1; then\n  AGENT_ARCHIVE_BASE=\"$(git rev-parse HEAD^)\"\nelse\n  AGENT_ARCHIVE_BASE=\"$(git rev-parse HEAD)\"\nfi\nexport AGENT_ARCHIVE_BASE\nprintf 'Archive comparison baseline: %s\\n' \"$AGENT_ARCHIVE_BASE\"\npython scripts/check.py\n"
               }
             }
-          }
+          },
+          "timeoutMinutes": 10
         },
         "backend": {
-          "name": "后端编译、格式、模块边界与质量探针",
+          "name": "后端完整测试、格式、模块边界与质量探针",
           "runsOn": {
             "group": "public/cn-beijing",
             "container": "build-steps-public-registry.cn-beijing.cr.aliyuncs.com/build-steps/alinux3:latest",
             "instanceType": "LARGE_4C8G"
           },
           "steps": {
+            "setup_python": {
+              "name": "安装 Python 3.11",
+              "step": "SetupPython",
+              "with": {
+                "pythonVersion": "3.11"
+              }
+            },
+            "setup_java": {
+              "name": "安装 JDK 21（构建使用仓库 Maven Wrapper）",
+              "step": "SetupJava",
+              "with": {
+                "jdkVersion": "21",
+                "mavenVersion": "3.9.3"
+              }
+            },
             "backend": {
-              "name": "Maven verify and quality probes",
+              "name": "Full Maven verify and quality probes",
               "step": "Command",
               "with": {
-                "run": "set -euo pipefail\ndnf install -y python3.11 java-21-openjdk-devel tar gzip xz\npython3.11 --version\njava -version\ncd ptmcp-parent\nsh ./mvnw -B -ntp -DskipTests verify\ncd ..\npython3.11 scripts/check_backend_quality.py --seed-repository \"$HOME/.m2/repository\" --timeout 240\n"
+                "run": "set -euo pipefail\npython --version\njava -version\ncd ptmcp-parent\nsh ./mvnw -B -ntp --version\nsh ./mvnw -B -ntp verify\ncd ..\npython scripts/check_backend_quality.py --seed-repository \"$HOME/.m2/repository\" --timeout 240\n"
               }
             }
-          }
+          },
+          "timeoutMinutes": 30
         },
         "frontend": {
           "name": "前端 ESLint/Prettier/类型检查/构建/契约测试",
@@ -62,14 +87,22 @@
             "instanceType": "LARGE_4C8G"
           },
           "steps": {
-            "frontend": {
-              "name": "pnpm check and contracts",
+            "setup_node": {
+              "name": "安装并校验 Node 24.22.1（缓存官方归档）",
               "step": "Command",
               "with": {
-                "run": "set -euo pipefail\ndnf install -y tar xz curl\nnode_version=24.22.1\ncurl -fsSLO \"https://nodejs.org/dist/v${node_version}/node-v${node_version}-linux-x64.tar.xz\"\ntar -xJf \"node-v${node_version}-linux-x64.tar.xz\" -C /opt\nexport PATH=\"/opt/node-v${node_version}-linux-x64/bin:$PATH\"\nnode --version\nnpm install -g pnpm@11.9.0\npnpm --version\npnpm --dir ptmcp-ui install --frozen-lockfile --ignore-scripts\npnpm --dir ptmcp-ui check\npnpm --dir ptmcp-ui test:contracts\n"
+                "run": "set -euo pipefail\nnode_version=24.22.1\nnode_sha256=6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6\nnode_cache=\"$HOME/.cache/ptmcp/node\"\nmkdir -p \"$node_cache\"\nnode_archive=\"$node_cache/node-v${node_version}-linux-x64.tar.xz\"\nif ! printf '%s  %s\\n' \"$node_sha256\" \"$node_archive\" | sha256sum --check --status; then\n  wget --https-only --timeout=30 --tries=3 -q \\\n    \"https://nodejs.org/dist/v${node_version}/node-v${node_version}-linux-x64.tar.xz\" \\\n    -O \"${node_archive}.part\"\n  printf '%s  %s\\n' \"$node_sha256\" \"${node_archive}.part\" | sha256sum --check\n  mv -- \"${node_archive}.part\" \"$node_archive\"\nfi\ntar -xJf \"$node_archive\" -C /opt\n"
+              }
+            },
+            "frontend": {
+              "name": "Frozen install, frontend checks and contracts",
+              "step": "Command",
+              "with": {
+                "run": "set -euo pipefail\nexport PATH=\"/opt/node-v24.22.1-linux-x64/bin:$PATH\"\nnode --version\nnpm install --global pnpm@11.9.0\npnpm --version\npnpm --dir ptmcp-ui install --frozen-lockfile --ignore-scripts\npnpm --dir ptmcp-ui check\npnpm --dir ptmcp-ui test:contracts\n"
               }
             }
-          }
+          },
+          "timeoutMinutes": 15
         }
       }
     }

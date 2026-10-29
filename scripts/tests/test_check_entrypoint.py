@@ -18,7 +18,9 @@ class RepositoryEntrypointTests(unittest.TestCase):
 
         def run(command, cwd):
             commands.append((command, cwd))
-            failed = failure and any('check_backend_quality.py' in str(arg) for arg in command)
+            failed = (
+                failure is True and any('check_backend_quality.py' in str(arg) for arg in command)
+            ) or (failure == 'contracts' and command[-1] == 'test:contracts')
             return SimpleNamespace(returncode=19 if failed else 0)
 
         with patch.object(sys, 'argv', ['check.py', *arguments]), \
@@ -54,6 +56,17 @@ class RepositoryEntrypointTests(unittest.TestCase):
         self.assertEqual(19, result)
         self.assertTrue(any('check_backend_quality.py' in str(arg) for arg in commands[-1][0]))
         self.assertFalse(any(cwd == repository_check.ROOT / 'ptmcp-ui' for _, cwd in commands))
+
+    def test_all_includes_frontend_contract_tests_after_frontend_checks(self):
+        result, commands = self.invoke(['--all'])
+        self.assertEqual(0, result)
+        frontend = [command for command, cwd in commands if cwd == repository_check.ROOT / 'ptmcp-ui']
+        self.assertEqual(['check', 'test:contracts'], [command[-1] for command in frontend])
+
+    def test_frontend_contract_failure_fails_the_full_gate(self):
+        result, commands = self.invoke(['--all'], failure='contracts')
+        self.assertEqual(19, result)
+        self.assertEqual('test:contracts', commands[-1][0][-1])
 
     def test_cache_seed_is_not_silently_ignored_without_all(self):
         with self.assertRaises(SystemExit) as error:

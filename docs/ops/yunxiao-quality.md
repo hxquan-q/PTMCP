@@ -11,22 +11,43 @@ Flow API 保存，不假设仓库内的文件会自动同步。
 | 名称 | `ALLSTAR_DATACHAT_SUB 质量流水线` |
 | ID | `5347135` |
 | 类型 | `PIPELINEASCODE` |
-| 触发 | 推送到 `dev`（`^dev$`），Codeup 服务连接 `e35k9qkwkyicf6yy` |
-| 构建环境 | 北京公共构建集群，`alinux3`，`LARGE_4C8G` |
+| 触发 | `dev` 推送、目标分支为 `dev` 的 MR 新建/更新（`^dev$`）；Codeup 服务连接 `e35k9qkwkyicf6yy` |
+| 构建环境 | 北京公共构建集群，`alinux3`；文档 `SMALL_1C2G`，后端/前端 `LARGE_4C8G` |
 
-阶段 `质量检查（dev）` 包含三个并行 Job：
+阶段 `质量检查（dev / MR）` 包含三个并行 Job：
 
-1. **文档与流程检查**：安装 Python 3.11，执行 `python3.11 scripts/check.py`。
-2. **后端编译、格式、模块边界与质量探针**：安装 JDK 21，执行
-   `ptmcp-parent/mvnw -B -ntp -DskipTests verify`，再执行
-   `scripts/check_backend_quality.py`（实际格式/Checkstyle/Enforcer 正反例）。
-3. **前端 ESLint/Prettier/类型检查/构建/契约测试**：下载 Node 24.22.1，安装 pnpm 11.9.0，
+1. **文档与流程检查**（10 分钟超时）：`SetupPython` 安装 Python 3.11，执行
+   `python scripts/check.py`。显式传入 `AGENT_ARCHIVE_BASE`：MR/非 dev 分支比较与 `dev`
+   的 merge-base；dev 默认比较 HEAD 父提交；首提交比较 HEAD。批量推送若需覆盖全部提交，
+   应显式提供推送前 SHA；默认父提交比较不能证明整个批次均未改动归档。
+2. **后端完整测试、格式、模块边界与质量探针**（30 分钟超时）：`SetupPython`、`SetupJava`
+   安装 Python 3.11/JDK 21，先检查 Wrapper 实际版本，再执行
+   `sh ./mvnw -B -ntp verify`（不跳测试），随后执行
+   `python scripts/check_backend_quality.py --seed-repository "$HOME/.m2/repository" --timeout 240`。
+   安装步骤附带的 Maven 3.9.3 不用于构建，仓库 Wrapper 固定 3.9.9。
+3. **前端 ESLint/Prettier/类型检查/构建/契约测试**（15 分钟超时）：从 Node 官网下载
+   Node 24.22.1，固定 SHA256 校验并缓存归档，安装 pnpm 11.9.0，
    执行 `pnpm --dir ptmcp-ui install --frozen-lockfile --ignore-scripts`、
    `pnpm --dir ptmcp-ui check`、`pnpm --dir ptmcp-ui test:contracts`。
 
-边界：云效托管构建环境不提供 Docker/Testcontainers，后端 Job 使用 `-DskipTests`，只验证
-编译、格式、模块边界与静态契约；真实数据库/审计/网关集成测试仍需在本机或独立集成环境执行，
-不能把流水线绿灯当成 M0/M4 通过。当前流水线不部署、不发布。
+不再每次执行 `dnf install`。第 4 次运行的日志显示仅仓库索引刷新就超过 15 分钟，阻塞后续
+运行；改用工具步骤及已校验归档，避免重复刷新不相关软件仓库。Flow 的既有缓存包含
+`$HOME/.m2`、`$HOME/.npm` 和 `$HOME/.cache`，Node 归档在后者的 `ptmcp/node` 下。
+
+Node 24.22.1 Linux x64 的固定 SHA256：
+`6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6`，来自官方
+[SHASUMS256](https://nodejs.org/dist/v24.22.1/SHASUMS256.txt)。官方 `SetupNode` 在本组织的
+第 6 次实跑中下载该版本时返回 403，因此使用 HTTPS 官方归档与固定校验值；不关闭证书验证。
+
+边界：第 6 次云端实跑的后端完整测试因 `Could not find a valid Docker environment` 失败。
+这只证明当前任务未接通可用 Docker，不能据此断言所有公共集群不支持 Docker。
+完整质量通过要求 Docker/Testcontainers 可运行；未接通时保持失败，不恢复 `-DskipTests`。
+需要在控制台开启后端任务的 Docker Daemon，或接入有 Docker 的专用 Linux 构建集群，
+再用双方言真实测试验证。当前未取得完整云端 PASS，不部署、不发布；扫描门禁阈值未修改。
+
+本地根 `python scripts/check.py --all` 与 GitHub 工作流已补齐 `test:contracts`。
+本地改动尚未推送，云端当前验证的是 Codeup 已有提交与新 Flow 配置；配置保存与运行通过
+分别记录。实际结果与交接见 [流水线工作项](../../tasks/work-items/DEV-20261026-yunxiao-pipeline.md)。
 
 更新流水线（需要 `ALIBABA_CLOUD_YUNXIAO_ACCESS_TOKEN`，不要把令牌写入仓库）：
 
@@ -40,6 +61,15 @@ aliyun devops flow-update-pipeline \
 
 `docs/ops/yunxiao-pipeline.json` 是当前 Flow 配置的可读副本；修改后需执行上面的命令，Flow
 不会自动读取它。
+
+更新前读取并保存原 `pipelineConfig.flow` 至忽略目录，可使用同一 update 命令恢复；不要把包含
+令牌的 CLI 调试输出保存为证据。本次备份、运行号与配置回读结果保留在上述工作项中。
+
+配置依据：[任务/超时](https://help.aliyun.com/zh/yunxiao/user-guide/pipelined-task-jobs)、
+[MR 触发](https://help.aliyun.com/zh/yunxiao/user-guide/code-source-trigger)、
+[SetupPython](https://atomgit.com/flow-step/SetupPython)、
+[SetupJava](https://atomgit.com/flow-step/SetupJava)、
+[公共/私有构建集群](https://help.aliyun.com/zh/yunxiao/user-guide/build-a-cluster)。
 
 ## 代码检测
 
