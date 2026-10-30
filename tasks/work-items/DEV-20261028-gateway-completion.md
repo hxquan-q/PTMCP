@@ -512,7 +512,13 @@ RoleAdminController.create尚未接IdempotentWrites，不能从本片推断角�
 覆盖缺少epoch/事件、事件故障不回滚、提交确认丢失误报、二次借连接/后续快照、版本及epoch耗尽。
 初轮同为37项/21 failures，另2 errors为测试触发器需要SUPER权限，已改隔离库CHECK约束后消除；
 初轮保存在`role-transaction-initial-red.*`，不把夹具错误计为产品缺陷。两轮XML均保留。
-当前产品已接统一事务，定向GREEN进行中；未据实现或RED升级总验证状态。
+定向GREEN：`role-transaction-green.log/.exit`（2026-10-30 08:08:40 +08，BUILD SUCCESS/exit0），
+37项全部通过、零失败/错误/跳过，XML已独立保存。
+兼容组合`role-transaction-combined-green.log/.exit`（08:15:34 +08，BUILD SUCCESS/exit0）：
+State13、Tx16、Org226、Admin111、Datasource9、IdentityPassword17、Session18，共410项，零失败/错误/跳过。
+两轮分别记录，不累加重复执行；7份组合XML另存，358份当前Windows/native/哈希清单重算差异0。
+独立只读静态复审亲核实际实现、37项源码与有效RED，无新增阻断；证据终审进行中，未升级总验证状态。
+并发用例只同时放行入口，不声称强制锁等待；实际MAX配旧If-Match优先级由源码核实，未单独动态覆盖。
 
 前一幂等切片收尾后实际检查：`python scripts/check.py` exit0（145份Markdown/672项链接、62项检查器回归），
 Skill tree/format/archived均exit0（12篇活跃笔记、0篇归档），`git diff --check` exit0；不替代本片验证。
@@ -547,8 +553,10 @@ Skill tree/format/archived均exit0（12篇活跃笔记、0篇归档），`git di
 React交接另确认：权限树为fixture，部分写/预览操作未接；接入页“测试连接”仅定时置success，
 未实际请求MCP，真实模式也未隔离该回调。应由前端窗口在接管前限制为明确预览或接入真实验证，不能以UI成功宣称连通。
 
-当前实施焦点为委派创建/撤销的epoch与事件原子提交；G1/OAuth资源及G2的局部完成证据见上文，
+当前实施焦点为角色定义三写命令的安全事务验证，随后接角色创建HTTP幂等；
+显式委派create/revoke事务片已独立终审，G1/OAuth资源及G2的局部完成证据见上文，
 G3～G5及G7完整验收仍待完成，G6局部验证已通过、人工接受待定。
 React窗口可直接按报告的真实接口和安全行为迁移，不能继承Vue的测试通过状态。
 整体保持 in_progress，不把立项、计划或局部测试通过报告为完整交付。
-尚未提交、推送、部署或发布；原有 UI 修改归原工作所有者。
+本窗口未执行提交、推送、部署或发布；共享历史已有另一窗口的提交，不回退或重写。
+React/Vue及其测试修改归另一窗口，后端证据和本轮授权边界按各切片记录。

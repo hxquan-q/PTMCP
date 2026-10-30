@@ -284,8 +284,13 @@ export function PlatformsPage() {
                 if (!deleting) return;
                 setBusy(true);
                 try {
-                  if (deleting.kind === 'platform') await deletePlatform(deleting.row.id, deleting.row.version);
-                  else await deleteClient(deleting.row.id, deleting.row.version);
+                  if (deleting.kind === 'platform') {
+                    await deletePlatform(deleting.row.id, deleting.row.version);
+                    showToast('平台已删除');
+                  } else {
+                    await deleteClient(deleting.row.id, deleting.row.version);
+                    showToast('客户端已删除');
+                  }
                   setDeleting(null);
                   setReloadTick((t) => t + 1);
                 } finally {
@@ -630,6 +635,7 @@ function ScopeDialog({ platform, onClose, onSaved }: { platform: PlatformRow; on
       setVersion(read.version);
       setScopeVersion(read.scopeVersion);
       setConfirming(false);
+      showToast('授权范围已保存');
       onSaved();
       // 留在弹窗内展示已保存状态；由用户关闭
     } catch (e) {

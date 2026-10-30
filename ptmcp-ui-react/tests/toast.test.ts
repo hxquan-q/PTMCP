@@ -106,3 +106,13 @@ test('composeToastDisplay applies expiry filtering then deduplication in order',
   // 顺序保证：如果先去重再过滤，id=2（过期的重复项）可能被保留而 id=1 被去掉
   // 先过滤保证所有过期项（无论是否重复）都被移除，然后去重只作用于存活项
 });
+
+test('showToast auto-dismisses after the max age (setTimeout fires)', async () => {
+  resetToasts();
+  showToast('这条会在 4 秒后消失');
+  assert.equal(getToasts().length, 1, 'toast must be registered immediately');
+  // 等待 4.1s（略超 4s 的 auto-dismiss 超时）
+  await new Promise((r) => setTimeout(r, 4100));
+  assert.equal(getToasts().length, 0, 'toast must be auto-dismissed after 4s — if this fails, the setTimeout in showToast is broken');
+  resetToasts();
+});
