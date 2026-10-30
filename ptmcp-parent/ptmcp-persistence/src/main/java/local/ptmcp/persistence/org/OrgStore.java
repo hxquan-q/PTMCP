@@ -357,6 +357,7 @@ public final class OrgStore {
         return new SecurityChangeTransaction(primary)
                 .executeReturning(
                         connection -> {
+                            requireCurrentRoleActor(connection, actorId, "ptmcp:role:create");
                             requireRoleKeyFree(connection, key);
                             long id;
                             try (PreparedStatement statement =
@@ -406,6 +407,7 @@ public final class OrgStore {
         return new SecurityChangeTransaction(primary)
                 .executeReturning(
                         connection -> {
+                            requireCurrentRoleActor(connection, actorId, "ptmcp:role:update");
                             long nextVersion = lockNextRoleVersion(connection, id, expectedVersion);
                             try (PreparedStatement statement =
                                     OrgSql.statement(
@@ -458,6 +460,7 @@ public final class OrgStore {
         new SecurityChangeTransaction(primary)
                 .executeReturning(
                         connection -> {
+                            requireCurrentRoleActor(connection, actorId, "ptmcp:role:delete");
                             long nextVersion = lockNextRoleVersion(connection, id, expectedVersion);
                             try (PreparedStatement members =
                                             OrgSql.statement(
@@ -1039,6 +1042,40 @@ public final class OrgStore {
                 return new DomainException(
                         result.next() ? ErrorCode.VERSION_CONFLICT : ErrorCode.RESOURCE_NOT_FOUND);
             }
+        }
+    }
+
+    /** Called first in the security transaction, after its global lock and before target reads. */
+    private static void requireCurrentRoleActor(Connection connection, long actorId, String action)
+            throws SQLException {
+        UserSecurityStore.State security = UserSecurityStore.read(connection, actorId, true);
+        if (!security.ready()) {
+            throw new DomainException(ErrorCode.TOKEN_REVOKED);
+        }
+        UserSecurityStore.requireActiveProfile(connection, actorId);
+        boolean platform = false;
+        boolean permitted = false;
+        try (PreparedStatement statement =
+                OrgSql.statement(
+                        connection,
+                        "SELECT DISTINCT rp.permission_code FROM sys_user_role ur"
+                                + " JOIN sys_role r ON r.role_id = ur.role_id"
+                                + " JOIN sys_role_permission rp ON rp.role_id = r.role_id"
+                                + " WHERE ur.user_id = ? AND r.status = '0' AND r.del_flag = '0'"
+                                + " AND rp.permission_code IN (?, ?)")) {
+            statement.setLong(1, actorId);
+            statement.setString(2, "ptmcp:platform:scope");
+            statement.setString(3, action);
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    String code = result.getString(1);
+                    platform |= "ptmcp:platform:scope".equals(code);
+                    permitted |= action.equals(code);
+                }
+            }
+        }
+        if (!platform || !permitted) {
+            throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
         }
     }
 
