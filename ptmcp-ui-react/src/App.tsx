@@ -47,15 +47,23 @@ import {
 import { LoginPage } from './views/auth/LoginPage';
 import { getSession, logout, type SessionInfo } from './services/session';
 import { onSessionExpired } from './services/http';
-import { ADMIN_ROUTE_PERMISSIONS, filterNavGroups, resolveRoute, safeReturnTo, type PermissionedNavGroup } from './navigation';
+import {
+  ADMIN_ROUTE_PERMISSIONS,
+  ME_HOME_PATH,
+  filterNavGroups,
+  firstAccessibleNavPath,
+  resolveRoute,
+  safeReturnTo,
+  type PermissionedNavGroup,
+} from './navigation';
 import { PermissionsContext, createPermissionsValue } from './permissionsContext';
 import { ToastContainer } from './components/Toast';
 
-/* 轻量 hash 路由:#/me/integrations、#/admin/datasources … */
+/* 轻量 hash 路由:#/me/integrations、#/admin/datasources …；空 hash 视为 `/`，由会话权限决定落地页。 */
 function useHashRoute(): [string, (path: string) => void] {
-  const [hash, setHash] = useState(() => window.location.hash.replace(/^#/, '') || '/me/integrations');
+  const [hash, setHash] = useState(() => window.location.hash.replace(/^#/, '') || '/');
   useEffect(() => {
-    const onChange = () => setHash(window.location.hash.replace(/^#/, '') || '/me/integrations');
+    const onChange = () => setHash(window.location.hash.replace(/^#/, '') || '/');
     window.addEventListener('hashchange', onChange);
     return () => window.removeEventListener('hashchange', onChange);
   }, []);
@@ -315,7 +323,7 @@ export function App() {
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [sessionState, setSessionState] = useState<'probing' | 'anonymous' | 'signed-in'>('probing');
   const [expiredNote, setExpiredNote] = useState('');
-  const [returnTo, setReturnTo] = useState('/me/integrations');
+  const [returnTo, setReturnTo] = useState('/');
   const permissionsValue = useMemo(() => createPermissionsValue(session?.permissions), [session]);
   const pendingReturnRef = useRef<string | null>(null);
 
@@ -336,14 +344,24 @@ export function App() {
 
   const [path, navigate] = useHashRoute();
 
+  const can = useCallback((code: string) => !!session?.permissions.includes(code), [session]);
+  /* 管理视角入口：首个有权访问的管理页；没有则为 null（个人门户用户不显示管理视角）。 */
+  const adminHomePath = useMemo(() => firstAccessibleNavPath(ADMIN_GROUPS, NAV_TO_PATH, can), [can]);
+  const homePath = adminHomePath ?? ME_HOME_PATH;
+
   /* 登录确认后再回跳：避免在登录请求与 hash 变更之间竞态。 */
   useEffect(() => {
     if (sessionState === 'signed-in' && pendingReturnRef.current) {
       const target = pendingReturnRef.current;
       pendingReturnRef.current = null;
-      navigate(target);
+      navigate(target === '/' ? homePath : target);
     }
-  }, [sessionState, navigate]);
+  }, [sessionState, navigate, homePath]);
+
+  /* `/` 与空 hash：落到首个有权访问的管理页；无管理权限则回个人字典。 */
+  useEffect(() => {
+    if (sessionState === 'signed-in' && path === '/') navigate(homePath);
+  }, [sessionState, path, homePath, navigate]);
 
   /* 改密成功即视为全会话失效：立即回登录页（不等下一次 401）。 */
   useEffect(() => {
@@ -368,7 +386,6 @@ export function App() {
     [path],
   );
 
-  const can = useCallback((code: string) => !!session?.permissions.includes(code), [session]);
   const resolved = useMemo(() => resolveRoute(path, ROUTES), [path]);
   const { route } = resolved;
   const denied = !!route?.permission && !can(route.permission);
@@ -381,10 +398,10 @@ export function App() {
     },
     [navigate],
   );
+  /* `/` 正在按权限重定向，渲染空帧等 effect 完成即可。 */
+  if (sessionState === 'signed-in' && path === '/') return null;
   if (sessionState === 'signed-in' && resolved.match === 'none') {
-    return (
-      <StaticErrorCard code="404" title="页面不存在" description={`没有找到 ${path} 对应的页面。`} onBack={() => navigate('/me/integrations')} />
-    );
+    return <StaticErrorCard code="404" title="页面不存在" description={`没有找到 ${path} 对应的页面。`} onBack={() => navigate(homePath)} />;
   }
   if (sessionState === 'signed-in' && denied && route) {
     return (
@@ -392,7 +409,7 @@ export function App() {
         code="403"
         title="无权访问"
         description={`当前账号缺少 ${route.permission} 权限，无法访问该页面。如需开通请联系平台管理员。`}
-        onBack={() => navigate('/me/integrations')}
+        onBack={() => navigate(homePath)}
       />
     );
   }
@@ -417,10 +434,13 @@ export function App() {
           groups={groups}
           active={route?.navKey ?? ''}
           onNavigate={onNavigate}
+          realm={route?.realm ?? 'me'}
+          adminHomePath={adminHomePath}
+          onSwitchRealm={(next) => navigate(next === 'admin' ? (adminHomePath ?? ME_HOME_PATH) : ME_HOME_PATH)}
           breadcrumb={route?.breadcrumb}
           onLogout={() => {
             setExpiredNote('');
-            setReturnTo('/me/integrations');
+            setReturnTo('/');
             void logout().finally(() => {
               setSession(null);
               setSessionState('anonymous');

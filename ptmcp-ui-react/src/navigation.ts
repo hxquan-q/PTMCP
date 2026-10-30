@@ -10,6 +10,20 @@ export function filterNavGroups(groups: PermissionedNavGroup[], can: (code: stri
     .filter((group) => group.items.length > 0);
 }
 
+/** 个人视角首页：无任何管理权限时的兜底落地页（docs/frontend/dev-guide.md §4）。 */
+export const ME_HOME_PATH = '/me/dictionary';
+
+/** 按给定导航顺序返回首个有权访问且有对应路径的导航项；全部无权时返回 null。 */
+export function firstAccessibleNavPath(groups: PermissionedNavGroup[], paths: Record<string, string>, can: (code: string) => boolean): string | null {
+  for (const group of groups) {
+    for (const item of group.items) {
+      const path = paths[item.key];
+      if (path && (!item.permission || can(item.permission))) return path;
+    }
+  }
+  return null;
+}
+
 export interface ResolvableRoute {
   path: string;
   prefix?: boolean;

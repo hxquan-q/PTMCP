@@ -29,6 +29,9 @@ export function AppShell({
   children,
   onLogout,
   user,
+  realm = 'me',
+  adminHomePath,
+  onSwitchRealm,
 }: {
   groups: NavGroup[];
   active: string;
@@ -37,6 +40,11 @@ export function AppShell({
   children: ReactNode;
   onLogout?: () => void;
   user?: { displayName: string; department: string };
+  /* 当前视角；切换只改导航，不改变服务端授权（docs/frontend/dev-guide.md §4）。 */
+  realm?: 'admin' | 'me';
+  /* 首个有权访问的管理页；为空表示当前账号无管理权限，不显示管理视角入口。 */
+  adminHomePath?: string | null;
+  onSwitchRealm?: (realm: 'admin' | 'me') => void;
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   return (
@@ -112,6 +120,62 @@ export function AppShell({
             flexDirection: 'column',
           }}
         >
+          {onSwitchRealm ? (
+            <div
+              role="tablist"
+              aria-label="视角切换"
+              style={{
+                display: 'flex',
+                gap: 4,
+                padding: 4,
+                margin: '0 4px 10px',
+                borderRadius: 10,
+                background: 'var(--ptmcp-chrome)',
+                border: '1px solid var(--ptmcp-border)',
+                flex: 'none',
+              }}
+            >
+              <button
+                role="tab"
+                aria-selected={realm === 'admin'}
+                disabled={!adminHomePath}
+                title={adminHomePath ? '进入管理工作区' : '当前账号没有管理权限'}
+                onClick={() => onSwitchRealm('admin')}
+                style={{
+                  flex: 1,
+                  padding: '6px 8px',
+                  border: 'none',
+                  borderRadius: 7,
+                  fontSize: 12.5,
+                  fontWeight: realm === 'admin' ? 700 : 500,
+                  color: realm === 'admin' ? 'var(--ptmcp-blue)' : 'var(--ptmcp-text-muted)',
+                  background: realm === 'admin' ? 'var(--ptmcp-surface)' : 'transparent',
+                  cursor: adminHomePath ? 'pointer' : 'not-allowed',
+                  opacity: adminHomePath ? 1 : 0.45,
+                }}
+              >
+                管理视角
+              </button>
+              <button
+                role="tab"
+                aria-selected={realm === 'me'}
+                onClick={() => onSwitchRealm('me')}
+                style={{
+                  flex: 1,
+                  padding: '6px 8px',
+                  border: 'none',
+                  borderRadius: 7,
+                  fontSize: 12.5,
+                  fontWeight: realm === 'me' ? 700 : 500,
+                  color: realm === 'me' ? 'var(--ptmcp-blue)' : 'var(--ptmcp-text-muted)',
+                  background: realm === 'me' ? 'var(--ptmcp-surface)' : 'transparent',
+                  cursor: 'pointer',
+                }}
+              >
+                个人视角
+              </button>
+            </div>
+          ) : null}
           <div style={{ flex: 1 }}>
             {groups.map((g, gi) => (
               <div key={gi} style={{ marginBottom: 10 }}>
@@ -164,8 +228,12 @@ export function AppShell({
               border: '1px solid var(--ptmcp-border)',
             }}
           >
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ptmcp-heading)' }}>PTMCP 管理工作区</div>
-            <div style={{ fontSize: 11, color: 'var(--ptmcp-text-muted)', marginTop: 2 }}>权限、资源与运行状态</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ptmcp-heading)' }}>
+              {realm === 'admin' ? 'PTMCP 管理工作区' : 'PTMCP 个人门户'}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--ptmcp-text-muted)', marginTop: 2 }}>
+              {realm === 'admin' ? '权限、资源与运行状态' : '我的数据、授权与安全'}
+            </div>
           </div>
         </nav>
         <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

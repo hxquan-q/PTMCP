@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { filterNavGroups, resolveRoute, safeReturnTo, type PermissionedNavGroup } from '../src/navigation.ts';
+import { ME_HOME_PATH, filterNavGroups, firstAccessibleNavPath, resolveRoute, safeReturnTo, type PermissionedNavGroup } from '../src/navigation.ts';
 import { ADMIN_ROUTE_PERMISSIONS } from '../src/navigation.ts';
 
 const groups: PermissionedNavGroup[] = [
@@ -35,6 +35,24 @@ test('filterNavGroups removes denied items, drops empty groups, keeps permission
     filterNavGroups(groups, none).map((g) => g.items.map((i) => i.key)),
     [['c']],
   );
+});
+
+test('firstAccessibleNavPath follows nav order and skips denied or path-less items', () => {
+  const paths = { a: '/admin/a', b: '/admin/b', c: '/me/c', d: '/admin/d', noRoute: '' };
+  const all = () => true;
+  assert.equal(firstAccessibleNavPath(groups, paths, all), '/admin/a');
+  assert.equal(firstAccessibleNavPath(groups, { ...paths, a: '' }, all), '/admin/b', 'item without a path is skipped');
+  assert.equal(
+    firstAccessibleNavPath(groups, paths, (code) => code === 'ptmcp:metadata:list'),
+    '/admin/b',
+  );
+  assert.equal(
+    firstAccessibleNavPath(groups, paths, () => false),
+    '/me/c',
+    'permission-free item is accessible',
+  );
+  assert.equal(firstAccessibleNavPath([], paths, all), null);
+  assert.equal(ME_HOME_PATH, '/me/dictionary');
 });
 
 test('resolveRoute prefers exact, then prefix with decoded id, else none', () => {

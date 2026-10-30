@@ -58,6 +58,11 @@ export function DictionaryPage() {
   }, []);
 
   useEffect(() => {
+    if (!platformId) {
+      setDatasources([]);
+      setDatasourceId('');
+      return;
+    }
     let cancelled = false;
     mePortalApi.accessContext
       .datasources(platformId)
@@ -73,12 +78,19 @@ export function DictionaryPage() {
   }, [platformId]);
 
   useEffect(() => {
+    /* 服务端必选 platformId/datasourceId：未选择时不发请求，避免无意义的 400。 */
+    if (!platformId || !datasourceId) {
+      setRows([]);
+      setNextCursor(null);
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     mePortalApi
       .dictionaryList({
-        platformId: platformId || undefined,
-        datasourceId: datasourceId || undefined,
+        platformId,
+        datasourceId,
         keyword: debounced.trim() || undefined,
         pageSize: 20,
       })
@@ -104,8 +116,8 @@ export function DictionaryPage() {
     setLoadingMore(true);
     mePortalApi
       .dictionaryList({
-        platformId: platformId || undefined,
-        datasourceId: datasourceId || undefined,
+        platformId,
+        datasourceId,
         keyword: debounced.trim() || undefined,
         cursor: nextCursor,
         pageSize: 20,
@@ -141,14 +153,14 @@ export function DictionaryPage() {
             }}
             label="平台"
             width={150}
-            options={[{ value: '', label: '全部平台' }, ...platforms.map((p) => ({ value: p.id, label: p.name }))]}
+            options={[{ value: '', label: '请选择平台' }, ...platforms.map((p) => ({ value: p.id, label: p.name }))]}
           />
           <Select
             value={datasourceId}
             onChange={setDatasourceId}
             label="数据源"
             width={150}
-            options={[{ value: '', label: '全部数据源' }, ...datasources.map((d) => ({ value: d.id, label: d.name }))]}
+            options={[{ value: '', label: platformId ? '请选择数据源' : '先选平台' }, ...datasources.map((d) => ({ value: d.id, label: d.name }))]}
           />
           <SearchInput value={keyword} onChange={setKeyword} placeholder="搜索对象名…" width={220} />
           <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>已加载 {rows.length} 个对象</span>
@@ -196,7 +208,12 @@ export function DictionaryPage() {
               ))}
             </tbody>
           </table>
-          {!loading && rows.length === 0 ? <EmptyState title="暂无可见对象" description="调整平台/数据源或关键词后重试。" /> : null}
+          {!loading && rows.length === 0 ? (
+            <EmptyState
+              title={platformId && datasourceId ? '暂无可见对象' : '请选择平台与数据源'}
+              description={platformId && datasourceId ? '调整数据源或关键词后重试。' : '数据字典按平台与数据源加载；选择前不请求服务端。'}
+            />
+          ) : null}
         </div>
         <div className="table-footer" style={{ justifyContent: 'space-between' }}>
           <span style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
