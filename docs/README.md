@@ -10,7 +10,7 @@
 4. [研发路线](architecture/roadmap.md)：M0～M4顺序与退出条件。
 5. [当前测试报告](test/test-report.md)：历史组件证据与尚未执行的全系统测试。
 
-开发Agent从根[AGENTS.md](../AGENTS.md)进入，按[开发流程](standards/agent-workflow.md)完成任务；[决策笔记](standards/decision-notes.md)说明ADR/Note分工。[后端框架](../ptmcp-parent/README.md)、[前端框架](../ptmcp-ui-react/README.md)提供实际命令；业务任务按[任务入口](../tasks/README.md)后续推进。
+开发Agent从根[AGENTS.md](../AGENTS.md)进入，按[开发流程](standards/agent-workflow.md)与[研发闭环](standards/harness-development.md)完成任务；[决策笔记](standards/decision-notes.md)说明ADR/Note分工。[后端框架](../ptmcp-parent/README.md)、[前端框架](../ptmcp-ui-react/README.md)提供实际命令；业务任务按[任务入口](../tasks/README.md)后续推进。
 
 规范优先级：总体方案与已纳入基线的ADR定义跨域不变量；PRD定义产品行为；backend契约定义字段/接口和算法细节；其他文档引用这些规则。新变更须同步相关文档，不能靠后写的文件隐式覆盖既有契约。冲突应在同一次变更中修正。
 
@@ -79,7 +79,10 @@
 | [Git规范](standards/git-rule.md) | 分支/提交/PR、私有资产、版本与文档维护 |
 | [Agent 开发流程](standards/agent-workflow.md) | 调查、任务合同、切片、验证、权限、交付、恢复与规则治理 |
 | [决策笔记](standards/decision-notes.md) | 文档/ADR/工作项分工、真实取舍和笔记生命周期 |
-| [工程标准与工具门禁](standards/quality-tooling.md) | p3c、Spotless/Checkstyle、Vue/ESLint/Prettier、MySQL 采用与配置来源 |
+| [工程标准与工具门禁](standards/quality-tooling.md) | p3c、Spotless/Checkstyle、React/ESLint/Prettier、MySQL 采用与配置来源 |
+| [研发闭环](standards/harness-development.md) | 上游 DeepSeek Harness 治理来源映射、只读变更范围报告、分层验证与文档/测试评审 |
+| [接口变更合同模板](standards/api-change-template.md) | 接口变更时记录输入输出、权限、兼容、回滚与验证状态 |
+| [Agent 与设计资产治理](standards/agent-assets.md) | 根入口/桥接、DESIGN、.agents 技能、.claude 本机配置的职责、加载与变更边界 |
 | [ASVS 安全自查](test/asvs-checklist.md) | ASVS 5.0.0 身份/会话/授权/日志的条款、证据与差距 |
 | [范式参考与采用边界](reference/agent-development-research.md) | PDF、笔记项目、open-forge 的来源与适配理由 |
 | [研发任务计划](../tasks/plan.md) / [待办](../tasks/todo.md) | 后续实现依赖与验收切片，目前未实现 |
