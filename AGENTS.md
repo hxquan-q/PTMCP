@@ -19,17 +19,17 @@ PTMCP 是权限管控型问数 MCP 网关。根目录已有[后端工程](ptmcp-
 
 | 任务 | 入口 |
 | --- | --- |
-| 实施、修复、重构、续做、任务拆分 | [开发流程](docs/standards/agent-workflow.md)、[任务用法](tasks/README.md) |
+| 实施、修复、重构、续做、任务拆分 | [开发流程](docs/standards/agent-workflow.md)、[研发闭环](docs/standards/harness-development.md)、[任务用法](tasks/README.md) |
 | 技术取舍、流程变化、复盘、决策被替代 | [决策笔记](docs/standards/decision-notes.md)，先检索相关 ADR/notes |
 | 业务范围与验收 | [PRD](docs/product/PRD.md)、[测试用例](docs/test/test-case.md) |
-| 模块/公共接口/存储变化 | [架构](docs/architecture/architecture.md)、[代码规范](docs/standards/code-style.md)，再读对应 backend 契约 |
-| Java/Vue/SQL 规范、格式或 linter 配置 | [工程标准与工具门禁](docs/standards/quality-tooling.md)；格式交给工具，评审只审语义 |
+| 模块/公共接口/存储变化 | [架构](docs/architecture/architecture.md)、[代码规范](docs/standards/code-style.md)，再读对应 backend 契约；接口变更按[合同模板](docs/standards/api-change-template.md)记录 |
+| Java/React/SQL 规范、格式或 linter 配置 | [工程标准与工具门禁](docs/standards/quality-tooling.md)；格式交给工具，评审只审语义 |
 | 本机构建、工具版本选择、数据库/容器启动 | [开发环境](docs/ops/development-environment.md)，先进入项目环境再运行 Maven/pnpm |
 | SQL、身份、授权、审计、执行器 | [安全架构](docs/architecture/security.md)、对应 backend 文档、[测试计划](docs/test/test-plan.md) |
 | Web 鉴权、会话、日志安全自查 | [ASVS 5.0.0 清单](docs/test/asvs-checklist.md)，记录证据与差距 |
-| 前端页面和交互 | [前端指南](docs/frontend/dev-guide.md)、[页面规格](docs/frontend/page-spec.md) |
+| 前端页面和交互 | [视觉设计](DESIGN.md)、[前端指南](docs/frontend/dev-guide.md)、[页面规格](docs/frontend/page-spec.md) |
 | Git、协作、提交、发布准备 | [Git 规范](docs/standards/git-rule.md) |
-| 修改规则或检查器 | [规则治理与门禁](docs/standards/agent-workflow.md#规则治理与门禁) |
+| 修改规则、Agent 技能、宿主配置或检查器 | [资产治理](docs/standards/agent-assets.md)、[规则治理与门禁](docs/standards/agent-workflow.md#规则治理与门禁) |
 
 其余文档按[导航](docs/README.md)定位；不要开工就全量读取文档库。
 

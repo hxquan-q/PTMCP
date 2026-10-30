@@ -1,6 +1,6 @@
 # PTMCP 整体架构与概要设计
 
-版本：1.0-design · 日期：2026-10-23 · 状态：待实现。跨文档约束以[总体方案](../总体方案.md)为准。
+版本：1.0-design · 日期：2026-10-23 · 状态：目标架构与设计约束。部分模块已实现；实际接线及验证缺口以[后端工程](../../ptmcp-parent/README.md)、[React 工程](../../ptmcp-ui-react/README.md)和[工作项](../../tasks/README.md)为准。跨文档约束以[总体方案](../总体方案.md)为准。
 
 ## 1. 系统上下文
 
@@ -26,7 +26,7 @@ Agent 的自然语言推理、prompt、模型凭证和工具选择都在系统�
 
 | 单元 | 责任 | 入站 | 出站 |
 | --- | --- | --- | --- |
-| ptmcp-ui | 双视角页面、配置复制、权限矩阵、审计展示 | 浏览器静态请求 | admin REST，浏览器 OAuth 跳转 |
+| ptmcp-ui-react | 双视角页面、配置复制、权限矩阵、审计展示 | 浏览器静态请求 | admin REST，浏览器 OAuth 跳转 |
 | ptmcp-admin | 组织/账号、数据源、平台、授权、审计 API | 受控 Web 会话 | 元库、Redis、批准业务库、密钥服务 |
 | ptmcp-authz | OAuth 发现、注册、登录、授权、签发、轮换与撤销 | 标准 OAuth HTTPS | 元库、Redis、受限 CIMD HTTPS |
 | ptmcp-gateway | MCP 三工具、身份验证、权限、guard、只读执行、审计 | `/mcp` | 元库、Redis、批准业务库、审计 WAL |
@@ -37,7 +37,7 @@ Agent 的自然语言推理、prompt、模型凭证和工具选择都在系统�
 
 ## 3. 代码模块与依赖方向
 
-以下为完整计划目录；根目录目前已创建parent/common/guard/admin/authz/gateway和ptmcp-ui框架。后续已逐片增加common资源/错误合同、persistence安全基础三表迁移与真实数据库测试，应用仍仅有标准启动/健康检查和前端最小壳；datasource/内部评测及业务认证、查询/管理接口尚未实现。
+以下为目标模块及依赖方向，不是完成清单。当前父工程已有 common、guard、persistence、datasource、admin、authz、gateway 等模块和部分业务接线；内部回归、真实客户端、运维恢复等仍需按工作项逐项核验。[2026-10-30 能力核查](../evidence/mcp-capability-audit-20261030.md)记录该时点的源码和在制改动，不能代替当前构件或完整验收。
 
 ```text
 ptmcp-parent/
@@ -47,9 +47,9 @@ ptmcp-parent/
   ptmcp-persistence/         gateway/authz元库适配与事务
   ptmcp-gateway/             MCP应用与查询编排
   ptmcp-authz/               授权应用与refresh扩展
-  ptmcp-admin/               若依独立工程适配、管理API
-  ptmcp-regression-internal/ 内部测试，不参与开源分发
-ptmcp-ui/                   plus-ui二开
+  ptmcp-admin/               管理API；若依适配为目标，实际状态见后端README
+  ptmcp-regression-internal/ 内部测试的规划模块，不参与开源分发
+ptmcp-ui-react/             React 管理与个人门户
 ```
 
 ```mermaid

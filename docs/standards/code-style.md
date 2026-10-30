@@ -1,12 +1,12 @@
 # 开发与代码规范
 
-版本：1.3-bootstrap · 2026-10-23 · 适用于当前框架与后续实现。根目录Maven/UI骨架及质量门禁已建立，业务实现与业务测试仍未开始。
+版本：1.3-bootstrap · 2026-10-23；适用于当前实现与后续维护。业务已按工作项分片实现和验证，完整产品验收不能由构建或局部测试推导。
 
-Java 语义与 MySQL 开发采用 [Alibaba p3c](https://github.com/alibaba/p3c)，Vue 组件/Props 采用 [Vue 风格指南](https://cn.vuejs.org/style-guide/)。具体工具配置、固定来源、适配差异及 M0 接线见[工程标准与门禁](quality-tooling.md)。格式由 Spotless/google-java-format 和 Prettier 判定，评审聚焦语义、安全、兼容，不人工裁定排版。
+Java 语义与 MySQL 开发采用 [Alibaba p3c](https://github.com/alibaba/p3c)；React/TypeScript 的约束与实际自动化配置见[前端指南](../frontend/dev-guide.md)和[工程标准与门禁](quality-tooling.md)。格式由 Spotless/google-java-format 和 Prettier 判定，评审聚焦语义、安全、兼容，不人工裁定排版。
 
 ## 1. 语言、目录与依赖
 
-后端Java21，UTF-8，由 google-java-format AOSP 统一四空格排版；前端Vue3/TypeScript strict，由 ESLint 校验语义、Prettier 统一格式。包前缀在M0由组织确定，文档样例不绑定未经确认的域名。目录与依赖遵循[整体架构](../architecture/architecture.md)及[ADR0005](../architecture/adr/0005-隔离后台与网关依赖.md)。
+后端 Java 21、UTF-8，由 google-java-format AOSP 统一四空格排版；当前前端为 React/TypeScript strict，由已配置的 ESLint 规则校验、Prettier 统一格式。包前缀在 M0 由组织确定，文档样例不绑定未经确认的域名。目录与依赖遵循[整体架构](../architecture/architecture.md)及[ADR0005](../architecture/adr/0005-隔离后台与网关依赖.md)。
 
 common不引用Spring/ORM/若依；guard纯Java且只采用锁定的JSQLParser；datasource不依赖guard反向实现。适配器/控制器负责编排和边界转换，领域逻辑不从HTTP线程上下文偷偷取用户。跨模块对象用明确值类型，不传无约束Map、Object或任意SQL字符串。
 
@@ -67,9 +67,9 @@ DECIMAL/BIGINT以字符串传输；重复列名用列序号/稳定列ID区分，
 
 ## 7. 检查工具与命令
 
-Java 门禁采用 Spotless 3.1.0 + google-java-format 1.28.0 AOSP、Checkstyle 插件 3.6.0 / 引擎 10.26.1；前端继承 plus-ui 历史 ESLint 配置结构与 Prettier 参数，增加 Vue/Props 等规则。版本及可复用配置见[工程标准](quality-tooling.md)。M0 接入真实父 POM/UI，锁定 Wrapper、Node与唯一包管理器及锁文件；不引入冲突 lockfile。依赖安装脚本先禁用/审查，不能整体放行未知脚本。
+Java 门禁采用 Spotless 3.1.0 + google-java-format 1.28.0 AOSP、Checkstyle 插件 3.6.0 / 引擎 10.26.1；当前 React 前端按工程内 ESLint、TypeScript 和 Prettier 配置检查，不沿用已移除工程的 Vue/Props 规则。版本与来源见[工程标准](quality-tooling.md)及实际工程配置。锁定 Wrapper、Node 与包管理器/锁文件，不引入冲突 lockfile。依赖安装脚本先禁用/审查，不能整体放行未知脚本。
 
-当前框架命令（先进入开发环境，在对应工程目录执行；没有业务测试时不将test退出0记作业务通过）：
+工程命令（先进入开发环境，在对应工程目录执行；局部测试通过不等于完整业务通过）：
 
 ```powershell
 # 工作目录：ptmcp-parent
@@ -78,16 +78,17 @@ Java 门禁采用 Spotless 3.1.0 + google-java-format 1.28.0 AOSP、Checkstyle �
 .\mvnw.cmd help:effective-pom
 .\mvnw.cmd dependency:tree
 .\mvnw.cmd validate
-# 工作目录：ptmcp-ui；版本以package/锁文件为准
+# 工作目录：ptmcp-ui-react；版本以package/锁文件为准
 pnpm lint
 pnpm format:check
 pnpm typecheck
 pnpm build
+pnpm test
 ```
 
 当前统一检查命令为 `python scripts/check.py`，涵盖文档结构、Agent 工作合同、工具模板/错误码登记和检查器回归；分项 `python docs/evidence/validate_docs.py` 仍可用。结果记录在[文档验证报告](../evidence/documentation-validation.md)。这些检查不替代应用与安全测试。
 
-Agent 的任务准入、风险分级、实施与交付遵循[开发流程](agent-workflow.md)；决策因果按[笔记政策](decision-notes.md)存放，完整框架检查已接入 python scripts/check.py --all；新增业务行为时再接入真实业务测试。
+Agent 的任务准入、风险分级、实施与交付遵循[开发流程](agent-workflow.md)；决策因果按[笔记政策](decision-notes.md)存放。`python scripts/check.py --all` 的实际执行范围以当前脚本为准；本次变更未运行该全量门禁，不能将脚本配置等同于 React 或后端已验证。
 
 ## 8. Definition of Done
 

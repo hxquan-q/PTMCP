@@ -1,5 +1,7 @@
 # PTMCP 业务页面覆盖与差距
 
+> **历史快照（Vue，2026-10-29）**：下表的 `.vue`、`ptmcp-ui` 路径与预览结论只描述当时工程；当前工作树中旧 Vue 工程已移除。React 的当前入口见[前端说明](../../ptmcp-ui-react/README.md)，接口及验证差距见[2026-10-30 能力核查](../evidence/mcp-capability-audit-20261030.md)和对应工作项。不要把本表的“已有”或旧浏览器结果继承为 React 通过。
+
 源码核对日期：2026-10-29（接口事实校准；布局切片为2026-10-27）。对应[页面规格](page-spec.md)的18组页面；本表记录范围、代码位置与契约差距，不是任务状态总表或验收报告。执行状态、网络证据、截图、人工接受和 `NOT_RUN` 原因由 `tasks/work-items/T17-sap-refine.md` 维护；本轮源码与运行核查见[能力报告](../evidence/mcp-capability-audit-20261029.md)。
 
 > 2026-10-30 更新：前端已由 Vue 切换为 React（ptmcp-ui-react）。本表保留 2026-10-29 的 Vue 源码核对记录作为历史证据；当前工程路径以 ptmcp-ui-react 源码为准。

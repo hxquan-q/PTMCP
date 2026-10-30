@@ -74,4 +74,4 @@ CIMD必须HTTPS、精确client_id、有限响应大小/读取超时、JSON schem
 
 已证实事实包括原解析器漏表、Spring默认公开客户端不发RT及相关默认入口限制、SET LOCAL的事务范围、MySQL分区唯一键约束、特定pgJDBC版本stream方法中的物化路径。参考：[Spring刷新生成器](https://raw.githubusercontent.com/spring-projects/spring-security/7.1.2/oauth2/oauth2-authorization-server/src/main/java/org/springframework/security/oauth2/server/authorization/token/OAuth2RefreshTokenGenerator.java)、[pgJDBC源码](https://raw.githubusercontent.com/pgjdbc/pgjdbc/REL42.7.8/pgjdbc/src/main/java/org/postgresql/jdbc/PgResultSet.java)、[PG SET](https://www.postgresql.org/docs/18/sql-set.html)、[MySQL分区限制](https://dev.mysql.com/doc/refman/8.4/en/partitioning-limitations-partitioning-keys-unique-keys.html)。
 
-新guard、完整refresh扩展、多客户端兼容、驱动输出限幅、≤5秒撤权、内存/性能/恢复均尚待实现验证。生产准入必须提供与构件版本一致的证据包，不以本文的设计描述替代测试结论。
+guard、refresh扩展等已有分片实现或局部测试；完整 refresh、多客户端兼容、驱动输出限幅、≤5秒撤权、内存/性能与恢复仍须按实际构件分别验证。生产准入必须提供与构件版本一致的证据包，不以本文的设计描述替代测试结论。

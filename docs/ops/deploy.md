@@ -2,7 +2,7 @@
 
 版本：1.0-design · 日期：2026-10-23 · 状态：部署设计，尚无PTMCP生产部署记录。
 
-依据：[总体方案](../总体方案.md)、[基础设施设计](../architecture/infra.md)与 [运维手册](operation-manual.md)。本文给出待实现系统的部署步骤和退出条件；**当前没有可据此一键启动的PTMCP镜像、Compose清单、Helm Chart或正式migration。** Reference里的启动脚本属于参考项目，不能当作PTMCP部署产物。
+依据：[总体方案](../总体方案.md)、[基础设施设计](../architecture/infra.md)与 [运维手册](operation-manual.md)。本文是生产部署目标与退出条件，不是已验证的一键部署指南。仓库已有开发环境与元库迁移源码，但不等于已交付生产镜像、生产 Compose/Helm 清单或经过演练的发布迁移包；Reference 启动脚本不能作为 PTMCP 部署产物。下方端口为早期部署设计值，与本机工程默认端口不同，实施时须由实际配置和发布清单核定。
 
 ## 1. 一期部署拓扑
 

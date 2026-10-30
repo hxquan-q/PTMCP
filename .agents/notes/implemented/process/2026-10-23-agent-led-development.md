@@ -8,7 +8,11 @@ PTMCP 已有设计、安全约束和待办，但缺少开发 Agent 的发现入�
 
 ## Decision
 
-仓库保留 docs、9 份 ADR 和 T01～T20。根 AGENTS 按任务路由到开发流程、决策笔记和领域契约。非平凡实施使用独立工作项，小改复用记录。本地与 CI 共用标准库检查入口，现有产品设计保持待实现。该笔记的 implemented 仅指开发规范和本地工具已经落地。
+仓库保留 docs、已有 ADR 和 T01～T20。根 AGENTS 按任务路由到开发流程、决策笔记和领域契约。非平凡实施使用独立工作项，小改复用记录。本地与 CI 共用标准库检查入口；产品设计、实现与验证仍分别取证。该笔记的 implemented 仅指开发规范和本地工具已经落地。
+
+[研发闭环](../../../../docs/standards/harness-development.md)按上游实际实践补充变更范围、风险验证、评审和迁移交接；只读范围报告区分提交、暂存、未暂存和未跟踪文件，不推断归属或基线。[资产治理](../../../../docs/standards/agent-assets.md)界定根入口、视觉设计、笔记、技能与宿主配置的职责；忽略的本机技能不成为团队必备依赖，结构门禁仅检查被 Git 跟踪的技能元数据。
+
+笔记结构检查按生命周期校验非空标题、Problem 首节和必需章节顺序并拒绝重复二级标题，允许后续穿插自由章节及代码块示例；新增笔记前检索并分类相关活跃记录，提交前语义自审问题、真实备选、后果与验证。结构检查只能防止形式歧义，不能证明决定理由真实或评审充分。对外接口变更在工作项中使用[接口合同模板](../../../../docs/standards/api-change-template.md)并同步权威契约；文档门禁只检查模板存在和链接，不能证明开发者实际遵循或协议实现正确。
 
 笔记结构检查按生命周期校验必需章节顺序并拒绝重复二级标题，允许穿插自由章节和代码块示例；这只能防止结构歧义，不能证明决定理由真实或评审充分。
 
@@ -29,6 +33,6 @@ PTMCP 已有设计、安全约束和待办，但缺少开发 Agent 的发现入�
 
 `python scripts/check.py` 的文档/流程检查与检查器回归通过，工具标准扩展见[编码工具决策](2026-10-23-tool-enforced-coding-standards.md)。CI 定义存在但尚未在远端运行；应用、数据库和真实客户端测试未运行。本轮为作者自审，没有声称独立评审或用户产品验收。
 
-2026-10-30 章节顺序与重复标题门禁的 RED/GREEN 和仓库检查见[工作项](../../../../tasks/work-items/DEV-20261030-note-gate.md)；未验证远端 CI 或 Agent 长期遵循情况。
+2026-10-30 章节顺序与重复标题门禁的 RED/GREEN 和仓库检查见[工作项](../../../../tasks/work-items/DEV-20261030-note-gate.md)；接口合同模板与存在性检查见[接口规范工作项](../../../../tasks/work-items/DEV-20261030-development-contract.md)。未验证远端 CI 或 Agent 长期遵循情况。
 
-依据：[参考调查](../../../../docs/reference/agent-development-research.md)、[执行合同](../../../../docs/standards/agent-workflow.md)、[本轮工作项](../../../../tasks/work-items/DEV-20261023-agent-workflow.md)。原 ADR 承载架构决定，无重复搬迁；无其他同主题活跃 Note 需要合并或否决。
+依据：[参考调查](../../../../docs/reference/agent-development-research.md)、[执行合同](../../../../docs/standards/agent-workflow.md)、[本轮工作项](../../../../tasks/work-items/DEV-20261023-agent-workflow.md)。原 ADR 承载架构决定，无重复搬迁；[文档入口与历史证据分层](2026-10-30-documentation-organization.md)细化文档发现和状态标注，不取代本篇研发流程。

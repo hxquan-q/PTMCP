@@ -2,6 +2,8 @@
 
 Status: implemented
 
+> 本篇保留 React 初始化时的并行策略与当时证据。截至 2026-10-30 核查，当前工作树已不含旧 Vue 工程；下文有关两套应用并行或可回退的描述是原决策背景，不证明当前仍可执行或已经验收。现状见[能力核查](../../../../docs/evidence/mcp-capability-audit-20261030.md)和[文档整理决定](../process/2026-10-30-documentation-organization.md)。
+
 ## Problem
 
 用户明确拍板「更换成 React 体系」，要求按 React 生态（shadcn/Radix/Tailwind/Aceternity/Magic UI/Tremor 等参考系）实现新一批设计稿（MCP 接入配置总览、接入向导六步、数据源管理控制台、权限矩阵管理控制台），并继续优化。此前的评估笔记 [是否将前端技术栈从 Vue 迁到 React](../../rejected/architecture/2026-10-29-vue-to-react-migration.md) 建议不迁，但保留了「新建 React 应用逐步接管」作为确定要换之后的执行路径——本笔记记录的正是该路径的落地。
