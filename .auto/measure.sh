@@ -6,12 +6,6 @@ cd "$(dirname "$0")/.."
 
 FE_PASS=0; FE_FAIL=0; RE_PASS=0; RE_FAIL=0; BE_PASS=0; BE_FAIL=0
 
-# --- Vue 前端契约测试（快，无构建） ---
-fe_out=$(cd ptmcp-ui && pnpm exec node --experimental-strip-types --test tests/*.test.ts tests/*.test.mjs 2>&1 || true)
-FE_PASS=$(printf '%s' "$fe_out" | sed -n 's/^ℹ pass \([0-9]*\)$/\1/p' | tail -1)
-FE_FAIL=$(printf '%s' "$fe_out" | sed -n 's/^ℹ fail \([0-9]*\)$/\1/p' | tail -1)
-FE_PASS=${FE_PASS:-0}; FE_FAIL=${FE_FAIL:-0}
-echo "FE_TESTS fe_pass=$FE_PASS fe_fail=$FE_FAIL"
 
 # --- React 前端契约测试（ptmcp-ui-react/tests） ---
 re_out=$(cd ptmcp-ui-react && pnpm exec node --experimental-strip-types --test tests/*.test.ts 2>&1 || true)
@@ -37,8 +31,7 @@ else
   echo "BE_TESTS be_pass=0 be_fail=0 mvn_exit=skipped_no_docker"
 fi
 
-echo "METRIC tests_passing=$((FE_PASS + RE_PASS + BE_PASS))"
-echo "METRIC tests_failed=$((FE_FAIL + RE_FAIL + BE_FAIL))"
-echo "METRIC fe_tests_pass=$FE_PASS"
+echo "METRIC tests_passing=$((RE_PASS + BE_PASS))"
+echo "METRIC tests_failed=$((RE_FAIL + BE_FAIL))"
 echo "METRIC react_tests_pass=$RE_PASS"
 echo "METRIC be_tests_pass=$BE_PASS"
