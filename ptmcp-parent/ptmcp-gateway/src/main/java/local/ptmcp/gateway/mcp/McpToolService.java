@@ -88,6 +88,9 @@ final class McpToolService {
     private final BoundedParser parser;
     private final McpAuthentication authentication;
 
+    /** Live executions this process may cancel, keyed by the subject that owns them. */
+    private final ExecutionCancellationRegistry cancellations = new ExecutionCancellationRegistry();
+
     McpToolService(
             SecurityStateReader security,
             AuditRepository auditRepository,
@@ -151,7 +154,11 @@ final class McpToolService {
         }
         JsonNode id = root.path("id");
         if (id.isMissingNode() || id.isNull()) {
-            // Notifications carry no response; this stateless boundary never queues work on them.
+            // Notifications carry no response. Cancellation is the only one that reaches live work,
+            // and it addresses this subject's own in-flight request id, never another caller's.
+            if ("notifications/cancelled".equals(method)) {
+                cancelRequested(identity, root.path("params"));
+            }
             return Outcome.accepted();
         }
         if (!id.isNumber() && !id.isTextual()) {
@@ -164,6 +171,28 @@ final class McpToolService {
             case "tools/call" -> callTool(identity, root.path("params"), id, boundaryRequestId);
             default -> Outcome.json(rpcError(id, -32601, "Method not found"));
         };
+    }
+
+    /**
+     * Applies a {@code notifications/cancelled} for one of this subject's own in-flight requests.
+     * An unknown or already finished request id is silently ignored, as the protocol requires, and
+     * the boundary still answers 202; the cancelled call then ends as a normal isError result
+     * carrying CLIENT_CANCELLED.
+     */
+    private void cancelRequested(McpIdentity identity, JsonNode params) {
+        if (!params.isObject()) {
+            return;
+        }
+        JsonNode target = params.path("requestId");
+        if (!target.isNumber() && !target.isTextual()) {
+            return;
+        }
+        cancellations.cancel(ExecutionCancellationRegistry.Key.of(identity, target.asText()));
+    }
+
+    private static ExecutionCancellationRegistry.Key cancellationKey(
+            McpIdentity identity, JsonNode id) {
+        return ExecutionCancellationRegistry.Key.of(identity, id.asText());
     }
 
     private Outcome callTool(
@@ -270,42 +299,51 @@ final class McpToolService {
             approved = GuardPipeline.guard(sql, context, policy, deps);
 
             stage = Stage.EXECUTION;
-            long queueStarted = System.nanoTime();
-            QuotaLimiter.ExecutionPermit permit;
-            try {
-                permit = awaitExecution(identity.userId(), datasourceId);
-            } finally {
-                queueMs = elapsedMillis(queueStarted);
-            }
+            // One handle is the only cancel path for this request, addressable from the moment
+            // the request starts waiting for capacity until the executor has finished cleaning up.
+            ReadOnlyCancellation cancellation = new ReadOnlyCancellation();
+            ExecutionCancellationRegistry.Key key = cancellationKey(identity, id);
+            cancellations.register(key, cancellation);
             ToolResultEncoder.Encoded encoded;
-            ApprovedQuery executionPlan = approved;
             try {
-                revalidateExecution(identity, executionPlan);
-                PoolHandle handle = activatePool(published, engine);
-                if (engine == DatabaseEngine.MYSQL) {
-                    ReadOnlyResult result =
-                            adapter.execute(
-                                    approved,
-                                    datasource -> {
-                                        revalidateExecution(identity, executionPlan);
-                                        audit.confirmStart(requestId, datasourceId);
-                                    },
-                                    new ReadOnlyCancellation());
-                    encoded = ToolResultEncoder.encode(result, result.limitReached());
-                } else {
-                    PgReadOnlyResult result =
-                            pgAdapter.execute(
-                                    approved,
-                                    handle,
-                                    datasource -> {
-                                        revalidateExecution(identity, executionPlan);
-                                        audit.confirmStart(requestId, datasourceId);
-                                    },
-                                    new ReadOnlyCancellation());
-                    encoded = ToolResultEncoder.encode(result);
+                long queueStarted = System.nanoTime();
+                QuotaLimiter.ExecutionPermit permit;
+                try {
+                    permit = awaitExecution(identity.userId(), datasourceId, cancellation);
+                } finally {
+                    queueMs = elapsedMillis(queueStarted);
+                }
+                ApprovedQuery executionPlan = approved;
+                try {
+                    revalidateExecution(identity, executionPlan);
+                    PoolHandle handle = activatePool(published, engine);
+                    if (engine == DatabaseEngine.MYSQL) {
+                        ReadOnlyResult result =
+                                adapter.execute(
+                                        approved,
+                                        datasource -> {
+                                            revalidateExecution(identity, executionPlan);
+                                            audit.confirmStart(requestId, datasourceId);
+                                        },
+                                        cancellation);
+                        encoded = ToolResultEncoder.encode(result, result.limitReached());
+                    } else {
+                        PgReadOnlyResult result =
+                                pgAdapter.execute(
+                                        approved,
+                                        handle,
+                                        datasource -> {
+                                            revalidateExecution(identity, executionPlan);
+                                            audit.confirmStart(requestId, datasourceId);
+                                        },
+                                        cancellation);
+                        encoded = ToolResultEncoder.encode(result);
+                    }
+                } finally {
+                    quotas.release(permit);
                 }
             } finally {
-                quotas.release(permit);
+                cancellations.unregister(key, cancellation);
             }
 
             stage = Stage.ENCODE;
@@ -1028,11 +1066,17 @@ final class McpToolService {
      * Bounded wait for one execution slot. Each attempt takes a queue slot, then tries the user,
      * datasource and gateway gauges; a rejected attempt returns its queue slot before the next
      * attempt. The overall wait never exceeds the quota queue window, and the caller revalidates
-     * the security state again immediately before the business connection is borrowed.
+     * the security state again immediately before the business connection is borrowed. A client
+     * cancel observed while queued ends the wait at once, before any capacity or connection is
+     * taken.
      */
-    private QuotaLimiter.ExecutionPermit awaitExecution(long userId, long datasourceId) {
+    private QuotaLimiter.ExecutionPermit awaitExecution(
+            long userId, long datasourceId, ReadOnlyCancellation cancellation) {
         long deadline = System.nanoTime() + QuotaLimiter.QUEUE_WINDOW_NANOS;
         while (true) {
+            if (cancellation.isCancelled()) {
+                throw new DomainException(ErrorCode.CLIENT_CANCELLED);
+            }
             QuotaLimiter.QueuePermit queued = quotas.acquireQueue(userId);
             try {
                 return quotas.acquireExecution(userId, datasourceId, queued);

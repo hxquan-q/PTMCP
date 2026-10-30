@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doAnswer;
@@ -29,6 +30,7 @@ import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.datasource.DataSourcePoolRegistry;
 import local.ptmcp.datasource.MysqlReadOnlyExecutor;
 import local.ptmcp.datasource.PoolHandle;
+import local.ptmcp.datasource.ReadOnlyCancellation;
 import local.ptmcp.datasource.connection.CredentialCipher;
 import local.ptmcp.datasource.metadata.MysqlMetadataCollector;
 import local.ptmcp.persistence.schema.PublishedSnapshotReader;
@@ -344,6 +346,44 @@ class McpQueryFlowTest {
         }
     }
 
+    private static void insertPlatform(long id, String code) throws Exception {
+        try (Connection meta = PRIMARY.getConnection();
+                PreparedStatement sql =
+                        meta.prepareStatement(
+                                "INSERT INTO platform_registry (id,code,name,tier,status,"
+                                        + "catalog_mode,proof_mode,create_time,update_time,"
+                                        + "created_by,updated_by) VALUES"
+                                        + " (?,?,?,3,'ACTIVE','DISCOVER','NONE',UTC_TIMESTAMP(6),"
+                                        + " UTC_TIMESTAMP(6),1,1)")) {
+            sql.setLong(1, id);
+            sql.setString(2, code);
+            sql.setString(3, code);
+            assertEquals(1, sql.executeUpdate());
+        }
+    }
+
+    private static void deletePatAndPlatform(String token, long platformId) throws Exception {
+        try (Connection meta = PRIMARY.getConnection();
+                PreparedStatement pat =
+                        meta.prepareStatement("DELETE FROM personal_token WHERE token_hash = ?")) {
+            pat.setBytes(1, sha256(token));
+            pat.executeUpdate();
+        }
+        try (Connection meta = PRIMARY.getConnection();
+                PreparedStatement platform =
+                        meta.prepareStatement("DELETE FROM platform_registry WHERE id = ?")) {
+            platform.setLong(1, platformId);
+            assertEquals(1, platform.executeUpdate());
+        }
+    }
+
+    private static String cancelledNotification(int requestId) {
+        return "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\","
+                + "\"params\":{\"requestId\":"
+                + requestId
+                + ",\"reason\":\"synthetic\"}}";
+    }
+
     @Test
     void allowedQueryReturnsRowsAndDurableStartAndTerminal() throws Exception {
         HttpResponse<String> response =
@@ -630,6 +670,129 @@ class McpQueryFlowTest {
             }
         } finally {
             held.forEach(quotas::release);
+        }
+    }
+
+    @Test
+    void cancelledWhileQueuedEndsTheWaitAndReturnsCapacity() throws Exception {
+        List<QuotaLimiter.ExecutionPermit> held = holdUserExecutionPermits();
+        long before = businessConnections();
+        long executedBefore = businessExecutionCount();
+        try (HttpClient client = noProxyClient()) {
+            clearInvocations(quotas);
+            CompletableFuture<HttpResponse<String>> pending =
+                    client.sendAsync(
+                            request(94, "SELECT id FROM orders", PAT),
+                            HttpResponse.BodyHandlers.ofString());
+            try {
+                verify(quotas, timeout(10_000).atLeastOnce())
+                        .acquireExecution(eq(1L), eq(1L), any());
+                long signalledAt = System.nanoTime();
+                HttpResponse<String> notice = rpc(cancelledNotification(94), PAT);
+                assertEquals(202, notice.statusCode(), notice.body());
+                HttpResponse<String> response = pending.get(10, TimeUnit.SECONDS);
+                long elapsedMillis = (System.nanoTime() - signalledAt) / 1_000_000;
+                assertToolError(response, "CLIENT_CANCELLED");
+                JsonNode content =
+                        JSON.readTree(response.body()).path("result").path("structuredContent");
+                String requestId = content.path("requestId").asText();
+                assertAll(
+                        () ->
+                                assertTrue(
+                                        elapsedMillis < 2_500,
+                                        "cancel must end the queue wait at once, took "
+                                                + elapsedMillis
+                                                + "ms"),
+                        () -> assertEquals(executedBefore, businessExecutionCount()),
+                        () -> assertEquals(before, businessConnections()));
+                assertTerminal(requestId, "ERROR", "ALLOW");
+            } finally {
+                held.forEach(quotas::release);
+                held.clear();
+                pending.get(10, TimeUnit.SECONDS);
+            }
+        } finally {
+            held.forEach(quotas::release);
+        }
+        // The cancelled request gave back every queue slot and never kept a user permit.
+        List<QuotaLimiter.ExecutionPermit> refilled = holdUserExecutionPermits();
+        refilled.forEach(quotas::release);
+        HttpResponse<String> after = call("SELECT id FROM orders", PAT);
+        assertFalse(
+                JSON.readTree(after.body()).path("result").path("isError").asBoolean(true),
+                after.body());
+    }
+
+    @Test
+    void cancelFromAnotherPlatformCannotStopThisSubjectsQueuedRead() throws Exception {
+        insertPlatform(2, "cancel-peer");
+        String peer = "ptmcp_pat_" + TlsMysqlFixture.secret();
+        insertPat(peer, "cancel-peer-pat", 2);
+        List<QuotaLimiter.ExecutionPermit> held = holdUserExecutionPermits();
+        try (HttpClient client = noProxyClient()) {
+            clearInvocations(quotas);
+            CompletableFuture<HttpResponse<String>> pending =
+                    client.sendAsync(
+                            request(95, "SELECT id FROM orders", PAT),
+                            HttpResponse.BodyHandlers.ofString());
+            try {
+                verify(quotas, timeout(10_000).atLeastOnce())
+                        .acquireExecution(eq(1L), eq(1L), any());
+                HttpResponse<String> notice = rpc(cancelledNotification(95), peer);
+                assertEquals(202, notice.statusCode(), notice.body());
+                held.forEach(quotas::release);
+                held.clear();
+                HttpResponse<String> response = pending.get(10, TimeUnit.SECONDS);
+                JsonNode result = JSON.readTree(response.body()).path("result");
+                assertFalse(result.path("isError").asBoolean(true), response.body());
+                assertEquals(
+                        "1",
+                        result.path("structuredContent")
+                                .path("data")
+                                .path("rows")
+                                .get(0)
+                                .get(0)
+                                .asText());
+            } finally {
+                held.forEach(quotas::release);
+                held.clear();
+                try {
+                    pending.get(10, TimeUnit.SECONDS);
+                } finally {
+                    deletePatAndPlatform(peer, 2);
+                }
+            }
+        } finally {
+            held.forEach(quotas::release);
+        }
+    }
+
+    @Test
+    void cancelReachesTheHandleTheExecutorIsUsing() throws Exception {
+        long executedBefore = businessExecutionCount();
+        java.util.concurrent.atomic.AtomicInteger signalled =
+                new java.util.concurrent.atomic.AtomicInteger();
+        doAnswer(
+                        invocation -> {
+                            ReadOnlyCancellation cancellation = invocation.getArgument(2);
+                            HttpResponse<String> notice = rpc(cancelledNotification(1), PAT);
+                            if (notice.statusCode() == 202 && cancellation.isCancelled()) {
+                                signalled.incrementAndGet();
+                            }
+                            return invocation.callRealMethod();
+                        })
+                .when(businessExecutor)
+                .execute(anyLong(), any(), any());
+        try {
+            HttpResponse<String> response = call("SELECT id FROM orders", PAT);
+            assertToolError(response, "CLIENT_CANCELLED");
+            JsonNode content =
+                    JSON.readTree(response.body()).path("result").path("structuredContent");
+            assertEquals(1, signalled.get(), "the notification must signal this request's handle");
+            assertTerminal(content.path("requestId").asText(), "ERROR", "ALLOW");
+            assertEquals(executedBefore + 1, businessExecutionCount());
+        } finally {
+            doCallRealMethod().when(businessExecutor).execute(anyLong(), any(), any());
         }
     }
 
