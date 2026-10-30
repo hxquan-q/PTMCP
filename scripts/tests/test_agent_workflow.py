@@ -51,8 +51,10 @@ class WorkflowGateTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.write("AGENTS.md", "# Rules\n")
-        self.write("CLAUDE.md", "# Bridge\n")
+        self.write("AGENTS.md", "# Rules\n[设计](DESIGN.md)\n[治理](docs/standards/agent-assets.md)\n")
+        self.write("CLAUDE.md", "# Bridge\n[规则](AGENTS.md)\n")
+        self.write("DESIGN.md", "# Design\n视觉规则。\n")
+        self.write("docs/standards/agent-assets.md", "# Asset policy\n")
         self.task = self.write("tasks/work-items/T01-a.md", TASK)
         self.note = self.write(
             ".agents/notes/implemented/process/2026-10-23-workflow.md", NOTE
@@ -107,6 +109,16 @@ class WorkflowGateTests(unittest.TestCase):
     def test_empty_task_section_is_rejected(self):
         self.task.write_text(TASK.replace("保持现有公共合同。", ""), encoding="utf-8")
         self.assertTrue(any("目标与边界" in e for e in self.errors()))
+
+    def test_note_title_must_not_be_empty(self):
+        self.note.write_text(NOTE.replace("# Agent Note: 流程取舍", "# Agent Note: "),
+                             encoding="utf-8")
+        self.assertTrue(any("header" in e for e in self.errors()))
+
+    def test_first_section_must_be_problem(self):
+        self.note.write_text(NOTE.replace("## Problem", "## 背景\n说明。\n## Problem"),
+                             encoding="utf-8")
+        self.assertTrue(any("first section" in e for e in self.errors()))
 
     def test_note_path_and_status_must_agree(self):
         self.note.write_text(NOTE.replace("Status: implemented", "Status: proposed"),
@@ -180,6 +192,32 @@ class WorkflowGateTests(unittest.TestCase):
 
     def test_missing_archive_baseline_fails_closed(self):
         self.assertTrue(any("baseline" in e for e in self.errors("missing-ref")))
+
+    def test_entry_links_and_design_are_required(self):
+        self.write("CLAUDE.md", "# Bridge\n")
+        self.assertTrue(any("CLAUDE.md" in e and "AGENTS.md" in e for e in self.errors()))
+        self.write("CLAUDE.md", "[规则](AGENTS.md)\n")
+        self.write("AGENTS.md", "# No routing\n")
+        errors = self.errors()
+        self.assertTrue(any("DESIGN.md" in e for e in errors))
+        self.assertTrue(any("agent-assets.md" in e for e in errors))
+        (self.root / "DESIGN.md").unlink()
+        self.assertTrue(any("DESIGN.md" in e for e in self.errors()))
+
+    def test_shared_skill_frontmatter_is_required(self):
+        skill = self.write(".agents/skills/example/SKILL.md", "# No metadata\n")
+        self.git("add", "--", ".agents/skills/example/SKILL.md")
+        self.assertTrue(any("skill metadata" in e for e in self.errors()))
+        skill.write_text("---\nname: example\ndescription: Example skill\n---\n# Example\n", encoding="utf-8")
+        self.assertEqual([], self.errors())
+        skill.write_text("---\nname: another\ndescription: Example skill\n---\n", encoding="utf-8")
+        self.assertTrue(any("skill metadata" in e for e in self.errors()))
+        skill.write_text("---\nname: example\ndescription: \n---\n", encoding="utf-8")
+        self.assertTrue(any("skill metadata" in e for e in self.errors()))
+
+    def test_untracked_local_skill_is_not_a_shared_gate(self):
+        self.write(".agents/skills/local/SKILL.md", "local content\n")
+        self.assertEqual([], self.errors())
 
     def test_root_rule_budget_is_in_bytes(self):
         self.write("AGENTS.md", "# Rules\n" + "规" * 3000)

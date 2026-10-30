@@ -27,10 +27,17 @@ REQUIRED = (
     "evidence/documentation-validation.md", "backend/mcp-tools.json",
     "standards/agent-workflow.md", "standards/decision-notes.md",
     "reference/agent-development-research.md",
-    "standards/quality-tooling.md", "test/asvs-checklist.md",
+    "standards/quality-tooling.md", "standards/api-change-template.md",
+    "standards/agent-assets.md",
+    "test/asvs-checklist.md",
 )
 LINK = re.compile(r"\[[^\]\n]*\]\((<[^>]+>|[^)\n]+)\)")
 FENCE = re.compile(r"^\s*(`{3,}|~{3,})([^\s]*)\s*$")
+
+
+def validate_required_files(docs: Path, required: tuple[str, ...]) -> list[str]:
+    return [f"missing required file: docs/{relative}" for relative in required
+            if not (docs / relative).is_file()]
 
 
 def path_label(path: Path) -> str:
@@ -65,9 +72,7 @@ def main() -> int:
         markdown.update((ROOT / project).glob('*.md'))
     for lifecycle in ("proposed", "implemented", "rejected"):
         markdown.update((ROOT / ".agents" / "notes" / lifecycle).rglob("*.md"))
-    for relative in REQUIRED:
-        if not (DOCS / relative).is_file():
-            errors.append(f"missing required file: docs/{relative}")
+    errors.extend(validate_required_files(DOCS, REQUIRED))
     errors.extend(validate_adr_paths(list(
         (DOCS / "architecture" / "adr").glob("[0-9][0-9][0-9][0-9]-*.md")
     )))

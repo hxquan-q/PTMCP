@@ -99,7 +99,9 @@ def check_note(path: Path, root: Path) -> list[str]:
         errors.append(f"{label}: invalid date-topic filename")
     raw = path.read_text(encoding="utf-8-sig")
     lines = raw.splitlines()
-    if len(lines) < 3 or not lines[0].startswith("# Agent Note: ") or lines[1] != "" or not lines[2].startswith("Status: "):
+    if (len(lines) < 3 or not lines[0].startswith("# Agent Note: ")
+            or not lines[0][len("# Agent Note: "):].strip()
+            or lines[1] != "" or not lines[2].startswith("Status: ")):
         errors.append(f"{label}: invalid note header")
     text = prose_only(raw)
     status = field(text, "Status")
@@ -119,6 +121,8 @@ def check_note(path: Path, root: Path) -> list[str]:
         errors.append(f"{label}: archived requires Archived date")
     errors.extend(require_sections(text, required, label))
     headings = re.findall(r"^## ([^\n]+)$", text, re.M)
+    if headings and headings[0] != "Problem":
+        errors.append(f"{label}: first section must be Problem")
     if len(headings) != len(set(headings)):
         errors.append(f"{label}: duplicate note section")
     ordered = (["Problem", "Decision", "Alternatives considered", "Consequences", "Verification"]
@@ -157,6 +161,40 @@ def archive_errors(root: Path, base: str) -> list[str]:
         return [f"archive baseline unavailable: {base}; Git and an existing commit are required"]
 
 
+def check_asset_contract(root: Path) -> list[str]:
+    """Check explicit entry routes and metadata for Git-tracked skills only."""
+    errors = []
+    for filename, target in (("CLAUDE.md", "AGENTS.md"),
+                             ("AGENTS.md", "DESIGN.md"),
+                             ("AGENTS.md", "docs/standards/agent-assets.md")):
+        path = root / filename
+        if path.is_file() and not re.search(r"\]\(" + re.escape(target) + r"\)", path.read_text(encoding="utf-8-sig")):
+            errors.append(f"{filename}: missing route to {target}")
+    for filename in ("DESIGN.md", "docs/standards/agent-assets.md"):
+        path = root / filename
+        if not path.is_file() or not path.read_text(encoding="utf-8-sig").strip():
+            errors.append(f"{filename}: missing or empty required asset")
+    try:
+        tracked = subprocess.run(["git", "-C", str(root), "ls-files", "-z", "--",
+                                  ".agents/skills/*/SKILL.md"], check=True,
+                                 capture_output=True).stdout
+        for entry in tracked.split(b"\0"):
+            if not entry:
+                continue
+            path = root / entry.decode("utf-8")
+            if not path.is_file():
+                errors.append(f"{path.relative_to(root).as_posix()}: tracked skill missing")
+                continue
+            text = path.read_text(encoding="utf-8-sig")
+            match = re.match(r"\A---\s*\n(.*?)\n---(?:\n|$)", text, re.S)
+            metadata = match.group(1) if match else ""
+            if field(metadata, "name") != path.parent.name or not field(metadata, "description"):
+                errors.append(f"{path.relative_to(root).as_posix()}: invalid skill metadata")
+    except (OSError, UnicodeError, subprocess.CalledProcessError):
+        errors.append("skill metadata unavailable: Git is required")
+    return errors
+
+
 def validate_workflow(root: Path, archive_base: str = "HEAD") -> list[str]:
     errors = []
     for name, limit in (("AGENTS.md", 8192), ("CLAUDE.md", 1024)):
@@ -169,6 +207,7 @@ def validate_workflow(root: Path, archive_base: str = "HEAD") -> list[str]:
         errors.extend(check_task(path, root))
     for path in sorted((root / ".agents/notes").rglob("*.md")):
         errors.extend(check_note(path, root))
+    errors.extend(check_asset_contract(root))
     errors.extend(archive_errors(root, archive_base))
     return errors
 
