@@ -12,6 +12,7 @@
 - [工程工具验证](quality-tooling-validation.md)：真实 Spotless/Checkstyle/ESLint/Prettier 隔离正反例，及配置/码段检查；不计作产品构建或 ASVS 通过。
 - [本机环境验证](development-environment-validation.md)：D盘工具、专用WSL、真实构建/HTTP/JDBC/TLS/Testcontainers与持久性；不计作产品业务验收。
 - [根目录框架验证](framework-bootstrap-validation.md)：正式前后端工程、构建/启动、UI依赖组合；本轮不进行业务编码。
+- [React 历史走查截图](screenshots/react-20261029-30/README.md)：2026-10-29 至 2026-10-30 的界面截图，保留原文件，不代表当前业务或人工验收通过。
 
 历史证据存放在reviews中，保持原始材料，不为了目录整齐复制成第二套可变副本。本文建立指针并登记适用范围。
 
