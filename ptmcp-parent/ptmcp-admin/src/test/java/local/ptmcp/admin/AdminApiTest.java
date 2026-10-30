@@ -1,5 +1,7 @@
 package local.ptmcp.admin;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -18,11 +20,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.mysql.cj.jdbc.exceptions.CommunicationsException;
 
 import local.ptmcp.admin.api.AdminAction;
+import local.ptmcp.admin.api.AdminActionInterceptor;
 import local.ptmcp.admin.api.AdminPrincipal;
 import local.ptmcp.admin.api.ApiExceptionAdvice;
 import local.ptmcp.admin.api.DepartmentAdminController;
 import local.ptmcp.admin.api.IdempotentWriteTestSupport;
+import local.ptmcp.admin.api.RoleAdminController;
 import local.ptmcp.admin.api.UserAdminController;
+import local.ptmcp.admin.web.StrictJson;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.persistence.org.DelegationScopeResolver;
@@ -253,6 +258,35 @@ class AdminApiTest {
                     connection,
                     ADMIN_ID,
                     AdminActionTestSupport.standardActions().toArray(String[]::new));
+            seedRoleAdminIdentity(connection);
+        }
+    }
+
+    /**
+     * Only this fixture actor gets an authoritative identity; grant() must not repair identities.
+     * Its soft-deleted fixture department stays outside the departments created by each test.
+     * Platform role management requires an active profile, not a business department grant.
+     */
+    private static void seedRoleAdminIdentity(Connection connection) throws SQLException {
+        try (PreparedStatement department =
+                        connection.prepareStatement(
+                                "INSERT INTO sys_dept (dept_id,dept_name,status,del_flag,create_time,update_time)"
+                                        + " VALUES (?,'测试管理部门','0','1',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
+                PreparedStatement profile =
+                        connection.prepareStatement(
+                                "INSERT INTO sys_user_profile (user_id,dept_id,display_name,password_hash,status,create_time,update_time)"
+                                        + " VALUES (?,?,'测试管理员','external','ACTIVE',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
+                PreparedStatement authority =
+                        connection.prepareStatement(
+                                "INSERT INTO sys_user_security (user_id,auth_version,identity_version,identity_state,create_time,update_time)"
+                                        + " VALUES (?,1,1,'READY',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))")) {
+            department.setLong(1, ADMIN_ID);
+            department.executeUpdate();
+            profile.setLong(1, ADMIN_ID);
+            profile.setLong(2, ADMIN_ID);
+            profile.executeUpdate();
+            authority.setLong(1, ADMIN_ID);
+            authority.executeUpdate();
         }
     }
 
@@ -3253,6 +3287,389 @@ class AdminApiTest {
     }
 
     @Test
+    void roleCreateIdempotencyReplaysOriginalResultAndRejectsChangedIntent() throws Exception {
+        String key = "r".repeat(128);
+        List<Long> before = roleCreateCounts();
+        MvcResult first =
+                mockMvc.perform(roleCreateRequest(key, "replayed_role"))
+                        .andExpect(status().isCreated())
+                        .andExpect(jsonPath("$.version").value(1))
+                        .andExpect(jsonPath("$.permissionCodes.length()").value(2))
+                        .andReturn();
+        assertRoleCreatedOnce(before);
+        long roleId = readLong(first.getResponse().getContentAsString(), "id");
+        String location = "/api/v1/admin/roles/" + roleId;
+        assertEquals(location, first.getResponse().getHeader("Location"));
+        assertEquals("SUCCEEDED", idempotencyState("roles.create", key));
+        String committed = roleCreateWriteEffects();
+        mockMvc.perform(roleCreateRequest(key, "replayed_role"))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Idempotent-Replay", "true"))
+                .andExpect(header().string("Location", location))
+                .andExpect(
+                        result ->
+                                assertEquals(
+                                        first.getResponse().getContentAsString(),
+                                        result.getResponse().getContentAsString()));
+        mockMvc.perform(roleCreateRequest(key, "changed_role"))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSED"));
+        assertEquals(committed, roleCreateWriteEffects());
+
+        // Replays describe the original result even after the resource has been removed.
+        orgStore.deleteRole(roleId, 1, ADMIN_ID);
+        String deleted = roleCreateWriteEffects();
+        mockMvc.perform(roleCreateRequest(key, "replayed_role"))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Idempotent-Replay", "true"))
+                .andExpect(header().string("Location", location))
+                .andExpect(
+                        result ->
+                                assertEquals(
+                                        first.getResponse().getContentAsString(),
+                                        result.getResponse().getContentAsString()));
+        assertEquals(deleted, roleCreateWriteEffects());
+    }
+
+    @Test
+    void roleCreateIdempotencyReplaysRecordedResponseAboveRequestLimit() throws Exception {
+        StringBuilder body =
+                new StringBuilder(
+                        "{\"key\":\"large_role\",\"name\":\"Large role\",\"enabled\":true,"
+                                + "\"permissionCodes\":[");
+        int permissionCount = 0;
+        while (body.length() + 2 + 206 < StrictJson.MAX_BODY_BYTES) {
+            if (permissionCount > 0) body.append(',');
+            String prefix = "p" + permissionCount + "_";
+            body.append('"').append(prefix).append("x".repeat(100 - prefix.length())).append('"');
+            permissionCount++;
+        }
+        int remaining = StrictJson.MAX_BODY_BYTES - body.length() - 2;
+        int firstLength = Math.min(100, remaining - 6 - 5);
+        int secondLength = remaining - 6 - firstLength;
+        body.append(",\"tail1")
+                .append("x".repeat(firstLength - 5))
+                .append("\",\"tail2")
+                .append("x".repeat(secondLength - 5))
+                .append("\"]}");
+        permissionCount += 2;
+        byte[] requestBody = body.toString().getBytes(StandardCharsets.UTF_8);
+        assertEquals(StrictJson.MAX_BODY_BYTES, requestBody.length);
+        List<Long> before = roleCreateCounts();
+        MvcResult first =
+                mockMvc.perform(
+                                roleCreateRequest("large-role-result", "unused")
+                                        .content(requestBody))
+                        .andExpect(status().isCreated())
+                        .andExpect(jsonPath("$.permissionCodes.length()").value(permissionCount))
+                        .andReturn();
+        byte[] original = first.getResponse().getContentAsByteArray();
+        assertTrue(original.length > StrictJson.MAX_BODY_BYTES);
+        assertEquals(
+                original.length,
+                scalar("SELECT OCTET_LENGTH(response_cipher) FROM api_idempotency"));
+        assertEquals("SUCCEEDED", idempotencyState("roles.create", "large-role-result"));
+        assertEquals(
+                List.of(
+                        before.get(0) + 1,
+                        before.get(1) + permissionCount,
+                        before.get(2) + 1,
+                        before.get(3) + 1,
+                        before.get(4) + 1),
+                roleCreateCounts());
+        String committed = roleCreateWriteEffects();
+        mockMvc.perform(roleCreateRequest("large-role-result", "unused").content(requestBody))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Idempotent-Replay", "true"))
+                .andExpect(header().string("Location", first.getResponse().getHeader("Location")))
+                .andExpect(
+                        result ->
+                                assertArrayEquals(
+                                        original, result.getResponse().getContentAsByteArray()));
+        assertEquals(committed, roleCreateWriteEffects());
+        assertEquals("SUCCEEDED", idempotencyState("roles.create", "large-role-result"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"missing", "blank", "too-long"})
+    void roleCreateIdempotencyRejectsInvalidKeyWithoutOccupying(String kind) throws Exception {
+        String before = roleCreateWriteEffects();
+        MockHttpServletRequestBuilder request = roleCreateRequest(null, "invalid_key_role");
+        if (kind.equals("blank")) request.header("Idempotency-Key", "   ");
+        if (kind.equals("too-long")) request.header("Idempotency-Key", "x".repeat(129));
+        mockMvc.perform(request)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ARGUMENT"));
+        assertEquals(before, roleCreateWriteEffects());
+        assertEquals(0, scalar("SELECT COUNT(*) FROM api_idempotency"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{", "{\"key\":\"missing_name\",\"enabled\":true}"})
+    void roleCreateIdempotencyRejectsInvalidBodyBeforeOccupying(String body) throws Exception {
+        String before = roleCreateWriteEffects();
+        mockMvc.perform(roleCreateRequest("bad-role-body", "unused").content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ARGUMENT"));
+        assertEquals(before, roleCreateWriteEffects());
+        assertEquals(0, scalar("SELECT COUNT(*) FROM api_idempotency"));
+    }
+
+    @Test
+    void roleCreateIdempotencyRejectsNonPlatformAdminWithoutOccupying() throws Exception {
+        String before = roleCreateWriteEffects();
+        idempotentRoleMvc(orgStore, idempotencyRecorder)
+                .perform(
+                        roleCreateRequest("role-denied", "denied_role")
+                                .requestAttr(
+                                        AdminPrincipal.ATTRIBUTE,
+                                        new AdminPrincipal(ADMIN_ID, false)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+        assertEquals(before, roleCreateWriteEffects());
+        assertEquals(0, scalar("SELECT COUNT(*) FROM api_idempotency"));
+    }
+
+    @Test
+    void roleCreateIdempotencyDoesNotRepeatAfterRealCommitAcknowledgementLoss() throws Exception {
+        MockMvc isolatedMvc =
+                idempotentRoleMvc(
+                        new OrgStore(idempotencyFaultSource(true, null, null)),
+                        idempotencyRecorder);
+        List<Long> before = roleCreateCounts();
+        isolatedMvc
+                .perform(roleCreateRequest("role-commit-ack", "commit_ack_role"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("OPERATION_UNKNOWN"))
+                .andExpect(jsonPath("$.retryable").value(false));
+        assertRoleCreatedOnce(before);
+        assertEquals("UNKNOWN", idempotencyState("roles.create", "role-commit-ack"));
+        String committed = roleCreateWriteEffects();
+        isolatedMvc
+                .perform(roleCreateRequest("role-commit-ack", "commit_ack_role"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("OPERATION_UNKNOWN"))
+                .andExpect(jsonPath("$.retryable").value(false));
+        assertEquals(committed, roleCreateWriteEffects());
+        assertEquals("UNKNOWN", idempotencyState("roles.create", "role-commit-ack"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void roleCreateIdempotencySuccessRecordingFailureNeverRepeatsAction(boolean updateCommitted)
+            throws Exception {
+        String prefix = "UPDATE api_idempotency SET state = 'SUCCEEDED'";
+        IdempotencyRecorder uncertainRecorder =
+                new IdempotencyRecorder(
+                        idempotencyFaultSource(
+                                false,
+                                updateCommitted ? null : prefix,
+                                updateCommitted ? prefix : null));
+        MockMvc isolatedMvc = idempotentRoleMvc(orgStore, uncertainRecorder);
+        List<Long> before = roleCreateCounts();
+        isolatedMvc
+                .perform(roleCreateRequest("role-response-ack", "response_ack_role"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("OPERATION_UNKNOWN"))
+                .andExpect(jsonPath("$.retryable").value(false));
+        assertRoleCreatedOnce(before);
+        String committed = roleCreateWriteEffects();
+        if (updateCommitted) {
+            assertEquals("SUCCEEDED", idempotencyState("roles.create", "role-response-ack"));
+            long id =
+                    orgStore.listRoles().stream()
+                            .filter(role -> role.key().equals("response_ack_role"))
+                            .findFirst()
+                            .orElseThrow()
+                            .id();
+            isolatedMvc
+                    .perform(roleCreateRequest("role-response-ack", "response_ack_role"))
+                    .andExpect(status().isCreated())
+                    .andExpect(header().string("Idempotent-Replay", "true"))
+                    .andExpect(header().string("Location", "/api/v1/admin/roles/" + id))
+                    .andExpect(jsonPath("$.id").value(id))
+                    .andExpect(jsonPath("$.key").value("response_ack_role"))
+                    .andExpect(jsonPath("$.version").value(1));
+        } else {
+            assertEquals("UNKNOWN", idempotencyState("roles.create", "role-response-ack"));
+            isolatedMvc
+                    .perform(roleCreateRequest("role-response-ack", "response_ack_role"))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("OPERATION_UNKNOWN"))
+                    .andExpect(jsonPath("$.retryable").value(false));
+        }
+        assertEquals(committed, roleCreateWriteEffects());
+        assertEquals(
+                updateCommitted ? "SUCCEEDED" : "UNKNOWN",
+                idempotencyState("roles.create", "role-response-ack"));
+    }
+
+    @Test
+    void roleCreateIdempotencyRechecksActionBeforeReplay() throws Exception {
+        long actorRole = actionActorRole("ptmcp:platform:scope", "ptmcp:role:create");
+        mockMvc.perform(roleCreateRequest("role-revoked", "revoked_role"))
+                .andExpect(status().isCreated());
+        try (Connection connection = connect();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "DELETE FROM sys_role_permission WHERE role_id=? AND permission_code=?")) {
+            statement.setLong(1, actorRole);
+            statement.setString(2, "ptmcp:role:create");
+            assertEquals(1, statement.executeUpdate());
+        }
+        String before = roleCreateWriteEffects();
+        mockMvc.perform(roleCreateRequest("role-revoked", "revoked_role"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+        assertEquals(before, roleCreateWriteEffects());
+        assertEquals("SUCCEEDED", idempotencyState("roles.create", "role-revoked"));
+        assertEquals(1, scalar("SELECT COUNT(*) FROM api_idempotency"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ptmcp:role:create", "ptmcp:platform:scope"})
+    void roleCreateIdempotencyRetainsUnknownWhenCurrentQualificationIsRevoked(String revoked)
+            throws Exception {
+        List<String> permissions =
+                List.of("ptmcp:platform:scope", "ptmcp:role:create", "ptmcp:role:update");
+        long actorRole = actionActorRole(permissions.toArray(String[]::new));
+        CountDownLatch actionStarted = new CountDownLatch(1);
+        CountDownLatch finishAction = new CountDownLatch(1);
+        AtomicInteger actions = new AtomicInteger();
+        OrgStore observed = spy(orgStore);
+        doAnswer(
+                        invocation -> {
+                            actions.incrementAndGet();
+                            actionStarted.countDown();
+                            assertTrue(finishAction.await(15, TimeUnit.SECONDS));
+                            return invocation.callRealMethod();
+                        })
+                .when(observed)
+                .createRole(
+                        "qualification_race",
+                        "角色创建",
+                        true,
+                        List.of("ptmcp:role:read", "ptmcp:role:list"),
+                        ADMIN_ID);
+        MockMvc isolatedMvc =
+                MockMvcBuilders.standaloneSetup(
+                                new RoleAdminController(
+                                        observed, idempotencyRecorder, delegationScopeResolver))
+                        .addInterceptors(new AdminActionInterceptor(delegationStore))
+                        .setControllerAdvice(new ApiExceptionAdvice())
+                        .build();
+        try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+            var original =
+                    executor.submit(
+                            () ->
+                                    isolatedMvc
+                                            .perform(
+                                                    roleCreateRequest(
+                                                            "role-qualification-race",
+                                                            "qualification_race"))
+                                            .andReturn());
+            try {
+                assertTrue(actionStarted.await(15, TimeUnit.SECONDS));
+                assertEquals(
+                        "RUNNING", idempotencyState("roles.create", "role-qualification-race"));
+                orgStore.updateRole(
+                        actorRole,
+                        "撤权角色",
+                        null,
+                        permissions.stream().filter(code -> !revoked.equals(code)).toList(),
+                        1,
+                        ADMIN_ID);
+                String afterRevocation = roleCreateWriteEffects();
+                finishAction.countDown();
+                MvcResult denied = original.get(15, TimeUnit.SECONDS);
+                assertAll(
+                        () -> assertEquals(403, denied.getResponse().getStatus()),
+                        () ->
+                                assertTrue(
+                                        denied.getResponse()
+                                                .getContentAsString()
+                                                .contains("MANAGEMENT_SCOPE_DENIED")),
+                        () -> assertEquals(afterRevocation, roleCreateWriteEffects()),
+                        () ->
+                                assertEquals(
+                                        "UNKNOWN",
+                                        idempotencyState(
+                                                "roles.create", "role-qualification-race")));
+                // Restore only this fixture permission to get through the real entry interceptor.
+                try (Connection connection = connect();
+                        PreparedStatement restore =
+                                connection.prepareStatement(
+                                        "INSERT INTO sys_role_permission (role_id,permission_code,create_time,update_time)"
+                                                + " VALUES (?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))")) {
+                    restore.setLong(1, actorRole);
+                    restore.setString(2, revoked);
+                    assertEquals(1, restore.executeUpdate());
+                }
+                String beforeRetry = roleCreateWriteEffects();
+                isolatedMvc
+                        .perform(roleCreateRequest("role-qualification-race", "qualification_race"))
+                        .andExpect(status().isConflict())
+                        .andExpect(jsonPath("$.code").value("OPERATION_UNKNOWN"))
+                        .andExpect(jsonPath("$.retryable").value(false));
+                assertEquals(1, actions.get());
+                assertEquals(beforeRetry, roleCreateWriteEffects());
+            } finally {
+                finishAction.countDown();
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "",
+                "{",
+                "{}",
+                "{\"id\":0}",
+                "{\"id\":-1}",
+                "null",
+                "{\"id\":1} {}",
+                "{\"id\":1,\"id\":2}",
+                "{\"id\":1,\"extra\":true}"
+            })
+    void roleCreateIdempotencyInvalidRecordedResultNeverRepeatsAction(String responseBody)
+            throws Exception {
+        assertCorruptRoleResultNeverRepeatsAction(responseBody.getBytes(StandardCharsets.UTF_8));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"UTF-16LE", "invalid-UTF-8"})
+    void roleCreateIdempotencyRejectsNonUtf8RecordedResult(String encoding) throws Exception {
+        byte[] responseBody =
+                "{\"id\":1,\"name\":\"X\"}"
+                        .getBytes(
+                                encoding.equals("UTF-16LE")
+                                        ? StandardCharsets.UTF_16LE
+                                        : StandardCharsets.UTF_8);
+        if (encoding.equals("invalid-UTF-8")) responseBody[responseBody.length - 3] = (byte) 0xC3;
+        assertCorruptRoleResultNeverRepeatsAction(responseBody);
+    }
+
+    private void assertCorruptRoleResultNeverRepeatsAction(byte[] responseBody) throws Exception {
+        byte[] body = roleCreateBody("corrupt_record_role").getBytes(StandardCharsets.UTF_8);
+        idempotencyRecorder.occupy(
+                ADMIN_ID,
+                "roles.create",
+                "corrupt-role-result",
+                MessageDigest.getInstance("SHA-256").digest(body));
+        idempotencyRecorder.completeSucceeded(
+                ADMIN_ID, "roles.create", "corrupt-role-result", responseBody, 201);
+        String before = roleCreateWriteEffects();
+        idempotentRoleMvc(orgStore, idempotencyRecorder)
+                .perform(roleCreateRequest("corrupt-role-result", "corrupt_record_role"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("OPERATION_UNKNOWN"))
+                .andExpect(jsonPath("$.retryable").value(false));
+        assertEquals(before, roleCreateWriteEffects());
+        assertEquals("SUCCEEDED", idempotencyState("roles.create", "corrupt-role-result"));
+    }
+
+    @Test
     void orgCreateEndpointsReplayWithSameIdempotencyKey() throws Exception {
         String body = "{\"name\":\"幂等部门\",\"enabled\":true}";
         MvcResult first =
@@ -3574,6 +3991,91 @@ class AdminApiTest {
         }
     }
 
+    private MockMvc idempotentRoleMvc(OrgStore store, IdempotencyRecorder recorder) {
+        return MockMvcBuilders.standaloneSetup(
+                        new RoleAdminController(store, recorder, delegationScopeResolver))
+                .setControllerAdvice(new ApiExceptionAdvice())
+                .build();
+    }
+
+    private static MockHttpServletRequestBuilder roleCreateRequest(String key, String roleKey) {
+        MockHttpServletRequestBuilder request =
+                post("/api/v1/admin/roles")
+                        .header("X-Test-User-Id", ADMIN_ID)
+                        .header("X-Test-Platform-Admin", "true")
+                        .requestAttr(AdminPrincipal.ATTRIBUTE, new AdminPrincipal(ADMIN_ID, true))
+                        .contentType("application/json")
+                        .content(roleCreateBody(roleKey));
+        return key == null ? request : request.header("Idempotency-Key", key);
+    }
+
+    private static String roleCreateBody(String roleKey) {
+        return "{\"key\":\""
+                + roleKey
+                + "\",\"name\":\"角色创建\",\"enabled\":true,"
+                + "\"permissionCodes\":[\"ptmcp:role:read\",\"ptmcp:role:list\"]}";
+    }
+
+    private List<Long> roleCreateCounts() throws SQLException {
+        return List.of(
+                scalar("SELECT COUNT(*) FROM sys_role"),
+                scalar("SELECT COUNT(*) FROM sys_role_permission"),
+                scalar("SELECT COUNT(*) FROM admin_operation_log"),
+                scalar("SELECT COUNT(*) FROM sys_security_event"),
+                scalar("SELECT policy_epoch FROM sys_security_state WHERE singleton_id=1"));
+    }
+
+    private void assertRoleCreatedOnce(List<Long> before) throws SQLException {
+        assertEquals(
+                List.of(
+                        before.get(0) + 1,
+                        before.get(1) + 2,
+                        before.get(2) + 1,
+                        before.get(3) + 1,
+                        before.get(4) + 1),
+                roleCreateCounts());
+    }
+
+    private long scalar(String sql) throws SQLException {
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement();
+                ResultSet rows = statement.executeQuery(sql)) {
+            assertTrue(rows.next());
+            return rows.getLong(1);
+        }
+    }
+
+    private String roleCreateWriteEffects() throws SQLException {
+        StringBuilder snapshot = new StringBuilder();
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            for (String sql :
+                    List.of(
+                            "SELECT * FROM sys_role ORDER BY role_id",
+                            "SELECT * FROM sys_role_permission ORDER BY role_id,permission_code",
+                            "SELECT * FROM admin_operation_log ORDER BY id",
+                            "SELECT * FROM sys_security_state ORDER BY singleton_id",
+                            "SELECT * FROM sys_security_event ORDER BY event_id")) {
+                snapshot.append(sql).append('\n');
+                try (ResultSet rows = statement.executeQuery(sql)) {
+                    while (rows.next()) {
+                        for (int column = 1;
+                                column <= rows.getMetaData().getColumnCount();
+                                column++) {
+                            String value = rows.getString(column);
+                            snapshot.append(value == null ? -1 : value.length())
+                                    .append(':')
+                                    .append(value)
+                                    .append('|');
+                        }
+                        snapshot.append('\n');
+                    }
+                }
+            }
+        }
+        return snapshot.toString();
+    }
+
     private MockMvc idempotentDepartmentMvc(OrgStore store, IdempotencyRecorder recorder) {
         return MockMvcBuilders.standaloneSetup(
                         new DepartmentAdminController(store, recorder, delegationScopeResolver))
@@ -3604,11 +4106,15 @@ class AdminApiTest {
     }
 
     private String idempotencyState(String key) throws Exception {
+        return idempotencyState("departments.create", key);
+    }
+
+    private String idempotencyState(String route, String key) throws Exception {
         try (Connection connection = connect();
                 PreparedStatement statement =
                         connection.prepareStatement(
                                 "SELECT state FROM api_idempotency WHERE actor_id=? AND route_key=? AND key_hash=?")) {
-            bindDepartmentIntent(statement, key);
+            bindIntent(statement, route, key);
             try (ResultSet rows = statement.executeQuery()) {
                 assertTrue(rows.next());
                 return rows.getString(1);
@@ -3630,8 +4136,13 @@ class AdminApiTest {
 
     private static void bindDepartmentIntent(PreparedStatement statement, String key)
             throws Exception {
+        bindIntent(statement, "departments.create", key);
+    }
+
+    private static void bindIntent(PreparedStatement statement, String route, String key)
+            throws Exception {
         statement.setLong(1, ADMIN_ID);
-        statement.setString(2, "departments.create");
+        statement.setString(2, route);
         statement.setBytes(
                 3,
                 MessageDigest.getInstance("SHA-256").digest(key.getBytes(StandardCharsets.UTF_8)));

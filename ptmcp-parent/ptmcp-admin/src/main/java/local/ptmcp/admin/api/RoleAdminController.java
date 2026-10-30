@@ -2,6 +2,7 @@ package local.ptmcp.admin.api;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+import local.ptmcp.admin.web.StrictJson;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.persistence.org.DelegationScopeResolver;
@@ -19,7 +20,16 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.StreamReadFeature;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.json.JsonMapper;
+
 import java.net.URI;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 
@@ -34,6 +44,15 @@ import java.util.List;
 @ConditionalOnProperty("ptmcp.admin.datasource.url")
 @RequestMapping("/api/v1/admin/roles")
 public class RoleAdminController {
+    // The recorded MEDIUMBLOB can exceed the request cap when the response adds id/version.
+    private static final int MAX_RECORDED_RESPONSE_BYTES = 16 * 1024 * 1024 - 1;
+    private static final JsonMapper RECORDED_JSON =
+            JsonMapper.builder()
+                    .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+                    .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                    .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                    .build();
+
     private final OrgStore orgStore;
     private final IdempotencyRecorder idempotency;
     private final DelegationScopeResolver scopeResolver;
@@ -67,25 +86,36 @@ public class RoleAdminController {
 
     @AdminAction("ptmcp:role:create")
     @PostMapping
-    public ResponseEntity<RoleRead> create(
-            @RequestBody RoleWrite write, HttpServletRequest request) {
+    public ResponseEntity<byte[]> create(
+            @RequestBody(required = false) byte[] body, HttpServletRequest request) {
         ManagementScope.requirePlatformAdmin(request);
+        RoleWrite write = StrictJson.parse(body, RoleWrite.class);
         if (write.key() == null || write.name() == null || write.enabled() == null) {
-            throw new local.ptmcp.common.error.DomainException(
-                    local.ptmcp.common.error.ErrorCode.INVALID_ARGUMENT);
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
-        RoleRead created =
-                toRead(
-                        orgStore.createRole(
-                                write.key(),
-                                write.name(),
-                                write.enabled(),
-                                write.permissionCodes() == null
-                                        ? List.of()
-                                        : write.permissionCodes(),
-                                actorId(request)));
-        return ResponseEntity.created(URI.create("/api/v1/admin/roles/" + created.id()))
-                .body(created);
+        ResponseEntity<byte[]> response =
+                IdempotentWrites.execute(
+                        idempotency,
+                        actorId(request),
+                        "roles.create",
+                        request.getHeader("Idempotency-Key"),
+                        body,
+                        () -> {
+                            RoleRead created =
+                                    toRead(
+                                            orgStore.createRole(
+                                                    write.key(),
+                                                    write.name(),
+                                                    write.enabled(),
+                                                    write.permissionCodes() == null
+                                                            ? List.of()
+                                                            : write.permissionCodes(),
+                                                    actorId(request)));
+                            return ResponseEntity.created(
+                                            URI.create("/api/v1/admin/roles/" + created.id()))
+                                    .body(created);
+                        });
+        return withCreatedLocation(response);
     }
 
     @AdminAction("ptmcp:role:read")
@@ -139,6 +169,37 @@ public class RoleAdminController {
 
     private static long actorId(HttpServletRequest request) {
         return AdminPrincipal.require(request).userId();
+    }
+
+    private static ResponseEntity<byte[]> withCreatedLocation(ResponseEntity<byte[]> response) {
+        if (response.getHeaders().getLocation() != null) {
+            return response;
+        }
+        // Replays retain status/body only; use the recorded id even if the role has since changed.
+        byte[] body = response.getBody();
+        if (body == null || body.length == 0 || body.length > MAX_RECORDED_RESPONSE_BYTES) {
+            throw new DomainException(ErrorCode.OPERATION_UNKNOWN);
+        }
+        RoleRead recorded;
+        try {
+            String json =
+                    StandardCharsets.UTF_8
+                            .newDecoder()
+                            .onMalformedInput(CodingErrorAction.REPORT)
+                            .onUnmappableCharacter(CodingErrorAction.REPORT)
+                            .decode(ByteBuffer.wrap(body))
+                            .toString();
+            recorded = RECORDED_JSON.readValue(json, RoleRead.class);
+        } catch (JacksonException | CharacterCodingException failure) {
+            throw new DomainException(ErrorCode.OPERATION_UNKNOWN);
+        }
+        if (recorded == null || recorded.id() <= 0) {
+            throw new DomainException(ErrorCode.OPERATION_UNKNOWN);
+        }
+        return ResponseEntity.status(response.getStatusCode())
+                .headers(response.getHeaders())
+                .location(URI.create("/api/v1/admin/roles/" + recorded.id()))
+                .body(response.getBody());
     }
 
     private static RoleRead toRead(OrgStore.RoleRow row) {
