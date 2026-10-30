@@ -460,7 +460,9 @@ public final class MeService {
             throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
         }
         Map<String, Object> server = new LinkedHashMap<>();
-        server.put("type", "VSCODE".equals(type) ? "http" : "streamable-http");
+        server.put(
+                "type",
+                "VSCODE".equals(type) || "CLAUDE_CODE".equals(type) ? "http" : "streamable-http");
         if (mcpUrl != null) {
             server.put("url", mcpUrl);
         }

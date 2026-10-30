@@ -53,6 +53,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -1135,6 +1136,45 @@ class SessionApiTest {
                                 .cookie(alice.cookie()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_ARGUMENT"));
+    }
+
+    @Test
+    void mcpTemplatesUseClientSpecificHttpTypesWithoutEmbeddingCredentials() throws Exception {
+        Fixture fixture = seedPortal();
+        Session alice = login("alice", PASSWORD);
+        Map<String, String> transportTypes =
+                Map.of(
+                        "CLAUDE_CODE", "http",
+                        "VSCODE", "http",
+                        "CURSOR", "streamable-http",
+                        "WORKBUDDY", "streamable-http",
+                        "GENERIC", "streamable-http");
+        for (Map.Entry<String, String> client : transportTypes.entrySet()) {
+            MvcResult response =
+                    mockMvc.perform(
+                                    get("/api/v1/me/mcp-config")
+                                            .param(
+                                                    "platformId",
+                                                    Long.toString(fixture.platformId()))
+                                            .param("clientType", client.getKey())
+                                            .cookie(alice.cookie()))
+                            .andExpect(status().isOk())
+                            .andExpect(jsonPath("$.transport").value("streamable-http"))
+                            .andExpect(jsonPath("$.compatibilityStatus").value("UNVERIFIED"))
+                            .andExpect(jsonPath("$.validatedVersion").isEmpty())
+                            .andReturn();
+            JsonNode config = JSON.readTree(response.getResponse().getContentAsString());
+            JsonNode template = JSON.readTree(config.path("configTemplate").asText());
+            String container = "VSCODE".equals(client.getKey()) ? "servers" : "mcpServers";
+            assertEquals(1, template.size());
+            JsonNode server = template.path(container).path("ptmcp");
+            assertEquals(client.getValue(), server.path("type").asText(), client.getKey());
+            assertEquals("https://mcp.example.test/mcp", server.path("url").asText());
+            assertEquals(
+                    "Bearer <PAT_OR_OAUTH_ACCESS_TOKEN>",
+                    server.path("headers").path("Authorization").asText());
+            assertEquals(3, server.size());
+        }
     }
 
     @Test
