@@ -745,9 +745,51 @@ input[type='checkbox'] {
 }
 .app-shell-crumb {
   flex: none;
-  padding: 12px 20px 0;
+  padding: 10px 20px 0;
   font-size: 12px;
   color: var(--ptmcp-text-faint);
+}
+/* 面包屑：有序列表让读屏报出「第 N 个，共 M 个」，末项用 aria-current="page" 标出当前页。
+   分隔箭头由图标组件自带 aria-hidden，不再像过去的 " › " 文本那样被念进名称里。 */
+.crumb-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.crumb-item {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+.crumb-sep {
+  flex: none;
+  font-size: 11px;
+}
+.crumb-current {
+  font-weight: 600;
+  color: var(--ptmcp-text-strong);
+}
+/* 可点回上层的面包屑仍是 12px 文本，但热区抬到 24px 高（SC 2.5.8），焦点环由共享 button 规则负责。 */
+.crumb-link {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  font: inherit;
+  color: var(--ptmcp-text-muted);
+  cursor: pointer;
+}
+.crumb-link:hover {
+  color: var(--ptmcp-blue-text);
+  text-decoration: underline;
 }
 .app-shell-scroll {
   display: flex;

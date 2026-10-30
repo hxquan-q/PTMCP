@@ -36,7 +36,8 @@ export function AppShell({
   groups: NavGroup[];
   active: string;
   onNavigate: (key: string) => void;
-  breadcrumb: ReactNode;
+  /* 从根到当前页的面包屑；末项是当前页，带 navKey 的中间层可点回上层列表。 */
+  breadcrumb?: { label: string; navKey?: string }[];
   children: ReactNode;
   onLogout?: () => void;
   user?: { displayName: string; department: string };
@@ -245,9 +246,33 @@ export function AppShell({
           </div>
         </nav>
         <main className="app-shell-main">
-          <nav className="app-shell-crumb" aria-label="面包屑">
-            {breadcrumb}
-          </nav>
+          {breadcrumb?.length ? (
+            <nav className="app-shell-crumb" aria-label="面包屑">
+              {/* 有序列表 + aria-current="page" 才让读屏报出“第 2 个，共 3 个”与当前页；分隔符只是图形，进可访问名会变成噪音。 */}
+              <ol className="crumb-list">
+                {breadcrumb.map((crumb, i) => {
+                  const key = crumb.navKey;
+                  const current = i === breadcrumb.length - 1;
+                  return (
+                    <li key={`${crumb.label}-${i}`} className="crumb-item">
+                      {i > 0 ? <ChevronRightIcon className="crumb-sep" aria-hidden /> : null}
+                      {current ? (
+                        <span className="crumb-current" aria-current="page">
+                          {crumb.label}
+                        </span>
+                      ) : key ? (
+                        <button type="button" className="crumb-link" onClick={() => onNavigate(key)}>
+                          {crumb.label}
+                        </button>
+                      ) : (
+                        <span>{crumb.label}</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            </nav>
+          ) : null}
           {/* 内容区是本页唯一的纵向滚动容器；给可聚焦命名区域，键盘用户才能滚动并跳过导航直达正文。 */}
           <div className="app-shell-scroll" ref={contentRef} role="region" aria-label="页面内容" tabIndex={0}>
             {children}
