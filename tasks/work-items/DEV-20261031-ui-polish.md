@@ -97,14 +97,32 @@ Updated: 2026-10-31
 
 `table-scroll` 可聚焦区域这一项在 21 处出现中，此前只有 1 处合规；本切片另修 1 处，其余位于 DEV-20261031-audit-fixes 占用文件（`DatasourcesPage/PlatformsPage/DetailPages/DelegationsPage/AuditPage`）与后续组织页、个人门户页，按页推进，不一次性覆盖他人未提交改动。
 
+### 切片 U5：P-05/P-06/P-07 组织页逐页细节
+
+三页共有的根因是“一次合并读取 + 一个 catch”和“写操作只有 `finally` 没有 `catch`”，前者把任一目录的读取失败转嫁成另一份数据的缺失，后者让写失败变成未处理拒绝、界面继续显示旧状态。
+
+- `UsersPage`：`Promise.all([listUsers, listRoles, listDepartments])` 的单个 catch 一律报「用户列表加载失败」，改为 `Promise.allSettled` 三路独立呈现——用户列表失败是 danger（消息 + `requestId` + 「重新读取」），角色/部门目录失败是 warning。角色目录读不到时角色列不再渲染成空白或假徽章，而显示「已分配 N 个（角色目录未加载）」；部门目录读不到时该列显示 `部门 ID …` 而不是「—」。`toggleStatus` 与删除对话框补 `catch`，启停失败进入可见 danger 播报，成功提示改为带具体用户名与动作（「用户「X」已停用」）。`deptFilter` 在加载或部门目录失败时禁用。
+- `UserDialog` 的分离提交原本是 3 次非原子写入（资料 → 部门 → 角色）却只报「保存失败」：现在记录失败步骤与已生效步骤，失败时明写“已生效的步骤：…；用户写入按子资源分次提交、不是原子操作，请关闭并刷新核对”。目录不可用（读取失败，或编辑一个已带角色的成员而角色目录为空）时禁止保存，避免用不完整清单覆盖真实分配；成员持有但目录里没有的角色 ID 以「角色 X（目录外，保留）」显式列出并原样回传——此前这些 ID 既不可见也不可控。角色目录“真的为空”与“读取失败”分开措辞，前者不再阻断保存。
+- `RolesPage`：`getSession` 失败静默 `setPermissionOptions([])`，对话框只显示「无匹配权限码」，管理员无从知道是会话读取失败。现在失败进入 `permsFailure`，页面顶部与对话框都给出原因，并在目录不可用时阻止提交（否则会创建出一个没有任何权限的角色）；「无匹配」文案改为回显筛选词。列表 `loadError` 由裸字符串改为 `Failure`（`requestId` + 「重新读取」），读取前先清空旧行。行内「删除」补 `roleDelete` 权限判定——此前只有对话框底部判定，无权限用户仍能打开确认框。`memberCount` 缺失由「—」改为「未知」并附说明。
+- `DepartmentsPage`：部门与成员分两路捕获，成员读不到时成员列显示「—」（附原因）且删除一律禁用，不再把“成员数未知”当成“0 个成员”放行删除；删除条件由 `deletionBlock()` 单点判定，行内按钮与对话框确认按钮共用，对话框内预检失败会把原因留在框里。`deleteDepartment`/`updateDepartment`/`createDepartment` 补 `catch`，失败留在对话框并显示 `requestId`；关闭与取消会清除残留失败。
+- 计数诚实化：组织三页都按 `pageSize=100` 取列表且契约不返回总数，「共 N 个用户/角色/部门」统一改为「已加载 N 个」，并配 `aria-live="polite"` 状态句（加载/失败/已加载数量）。空态按失败、搜索无匹配（回显关键字 + 「清空搜索」）、真无数据分流，读取失败不再显示成空列表。
+- 控件与可达性：区域 `role="region"`+`aria-label`+`tabIndex=0`、`th scope="col"`、`SearchInput label`、行内动作 `.row-actions`（替掉逐个 `marginLeft: 10`）、对话框底部 `.form-actions`、可滚动的角色/权限码多选区收敛为 `.check-list`（`role="group"`+`aria-label`+`tabIndex=0`+`focus-visible`）。`common.tsx` 的 `TextInput` 新增可选 `label` 落到 `aria-label`（权限码筛选框此前只靠 `Field` 的隐式关联拿到名字）。`index.css` 补 `.link:disabled` 可辨状态（颜色 + `cursor: not-allowed` + 去下划线）、`.link--danger`；`code` 与部门 ID 的 11px 字号抬到 12px。
+- 记录事实而非发明权限：`src/permissions.ts` 的 `SENSITIVE_ACTIONS` 没有部门新建/删除权限码，后端也未提供 `DELETE /admin/users/{id}`（故 `canDeleteUsers` 仍限合成预览）。部门页的写操作因此仍未做权限门控——不擅自新增权限码，列为待契约确认。
+
+浏览器实测（隔离合成预览 1440×900；预览走进程内 `previewRequest`）：三页 region 均 `{role:region,tabindex:0,label:用户列表/角色列表/部门列表}`、`th` 全为 `scope=col`、无名按钮 0、表内 <12px 文本 0、`aria-live` 各 1、工具栏状态「已加载 2 个」。部门页两个节点的删除按钮均 `disabled=true` 且 `title=部门下仍有成员`，禁用态计算样式 `{color:rgb(91,106,119),cursor:not-allowed,textDecoration:none}`、热区 24×39px。`UserDialog` 检出 `.check-list[role=group][tabindex=0][aria-label=可选角色]`、2 个 `.check-row`、`.form-actions`、提交按钮可用；`RoleDialog` 检出 54 个 `.check-row`、筛选框 `aria-label=筛选权限码`。写路径实跑：新建表单在缺少部门时留在框内并播报「请选择所属部门」（客户端校验），补齐后创建成功并 reload，随后用删除确认框移除该合成用户、列表恢复种子 2 条——合成预览数据已复位。本切片的一个真实缺陷由实测发现并修掉：`DepartmentsPage` 改用 `allSettled` 时漏掉 `setLoading(false)`，导致表格已有数据仍常驻「正在读取…」，修复后状态句变回「已加载 2 个」。
+
+未验证：列表读取失败的 Alert（含 `requestId` 与「重新读取」）、`UserDialog` 的分步部分失败提示、目录外角色/权限码保留徽章、`memberCount` 的「未知」分支——合成预览没有稳定的失败注入点（进程内 transport 拦不到），只有代码与类型门禁依据；真实后端联调与人工体验接受未做。
+
+实际检查：`pnpm exec prettier --write`（3 页 + `common.tsx` + `index.css`）；`pnpm exec eslint --max-warnings 0` 覆盖 `DepartmentsPage.tsx`、`UsersPage.tsx`、`RolesPage.tsx`、`common.tsx` 无输出；`pnpm exec tsc --noEmit` 通过；`node --experimental-strip-types --test tests/*.test.ts` 164/164 通过；`pnpm build` 通过（CSS 25.15 kB / gzip 5.93 kB，JS 462.72 kB / gzip 127.74 kB）；仓库根 `python scripts/check.py` 74 测试 OK。
+
 ### 尚未做
 
-P-05/P-06/P-07 组织页（用户/角色/部门）与个人门户其余页面的逐页细节。P-02 数据源页的死控件与复选区仍待处理，但该文件与 `DatasourcesPage.tsx`、`services/*`、`dsForm.ts`、`platformForm.ts` 等正被 DEV-20261031-audit-fixes 的未提交改动占用，接管前须先确认对方落地状态，避免同文件互踩。DESIGN.md 记录的 SAP 调色板（`#0057d2`）与实现所用 Apple 调色板（`#0071e3`）之间的契约偏差处置——需用户确认以哪一侧为准，未擅自动手。P-10 的自增权防护与 NAMESPACE/DATASOURCE 级授权按上文理由保留未实现。
+个人门户其余页面（`MePages.tsx` 在 DEV-20261031-audit-fixes 占用清单内，须后接）与 `AuditPage`/`DetailPages` 的逐页细节。P-02 数据源页的死控件与复选区仍待处理，但该文件与 `services/*`、`dsForm.ts`、`platformForm.ts` 等正被 DEV-20261031-audit-fixes 的未提交改动占用，接管前须先确认对方落地状态，避免同文件互踩。DESIGN.md 记录的 SAP 调色板（`#0057d2`）与实现所用 Apple 调色板（`#0071e3`）之间的契约偏差处置——需用户确认以哪一侧为准，未擅自动手。P-10 的自增权防护与 NAMESPACE/DATASOURCE 级授权按上文理由保留未实现。
 
 ## 结果与证据
 
-设计层：本切片修复的是可度量的可达性与控件缺陷，不等于按设计图完成视觉还原（图像通道不可用）。除配色与热区外，U1–U3 的实际改动集中在“页面声称却做不到的能力”：假数据列表、语义错误的测试连接、无处理器的死链接、把失败显示成空、无脑报成功的复制，均已按可核验来源收紧或移除。验证层：自动化与浏览器交互已跑，人工体验接受与真实后端联调未做。本项不改后端，也不把框架构建当作业务验收。
+设计层：U1–U5 修复的是可度量的可达性、控件与状态诚实性缺陷，不等于按设计图完成视觉还原（图像通道不可用）。除配色与热区外，实际改动集中在“页面声称却做不到的能力”：假数据列表、语义错误的测试连接、无处理器的死链接、把失败显示成空、无脑报成功的复制、把“成员数未知”当成“0 个成员”放行删除、把 3 次非原子写入报成一次保存、用不完整目录覆盖真实角色/权限分配，均已按可核验来源收紧或移除。验证层：自动化门禁与浏览器交互已跑，U5 还发现并修掉一个只有实跑才能暴露的回归（`setLoading(false)` 丢失）；人工体验接受与真实后端联调未做。本项不改后端，也不把框架构建当作业务验收。`Acceptance` 仍为 pending：设计图比对与人工接受是用户的通道，不由本项自封。
 
 ## 交接
 
-切片 U3（P-13 MCP 接入配置，提交 `c869979`）与切片 U4（P-04 元数据页，随本条提交）已完成；已提交路径限于 `src/views/me/IntegrationsPage.tsx`、`src/views/admin/MetadataPage.tsx`、`src/components/common.tsx`、`src/layouts/AppShell.tsx`、`src/styles/index.css`、`src/services/http.ts` 与本工作项，其余 DIRTY 路径属 DEV-20261031-audit-fixes，未暂存、未改动。下一个焦点：P-05/P-06/P-07 组织页（`UsersPage.tsx`、`RolesPage.tsx`、`DepartmentsPage.tsx`，均未被他人占用），随后个人门户 `MePages.tsx`（该文件在对方占用清单内，须后接）。P-02 数据源页须等对方未提交改动落地后再接管，避免同文件互踩。每个切片只暂存自己改过的路径。预览端口 25175 用完须停止并确认无监听。两项待用户决断：DESIGN.md 与实现的调色板偏差以哪侧为准；P-13 普通模式是否需要后端提供“本人接入列表”端点（当前按契约缺失处理，只显示空态与出口，不伪造）。远端提示仓库已迁移到 `github.com/hxquan-q/PTMCP`，本次推送仍按既有 origin 成功；是否更新 remote URL 属配置变更，未擅自修改。
+切片 U3（P-13，提交 `c869979`）、U4（P-04，提交 `b4f0acc`）与 U5（P-05/P-06/P-07 组织页，随本条提交）已完成；本项已提交路径限于 `src/views/me/IntegrationsPage.tsx`、`src/views/admin/MetadataPage.tsx`、`src/views/admin/UsersPage.tsx`、`src/views/admin/RolesPage.tsx`、`src/views/admin/DepartmentsPage.tsx`、`src/components/common.tsx`、`src/layouts/AppShell.tsx`、`src/styles/index.css`、`src/services/http.ts` 与本工作项，其余 DIRTY 路径属 DEV-20261031-audit-fixes，未暂存、未改动。下一个焦点：个人门户 `MePages.tsx` 与 `AuditPage`/`DetailPages`（三者均在对方占用清单内，须先确认 `DEV-20261031-audit-fixes` 落地状态再接管，避免同文件互踩）；P-02 数据源页同理。每个切片只暂存自己改过的路径。预览端口 25175 用完须停止并确认无监听。待用户决断：DESIGN.md 与实现的调色板偏差以哪侧为准；P-13 普通模式是否需要后端提供“本人接入列表”端点（当前按契约缺失处理，只显示空态与出口，不伪造）；组织部门写操作是否补权限码（`SENSITIVE_ACTIONS` 现无该码，未擅自新增）。远端提示仓库已迁移到 `github.com/hxquan-q/PTMCP`，历次推送仍按既有 origin 成功；是否更新 remote URL 属配置变更，未擅自修改。

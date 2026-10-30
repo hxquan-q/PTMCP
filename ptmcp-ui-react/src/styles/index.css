@@ -443,6 +443,62 @@ input[type='checkbox'] {
 .link:hover {
   text-decoration: underline;
 }
+/* 禁用态必须与可用态肉眼可辨：此前禁用「删除」与可用「删除」样式一致。 */
+.link:not(:disabled) {
+  cursor: pointer;
+}
+.link:disabled {
+  color: var(--ptmcp-text-faint);
+  cursor: not-allowed;
+  text-decoration: none;
+}
+.link--danger {
+  color: var(--ptmcp-red);
+}
+/* 行内操作组：用 gap 取代逐个字段的 marginLeft。 */
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+/* 对话框底部动作行。 */
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+/* 权限码 / 角色多选区：可滚动列表需要可聚焦。 */
+.check-list {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--ptmcp-border);
+  border-radius: 8px;
+  padding: 6px;
+}
+.check-list:focus-visible {
+  outline: 2px solid var(--ptmcp-blue);
+  outline-offset: -2px;
+}
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.check-row:hover {
+  background: var(--ptmcp-hover);
+}
+.check-empty {
+  display: block;
+  padding: 6px;
+  font-size: 12px;
+  color: var(--ptmcp-text-muted);
+}
 /* 表格行内主链接：行高保持紧凑，但把可点高度抬到 24px。 */
 .data-table .link {
   display: inline-flex;

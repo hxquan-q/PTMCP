@@ -115,6 +115,7 @@ export function TextInput({
   disabled,
   maxLength,
   autoComplete,
+  label,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -123,6 +124,7 @@ export function TextInput({
   disabled?: boolean;
   maxLength?: number;
   autoComplete?: string;
+  label?: string;
 }) {
   return (
     <input
@@ -134,6 +136,7 @@ export function TextInput({
       maxLength={maxLength}
       autoComplete={autoComplete}
       placeholder={placeholder}
+      aria-label={label}
       onChange={(e) => onChange(e.target.value)}
     />
   );
