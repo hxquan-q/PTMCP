@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode, type Ref } from 'react';
 import { CheckIcon, ChevronRightIcon, CloseIcon, InfoIcon, SearchIcon, WarningIcon } from './Icons';
 import type { IconComponent } from './Icons';
 
@@ -132,8 +132,12 @@ export function TextInput({
   describedBy?: string;
   inputRef?: Ref<HTMLInputElement>;
 }) {
+  /* 控件此前没有 id：浏览器的表单启发式（自动填充、Chrome 的 “field should have an id or name” 告警）与任何按 id 关联的脚本都无从下手。
+     可见名仍由外层 <label> 或 aria-label 提供，这里只补可编程标识。 */
+  const autoId = useId();
   return (
     <input
+      id={autoId}
       className={invalid ? 'input input--invalid' : 'input'}
       style={{ width: '100%' }}
       type={type ?? 'text'}
@@ -227,15 +231,20 @@ export function SearchInput({
   width?: number | string;
   label?: string;
 }) {
+  const autoId = useId();
   return (
     <span className="input-wrap" style={{ width }}>
+      {/* 搜索框只有占位符可见，占位符会在输入后消失且不算可编程标签：补一个仅供辅助技术的 <label>，可编程名与自动填充都从此处取。 */}
+      <label className="sr-only" htmlFor={autoId}>
+        {label ?? placeholder}
+      </label>
       <SearchIcon className="input-icon" />
       <input
+        id={autoId}
         className="input"
         style={{ width: '100%' }}
         value={value}
         placeholder={placeholder}
-        aria-label={label ?? placeholder}
         onChange={(e) => onChange(e.target.value)}
       />
     </span>
@@ -257,10 +266,11 @@ export function Select({
   label?: string;
   disabled?: boolean;
 }) {
+  const autoId = useId();
   return (
     <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--ptmcp-text)' }}>
       {label}
-      <select className="select" style={{ width }} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
+      <select id={autoId} className="select" style={{ width }} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
         {options.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
@@ -271,7 +281,17 @@ export function Select({
   );
 }
 
-export function Tabs({ tabs, active, onChange }: { tabs: { key: string; label: ReactNode }[]; active: string; onChange: (k: string) => void }) {
+export function Tabs({
+  tabs,
+  active,
+  onChange,
+  label = '视图切换',
+}: {
+  tabs: { key: string; label: ReactNode }[];
+  active: string;
+  onChange: (k: string) => void;
+  label?: string;
+}) {
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
   const move = (dir: number) => {
     const i = tabs.findIndex((t) => t.key === active);
@@ -282,7 +302,11 @@ export function Tabs({ tabs, active, onChange }: { tabs: { key: string; label: R
   };
   return (
     <div
-      role="tablist"
+      /* 五个消费方都在控件外面各自渲染内容，全站没有任何 tabpanel：挂 tab 语义会让读屏播报“标签页”却找不到对应面板，
+         也会让人以为只有选中的那个能 Tab 到。现按“带名分组 + aria-current”播报，每个视图都是原生可达的按钮。 */
+      role="group"
+      aria-label={label}
+      className="tab-row"
       onKeyDown={(e) => {
         if (e.key === 'ArrowRight') {
           e.preventDefault();
@@ -292,17 +316,15 @@ export function Tabs({ tabs, active, onChange }: { tabs: { key: string; label: R
           move(-1);
         }
       }}
-      style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--ptmcp-border)', marginBottom: 14 }}
     >
       {tabs.map((t) => (
         <button
           key={t.key}
+          type="button"
           ref={(el) => {
             refs.current[t.key] = el;
           }}
-          role="tab"
-          tabIndex={active === t.key ? 0 : -1}
-          aria-selected={active === t.key}
+          aria-current={active === t.key}
           className={`tab-btn${active === t.key ? ' is-active' : ''}`}
           onClick={() => onChange(t.key)}
         >
@@ -524,31 +546,33 @@ export function DrawerFields({ fields }: { fields: { label: string; value: React
 export function Pagination({ total, pageSize, page, onPage }: { total: number; pageSize: number; page: number; onPage: (p: number) => void }) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-      <button className="page-btn" disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label="上一页">
+    /* 分页此前只是一个裸 span：读屏的 landmark 列表里找不到它，键盘用户要逐个 Tab 才知道自己在第几页。 */
+    <nav className="pagination" aria-label="分页">
+      <button type="button" className="page-btn" disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label="上一页">
         <ChevronRightIcon style={{ transform: 'rotate(180deg)' }} />
       </button>
       {pageNums(page, pages).map((p, i) =>
         p === 'gap' ? (
-          <span key={`gap-${i}`} style={{ padding: '0 2px', color: 'var(--ptmcp-text-faint)' }} aria-hidden>
+          <span key={`gap-${i}`} className="page-gap" aria-hidden>
             …
           </span>
         ) : (
           <button
             key={p}
+            type="button"
             className={`page-btn${p === page ? ' is-active' : ''}`}
             onClick={() => onPage(p)}
             aria-current={p === page ? 'page' : undefined}
-            aria-label={`第 ${p} 页`}
+            aria-label={`第 ${p} 页，共 ${pages} 页`}
           >
             {p}
           </button>
         ),
       )}
-      <button className="page-btn" disabled={page >= pages} onClick={() => onPage(page + 1)} aria-label="下一页">
+      <button type="button" className="page-btn" disabled={page >= pages} onClick={() => onPage(page + 1)} aria-label="下一页">
         <ChevronRightIcon />
       </button>
-    </span>
+    </nav>
   );
 }
 

@@ -307,11 +307,12 @@ select {
 .select:hover:not(:disabled) {
   border-color: var(--ptmcp-text-faint);
 }
+/* 此处原本写着 outline:none，与上面的 .input:focus-visible 同权重却排在更后，把键盘焦点环整条抹掉了。
+   柔和光晕对比度不足，不能单独充当 WCAG 2.4.7 的可见焦点，所以焦点环交回 :focus-visible 负责。 */
 .input:focus,
 .select:focus {
   border-color: var(--ptmcp-blue);
   box-shadow: 0 0 0 3px var(--ptmcp-blue-bg);
-  outline: none;
 }
 .input::placeholder {
   color: var(--ptmcp-text-faint);
@@ -512,7 +513,12 @@ input[type='checkbox'] {
 .data-table tbody tr {
   transition: background 0.12s ease;
 }
-/* 分页箭头与页码统一 28×28，避免只有 13px 的图标点击区。 */
+/* 分页：nav 让读屏能在 landmark 列表里直达；页码与箭头统一 28×28，避免只有 13px 的图标点击区。 */
+.pagination {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 .page-btn {
   display: inline-flex;
   align-items: center;
@@ -539,6 +545,11 @@ input[type='checkbox'] {
   border-color: var(--ptmcp-blue-text);
   background: var(--ptmcp-blue-soft);
   color: var(--ptmcp-blue-text);
+}
+/* 页码折叠处的省略号只是视觉提示，元素本身已 aria-hidden，不参与朗读。 */
+.page-gap {
+  padding: 0 2px;
+  color: var(--ptmcp-text-faint);
 }
 /* 侧栏行：悬停给浅底，选中行用左侧蓝条 + 蓝字。 */
 .nav-item {
@@ -639,7 +650,13 @@ input[type='checkbox'] {
   font-family: inherit;
   font-size: 11px;
 }
-/* 页签：下划线随状态着色，支持左右方向键切换。 */
+/* 视图切换行：带名分组，下划线随状态着色，左右方向键作为原生 Tab 之外的快捷切换。 */
+.tab-row {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--ptmcp-border);
+}
 .tab-btn {
   padding: 8px 14px;
   border: none;
@@ -814,8 +831,7 @@ input[type='checkbox'] {
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible,
-[role='tab']:focus-visible {
+textarea:focus-visible {
   outline: 2px solid var(--ptmcp-blue);
   outline-offset: 2px;
 }
