@@ -39,12 +39,27 @@ Updated: 2026-10-31
 - `node --experimental-strip-types --test tests/*.test.ts`：退出 0，164 tests / 164 pass / 0 fail。
 - `pnpm exec eslint src/components/common.tsx src/layouts/AppShell.tsx --max-warnings 0`：通过；`tsc --noEmit`：通过；`pnpm build`：通过（CSS 19.84 kB / gzip 4.98 kB）。
 - `pnpm exec prettier --write` 已用于上述三个文件；仓库级 `pnpm check` 仍被 DEV-20261031-audit-fixes 未提交的 `platformForm.ts`（`replacementRequired` 声明未使用，eslint error）和未跟踪的 `tests/browser/`（Prettier 未通过）挡住，本项不代为修正。
-- 头部 `Verification: PASS` 只描述已交付切片 U1 的适用检查（测试、类型、构建、16 路由复审计）全部通过；本项仍是 `in_progress`，逐页切片未开始，仓库级 `pnpm check` 因上述外部失败未绿。
+- 头部 `Verification: PASS` 描述已完成切片（U1 共享层、U2 P-10）的适用检查全部通过；本项仍是 `in_progress`，其余页面逐页切片未完成，仓库级 `pnpm check` 因上述外部失败未绿。
 - 浏览器行为验证：`⌘K` 打开→输入“数据”得 4 条（导航 + 合成数据源）→`ArrowDown`+`Enter` 落到 `#/admin/metadata` 并关闭弹层→再次 `Ctrl+K` 打开→`Escape` 关闭；激活导航行高 36px。
+
+### 切片 U2：P-10 权限矩阵逐页细节
+
+开工前复审计（同一浏览器脚本，选中态被真正点亮后才测得）暴露 U1 漏检的一处对比度回归：资源树选中行用 `--ptmcp-blue` 写在 `--ptmcp-selected` 上，实测 4.19:1。同批与页面级缺陷一起修：
+
+- 资源树原本用 `<div onClick role="treeitem">`，键盘完全不可达，也不符合 ARIA tree 模式。改为 `<button class="tree-row" role="treeitem">` + 容器 `role="tree"`/子层 `role="group"` + `aria-level`，并实现单 Tab 焦点（roving tabindex）与 `↑↓ ←→ Home End`：←→ 折叠/展开或进入首个子节点，容器统一 `onKeyDown` 依据 `data-key/data-depth/data-branch/data-open` 导航。选中态样式移入 CSS，蓝文本改走 `--ptmcp-blue-text`。
+- 拖拽分隔线只有 6px 且不能键盘操作：加 `tabIndex`、`aria-valuenow/min/max/valuetext` 与 ←→ 4% 步进（复用纯函数 `resizeColumns` 的 [14,50] 钳制），`::after` 把命中区扩到 24px 宽而视觉不变。
+- 预览面板原实现把上一组主体的结论留在页面上：切换主体/主体类型/平台/数据源即清空 `previewResult`；结论改为持有完整 `Preview`，展示服务端 `evaluatedAt` 与 `nextBoundaryAt`；给定未来时点时标注「未来时点模拟，不可据此执行查询」；折叠按钮补 `aria-controls`，面板补 `role="region"`。
+- 三处把失败伪装成空的分支（`catch` 后只清数组）改为可辨识错误态并给出重读入口：主体目录失败清空选择、规则读取失败提示列表不可信、资源树失败时禁用「+ 新增规则」（页面规格要求资源树加载失败禁止提交）。空态文案区分“没有匹配的主体/该源暂无可见元数据（可能是待同步）/未选择数据源”。
+- 新增规则对话框：到期时间原样允许过去（会写入一条永不生效的规则），现校验 `validTo > now` 并给 `min`；理由补 500 字上限；移除对象级规则里语义为假的「包含下级对象」勾选（`includeDescendants` 恒发 `false`），改为紧邻配置说明「READ ALLOW 隐含 META；META DENY 阻断 READ，DENY 优先」。规则表补「有效期」列并把 ALLOW/DENY、ACTIVE 状态本地化为允许/拒绝、生效中/已撤销。
+- 未接线也未按页面规格实现的部分保持未验证记录：页面规格要求的“组织授权管理员不得自增 META/READ，需解释拒绝并指向平台管理员”未做——当前 `PermissionsValue` 只有 `can()`，拿不到本人主体与委派范围，需后端契约确认；`NAMESPACE`/`DATASOURCE` 级授权同样未开放，因服务端对这两类 `resourceGeneration` 的取值没有可核验来源，不猜。预览的 `reasonCodes` 也不在现契约内。
+
+复验（隔离合成预览，非真实后端）：树 4 行中 `tabIndex=0` 恰 1 个、`role=group` 1 个；`↑↓ Home End ←` 焦点落点分别为 `obj:1 / schema:synthetic / obj:3 / schema:synthetic`；选中行实测对比度 5.66:1、行高 32px；分隔线键盘两次 `→` 后 `aria-valuenow` 25→37 且栅格模板同步；对话框到期填 `2020-01-01` 时内联报「有效期须晚于当前时间…」且未提交，改 `2030-06-01` 保存成功、新行显示「至 06/01 10:00」；预览当前时点得 3 条决策、未来时点出现模拟标注、切换主体后旧结论清空。
+
+实际检查：`node --experimental-strip-types --test tests/*.test.ts` 退出 0（164/164）；`tsc --noEmit` 通过；`pnpm exec eslint src/views/admin/PermissionsPage.tsx --max-warnings 0` 无输出；`pnpm exec prettier --write` 已跑；`pnpm build` 通过（CSS 21.17 kB / gzip 5.17 kB，JS 451.37 kB / gzip 123.99 kB）。
 
 ### 尚未做
 
-数据源/权限矩阵/平台/接入配置等逐页细节（死控件接线或移除、复选框命中区、空/加载/错误态、窄屏），以及 DESIGN.md 记录的 SAP 调色板（`#0057d2`）与实现所用 Apple 调色板（`#0071e3`）之间的契约偏差处置——后者需用户确认以哪一侧为准，未擅自动手。
+数据源/平台/接入配置等其余页面逐页细节（死控件接线或移除、16px 复选框命中区、空/加载/错误/409 态、窄屏），以及 DESIGN.md 记录的 SAP 调色板（`#0057d2`）与实现所用 Apple 调色板（`#0071e3`）之间的契约偏差处置——后者需用户确认以哪一侧为准，未擅自动手。P-10 的自增权防护与 NAMESPACE/DATASOURCE 级授权按上文理由保留未实现。
 
 ## 结果与证据
 
@@ -52,4 +67,4 @@ Updated: 2026-10-31
 
 ## 交接
 
-焦点在切片 U2：逐页处理数据源等页面的死控件与复选区，再推进其余页面。共享层切片只暂存 `index.css`、`AppShell.tsx`、`common.tsx` 与本工作项，避免混入他人未提交改动。预览端口 25175 用完须停止并确认无监听。
+焦点在切片 U3：P-13 我的 MCP 接入配置（`src/views/me/IntegrationsPage.tsx`，本人可写路径，且有对应设计图），随后 P-04 元数据、P-05/P-06/P-07 组织页。P-02 数据源页的死控件与复选区仍待处理，但该文件与 `DatasourcesPage.tsx`、`services/*`、`dsForm.ts`、`platformForm.ts` 等正被 DEV-20261031-audit-fixes 的未提交改动占用，接管前须先确认对方落地状态，避免同文件互踩。每个切片只暂存自己改过的路径。预览端口 25175 用完须停止并确认无监听。

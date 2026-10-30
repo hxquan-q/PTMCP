@@ -660,6 +660,94 @@ textarea:focus-visible,
   outline-offset: 2px;
 }
 
+/* ─── 权限工作台：主体行、资源树行、分栏拖拽（键盘可达 + ≥24px 热区） ─── */
+.subject-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 10px;
+  margin: 2px 0;
+  border: 1px solid transparent;
+  border-radius: var(--ptmcp-radius-control);
+  background: none;
+  text-align: left;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+.subject-row:hover {
+  background: var(--ptmcp-hover);
+}
+.subject-row:focus-visible {
+  outline: 2px solid var(--ptmcp-blue);
+  outline-offset: -1px;
+}
+.subject-row.is-selected {
+  border-color: var(--ptmcp-blue);
+  background: var(--ptmcp-selected);
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 28px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ptmcp-text);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+.tree-row:hover {
+  background: var(--ptmcp-hover);
+}
+.tree-row:focus-visible {
+  outline: 2px solid var(--ptmcp-blue);
+  outline-offset: -2px;
+}
+.tree-row.is-selected {
+  background: var(--ptmcp-selected);
+  color: var(--ptmcp-blue-text);
+  font-weight: 600;
+}
+.tree-row .tree-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.perm-resizer {
+  position: relative;
+}
+/* 视觉保持 6px，但命中区向两侧各扩到 24px（WCAG 2.2 AA 2.5.8）。 */
+.perm-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -9px;
+  right: -9px;
+}
+.perm-resizer:focus-visible {
+  outline: 2px solid var(--ptmcp-blue);
+  outline-offset: -1px;
+  border-radius: 3px;
+}
+.perm-resizer:hover > span,
+.perm-resizer:focus-visible > span {
+  background: var(--ptmcp-blue);
+}
+
 /* ─── 权限矩阵窄屏：三栏改纵向堆叠，隐藏拖拽分隔线 ─── */
 @media (max-width: 900px) {
   .perm-workspace {
