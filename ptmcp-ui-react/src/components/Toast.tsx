@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { dismissToast, subscribeToasts, type ToastMessage } from '../toast';
+import { composeToastDisplay, dismissToast, subscribeToasts, type ToastMessage } from '../toast';
 
 const TONE_STYLE: Record<ToastMessage['tone'], React.CSSProperties> = {
   success: { borderLeft: '3px solid var(--ptmcp-green)' },
@@ -12,14 +12,15 @@ const TONE_STYLE: Record<ToastMessage['tone'], React.CSSProperties> = {
 export function ToastContainer() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   useEffect(() => subscribeToasts(setToasts), []);
-  if (!toasts.length) return null;
+  const visible = composeToastDisplay(toasts, Date.now());
+  if (!visible.length) return null;
   return (
     <div
       role="status"
       aria-live="polite"
       style={{ position: 'fixed', top: 60, right: 20, zIndex: 100, display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'auto' }}
     >
-      {toasts.map((t) => (
+      {visible.map((t) => (
         <div
           key={t.id}
           className="table-card"

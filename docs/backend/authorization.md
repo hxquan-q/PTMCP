@@ -84,6 +84,15 @@ gateway进入请求读取/核验安全快照；排队出队时和JDBC执行提�
 
 外部脚本直接写若依表会跳过闭环，一期只允许经PTMCP管理域写入；数据库凭证禁止通用后台直接写组织表。已有若依接口必须包装/禁用，不能保留旁路。紧急运维SQL需同事务更新版本/outbox并有审核日志及恢复校验。
 
+角色create/update/delete复用SecurityChangeTransaction，先取得全局安全锁，再锁角色并校验实际版本；
+角色行/version、权限码、操作日志、epoch与ROLE_CHANGED同事务。事件固定aggregate_type=ROLE，
+payload仅schemaVersion=1、实际数值角色ID和本次version，软删使用递增后的version。
+create/update在同连接读取行与权限码并返回不可变快照；权限码null保持、空集合清空，enabled=null保持。
+版本不匹配先拒绝VERSION_CONFLICT，实际版本耗尽拒绝SECURITY_STATE_UNAVAILABLE；commit丢确认返回
+OPERATION_UNKNOWN且单次调用不重放。角色创建HTTP同key防重须由控制器另行接线，不能由store推断。
+当前删除保留成员/活动授权引用检查，但成员/ACL写方尚未统一围栏，不能据此承诺并发引用完整性；
+事务内actor授权重验、最后管理员、间接自扩权及事件广播仍未覆盖。实际验证见[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
+
 ## 7. 管理范围委派
 
 admin_delegation是平台管理员给组织授权管理员的管理授权，包含userId、departmentRootId、resourceType/resourceId/generation、allowedActions、validFrom/validTo、status/version。服务端把多个委派分别校验，不能把“委派A的部门”与“委派B的资源”交叉拼出没有授予的新组合。管理命令必须由至少一个完整委派覆盖该命令的所有目标及动作；批量多目标逐项校验，任一失败整个事务不提交。

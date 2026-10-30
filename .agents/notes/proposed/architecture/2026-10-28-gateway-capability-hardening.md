@@ -334,7 +334,7 @@ FAILED的显式安全重试和SUCCEEDED重放保留，不扩schema、不改OAuth
 角色定义的三条写命令原来只原子写sys_role、sys_role_permission与操作日志，缺少epoch和事件，
 角色启停或权限码变化不能由该路径可靠驱动缓存重算；create/update提交后另借连接读取，
 还可能读到竞争命令的结果，或把已提交成功误报为依赖故障。
-本片拟复用SecurityChangeTransaction，先锁全局安全行，再锁定角色；把角色行/version、权限码、
+本片复用SecurityChangeTransaction，先锁全局安全行，再锁定角色；把角色行/version、权限码、
 操作日志、epoch和ROLE_CHANGED同事务提交。事件只含真实数值角色ID/version，aggregate_type=ROLE，
 沿用现有事件格式，无需迁移。create/update同连接返回本事务不可变快照，提交未知不重放。
 保留版本CAS、key冲突、成员及活动授权引用拒绝；角色版本耗尽先拒绝，不能依赖BIGINT溢出报SQL故障。
@@ -346,6 +346,8 @@ FAILED的显式安全重试和SUCCEEDED重放保留，不扩schema、不改OAuth
 现有角色创建HTTP handler尚未使用IdempotentWrites，store级未知提交处理不能代表HTTP同key防重完成。
 最低验证先取三命令真实MySQL有效RED，再测完整写快照、日志/事件回滚、真实commit丢确认、单连接结果、
 提交后竞争更新仍返回自身快照、权限码保留/清空、并发CAS及版本/epoch耗尽零写入。
+旧产品有效RED为37项/21 failures/0 errors/0 skipped（exit1）；初轮另2个触发器权限错误已通过
+隔离测试库CHECK夹具消除，不计产品缺陷。定向GREEN与兼容组合及独立终审尚待实际结果。
 
 ### 业务授权的部门主体读取
 

@@ -1509,10 +1509,12 @@ class OrgManagementStoreTest {
     private RoleWriteSnapshot roleWriteSnapshot() throws SQLException {
         try (Connection connection = dataSource.getConnection()) {
             return new RoleWriteSnapshot(
-                    departmentWriteRows(connection,
+                    departmentWriteRows(
+                            connection,
                             "SELECT role_id,role_key,role_name,status,del_flag,version,create_time,update_time"
                                     + " FROM sys_role ORDER BY role_id"),
-                    departmentWriteRows(connection,
+                    departmentWriteRows(
+                            connection,
                             "SELECT role_id,permission_code,create_time,update_time"
                                     + " FROM sys_role_permission ORDER BY role_id,permission_code"),
                     departmentWriteSnapshot());
@@ -1520,18 +1522,34 @@ class OrgManagementStoreTest {
     }
 
     private OrgStore.RoleRow roleTransactionExisting(String command) {
-        return "CREATE".equals(command) ? null
-                : orgStore.createRole("transaction_role", "原角色", true,
-                        List.of("ptmcp:role:read", "ptmcp:user:read"), 1);
+        return "CREATE".equals(command)
+                ? null
+                : orgStore.createRole(
+                        "transaction_role",
+                        "原角色",
+                        true,
+                        List.of("ptmcp:role:read", "ptmcp:user:read"),
+                        1);
     }
 
     private OrgStore.RoleRow roleTransactionMutation(
             String command, OrgStore store, OrgStore.RoleRow existing) {
         return switch (command) {
-            case "CREATE" -> store.createRole("transaction_role", "本次角色", true,
-                    List.of("ptmcp:user:read", "ptmcp:role:read"), 1);
-            case "UPDATE" -> store.updateRole(existing.id(), "本次角色", false,
-                    List.of("ptmcp:acl:read"), existing.version(), 1);
+            case "CREATE" ->
+                    store.createRole(
+                            "transaction_role",
+                            "本次角色",
+                            true,
+                            List.of("ptmcp:user:read", "ptmcp:role:read"),
+                            1);
+            case "UPDATE" ->
+                    store.updateRole(
+                            existing.id(),
+                            "本次角色",
+                            false,
+                            List.of("ptmcp:acl:read"),
+                            existing.version(),
+                            1);
             case "DELETE" -> {
                 store.deleteRole(existing.id(), existing.version(), 1);
                 yield null;
@@ -1545,23 +1563,41 @@ class OrgManagementStoreTest {
         RoleWriteSnapshot after = roleWriteSnapshot();
         assertAll(
                 () -> assertEquals(before.journal().epoch() + 1, after.journal().epoch()),
-                () -> assertEquals(before.roles().size() + ("CREATE".equals(command) ? 1 : 0),
-                        after.roles().size()),
-                () -> assertEquals(before.journal().events().size() + 1,
-                        after.journal().events().size()),
-                () -> assertEquals(before.journal().operations().size() + 1,
-                        after.journal().operations().size()),
-                () -> assertEquals(1, statusScalar(
-                        "SELECT COUNT(*) FROM sys_security_event WHERE aggregate_type='ROLE'"
-                                + " AND aggregate_id=? AND event_type='ROLE_CHANGED' AND epoch="
-                                + after.journal().epoch()
-                                + " AND JSON_LENGTH(payload)=3 AND JSON_EXTRACT(payload,'$.schemaVersion')=1"
-                                + " AND JSON_EXTRACT(payload,'$.version')=" + version
-                                + " AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.aggregateId'))='" + id + "'",
-                        String.valueOf(id))),
-                () -> assertEquals(1, statusScalar(
-                        "SELECT COUNT(*) FROM admin_operation_log WHERE aggregate_type='ROLE'"
-                                + " AND aggregate_id=? AND action='ROLE_" + command + "'", id)));
+                () ->
+                        assertEquals(
+                                before.roles().size() + ("CREATE".equals(command) ? 1 : 0),
+                                after.roles().size()),
+                () ->
+                        assertEquals(
+                                before.journal().events().size() + 1,
+                                after.journal().events().size()),
+                () ->
+                        assertEquals(
+                                before.journal().operations().size() + 1,
+                                after.journal().operations().size()),
+                () ->
+                        assertEquals(
+                                1,
+                                statusScalar(
+                                        "SELECT COUNT(*) FROM sys_security_event WHERE aggregate_type='ROLE'"
+                                                + " AND aggregate_id=? AND event_type='ROLE_CHANGED' AND epoch="
+                                                + after.journal().epoch()
+                                                + " AND JSON_LENGTH(payload)=3 AND JSON_EXTRACT(payload,'$.schemaVersion')=1"
+                                                + " AND JSON_EXTRACT(payload,'$.version')="
+                                                + version
+                                                + " AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.aggregateId'))='"
+                                                + id
+                                                + "'",
+                                        String.valueOf(id))),
+                () ->
+                        assertEquals(
+                                1,
+                                statusScalar(
+                                        "SELECT COUNT(*) FROM admin_operation_log WHERE aggregate_type='ROLE'"
+                                                + " AND aggregate_id=? AND action='ROLE_"
+                                                + command
+                                                + "'",
+                                        id)));
     }
 
     @ParameterizedTest
@@ -1576,16 +1612,20 @@ class OrgManagementStoreTest {
         assertEquals(version, statusScalar("SELECT version FROM sys_role WHERE role_id=?", id));
         if ("DELETE".equals(command)) {
             assertEquals(ErrorCode.RESOURCE_NOT_FOUND, codeOf(() -> orgStore.getRole(id)));
-            assertEquals(0, statusScalar(
-                    "SELECT COUNT(*) FROM sys_role_permission WHERE role_id=?", id));
+            assertEquals(
+                    0,
+                    statusScalar("SELECT COUNT(*) FROM sys_role_permission WHERE role_id=?", id));
         } else {
             assertEquals("本次角色", written.name());
             assertEquals("CREATE".equals(command), written.enabled());
-            assertEquals("CREATE".equals(command)
-                    ? List.of("ptmcp:role:read", "ptmcp:user:read")
-                    : List.of("ptmcp:acl:read"), written.permissionCodes());
+            assertEquals(
+                    "CREATE".equals(command)
+                            ? List.of("ptmcp:role:read", "ptmcp:user:read")
+                            : List.of("ptmcp:acl:read"),
+                    written.permissionCodes());
             assertEquals(orgStore.getRole(id), written);
-            assertThrows(UnsupportedOperationException.class,
+            assertThrows(
+                    UnsupportedOperationException.class,
                     () -> written.permissionCodes().add("ptmcp:unexpected"));
         }
         assertRoleJournal(command, before, id, version);
@@ -1597,13 +1637,16 @@ class OrgManagementStoreTest {
         "DELETE,INSERT INTO sys_security_event", "CREATE,INSERT INTO admin_operation_log",
         "UPDATE,INSERT INTO admin_operation_log", "DELETE,INSERT INTO admin_operation_log"
     })
-    void roleTransactionFailureRollsBackEveryRow(String command, String failedSql) throws Exception {
+    void roleTransactionFailureRollsBackEveryRow(String command, String failedSql)
+            throws Exception {
         OrgStore.RoleRow existing = roleTransactionExisting(command);
         RoleWriteSnapshot before = roleWriteSnapshot();
         OrgStore failing = new OrgStore(statusFaultDataSource(failedSql, false));
         assertAll(
-                () -> assertEquals(ErrorCode.DEPENDENCY_UNAVAILABLE,
-                        codeOf(() -> roleTransactionMutation(command, failing, existing))),
+                () ->
+                        assertEquals(
+                                ErrorCode.DEPENDENCY_UNAVAILABLE,
+                                codeOf(() -> roleTransactionMutation(command, failing, existing))),
                 () -> assertEquals(before, roleWriteSnapshot()));
     }
 
@@ -1613,18 +1656,25 @@ class OrgManagementStoreTest {
         OrgStore.RoleRow existing = roleTransactionExisting(command);
         RoleWriteSnapshot before = roleWriteSnapshot();
         OrgStore uncertain = new OrgStore(statusFaultDataSource(null, true));
-        assertEquals(ErrorCode.OPERATION_UNKNOWN,
+        assertEquals(
+                ErrorCode.OPERATION_UNKNOWN,
                 codeOf(() -> roleTransactionMutation(command, uncertain, existing)));
-        long id = "CREATE".equals(command)
-                ? orgStore.listRoles().stream().filter(r -> "transaction_role".equals(r.key()))
-                        .findFirst().orElseThrow().id() : existing.id();
+        long id =
+                "CREATE".equals(command)
+                        ? orgStore.listRoles().stream()
+                                .filter(r -> "transaction_role".equals(r.key()))
+                                .findFirst()
+                                .orElseThrow()
+                                .id()
+                        : existing.id();
         assertRoleJournal(command, before, id, "CREATE".equals(command) ? 1 : 2);
         RoleWriteSnapshot committed = roleWriteSnapshot();
-        ErrorCode rejected = switch (command) {
-            case "CREATE" -> ErrorCode.INVALID_ARGUMENT;
-            case "UPDATE" -> ErrorCode.VERSION_CONFLICT;
-            default -> ErrorCode.RESOURCE_NOT_FOUND;
-        };
+        ErrorCode rejected =
+                switch (command) {
+                    case "CREATE" -> ErrorCode.INVALID_ARGUMENT;
+                    case "UPDATE" -> ErrorCode.VERSION_CONFLICT;
+                    default -> ErrorCode.RESOURCE_NOT_FOUND;
+                };
         assertEquals(rejected, codeOf(() -> roleTransactionMutation(command, orgStore, existing)));
         assertEquals(committed, roleWriteSnapshot());
     }
@@ -1634,13 +1684,18 @@ class OrgManagementStoreTest {
     void roleTransactionReturnsWithoutBorrowingAnotherConnection(String command) throws Exception {
         OrgStore.RoleRow existing = roleTransactionExisting(command);
         AtomicInteger borrowed = new AtomicInteger();
-        OrgStore singleConnection = new OrgStore(delegationObservedSource(
-                () -> {
-                    if (borrowed.incrementAndGet() > 1)
-                        throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
-                }, null, null));
-        OrgStore.RoleRow returned = assertDoesNotThrow(
-                () -> roleTransactionMutation(command, singleConnection, existing));
+        OrgStore singleConnection =
+                new OrgStore(
+                        delegationObservedSource(
+                                () -> {
+                                    if (borrowed.incrementAndGet() > 1)
+                                        throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+                                },
+                                null,
+                                null));
+        OrgStore.RoleRow returned =
+                assertDoesNotThrow(
+                        () -> roleTransactionMutation(command, singleConnection, existing));
         assertEquals(1, borrowed.get());
         assertEquals(orgStore.getRole(returned.id()), returned);
     }
@@ -1650,13 +1705,26 @@ class OrgManagementStoreTest {
     void roleTransactionReturnsOwnSnapshotAfterCompetingUpdate(String command) throws Exception {
         OrgStore.RoleRow existing = roleTransactionExisting(command);
         AtomicInteger competingCommits = new AtomicInteger();
-        OrgStore observed = new OrgStore(delegationObservedSource(null, null, () -> {
-            OrgStore.RoleRow committed = orgStore.listRoles().stream()
-                    .filter(r -> "transaction_role".equals(r.key())).findFirst().orElseThrow();
-            orgStore.updateRole(committed.id(), "后续角色", true,
-                    List.of("ptmcp:later:read"), committed.version(), 1);
-            competingCommits.incrementAndGet();
-        }));
+        OrgStore observed =
+                new OrgStore(
+                        delegationObservedSource(
+                                null,
+                                null,
+                                () -> {
+                                    OrgStore.RoleRow committed =
+                                            orgStore.listRoles().stream()
+                                                    .filter(r -> "transaction_role".equals(r.key()))
+                                                    .findFirst()
+                                                    .orElseThrow();
+                                    orgStore.updateRole(
+                                            committed.id(),
+                                            "后续角色",
+                                            true,
+                                            List.of("ptmcp:later:read"),
+                                            committed.version(),
+                                            1);
+                                    competingCommits.incrementAndGet();
+                                }));
         OrgStore.RoleRow returned = roleTransactionMutation(command, observed, existing);
         OrgStore.RoleRow current = orgStore.getRole(returned.id());
         assertAll(
@@ -1664,9 +1732,12 @@ class OrgManagementStoreTest {
                 () -> assertEquals("CREATE".equals(command) ? 1 : 2, returned.version()),
                 () -> assertEquals("本次角色", returned.name()),
                 () -> assertEquals("CREATE".equals(command), returned.enabled()),
-                () -> assertEquals("CREATE".equals(command)
-                        ? List.of("ptmcp:role:read", "ptmcp:user:read")
-                        : List.of("ptmcp:acl:read"), returned.permissionCodes()),
+                () ->
+                        assertEquals(
+                                "CREATE".equals(command)
+                                        ? List.of("ptmcp:role:read", "ptmcp:user:read")
+                                        : List.of("ptmcp:acl:read"),
+                                returned.permissionCodes()),
                 () -> assertEquals(returned.version() + 1, current.version()),
                 () -> assertEquals("后续角色", current.name()),
                 () -> assertEquals(List.of("ptmcp:later:read"), current.permissionCodes()));
@@ -1685,35 +1756,60 @@ class OrgManagementStoreTest {
                 () -> assertTrue(cleared.enabled()),
                 () -> assertEquals(3, cleared.version()),
                 () -> assertEquals(List.of(), cleared.permissionCodes()),
-                () -> assertEquals(0, statusScalar(
-                        "SELECT COUNT(*) FROM sys_role_permission WHERE role_id=?", cleared.id())),
+                () ->
+                        assertEquals(
+                                0,
+                                statusScalar(
+                                        "SELECT COUNT(*) FROM sys_role_permission WHERE role_id=?",
+                                        cleared.id())),
                 () -> assertEquals(before.journal().epoch() + 2, after.journal().epoch()),
-                () -> assertEquals(before.journal().events().size() + 2, after.journal().events().size()),
-                () -> assertEquals(before.journal().operations().size() + 2,
-                        after.journal().operations().size()));
+                () ->
+                        assertEquals(
+                                before.journal().events().size() + 2,
+                                after.journal().events().size()),
+                () ->
+                        assertEquals(
+                                before.journal().operations().size() + 2,
+                                after.journal().operations().size()));
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"CREATE", "UPDATE"})
-    void roleTransactionPermissionBatchFailureRollsBackEarlierWrites(String command) throws Exception {
+    void roleTransactionPermissionBatchFailureRollsBackEarlierWrites(String command)
+            throws Exception {
         OrgStore.RoleRow existing = roleTransactionExisting(command);
-        statusExecute("CREATE TRIGGER role_permission_failure BEFORE INSERT ON sys_role_permission"
-                + " FOR EACH ROW BEGIN IF NEW.permission_code='ptmcp:role:fail' THEN"
-                + " SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='synthetic permission failure'; END IF; END");
+        statusExecute(
+                "ALTER TABLE sys_role_permission ADD CONSTRAINT role_permission_failure"
+                        + " CHECK (permission_code <> 'ptmcp:role:fail')");
         try {
             RoleWriteSnapshot before = roleWriteSnapshot();
             List<String> permissions = List.of("ptmcp:first:read", "ptmcp:role:fail");
             assertAll(
-                    () -> assertEquals(ErrorCode.DEPENDENCY_UNAVAILABLE, codeOf(() -> {
-                        if ("CREATE".equals(command)) {
-                            orgStore.createRole("transaction_role", "批次失败", true, permissions, 1);
-                        } else {
-                            orgStore.updateRole(existing.id(), "批次失败", false, permissions, 1, 1);
-                        }
-                    })),
+                    () ->
+                            assertEquals(
+                                    ErrorCode.DEPENDENCY_UNAVAILABLE,
+                                    codeOf(
+                                            () -> {
+                                                if ("CREATE".equals(command)) {
+                                                    orgStore.createRole(
+                                                            "transaction_role",
+                                                            "批次失败",
+                                                            true,
+                                                            permissions,
+                                                            1);
+                                                } else {
+                                                    orgStore.updateRole(
+                                                            existing.id(),
+                                                            "批次失败",
+                                                            false,
+                                                            permissions,
+                                                            1,
+                                                            1);
+                                                }
+                                            })),
                     () -> assertEquals(before, roleWriteSnapshot()));
         } finally {
-            statusExecute("DROP TRIGGER role_permission_failure");
+            statusExecute("ALTER TABLE sys_role_permission DROP CHECK role_permission_failure");
         }
     }
 
@@ -1724,30 +1820,35 @@ class OrgManagementStoreTest {
         RoleWriteSnapshot before = roleWriteSnapshot();
         CountDownLatch start = new CountDownLatch(1);
         try (var executor = Executors.newFixedThreadPool(2)) {
-            var first = executor.submit(() -> {
-                delegationAwait(start);
-                try {
-                    roleTransactionMutation(command, orgStore, existing);
-                    return "SUCCESS";
-                } catch (DomainException failure) {
-                    return failure.errorCode().name();
-                }
-            });
-            var second = executor.submit(() -> {
-                delegationAwait(start);
-                try {
-                    roleTransactionMutation(command, orgStore, existing);
-                    return "SUCCESS";
-                } catch (DomainException failure) {
-                    return failure.errorCode().name();
-                }
-            });
+            var first =
+                    executor.submit(
+                            () -> {
+                                delegationAwait(start);
+                                try {
+                                    roleTransactionMutation(command, orgStore, existing);
+                                    return "SUCCESS";
+                                } catch (DomainException failure) {
+                                    return failure.errorCode().name();
+                                }
+                            });
+            var second =
+                    executor.submit(
+                            () -> {
+                                delegationAwait(start);
+                                try {
+                                    roleTransactionMutation(command, orgStore, existing);
+                                    return "SUCCESS";
+                                } catch (DomainException failure) {
+                                    return failure.errorCode().name();
+                                }
+                            });
             start.countDown();
-            List<String> outcomes = List.of(first.get(15, TimeUnit.SECONDS),
-                    second.get(15, TimeUnit.SECONDS));
+            List<String> outcomes =
+                    List.of(first.get(15, TimeUnit.SECONDS), second.get(15, TimeUnit.SECONDS));
             assertEquals(1, outcomes.stream().filter("SUCCESS"::equals).count());
-            assertTrue(outcomes.contains("UPDATE".equals(command)
-                    ? "VERSION_CONFLICT" : "RESOURCE_NOT_FOUND"));
+            assertTrue(
+                    outcomes.contains(
+                            "UPDATE".equals(command) ? "VERSION_CONFLICT" : "RESOURCE_NOT_FOUND"));
         }
         assertRoleJournal(command, before, existing.id(), 2);
     }
@@ -1758,31 +1859,40 @@ class OrgManagementStoreTest {
         "UPDATE,FUTURE", "DELETE,FUTURE", "UPDATE,VERSION_EXHAUSTED", "DELETE,VERSION_EXHAUSTED",
         "UPDATE,DELETED", "DELETE,DELETED"
     })
-    void roleTransactionRejectedMutationDoesNotWrite(String command, String reason) throws Exception {
+    void roleTransactionRejectedMutationDoesNotWrite(String command, String reason)
+            throws Exception {
         OrgStore.RoleRow existing = roleTransactionExisting(command);
         if ("STALE".equals(reason))
             statusExecute("UPDATE sys_role SET version=2 WHERE role_id=?", existing.id());
         if ("VERSION_EXHAUSTED".equals(reason))
-            statusExecute("UPDATE sys_role SET version=? WHERE role_id=?", Long.MAX_VALUE, existing.id());
+            statusExecute(
+                    "UPDATE sys_role SET version=? WHERE role_id=?", Long.MAX_VALUE, existing.id());
         if ("DELETED".equals(reason)) orgStore.deleteRole(existing.id(), 1, 1);
         long id = "MISSING".equals(reason) ? existing.id() + 1_000_000 : existing.id();
-        long version = switch (reason) {
-            case "FUTURE" -> 3;
-            case "VERSION_EXHAUSTED" -> Long.MAX_VALUE;
-            default -> 1;
-        };
-        ErrorCode rejected = switch (reason) {
-            case "MISSING", "DELETED" -> ErrorCode.RESOURCE_NOT_FOUND;
-            case "VERSION_EXHAUSTED" -> ErrorCode.SECURITY_STATE_UNAVAILABLE;
-            default -> ErrorCode.VERSION_CONFLICT;
-        };
+        long version =
+                switch (reason) {
+                    case "FUTURE" -> 3;
+                    case "VERSION_EXHAUSTED" -> Long.MAX_VALUE;
+                    default -> 1;
+                };
+        ErrorCode rejected =
+                switch (reason) {
+                    case "MISSING", "DELETED" -> ErrorCode.RESOURCE_NOT_FOUND;
+                    case "VERSION_EXHAUSTED" -> ErrorCode.SECURITY_STATE_UNAVAILABLE;
+                    default -> ErrorCode.VERSION_CONFLICT;
+                };
         RoleWriteSnapshot before = roleWriteSnapshot();
         assertAll(
-                () -> assertEquals(rejected, codeOf(() -> {
-                    if ("UPDATE".equals(command))
-                        orgStore.updateRole(id, "不应写入", false, List.of(), version, 1);
-                    else orgStore.deleteRole(id, version, 1);
-                })),
+                () ->
+                        assertEquals(
+                                rejected,
+                                codeOf(
+                                        () -> {
+                                            if ("UPDATE".equals(command))
+                                                orgStore.updateRole(
+                                                        id, "不应写入", false, List.of(), version, 1);
+                                            else orgStore.deleteRole(id, version, 1);
+                                        })),
                 () -> assertEquals(before, roleWriteSnapshot()));
     }
 
@@ -1790,18 +1900,26 @@ class OrgManagementStoreTest {
     @ValueSource(strings = {"CREATE", "UPDATE", "DELETE"})
     void roleTransactionExhaustedEpochRejectsWithoutWrites(String command) throws Exception {
         OrgStore.RoleRow existing = roleTransactionExisting(command);
-        long savedEpoch = statusScalar(
-                "SELECT policy_epoch FROM sys_security_state WHERE singleton_id=?", 1);
+        long savedEpoch =
+                statusScalar("SELECT policy_epoch FROM sys_security_state WHERE singleton_id=?", 1);
         try {
-            statusExecute("UPDATE sys_security_state SET policy_epoch=? WHERE singleton_id=1",
+            statusExecute(
+                    "UPDATE sys_security_state SET policy_epoch=? WHERE singleton_id=1",
                     Long.MAX_VALUE);
             RoleWriteSnapshot before = roleWriteSnapshot();
             assertAll(
-                    () -> assertEquals(ErrorCode.SECURITY_STATE_UNAVAILABLE,
-                            codeOf(() -> roleTransactionMutation(command, orgStore, existing))),
+                    () ->
+                            assertEquals(
+                                    ErrorCode.SECURITY_STATE_UNAVAILABLE,
+                                    codeOf(
+                                            () ->
+                                                    roleTransactionMutation(
+                                                            command, orgStore, existing))),
                     () -> assertEquals(before, roleWriteSnapshot()));
         } finally {
-            statusExecute("UPDATE sys_security_state SET policy_epoch=? WHERE singleton_id=1", savedEpoch);
+            statusExecute(
+                    "UPDATE sys_security_state SET policy_epoch=? WHERE singleton_id=1",
+                    savedEpoch);
         }
     }
 
@@ -1811,17 +1929,33 @@ class OrgManagementStoreTest {
         OrgStore.RoleRow existing = roleTransactionExisting("DELETE");
         if ("MEMBER".equals(reference)) {
             long department = orgStore.createDepartment(null, "引用部", true, 1).id();
-            orgStore.createUser("role-reference", "引用人", department, "unused",
-                    List.of(existing.id()), true, 1);
+            orgStore.createUser(
+                    "role-reference", "引用人", department, "unused", List.of(existing.id()), true, 1);
         } else {
-            grantStore.create(new AclGrantStore.AclGrantRecord(0, "ROLE", existing.id(),
-                    "DATASOURCE", insertDatasource("role-reference"), 1, "READ", "ALLOW", false,
-                    Instant.now(), null, "ACTIVE", "合成引用", 1), 1);
+            grantStore.create(
+                    new AclGrantStore.AclGrantRecord(
+                            0,
+                            "ROLE",
+                            existing.id(),
+                            "DATASOURCE",
+                            insertDatasource("role-reference"),
+                            1,
+                            "READ",
+                            "ALLOW",
+                            false,
+                            Instant.now(),
+                            null,
+                            "ACTIVE",
+                            "合成引用",
+                            1),
+                    1);
         }
         RoleWriteSnapshot before = roleWriteSnapshot();
         assertAll(
-                () -> assertEquals(ErrorCode.REFERENCES_EXIST,
-                        codeOf(() -> orgStore.deleteRole(existing.id(), 1, 1))),
+                () ->
+                        assertEquals(
+                                ErrorCode.REFERENCES_EXIST,
+                                codeOf(() -> orgStore.deleteRole(existing.id(), 1, 1))),
                 () -> assertEquals(before, roleWriteSnapshot()));
     }
 
@@ -1830,8 +1964,10 @@ class OrgManagementStoreTest {
         roleTransactionExisting("UPDATE");
         RoleWriteSnapshot before = roleWriteSnapshot();
         assertAll(
-                () -> assertEquals(ErrorCode.INVALID_ARGUMENT,
-                        codeOf(() -> roleTransactionMutation("CREATE", orgStore, null))),
+                () ->
+                        assertEquals(
+                                ErrorCode.INVALID_ARGUMENT,
+                                codeOf(() -> roleTransactionMutation("CREATE", orgStore, null))),
                 () -> assertEquals(before, roleWriteSnapshot()));
     }
 

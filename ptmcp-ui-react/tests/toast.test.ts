@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  composeToastDisplay,
   dismissToast,
   deduplicateToasts,
   filterExpired,
@@ -84,4 +85,24 @@ test('showToast auto-registers with incrementing ids and correct tones', () => {
     ['success', 'warning', 'danger'],
   );
   resetToasts();
+});
+
+test('composeToastDisplay applies expiry filtering then deduplication in order', () => {
+  const base = 1_000_000;
+  const toasts: ToastMessage[] = [
+    { id: 1, text: 'old-dup', tone: 'success', createdAt: base }, // expired
+    { id: 2, text: 'old-dup', tone: 'success', createdAt: base }, // expired (same age as 1), duplicate
+    { id: 3, text: 'fresh-dup', tone: 'success', createdAt: base + 3900 }, // fresh
+    { id: 4, text: 'fresh-dup', tone: 'success', createdAt: base + 3950 }, // fresh, duplicate of 3
+    { id: 5, text: 'fresh-unique', tone: 'info', createdAt: base + 3980 }, // fresh, unique
+  ];
+  const now = base + 4000;
+  const result = composeToastDisplay(toasts, now);
+  // 1,2 expired → removed; 3 kept, 4 deduped; 5 kept
+  assert.deepEqual(
+    result.map((t) => t.id),
+    [3, 5],
+  );
+  // 顺序保证：如果先去重再过滤，id=2（过期的重复项）可能被保留而 id=1 被去掉
+  // 先过滤保证所有过期项（无论是否重复）都被移除，然后去重只作用于存活项
 });

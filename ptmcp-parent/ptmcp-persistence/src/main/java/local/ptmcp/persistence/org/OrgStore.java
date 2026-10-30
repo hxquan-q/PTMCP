@@ -354,46 +354,43 @@ public final class OrgStore {
         if (!ROLE_KEY.matcher(key).matches()) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
-        try (Connection connection = OrgSql.configure(primary)) {
-            connection.setAutoCommit(false);
-            try {
-                requireRoleKeyFree(connection, key);
-                long id;
-                try (PreparedStatement statement =
-                        OrgSql.statement(
-                                connection,
-                                "INSERT INTO sys_role (role_key, role_name, status, del_flag,"
-                                        + " create_time, update_time) VALUES (?, ?, ?, '0', ?, ?)",
-                                Statement.RETURN_GENERATED_KEYS)) {
-                    statement.setString(1, key);
-                    statement.setString(2, name);
-                    statement.setString(3, enabled ? "0" : "1");
-                    statement.setObject(4, OrgSql.nowUtc());
-                    statement.setObject(5, OrgSql.nowUtc());
-                    statement.executeUpdate();
-                    id = generatedKey(statement);
-                }
-                insertPermissions(connection, id, codes);
-                writeOperationLog(
-                        connection,
-                        actorId,
-                        "ROLE_CREATE",
-                        "ROLE",
-                        id,
-                        "{\"key\":\"" + key + "\",\"permissionCount\":" + codes.size() + "}");
-                connection.commit();
-                return getRole(id);
-            } catch (SQLException | RuntimeException failure) {
-                try {
-                    connection.rollback();
-                } catch (SQLException ignored) {
-                    // Never mask the in-flight failure with a rollback error.
-                }
-                throw failure;
-            }
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
-        }
+        return new SecurityChangeTransaction(primary)
+                .executeReturning(
+                        connection -> {
+                            requireRoleKeyFree(connection, key);
+                            long id;
+                            try (PreparedStatement statement =
+                                    OrgSql.statement(
+                                            connection,
+                                            "INSERT INTO sys_role (role_key, role_name, status, del_flag,"
+                                                    + " create_time, update_time) VALUES (?, ?, ?, '0', ?, ?)",
+                                            Statement.RETURN_GENERATED_KEYS)) {
+                                statement.setString(1, key);
+                                statement.setString(2, name);
+                                statement.setString(3, enabled ? "0" : "1");
+                                statement.setObject(4, OrgSql.nowUtc());
+                                statement.setObject(5, OrgSql.nowUtc());
+                                if (statement.executeUpdate() != 1) {
+                                    throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+                                }
+                                id = generatedKey(statement);
+                            }
+                            insertPermissions(connection, id, codes);
+                            writeOperationLog(
+                                    connection,
+                                    actorId,
+                                    "ROLE_CREATE",
+                                    "ROLE",
+                                    id,
+                                    "{\"key\":\""
+                                            + key
+                                            + "\",\"permissionCount\":"
+                                            + codes.size()
+                                            + "}");
+                            return new SecurityChangeTransaction.Outcome<>(
+                                    getRole(connection, id), roleEvent(id, 1));
+                        })
+                .value();
     }
 
     public RoleRow updateRole(
@@ -406,124 +403,109 @@ public final class OrgStore {
         OrgSql.requireActor(actorId);
         requireVersion(expectedVersion);
         List<String> codes = permissionCodes == null ? null : normalizedCodes(permissionCodes);
-        try (Connection connection = OrgSql.configure(primary)) {
-            connection.setAutoCommit(false);
-            try {
-                lockRole(connection, id);
-                try (PreparedStatement statement =
-                        OrgSql.statement(
-                                connection,
-                                "UPDATE sys_role SET role_name = ?,"
-                                        + " status = COALESCE(?, status), version = version + 1,"
-                                        + " update_time = ? WHERE role_id = ? AND version = ?"
-                                        + " AND del_flag = '0'")) {
-                    statement.setString(1, name);
-                    if (enabled == null) {
-                        statement.setNull(2, java.sql.Types.CHAR);
-                    } else {
-                        statement.setString(2, enabled ? "0" : "1");
-                    }
-                    statement.setObject(3, OrgSql.nowUtc());
-                    statement.setLong(4, id);
-                    statement.setLong(5, expectedVersion);
-                    if (statement.executeUpdate() != 1) {
-                        throw new DomainException(ErrorCode.VERSION_CONFLICT);
-                    }
-                }
-                if (codes != null) {
-                    try (PreparedStatement delete =
-                            OrgSql.statement(
+        return new SecurityChangeTransaction(primary)
+                .executeReturning(
+                        connection -> {
+                            long nextVersion = lockNextRoleVersion(connection, id, expectedVersion);
+                            try (PreparedStatement statement =
+                                    OrgSql.statement(
+                                            connection,
+                                            "UPDATE sys_role SET role_name = ?,"
+                                                    + " status = COALESCE(?, status), version = version + 1,"
+                                                    + " update_time = ? WHERE role_id = ? AND version = ?"
+                                                    + " AND del_flag = '0'")) {
+                                statement.setString(1, name);
+                                if (enabled == null) {
+                                    statement.setNull(2, java.sql.Types.CHAR);
+                                } else {
+                                    statement.setString(2, enabled ? "0" : "1");
+                                }
+                                statement.setObject(3, OrgSql.nowUtc());
+                                statement.setLong(4, id);
+                                statement.setLong(5, expectedVersion);
+                                if (statement.executeUpdate() != 1) {
+                                    throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                                }
+                            }
+                            if (codes != null) {
+                                try (PreparedStatement delete =
+                                        OrgSql.statement(
+                                                connection,
+                                                "DELETE FROM sys_role_permission WHERE role_id = ?")) {
+                                    delete.setLong(1, id);
+                                    delete.executeUpdate();
+                                }
+                                insertPermissions(connection, id, codes);
+                            }
+                            writeOperationLog(
                                     connection,
-                                    "DELETE FROM sys_role_permission WHERE role_id = ?")) {
-                        delete.setLong(1, id);
-                        delete.executeUpdate();
-                    }
-                    insertPermissions(connection, id, codes);
-                }
-                writeOperationLog(
-                        connection,
-                        actorId,
-                        "ROLE_UPDATE",
-                        "ROLE",
-                        id,
-                        "{\"permissionCount\":" + (codes == null ? 0 : codes.size()) + "}");
-                connection.commit();
-                return getRole(id);
-            } catch (SQLException | RuntimeException failure) {
-                try {
-                    connection.rollback();
-                } catch (SQLException ignored) {
-                    // Never mask the in-flight failure with a rollback error.
-                }
-                throw failure;
-            }
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
-        }
+                                    actorId,
+                                    "ROLE_UPDATE",
+                                    "ROLE",
+                                    id,
+                                    "{\"permissionCount\":"
+                                            + (codes == null ? 0 : codes.size())
+                                            + "}");
+                            return new SecurityChangeTransaction.Outcome<>(
+                                    getRole(connection, id), roleEvent(id, nextVersion));
+                        })
+                .value();
     }
 
     public void deleteRole(long id, long expectedVersion, long actorId) {
         OrgSql.requireActor(actorId);
         requireVersion(expectedVersion);
-        try (Connection connection = OrgSql.configure(primary)) {
-            connection.setAutoCommit(false);
-            try {
-                lockRole(connection, id);
-                try (PreparedStatement members =
-                                OrgSql.statement(
-                                        connection,
-                                        "SELECT COUNT(*) FROM sys_user_role WHERE role_id = ?");
-                        PreparedStatement grants =
-                                OrgSql.statement(
-                                        connection,
-                                        "SELECT COUNT(*) FROM acl_grant WHERE subject_type = 'ROLE'"
-                                                + " AND subject_id = ? AND status = 'ACTIVE'")) {
-                    members.setLong(1, id);
-                    try (ResultSet result = members.executeQuery()) {
-                        result.next();
-                        if (result.getLong(1) > 0) {
-                            throw new DomainException(ErrorCode.REFERENCES_EXIST);
-                        }
-                    }
-                    grants.setLong(1, id);
-                    try (ResultSet result = grants.executeQuery()) {
-                        result.next();
-                        if (result.getLong(1) > 0) {
-                            throw new DomainException(ErrorCode.REFERENCES_EXIST);
-                        }
-                    }
-                }
-                try (PreparedStatement statement =
-                        OrgSql.statement(
-                                connection,
-                                "UPDATE sys_role SET del_flag = '1', version = version + 1,"
-                                        + " update_time = ? WHERE role_id = ? AND version = ?")) {
-                    statement.setObject(1, OrgSql.nowUtc());
-                    statement.setLong(2, id);
-                    statement.setLong(3, expectedVersion);
-                    if (statement.executeUpdate() != 1) {
-                        throw new DomainException(ErrorCode.VERSION_CONFLICT);
-                    }
-                }
-                try (PreparedStatement delete =
-                        OrgSql.statement(
-                                connection, "DELETE FROM sys_role_permission WHERE role_id = ?")) {
-                    delete.setLong(1, id);
-                    delete.executeUpdate();
-                }
-                writeOperationLog(connection, actorId, "ROLE_DELETE", "ROLE", id, null);
-                connection.commit();
-            } catch (SQLException | RuntimeException failure) {
-                try {
-                    connection.rollback();
-                } catch (SQLException ignored) {
-                    // Never mask the in-flight failure with a rollback error.
-                }
-                throw failure;
-            }
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
-        }
+        new SecurityChangeTransaction(primary)
+                .executeReturning(
+                        connection -> {
+                            long nextVersion = lockNextRoleVersion(connection, id, expectedVersion);
+                            try (PreparedStatement members =
+                                            OrgSql.statement(
+                                                    connection,
+                                                    "SELECT COUNT(*) FROM sys_user_role WHERE role_id = ?");
+                                    PreparedStatement grants =
+                                            OrgSql.statement(
+                                                    connection,
+                                                    "SELECT COUNT(*) FROM acl_grant WHERE subject_type = 'ROLE'"
+                                                            + " AND subject_id = ? AND status = 'ACTIVE'")) {
+                                members.setLong(1, id);
+                                try (ResultSet result = members.executeQuery()) {
+                                    result.next();
+                                    if (result.getLong(1) > 0) {
+                                        throw new DomainException(ErrorCode.REFERENCES_EXIST);
+                                    }
+                                }
+                                grants.setLong(1, id);
+                                try (ResultSet result = grants.executeQuery()) {
+                                    result.next();
+                                    if (result.getLong(1) > 0) {
+                                        throw new DomainException(ErrorCode.REFERENCES_EXIST);
+                                    }
+                                }
+                            }
+                            try (PreparedStatement statement =
+                                    OrgSql.statement(
+                                            connection,
+                                            "UPDATE sys_role SET del_flag = '1', version = version + 1,"
+                                                    + " update_time = ? WHERE role_id = ? AND version = ?")) {
+                                statement.setObject(1, OrgSql.nowUtc());
+                                statement.setLong(2, id);
+                                statement.setLong(3, expectedVersion);
+                                if (statement.executeUpdate() != 1) {
+                                    throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                                }
+                            }
+                            try (PreparedStatement delete =
+                                    OrgSql.statement(
+                                            connection,
+                                            "DELETE FROM sys_role_permission WHERE role_id = ?")) {
+                                delete.setLong(1, id);
+                                delete.executeUpdate();
+                            }
+                            writeOperationLog(connection, actorId, "ROLE_DELETE", "ROLE", id, null);
+                            return new SecurityChangeTransaction.Outcome<Void>(
+                                    null, roleEvent(id, nextVersion));
+                        });
     }
 
     public List<RoleRow> listRoles() {
@@ -568,12 +550,19 @@ public final class OrgStore {
     }
 
     public RoleRow getRole(long id) {
-        try (Connection connection = OrgSql.configure(primary);
-                PreparedStatement statement =
-                        OrgSql.statement(
-                                connection,
-                                "SELECT role_id, role_key, role_name, status, version FROM sys_role"
-                                        + " WHERE role_id = ? AND del_flag = '0'")) {
+        try (Connection connection = OrgSql.configure(primary)) {
+            return getRole(connection, id);
+        } catch (SQLException error) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+    }
+
+    private RoleRow getRole(Connection connection, long id) throws SQLException {
+        try (PreparedStatement statement =
+                OrgSql.statement(
+                        connection,
+                        "SELECT role_id, role_key, role_name, status, version FROM sys_role"
+                                + " WHERE role_id = ? AND del_flag = '0'")) {
             statement.setLong(1, id);
             List<String> codes = new ArrayList<>();
             RoleRow role;
@@ -609,8 +598,6 @@ public final class OrgStore {
                     role.enabled(),
                     List.copyOf(codes),
                     role.version());
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
     }
 
@@ -1000,19 +987,36 @@ public final class OrgStore {
 
     // ---- internal ----------------------------------------------------------
 
-    private void lockRole(Connection connection, long id) throws SQLException {
+    private long lockNextRoleVersion(Connection connection, long id, long expectedVersion)
+            throws SQLException {
         try (PreparedStatement statement =
                 OrgSql.statement(
                         connection,
-                        "SELECT role_id FROM sys_role WHERE role_id = ? AND del_flag = '0'"
+                        "SELECT version FROM sys_role WHERE role_id = ? AND del_flag = '0'"
                                 + " FOR UPDATE")) {
             statement.setLong(1, id);
             try (ResultSet result = statement.executeQuery()) {
                 if (!result.next()) {
                     throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
                 }
+                long version = result.getLong(1);
+                if (version != expectedVersion) {
+                    throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                }
+                if (version <= 0 || version == Long.MAX_VALUE) {
+                    throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+                }
+                return version + 1;
             }
         }
+    }
+
+    private static SecurityEvent roleEvent(long id, long version) {
+        return new SecurityEvent(
+                UUID.randomUUID(),
+                SecurityEvent.Kind.ROLE_CHANGED,
+                new SecurityEvent.NumericId(id),
+                version);
     }
 
     private static DepartmentRow departmentRow(ResultSet result) throws SQLException {

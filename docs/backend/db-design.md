@@ -169,6 +169,13 @@ DELEGATION_CHANGED的aggregate_type为ADMIN_DELEGATION，payload沿用schemaVers
 新增事件无需修改历史迁移。创建与撤销均从同连接取得返回快照，commit后不再读取，丢确认不重放。
 并发保证依赖所有委派写方遵守该围栏；旧直写代码混跑、事件广播/消费者及提交前授权重验未由此实现。
 
+角色定义create/update/delete使用同一安全事务，锁序sys_security_state→sys_role，
+角色行/version、sys_role_permission、操作日志、epoch及ROLE_CHANGED原子提交。
+事件aggregate_type=ROLE，使用实际生成ID/version1或锁内递增后的版本，无需修改旧迁移。
+update/delete先在锁内核对If-Match，再检查BIGINT版本耗尽，并保留UPDATE CAS。
+create/update同连接读取行与排序后的权限码，返回本事务不可变快照；commit后不另借连接，丢确认不重放。
+成员/ACL引用写方尚未统一该锁序，不支持与旧直写版本混跑，不能把此片升级为引用并发或授权重验完成。
+
 ## 8. 生命周期、归档和迁移验收
 
 配置/主体软删除保留 ID，不级联删除历史审计；关联表以 RESTRICT 或服务领域检查，禁止随用户删除审计。资源 DROP/重建用新 generation/object_id，旧 grant 标 stale/revoked，不靠名字重新授权。无可靠物理身份的引擎，在快照检测到删除/重建/定义不确定时收紧到需管理员重新确认；不能凭同名表无变化证明未重建。

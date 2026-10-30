@@ -59,3 +59,8 @@ export function resetToasts(): void {
   nextId = 1;
   notify();
 }
+
+/** 组合：先过滤过期再去重（顺序重要——过期重复不应遮蔽新鲜唯一）。供 ToastContainer 渲染前调用。 */
+export function composeToastDisplay(toasts: ToastMessage[], now: number, maxAgeMs = 4000): ToastMessage[] {
+  return deduplicateToasts(filterExpired(toasts, now, maxAgeMs));
+}

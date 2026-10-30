@@ -508,6 +508,12 @@ create/update在同连接读取并返回本事务不可变快照，保留CAS、�
 只读设计评审无阻断；补充中途权限码batch故障回滚、软删角色拒绝及null/空集合兼容测试。
 RoleAdminController.create尚未接IdempotentWrites，不能从本片推断角色创建HTTP同key防重闭环。
 
+有效RED：`role-transaction-red.log/.exit`（2026-10-30 08:04，exit1），37项/21 failures/0 errors/0 skipped。
+覆盖缺少epoch/事件、事件故障不回滚、提交确认丢失误报、二次借连接/后续快照、版本及epoch耗尽。
+初轮同为37项/21 failures，另2 errors为测试触发器需要SUPER权限，已改隔离库CHECK约束后消除；
+初轮保存在`role-transaction-initial-red.*`，不把夹具错误计为产品缺陷。两轮XML均保留。
+当前产品已接统一事务，定向GREEN进行中；未据实现或RED升级总验证状态。
+
 前一幂等切片收尾后实际检查：`python scripts/check.py` exit0（145份Markdown/672项链接、62项检查器回归），
 Skill tree/format/archived均exit0（12篇活跃笔记、0篇归档），`git diff --check` exit0；不替代本片验证。
 
