@@ -42,12 +42,12 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
 async function write<T>(
   path: string,
   init: { method: 'POST' | 'PUT' | 'DELETE'; body?: unknown; headers?: Record<string, string> } & (
-    | { kind: 'create' }
+    | { kind: 'create'; idempotencyKey?: string }
     | { kind: 'update' | 'delete'; version: string | number }
   ),
 ): Promise<T> {
   const headers = new Headers(init.headers);
-  if (init.kind === 'create') headers.set('Idempotency-Key', idempotencyKey());
+  if (init.kind === 'create') headers.set('Idempotency-Key', init.idempotencyKey ?? idempotencyKey());
   else headers.set('If-Match', etag(init.version));
   const { data } = await request<T>(path, { method: init.method, body: init.body, headers });
   return normalizeOrgResponse(path, data) as T;
@@ -70,8 +70,8 @@ export interface RoleWrite {
   permissionCodes: string[];
 }
 
-export function createRole(body: RoleWrite & { key: string }): Promise<RoleRow> {
-  return write<RoleRow>('/api/v1/admin/roles', { method: 'POST', kind: 'create', body });
+export function createRole(body: RoleWrite & { key: string }, idempotencyKey?: string): Promise<RoleRow> {
+  return write<RoleRow>('/api/v1/admin/roles', { method: 'POST', kind: 'create', body, idempotencyKey });
 }
 
 export function getRole(id: string, signal?: AbortSignal): Promise<RoleRow> {

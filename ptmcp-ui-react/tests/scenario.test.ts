@@ -12,6 +12,8 @@ const sourceImports = registerHooks({
 const access = await import('../src/services/access.ts');
 const org = await import('../src/services/orgPortalApi.ts');
 const data = await import('../src/services/data.ts');
+const mePortalModule = await import('../src/services/mePortalApi.ts');
+const mePortalApi = mePortalModule.mePortalApi;
 const { setCsrfToken } = await import('../src/services/http.ts');
 const preview = await import('../src/preview/server.ts');
 sourceImports.deregister();
@@ -114,5 +116,32 @@ test('garbage cursor returns empty results without crashing (NaN slice)', async 
     const tokens = await access.listMyTokens({ cursor: 'also-garbage', pageSize: 10 });
     assert.deepEqual(tokens.items, []);
     assert.equal(tokens.nextCursor, null);
+  });
+});
+
+test('empty scenario returns empty for all personal portal and operations endpoints', async () => {
+  await withServer(async () => {
+    setPreviewScenario('empty');
+    // 个人门户 4 个列表端点
+    const dict = await mePortalApi.dictionaryList({ pageSize: 10 });
+    assert.deepEqual(dict.items, []);
+    assert.equal(dict.nextCursor, null, 'dictionary empty must be a page shape, not []');
+
+    const history = await access.listMyHistory({ pageSize: 10 });
+    assert.deepEqual(history.items, []);
+    assert.equal(history.nextCursor, null);
+
+    const tokens = await access.listMyTokens({ pageSize: 10 });
+    assert.deepEqual(tokens.items, []);
+    assert.equal(tokens.nextCursor, null);
+
+    const auths = await access.listMyAuthorizations({ pageSize: 10 });
+    assert.deepEqual(auths.items, []);
+    assert.equal(auths.nextCursor, null);
+
+    // 管理操作日志
+    const ops = await access.listOperations({ pageSize: 10 });
+    assert.deepEqual(ops.items, []);
+    assert.equal(ops.nextCursor, null);
   });
 });

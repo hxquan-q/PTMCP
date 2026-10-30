@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { Alert, Badge, Dialog, EmptyState, Field, PageHeader, SearchInput, StatusDot, TextInput, useDebounced } from '../../components/common';
 import { CloseIcon, EditIcon, PlusIcon } from '../../components/Icons';
 import { request } from '../../services/http';
 import { createRole, deleteRole, listRoles, updateRole, type RoleRow } from '../../services/orgPortalApi';
+import { idempotencyKey } from '../../services/http';
 import { validateRoleForm, type RoleFormValues } from './roleForm';
 import { useSensitivePermissions } from '../../permissionsContext';
 import { showToast } from '../../toast';
@@ -234,6 +235,8 @@ function RoleDialog({
   }));
   const [codeFilter, setCodeFilter] = useState('');
   const [saving, setSaving] = useState(false);
+  const [uncertain, setUncertain] = useState(false);
+  const idemKeyRef = useRef<string>('');
   const [formError, setFormError] = useState('');
   const [conflict, setConflict] = useState<string | null>(null);
 
@@ -267,15 +270,22 @@ function RoleDialog({
         enabled: values.enabled,
         permissionCodes: [...new Set([...values.permissionCodes, ...retainedCodes])].sort(),
       };
-      if (role) await updateRole(role.id, body, role.version);
-      else await createRole({ ...body, key: values.key.trim() });
+      if (role) {
+        await updateRole(role.id, body, role.version);
+      } else {
+        if (!idemKeyRef.current) idemKeyRef.current = idempotencyKey();
+        await createRole({ ...body, key: values.key.trim() }, idemKeyRef.current);
+      }
       onSaved();
       showToast(role ? '角色已更新' : '角色已创建');
     } catch (e) {
-      const status = (e as { status?: number }).status;
-      if (status === 412) setConflict('该角色已被他人修改。请复制本地修改后刷新，再重新提交。');
-      else if (status === 409) setConflict('编码已存在，请更换角色编码。');
-      else setFormError((e as Error).message || '保存失败，请稍后重试。');
+      const err = e as { status?: number; code?: string; message?: string };
+      if (err.code === 'OPERATION_UNKNOWN') {
+        setUncertain(true);
+        setFormError('');
+      } else if (err.status === 412) setConflict('该角色已被他人修改。请复制本地修改后刷新，再重新提交。');
+      else if (err.status === 409) setConflict('编码已存在，请更换角色编码。');
+      else setFormError(err.message || '保存失败，请稍后重试。');
     } finally {
       setSaving(false);
     }
@@ -336,13 +346,18 @@ function RoleDialog({
           </div>
         </div>
       </Field>
+      {uncertain ? (
+        <Alert kind="warning" title="操作结果未知">
+          服务端可能已创建该角色。再次点击提交将用同一请求键安全确认——如果已创建将返回原结果，不会重复创建。
+        </Alert>
+      ) : null}
       {formError ? <Alert kind="danger">{formError}</Alert> : null}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
         <button className="btn btn--secondary" onClick={onClose} disabled={saving}>
           取消
         </button>
         <button className="btn btn--primary" onClick={submit} disabled={saving || !!errors}>
-          {saving ? '保存中…' : role ? '保存修改' : '创建角色'}
+          {saving ? '保存中…' : uncertain ? '用同一请求键确认' : role ? '保存修改' : '创建角色'}
         </button>
       </div>
     </Dialog>
