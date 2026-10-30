@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { LogoIcon, SearchIcon, UserIcon } from '../components/Icons';
-import { GlobalSearch } from '../components/common';
+import { GlobalSearch, useFocusTrap } from '../components/common';
 import { ChevronRightIcon, CloseIcon, DocumentIcon } from '../components/Icons';
 import { listDatasources } from '../services/data';
 
@@ -47,6 +47,7 @@ export function AppShell({
   onSwitchRealm?: (realm: 'admin' | 'me') => void;
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -58,7 +59,11 @@ export function AppShell({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+    <div className="app-shell">
+      {/* 全站用 hash 路由，href="#…" 会被当成路由变更，所以跳过导航用按钮把焦点送进内容区。 */}
+      <button type="button" className="skip-link" onClick={() => contentRef.current?.focus()}>
+        跳到主内容
+      </button>
       <header
         className="app-shell-top"
         style={{
@@ -113,6 +118,7 @@ export function AppShell({
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <nav
           className="app-shell-nav"
+          aria-label={realm === 'admin' ? '管理工作区导航' : '个人门户导航'}
           style={{
             width: 208,
             flex: 'none',
@@ -126,13 +132,8 @@ export function AppShell({
         >
           {onSwitchRealm ? (
             <div
-              role="tablist"
+              role="group"
               aria-label="视角切换"
-              onKeyDown={(e) => {
-                if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
-                e.preventDefault();
-                if (adminHomePath) onSwitchRealm(realm === 'admin' ? 'me' : 'admin');
-              }}
               style={{
                 display: 'flex',
                 gap: 4,
@@ -145,12 +146,14 @@ export function AppShell({
               }}
             >
               <button
-                role="tab"
-                aria-selected={realm === 'admin'}
-                tabIndex={realm === 'admin' ? 0 : -1}
-                disabled={!adminHomePath}
+                type="button"
+                aria-current={realm === 'admin'}
+                aria-disabled={!adminHomePath}
                 title={adminHomePath ? '进入管理工作区' : '当前账号没有管理权限'}
-                onClick={() => onSwitchRealm('admin')}
+                onClick={() => {
+                  if (!adminHomePath) return;
+                  onSwitchRealm('admin');
+                }}
                 style={{
                   flex: 1,
                   padding: '6px 8px',
@@ -167,9 +170,8 @@ export function AppShell({
                 管理视角
               </button>
               <button
-                role="tab"
-                aria-selected={realm === 'me'}
-                tabIndex={realm === 'me' ? 0 : -1}
+                type="button"
+                aria-current={realm === 'me'}
                 onClick={() => onSwitchRealm('me')}
                 style={{
                   flex: 1,
@@ -242,9 +244,12 @@ export function AppShell({
             </div>
           </div>
         </nav>
-        <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ padding: '12px 20px 0', fontSize: 12, color: 'var(--ptmcp-text-faint)', flex: 'none' }}>{breadcrumb}</div>
-          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '10px 20px 20px', display: 'flex', flexDirection: 'column' }}>
+        <main className="app-shell-main">
+          <nav className="app-shell-crumb" aria-label="面包屑">
+            {breadcrumb}
+          </nav>
+          {/* 内容区是本页唯一的纵向滚动容器；给可聚焦命名区域，键盘用户才能滚动并跳过导航直达正文。 */}
+          <div className="app-shell-scroll" ref={contentRef} role="region" aria-label="页面内容" tabIndex={0}>
             {children}
           </div>
         </main>
@@ -258,9 +263,9 @@ function SearchOverlay({ onClose, onNavigate, groups }: { onClose: () => void; o
   const [keyword, setKeyword] = useState('');
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [active, setActive] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => inputRef.current?.focus(), []);
+  /* 弹层打开即圈禁焦点：首个可操作元素是搜索框，关闭后焦点归还给顶栏触发按钮。 */
+  const trapRef = useFocusTrap(true);
   useEffect(() => {
     let cancelled = false;
     const navHits: SearchHit[] = groups
@@ -325,32 +330,20 @@ function SearchOverlay({ onClose, onNavigate, groups }: { onClose: () => void; o
         paddingTop: '14vh',
       }}
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label="全局搜索"
-        style={{
-          width: 520,
-          maxHeight: '60vh',
-          background: 'var(--ptmcp-surface)',
-          borderRadius: 'var(--ptmcp-radius-panel)',
-          boxShadow: 'var(--ptmcp-shadow-pop)',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
+      <div ref={trapRef} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="全局搜索" className="cmdk-panel">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: '1px solid var(--ptmcp-border)' }}>
           <SearchIcon style={{ color: 'var(--ptmcp-text-faint)' }} />
           <input
-            ref={inputRef}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="搜索功能、资源或关键词"
+            role="combobox"
+            aria-expanded={hits.length > 0}
+            aria-autocomplete="list"
             aria-controls="cmdk-results"
+            aria-activedescendant={hits.length > 0 ? `cmdk-opt-${active}` : undefined}
             aria-label="搜索关键词"
-            style={{ flex: 1, border: 'none', outline: 'none', fontSize: 14, background: 'none' }}
+            style={{ flex: 1, minWidth: 0, border: 'none', fontSize: 14, background: 'none' }}
           />
           <button className="btn btn--icon" aria-label="关闭搜索" onClick={onClose}>
             <CloseIcon />
@@ -358,13 +351,17 @@ function SearchOverlay({ onClose, onNavigate, groups }: { onClose: () => void; o
         </div>
         <div id="cmdk-results" ref={listRef} role="listbox" aria-label="搜索结果" style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
           {hits.length === 0 ? (
-            <div style={{ padding: '22px 16px', fontSize: 13, color: 'var(--ptmcp-text-faint)' }}>
+            <div role="presentation" style={{ padding: '22px 16px', fontSize: 13, color: 'var(--ptmcp-text-faint)' }}>
               {keyword ? '没有匹配的结果。' : '输入以搜索导航项和数据源。'}
             </div>
           ) : (
             hits.map((h, i) => (
               <button
                 key={h.id}
+                id={`cmdk-opt-${i}`}
+                type="button"
+                /* 结果行不进 Tab 序列：焦点始终留在搜索框，用 aria-activedescendant 指向高亮行，避免“聚焦行”和“高亮行”两套状态互相矛盾。 */
+                tabIndex={-1}
                 role="option"
                 aria-selected={i === active}
                 className={`cmd-row${i === active ? ' is-active' : ''}`}

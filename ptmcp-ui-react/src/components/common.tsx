@@ -598,7 +598,7 @@ const DocumentSvg = () => (
 /** ⌘K 风格全局搜索输入(纯 UI,数据源由调用方注入) */
 export function GlobalSearch({ onOpen }: { onOpen: () => void }) {
   return (
-    <button className="search-trigger" onClick={onOpen}>
+    <button type="button" className="search-trigger" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K" onClick={onOpen}>
       <SearchIcon />
       <span>搜索功能、资源或关键词</span>
       <kbd>⌘K</kbd>
@@ -614,9 +614,10 @@ export function useFocusTrap(open: boolean) {
     const container = ref.current;
     if (!container) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
+    /* 圈禁边界要和浏览器原生 Tab 序列一致：tabindex="-1" 的原生不可达，若仍算作 first/last，Tab 会从弹层漏到背后的页面。 */
     const focusables = () =>
       Array.from(container.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter(
-        (el) => !el.hasAttribute('disabled') && el.offsetParent !== null,
+        (el) => !el.hasAttribute('disabled') && el.offsetParent !== null && el.tabIndex >= 0,
       );
     window.setTimeout(() => focusables()[0]?.focus(), 0);
     const onKeyDown = (event: KeyboardEvent) => {

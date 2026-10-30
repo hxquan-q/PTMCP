@@ -692,6 +692,71 @@ input[type='checkbox'] {
   border-color: var(--ptmcp-blue);
 }
 
+/* ─── 应用外壳：整屏布局、跳过导航、正文滚动区与命令面板 ─── */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+/* 键盘聚焦才进入视口；负偏移不会撑出滚动条。hash 路由下用按钮移焦，不能用 href="#…" 以免被当成路由变更。 */
+.skip-link {
+  position: absolute;
+  top: -48px;
+  left: 12px;
+  z-index: 60;
+  padding: 8px 14px;
+  border: 1px solid var(--ptmcp-blue);
+  border-radius: var(--ptmcp-radius-control);
+  background: var(--ptmcp-surface);
+  color: var(--ptmcp-blue-text);
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: var(--ptmcp-shadow-pop);
+  transition: top 0.12s ease;
+}
+.skip-link:focus {
+  top: 10px;
+}
+.app-shell-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+.app-shell-crumb {
+  flex: none;
+  padding: 12px 20px 0;
+  font-size: 12px;
+  color: var(--ptmcp-text-faint);
+}
+.app-shell-scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 10px 20px 20px;
+  overflow: auto;
+}
+.app-shell-scroll:focus-visible {
+  outline: 2px solid var(--ptmcp-blue);
+  outline-offset: -2px;
+}
+/* 命令面板：宽度随视口收，避免窄屏被 520px 固定宽撑出横向溢出。 */
+.cmdk-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(520px, calc(100vw - 32px));
+  max-height: 60vh;
+  max-height: 60dvh;
+  overflow: hidden;
+  background: var(--ptmcp-surface);
+  border-radius: var(--ptmcp-radius-panel);
+  box-shadow: var(--ptmcp-shadow-pop);
+}
+
 /* ─── 响应式：平板收窄为图标栏，手机隐藏全局搜索与副标题 ─── */
 .app-shell-nav .nav-label,
 .app-shell-nav .app-shell-workspace {
