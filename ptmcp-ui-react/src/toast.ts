@@ -15,11 +15,11 @@ function notify(): void {
   for (const listener of listeners) listener(getToasts());
 }
 
-export function showToast(text: string, tone: ToastMessage['tone'] = 'success'): void {
+export function showToast(text: string, tone: ToastMessage['tone'] = 'success', maxAgeMs = 4000): void {
   const toast: ToastMessage = { id: nextId++, text, tone, createdAt: Date.now() };
   active = [...active, toast];
   notify();
-  setTimeout(() => dismissToast(toast.id), 4000);
+  setTimeout(() => dismissToast(toast.id), maxAgeMs);
 }
 
 export function dismissToast(id: number): void {

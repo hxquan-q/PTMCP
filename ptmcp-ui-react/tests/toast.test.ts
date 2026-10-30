@@ -107,12 +107,22 @@ test('composeToastDisplay applies expiry filtering then deduplication in order',
   // 先过滤保证所有过期项（无论是否重复）都被移除，然后去重只作用于存活项
 });
 
-test('showToast auto-dismisses after the max age (setTimeout fires)', async () => {
+test('showToast auto-dismisses via configurable maxAgeMs (setTimeout fires)', async () => {
   resetToasts();
-  showToast('这条会在 4 秒后消失');
+  showToast('快消失', 'success', 100);
   assert.equal(getToasts().length, 1, 'toast must be registered immediately');
-  // 等待 4.1s（略超 4s 的 auto-dismiss 超时）
-  await new Promise((r) => setTimeout(r, 4100));
-  assert.equal(getToasts().length, 0, 'toast must be auto-dismissed after 4s — if this fails, the setTimeout in showToast is broken');
+  await new Promise((r) => setTimeout(r, 150));
+  assert.equal(getToasts().length, 0, 'custom 100ms timeout should have fired — if this fails, the setTimeout in showToast is broken');
+  resetToasts();
+});
+
+test('resetToasts notifies subscribers with empty list (ToastContainer depends on this)', () => {
+  resetToasts();
+  showToast('会被清空');
+  const lengths: number[] = [];
+  const off = subscribeToasts((toasts) => lengths.push(toasts.length));
+  resetToasts();
+  assert.ok(lengths.includes(0), 'subscriber must receive an empty-array notification on reset — otherwise ToastContainer stays stale');
+  off();
   resetToasts();
 });

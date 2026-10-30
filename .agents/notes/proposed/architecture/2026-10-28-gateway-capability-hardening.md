@@ -349,7 +349,27 @@ FAILED的显式安全重试和SUCCEEDED重放保留，不扩schema、不改OAuth
 旧产品有效RED为37项/21 failures/0 errors/0 skipped（exit1）；初轮另2个触发器权限错误已通过
 隔离测试库CHECK夹具消除，不计产品缺陷。定向GREEN为37/37（08:08:40，exit0、零跳过）；
 兼容组合410/410（08:15:34，BUILD SUCCESS/exit0、零失败/错误/跳过），358份构建输入三方哈希一致。
-独立静态复审无新增阻断，证据终审进行中；并发用例未强制锁等待，MAX配旧If-Match优先级未独立动态覆盖。
+独立只读终审亲核实际diff、37/410项日志及退出码、7份组合XML，并重算358份三方哈希，差异0；
+无本片新增阻断，评审者未重复运行动态测试。并发用例未强制锁等待，MAX配旧If-Match优先级未独立动态覆盖。
+
+### 角色创建HTTP幂等接线
+
+角色创建原来注入IdempotencyRecorder却直接调用store；数据库role_key唯一约束不能恢复首次响应，
+也不能把真实commit丢确认与未执行区分。下一片仅接POST /admin/roles，不改PUT/DELETE、React或共用包装器。
+动作拦截器和平台管理员门禁、StrictJson及必填字段检查先于占键；沿用roles.create及原始请求字节摘要。
+相同actor/route/key/body成功回放原201与DTO；不同摘要422 IDEMPOTENCY_KEY_REUSED；
+未知结局409 OPERATION_UNKNOWN且retryable=false，不换键自动重做。
+
+通用包装器只保存状态和正文。为首次及回放都提供Location，角色controller在响应缺Location时，
+从记录的RoleRead恢复正数id并构造固定资源路径，不重读可能已被修改/删除的角色。
+内部记录不能解析时返回OPERATION_UNKNOWN，不篡改记录或调用业务动作。
+扩展所有幂等记录保存通用headers能统一多资源，但扩大持久格式与迁移范围；本片采用局部恢复，
+接受角色响应额外一次解析，并把其余资源Location合同留在原范围。
+
+最低验证先用实际MySQL/MVC取得未接线RED，再验证成功回放及Location、改意图拒绝、缺失/空白/超长键、
+JSON/必填前置拒绝、非平台管理员零占键、真实commit丢确认、成功记录故障及撤动作权限后拒绝回放。
+未知与回放均比较角色/权限码/日志/epoch/事件完整快照，防止唯一键冲突掩盖重复执行。
+React创建调用仍每次生成UUID；重试同一意图须保留原键，不能把新键重试当作未知结局已解除。
 
 ### 业务授权的部门主体读取
 

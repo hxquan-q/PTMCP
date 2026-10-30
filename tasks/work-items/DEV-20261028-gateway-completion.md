@@ -490,7 +490,7 @@ BUILD SUCCESS/exit0：State13、Tx16、Org189、Admin111、Datasource9、Identit
 本片文档收尾实际检查：`python scripts/check.py` exit0（145份Markdown/674项链接、62项检查器回归），
 Skill tree/format/archived均exit0（12篇活跃笔记、0篇归档），`git diff --check` exit0。
 
-### 角色定义写入安全事务切片（2026-10-30，实施中）
+### 角色定义写入安全事务切片（2026-10-30）
 
 承接FR-02/AC-02、TC-ACL-002/007及authorization §6、db-design §7。
 目标：OrgStore.createRole/updateRole/deleteRole复用SecurityChangeTransaction，固定全局锁先于角色，
@@ -517,11 +517,22 @@ RoleAdminController.create尚未接IdempotentWrites，不能从本片推断角�
 兼容组合`role-transaction-combined-green.log/.exit`（08:15:34 +08，BUILD SUCCESS/exit0）：
 State13、Tx16、Org226、Admin111、Datasource9、IdentityPassword17、Session18，共410项，零失败/错误/跳过。
 两轮分别记录，不累加重复执行；7份组合XML另存，358份当前Windows/native/哈希清单重算差异0。
-独立只读静态复审亲核实际实现、37项源码与有效RED，无新增阻断；证据终审进行中，未升级总验证状态。
+独立只读终审亲核实际diff、37/410项日志与退出码及7份组合XML，重算358份Windows/native/manifest哈希，差异0。
+无本片新增阻断，评审者未重复运行动态测试；未升级总验证状态。
 并发用例只同时放行入口，不声称强制锁等待；实际MAX配旧If-Match优先级由源码核实，未单独动态覆盖。
 
 前一幂等切片收尾后实际检查：`python scripts/check.py` exit0（145份Markdown/672项链接、62项检查器回归），
 Skill tree/format/archived均exit0（12篇活跃笔记、0篇归档），`git diff --check` exit0；不替代本片验证。
+
+### 角色创建HTTP幂等切片（2026-10-30，实施中）
+
+关联FR-02/AC-02、TC-API-005及TC-ACL-002/007。范围仅POST /admin/roles接IdempotentWrites，
+先校验当前动作权限、平台资格、JSON与必填字段再占键；不改角色更新/删除、schema、OAuth或React。
+成功同意图回放201/原DTO及固定资源Location；不同原始body摘要422，未知结局409且retryable=false。
+不重读当前角色来恢复回放头，未知不释放键或自动重做。React的每次调用新UUID问题交给前端窗口。
+设计只读评审无阻断；实现前最低验证为真实MySQL/MVC RED，随后覆盖成功/改意图、非法键、前置拒绝、
+commit丢确认、成功标记前/后故障及撤动作码后的回放拒绝；比较完整角色/权限码/日志/epoch/事件快照。
+待实际实现、GREEN与兼容回归后独立终审；本节不作为通过证据。
 
 ## 交接
 
@@ -553,7 +564,7 @@ Skill tree/format/archived均exit0（12篇活跃笔记、0篇归档），`git di
 React交接另确认：权限树为fixture，部分写/预览操作未接；接入页“测试连接”仅定时置success，
 未实际请求MCP，真实模式也未隔离该回调。应由前端窗口在接管前限制为明确预览或接入真实验证，不能以UI成功宣称连通。
 
-当前实施焦点为角色定义三写命令的安全事务验证，随后接角色创建HTTP幂等；
+当前实施焦点为角色创建HTTP幂等；角色定义三写事务片已完成独立证据终审，
 显式委派create/revoke事务片已独立终审，G1/OAuth资源及G2的局部完成证据见上文，
 G3～G5及G7完整验收仍待完成，G6局部验证已通过、人工接受待定。
 React窗口可直接按报告的真实接口和安全行为迁移，不能继承Vue的测试通过状态。
