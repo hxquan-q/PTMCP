@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import { Alert, Badge, Dialog, EmptyState, Field, PageHeader, SearchInput, StatusDot, TextInput, useDebounced } from '../../components/common';
 import { CloseIcon, EditIcon, PlusIcon } from '../../components/Icons';
 import { request } from '../../services/http';
-import { createRole, deleteRole, listRoles, updateRole, type RoleRow } from '../../services/orgPortalApi';
+import { createRole, deleteRole, listRoles, updateRole, type RoleRow, type RoleWrite } from '../../services/orgPortalApi';
 import { idempotencyKey } from '../../services/http';
 import { validateRoleForm, type RoleFormValues } from './roleForm';
 import { useSensitivePermissions } from '../../permissionsContext';
@@ -237,6 +237,7 @@ function RoleDialog({
   const [saving, setSaving] = useState(false);
   const [uncertain, setUncertain] = useState(false);
   const idemKeyRef = useRef<string>('');
+  const snapshotRef = useRef<(RoleWrite & { key: string }) | null>(null);
   const [formError, setFormError] = useState('');
   const [conflict, setConflict] = useState<string | null>(null);
 
@@ -272,9 +273,14 @@ function RoleDialog({
       };
       if (role) {
         await updateRole(role.id, body, role.version);
+      } else if (uncertain && snapshotRef.current) {
+        // OPERATION_UNKNOWN 重试：复用冻结快照+原 key（不改 body）
+        await createRole(snapshotRef.current, idemKeyRef.current);
       } else {
-        if (!idemKeyRef.current) idemKeyRef.current = idempotencyKey();
-        await createRole({ ...body, key: values.key.trim() }, idemKeyRef.current);
+        // 首次提交：生成 key + 冻结 body 快照
+        idemKeyRef.current = idempotencyKey();
+        snapshotRef.current = Object.freeze({ ...body, key: values.key.trim() });
+        await createRole(snapshotRef.current, idemKeyRef.current);
       }
       onSaved();
       showToast(role ? '角色已更新' : '角色已创建');
@@ -302,13 +308,24 @@ function RoleDialog({
         </Alert>
       ) : null}
       <Field label="角色编码" hint={role ? '编码创建后不可修改' : '大写字母开头，可含数字与下划线'}>
-        <TextInput value={values.key} onChange={(v) => setValues((s) => ({ ...s, key: v }))} disabled={!!role} placeholder="ROLE_KEY" />
+        <TextInput
+          value={values.key}
+          onChange={(v) => setValues((s) => ({ ...s, key: v }))}
+          disabled={!!role || uncertain || saving}
+          placeholder="ROLE_KEY"
+        />
       </Field>
-      <Field label="角色名称" hint="2–128 字符">
-        <TextInput value={values.name} onChange={(v) => setValues((s) => ({ ...s, name: v }))} placeholder="如：数据专员" />
+      <Field label="角色名称" hint="2–30 字符">
+        <TextInput
+          value={values.name}
+          onChange={(v) => setValues((s) => ({ ...s, name: v }))}
+          disabled={uncertain || saving}
+          placeholder="如：数据专员"
+        />
       </Field>
       <Field label="状态">
         <select
+          disabled={uncertain || saving}
           value={values.enabled ? '1' : '0'}
           onChange={(e) => setValues((s) => ({ ...s, enabled: e.target.value === '1' }))}
           style={{ width: 160 }}
@@ -338,7 +355,7 @@ function RoleDialog({
                   key={code}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px', borderRadius: 6, cursor: 'pointer', fontSize: 12.5 }}
                 >
-                  <input type="checkbox" checked={selected.has(code)} onChange={() => toggleCode(code)} />
+                  <input type="checkbox" checked={selected.has(code)} disabled={uncertain || saving} onChange={() => toggleCode(code)} />
                   <code>{code}</code>
                 </label>
               ))
@@ -348,7 +365,7 @@ function RoleDialog({
       </Field>
       {uncertain ? (
         <Alert kind="warning" title="操作结果未知">
-          服务端可能已创建该角色。再次点击提交将用同一请求键安全确认——如果已创建将返回原结果，不会重复创建。
+          服务端可能已处理该请求但结果不确定。用同一请求键重试是安全的（不会重复创建），但结果仍可能不确定。若多次不确定，请关闭后刷新列表核对，或联系管理员。
         </Alert>
       ) : null}
       {formError ? <Alert kind="danger">{formError}</Alert> : null}

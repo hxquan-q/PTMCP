@@ -16,6 +16,6 @@ export function validateRoleForm(values: RoleFormValues, isCreate: boolean): str
     if (!KEY_PATTERN.test(key)) return '角色编码须以大写字母开头，仅含大写字母、数字与下划线，长度 2–64';
   }
   const name = values.name.trim();
-  if (name.length < 2 || name.length > 128) return '角色名称长度须为 2–128 个字符';
+  if (name.length < 2 || name.length > 30) return '角色名称长度须为 2–30 个字符';
   return null;
 }

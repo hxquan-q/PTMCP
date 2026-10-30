@@ -90,7 +90,7 @@ test('validateRoleForm enforces key format only on create and name length always
   assert.match(String(validateRoleForm({ ...valid, key: '1ABC' }, true)), /大写字母开头/);
   // 编辑时不校验编码（编码不可改）
   assert.equal(validateRoleForm({ ...valid, key: '' }, false), null);
-  assert.match(String(validateRoleForm({ ...valid, name: '短' }, false)), /2–128/);
-  assert.match(String(validateRoleForm({ ...valid, name: 'x'.repeat(129) }, false)), /2–128/);
-  assert.match(String(validateRoleForm({ ...valid, name: '  ' }, false)), /2–128/);
+  assert.match(String(validateRoleForm({ ...valid, name: '短' }, false)), /2–30/);
+  assert.match(String(validateRoleForm({ ...valid, name: 'x'.repeat(31) }, false)), /2–30/);
+  assert.match(String(validateRoleForm({ ...valid, name: '  ' }, false)), /2–30/);
 });
