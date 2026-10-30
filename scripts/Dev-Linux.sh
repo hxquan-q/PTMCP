@@ -38,8 +38,8 @@ require_cmd() {
 }
 
 ui_port() {
-    # React 工程：pnpm dev 绑定 127.0.0.1:5175；PTMCP_UI_PUBLIC=true 时 dev:public 绑定 5173。
-    if [ "${PTMCP_UI_PUBLIC:-false}" = "true" ]; then printf '5173'; else printf '5175'; fi
+    # React 工程：pnpm dev 绑定 127.0.0.1:25175；PTMCP_UI_PUBLIC=true 时 dev:public 绑定 0.0.0.0:25173。
+    if [ "${PTMCP_UI_PUBLIC:-false}" = "true" ]; then printf '25173'; else printf '25175'; fi
 }
 
 require_infra_tools() {
@@ -192,7 +192,7 @@ ensure_env() {
         fi
         # resource-uri pairs with resource-metadata-uri validation; keep both back-filled together.
         if [ -z "${PTMCP_GATEWAY_RESOURCEURI:-}" ]; then
-            printf "PTMCP_GATEWAY_RESOURCEURI='http://127.0.0.1:8082/mcp'\n" >>"$ENV_FILE"
+            printf "PTMCP_GATEWAY_RESOURCEURI='http://127.0.0.1:28082/mcp'\n" >>"$ENV_FILE"
         fi
         return 0
     fi
@@ -213,9 +213,11 @@ ensure_env() {
 # Generated local development configuration. Do not commit.
 PTMCP_DEV_HOME='$LOCAL_DIR'
 PTMCP_UI_PUBLIC='false'
+# Spring services bind loopback by default; set SERVER_ADDRESS='0.0.0.0' to expose them.
 PTMCP_ADMIN_DATASOURCE_URL='jdbc:mysql://127.0.0.1:13306/ptmcp_dev?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8'
 PTMCP_ADMIN_DATASOURCE_USERNAME='ptmcp_dev'
 PTMCP_ADMIN_DATASOURCE_PASSWORD='$mysql_app'
+PTMCP_ADMIN_PORT='28080'
 PTMCP_ADMIN_COOKIESECURE='false'
 PTMCP_ADMIN_CREDENTIALKEY='$admin_key'
 PTMCP_ADMIN_AUDITKEY='$audit_key'
@@ -223,20 +225,22 @@ PTMCP_ADMIN_DATASOURCE_ALLOWEDCIDRS='127.0.0.1/32,::1/128'
 PTMCP_ADMIN_IDENTITY_DATASOURCE_URL='jdbc:mysql://127.0.0.1:13306/ptmcp_dev?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8'
 PTMCP_ADMIN_IDENTITY_DATASOURCE_USERNAME='ptmcp_dev'
 PTMCP_ADMIN_IDENTITY_DATASOURCE_PASSWORD='$mysql_app'
-PTMCP_MCP_URL='http://127.0.0.1:8082/mcp'
+PTMCP_MCP_URL='http://127.0.0.1:28082/mcp'
 
 PTMCP_AUTHZ_DB_URL='jdbc:mysql://127.0.0.1:13306/ptmcp_dev?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8'
 PTMCP_AUTHZ_DB_USERNAME='ptmcp_dev'
 PTMCP_AUTHZ_DB_PASSWORD='$mysql_app'
+PTMCP_AUTHZ_PORT='28081'
 PTMCP_OAUTH_ENABLED='true'
-PTMCP_OAUTH_ISSUER='http://127.0.0.1:8081'
-PTMCP_OAUTH_AUDIENCE='http://127.0.0.1:8082/mcp'
+PTMCP_OAUTH_ISSUER='http://127.0.0.1:28081'
+PTMCP_OAUTH_AUDIENCE='http://127.0.0.1:28082/mcp'
 PTMCP_OAUTH_SIGNING_KEY_FILE='$LOCAL_DIR/oauth-signing.pem'
 PTMCP_AS_COOKIE_SECURE='false'
 
 # Gateway MCP stays disabled until local TLS trust material and an OAuth
 # client are configured. See docs/ops/development-linux-server.md.
 PTMCP_GATEWAY_ENABLED='false'
+PTMCP_GATEWAY_PORT='28082'
 PTMCP_GATEWAY_METADATAURL='jdbc:mysql://127.0.0.1:13306/ptmcp_dev?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8'
 PTMCP_GATEWAY_METADATAUSERNAME='ptmcp_dev'
 PTMCP_GATEWAY_METADATAPASSWORD='$mysql_app'
@@ -245,11 +249,11 @@ PTMCP_GATEWAY_ALLOWEDCIDRS='127.0.0.1/32,::1/128'
 PTMCP_GATEWAY_WALDIRECTORY='$LOCAL_DIR/wal'
 PTMCP_GATEWAY_WALKEY='$wal_key'
 PTMCP_GATEWAY_AUDITKEY='$audit_key'
-PTMCP_GATEWAY_ISSUER='http://127.0.0.1:8081'
-PTMCP_GATEWAY_RESOURCE='http://127.0.0.1:8082/mcp'
-PTMCP_GATEWAY_RESOURCEURI='http://127.0.0.1:8082/mcp'
-PTMCP_GATEWAY_JWKSURI='http://127.0.0.1:8081/oauth2/jwks'
-PTMCP_GATEWAY_RESOURCEMETADATAURI='http://127.0.0.1:8082/.well-known/oauth-protected-resource'
+PTMCP_GATEWAY_ISSUER='http://127.0.0.1:28081'
+PTMCP_GATEWAY_RESOURCE='http://127.0.0.1:28082/mcp'
+PTMCP_GATEWAY_RESOURCEURI='http://127.0.0.1:28082/mcp'
+PTMCP_GATEWAY_JWKSURI='http://127.0.0.1:28081/oauth2/jwks'
+PTMCP_GATEWAY_RESOURCEMETADATAURI='http://127.0.0.1:28082/.well-known/oauth-protected-resource'
 PTMCP_GATEWAY_TRUSTSTOREPATH=''
 PTMCP_GATEWAY_TRUSTSTOREPASSWORD=''
 PTMCP_GATEWAY_PGSSLROOTCERT=''
@@ -398,6 +402,12 @@ seed() {
         info "local administrator already exists; password unchanged"
     fi
 
+    info "refreshing platform_admin permission codes"
+    python3 "$SEED_ADMIN_PY" --root "$ROOT" --permissions-only \
+        --output "$LOCAL_DIR/seed-permissions.sql"
+    mysql_exec <"$LOCAL_DIR/seed-permissions.sql"
+    rm -f "$LOCAL_DIR/seed-permissions.sql"
+
     mysql_exec <"$DEV_IDENTITY_SQL"
     if [ -s "$ADMIN_CREDENTIALS" ]; then
         info "admin credentials: $ADMIN_CREDENTIALS"
@@ -416,11 +426,17 @@ up() {
 }
 
 status() {
+    if [ -s "$ENV_FILE" ]; then
+        load_env
+    fi
     echo "== containers"
     compose ps || true
     echo "== health"
     local entry name port
-    for entry in "admin 8080" "authz 8081" "gateway 8082"; do
+    for entry in \
+        "admin ${PTMCP_ADMIN_PORT:-28080}" \
+        "authz ${PTMCP_AUTHZ_PORT:-28081}" \
+        "gateway ${PTMCP_GATEWAY_PORT:-28082}"; do
         read -r name port <<<"$entry"
         if curl -fsS --max-time 2 "http://127.0.0.1:${port}/actuator/health" >/dev/null 2>&1; then
             echo "${name}: UP (http://127.0.0.1:${port})"
@@ -604,10 +620,10 @@ start() {
     fi
     start_one ui
 
-    wait_health admin "http://127.0.0.1:8080/actuator/health" || true
-    wait_health authz "http://127.0.0.1:8081/actuator/health" || true
+    wait_health admin "http://127.0.0.1:${PTMCP_ADMIN_PORT:-28080}/actuator/health" || true
+    wait_health authz "http://127.0.0.1:${PTMCP_AUTHZ_PORT:-28081}/actuator/health" || true
     if [ "${PTMCP_GATEWAY_ENABLED:-false}" = "true" ]; then
-        wait_health gateway "http://127.0.0.1:8082/actuator/health" || true
+        wait_health gateway "http://127.0.0.1:${PTMCP_GATEWAY_PORT:-28082}/actuator/health" || true
     fi
     wait_health ui "http://127.0.0.1:$(ui_port)/" || true
     status
@@ -709,7 +725,7 @@ Typical first run:
   ./scripts/Dev-Linux.sh build
   ./scripts/Dev-Linux.sh start
 
-Open http://127.0.0.1:5175 (PTMCP_UI_PUBLIC=true: 5173) and use the credentials in
+Open http://127.0.0.1:25175 (PTMCP_UI_PUBLIC=true: http://0.0.0.0:25173) and use the credentials in
 .local/dev/admin-credentials.txt. The admin password is random and never
 printed by this script.
 EOF

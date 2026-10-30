@@ -20,12 +20,29 @@ SKIP_PERMISSIONS = {"ptmcp:session-expired"}
 
 
 def collect_permissions(root: Path) -> list[str]:
+    """Collect every ptmcp:* code the console can require.
+
+    The React UI and frontend docs list the codes the console uses; the admin
+    module's @AdminAction values are the server-side source of truth. Scanning
+    both keeps an existing dev database in step when either side adds a code.
+    """
     codes: set[str] = set()
-    for base in (root / "ptmcp-ui-react" / "src", root / "docs" / "frontend"):
+    for base in (
+        root / "ptmcp-ui-react" / "src",
+        root / "ptmcp-parent" / "ptmcp-admin" / "src" / "main" / "java",
+        root / "docs" / "frontend",
+    ):
         if not base.exists():
             continue
         for path in base.rglob("*"):
-            if not path.is_file() or path.suffix not in {".ts", ".vue", ".mjs", ".md", ".json"}:
+            if not path.is_file() or path.suffix not in {
+                ".ts",
+                ".vue",
+                ".mjs",
+                ".md",
+                ".json",
+                ".java",
+            }:
                 continue
             try:
                 text = path.read_text(encoding="utf-8")
@@ -62,8 +79,15 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--credentials", required=True, type=Path)
+    parser.add_argument("--credentials", type=Path)
+    parser.add_argument(
+        "--permissions-only",
+        action="store_true",
+        help="Emit only the platform_admin permission refresh; no credential or credentials file is touched.",
+    )
     args = parser.parse_args()
+    if not args.permissions_only and args.credentials is None:
+        parser.error("--credentials is required unless --permissions-only is given")
 
     root = args.root.resolve()
     password = secrets.token_urlsafe(18)
@@ -77,6 +101,26 @@ def main() -> int:
         f"VALUES (1, '{code}', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6));"
         for code in permissions
     )
+
+    if args.permissions_only:
+        refresh_sql = (
+            "-- Generated local development permission refresh. Do not commit.\n"
+            "INSERT INTO sys_role\n"
+            "    (role_id, role_key, role_name, status, del_flag, version, create_time, update_time)\n"
+            "VALUES\n"
+            "    (1, 'platform_admin', 'Platform Admin', '0', '0', 1, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))\n"
+            "ON DUPLICATE KEY UPDATE\n"
+            "    role_name = VALUES(role_name),\n"
+            "    status = '0',\n"
+            "    del_flag = '0',\n"
+            "    update_time = UTC_TIMESTAMP(6);\n\n"
+            f"{permission_rows}\n"
+        )
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(refresh_sql, encoding="utf-8")
+        args.output.chmod(0o600)
+        print(f"Permission refresh written: {args.output} ({len(permissions)} codes)")
+        return 0
 
     sql = f"""-- Generated local development seed. Do not commit.
 INSERT INTO sys_dept
@@ -122,7 +166,7 @@ VALUES
     args.output.chmod(0o600)
 
     credentials = f"""PTMCP local development administrator
-URL: http://127.0.0.1:5173
+URL: http://127.0.0.1:25175 (PTMCP_UI_PUBLIC=true: http://127.0.0.1:25173)
 Username: admin
 Password: {password}
 Created: {created}

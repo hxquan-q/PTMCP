@@ -1,6 +1,6 @@
 # Linux 开发服务器
 
-本页保留 Linux 开发服务器的环境与脚本记录，不是生产部署流程。`scripts/Dev-Linux.sh` 的 UI 路径已改为 `ptmcp-ui-react`，默认端口随 React 工程改为 5175（`PTMCP_UI_PUBLIC=true` 时仍为 5173），并已通过 `bash -n` 语法检查；但尚未在 Linux 主机实际执行，不能声称一键启动已验证。React 手动启动和端口以[工程说明](../../ptmcp-ui-react/README.md)为准。涉及容器、凭据和持久卷的操作须先确认环境及授权，尤其不能把下文 reset 示例当作可直接执行的修复建议。
+本页保留 Linux 开发服务器的环境与脚本记录，不是生产部署流程。`scripts/Dev-Linux.sh` 的 UI 路径已改为 `ptmcp-ui-react`，默认端口使用高位段：React 默认 `25175`（`PTMCP_UI_PUBLIC=true` 时为 `0.0.0.0:25173`），admin/authz/gateway 为 `28080/28081/28082`，并已通过 `bash -n` 语法检查；但尚未在 Linux 主机实际执行，不能声称一键启动已验证。React 手动启动和端口以[工程说明](../../ptmcp-ui-react/README.md)为准。涉及容器、凭据和持久卷的操作须先确认环境及授权，尤其不能把下文 reset 示例当作可直接执行的修复建议。
 
 ## 前置条件
 
@@ -33,7 +33,7 @@ cd /home/ubuntu/ALLSTAR_DATACHAT_SUB
 1. 在 `config/dev/secrets/` 生成随机数据库凭据（已 gitignore）；
 2. 在 `.local/dev/` 生成本地应用配置、OAuth RSA 私钥和管理员密码；
 3. 启动 `config/dev/compose.yaml` 中固定 digest 的 MySQL 8.4；
-4. 按顺序执行 `V1`–`V6` 元库迁移；
+4. 按顺序执行 `V1`–`V14` 元库迁移；
 5. 创建本地管理员 `admin`，密码只写入 `.local/dev/admin-credentials.txt`（0600）。
 
 需要 PostgreSQL/Redis 时：
@@ -54,10 +54,10 @@ PTMCP_MYSQL_IMAGE=mysql:8.0 ./scripts/Dev-Linux.sh up
 
 ## 访问
 
-- React 默认前端：`http://127.0.0.1:5175`（公开开发模式为 5173）
-- admin：`http://127.0.0.1:8080`
-- authz：`http://127.0.0.1:8081`
-- gateway：`http://127.0.0.1:8082`
+- React 默认前端：`http://127.0.0.1:25175`（公开开发模式为 `http://0.0.0.0:25173`）
+- admin：`http://127.0.0.1:28080`
+- authz：`http://127.0.0.1:28081`
+- gateway：`http://127.0.0.1:28082`
 
 查看管理员密码：
 
@@ -65,10 +65,10 @@ PTMCP_MYSQL_IMAGE=mysql:8.0 ./scripts/Dev-Linux.sh up
 cat .local/dev/admin-credentials.txt
 ```
 
-Vite 默认只绑定 `127.0.0.1`。从其他机器访问默认开发模式时优先使用 SSH 隧道，转发 5175；前端代理会在服务器上访问三个后端：
+Vite 默认只绑定 `127.0.0.1`。从其他机器访问默认开发模式时优先使用 SSH 隧道，转发 25175；前端代理会在服务器上访问三个后端：
 
 ```bash
-ssh -L 5175:127.0.0.1:5175 <user>@<server>
+ssh -L 25175:127.0.0.1:25175 <user>@<server>
 ```
 
 ## 临时公网访问
@@ -80,16 +80,22 @@ ssh -L 5175:127.0.0.1:5175 <user>@<server>
 #    在 .local/dev/dev.env 设置 PTMCP_UI_PUBLIC='true'，或启动时传入环境变量
 PTMCP_UI_PUBLIC='true' ./scripts/Dev-Linux.sh start
 
-# 2. 放行主机防火墙
-sudo ufw allow 5173/tcp
+# 2. 如还要从其他机器直接访问三个后端（而非只经 Vite 代理），
+#    在 .local/dev/dev.env 设置 SERVER_ADDRESS='0.0.0.0' 后重启
 
-# 3. 如云服务器启用了安全组，还需在云控制台放行 5173/tcp
-# 4. 访问 http://<公网IP>:5173
+# 3. 放行主机防火墙
+sudo ufw allow 25173/tcp
+sudo ufw allow 28080/tcp
+sudo ufw allow 28081/tcp
+sudo ufw allow 28082/tcp
+
+# 4. 如云服务器启用了安全组，还需在云控制台放行上述端口
+# 5. 访问 http://<公网IP>:25173
 ```
 
 React 前端可在 `ptmcp-ui-react` 中按[工程说明](../../ptmcp-ui-react/README.md)手工启动；`pnpm dev` 默认只绑定本机，`dev:public` 会绑定所有网卡且仅可在明确授权的隔离开发环境使用。
 
-**安全边界**：Vite 是开发服务器，当前链路由 HTTP 承载，管理员密码和会话 Cookie 会明文传输。不要用于生产、真实业务数据或长期暴露；建议在云安全组限制来源 IP，或改用 SSH 隧道。恢复默认时把 `PTMCP_UI_PUBLIC` 设为 `false` 并重启 UI，然后执行 `sudo ufw delete allow 5173/tcp`。
+**安全边界**：Vite 是开发服务器，当前链路由 HTTP 承载，管理员密码和会话 Cookie 会明文传输。不要用于生产、真实业务数据或长期暴露；建议在云安全组限制来源 IP，或改用 SSH 隧道。恢复默认时把 `PTMCP_UI_PUBLIC` 设为 `false`、移除 `SERVER_ADDRESS` 后重启，并执行 `sudo ufw delete allow 25173/tcp`（28080–28082 同理）。MCP 的 OAuth 资源标识仍按契约使用回环 `http://127.0.0.1:28082/mcp`（HTTP 仅允许回环），因此外部 MCP 客户端无法直接以公网地址完成 OAuth 发现；对外开放主要面向 UI、admin 与 authz。
 
 ## 常用命令
 
@@ -128,6 +134,7 @@ pnpm test
 - `authz` 的 OAuth 默认在本地启用，签名私钥位于 `.local/dev/oauth-signing.pem`。本地脚本没有注册 OAuth 客户端，因此后台登录可用，但完整客户端授权/刷新链路仍需另行配置。
 - `gateway` 默认 `PTMCP_GATEWAY_ENABLED=false`，启动后 MCP 工具保持关闭。启用它需要业务库 TLS 信任材料（MySQL truststore、PostgreSQL 根证书）和客户端配置；不要为了本地方便引入非 TLS 执行旁路。
 - 所有数据库/缓存端口只发布到 `127.0.0.1`，不监听公网。
+- 应用端口（28080/28081/28082）默认也只绑定回环；仅在显式设置 `SERVER_ADDRESS='0.0.0.0'` 时才对外监听。
 - `.local/` 和 `config/dev/secrets/` 已在 `.gitignore` 中；不要提交、复制或粘贴其中的密码与密钥。
 - 本地管理员密码是随机生成的，仅用于可丢弃的开发库。共享服务器上首次登录后应修改密码。
 - 本脚本不执行提交、推送、发布、生产迁移或真实业务库连接。

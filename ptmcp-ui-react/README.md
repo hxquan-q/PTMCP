@@ -1,13 +1,13 @@
 # ptmcp-ui-react
 
-PTMCP 数据访问管理平台的 React 前端。当前工作树不含原 `ptmcp-ui`（Vue）工程；React 的设计令牌与历史 Vue 版同源，但旧版代码和测试不自动成为 React 的验收证据。目标能力见[页面规格](../docs/frontend/page-spec.md)与[前端指南](../docs/frontend/dev-guide.md)，实际差距见[能力核查](../docs/evidence/mcp-capability-audit-20261030.md)及对应工作项。
+PTMCP 数据访问管理平台的 React 前端。当前工作树不含原 `ptmcp-ui`（Vue）工程；React 的设计令牌与历史 Vue 版同源，但旧版代码和测试不自动成为 React 的验收证据。目标能力见[页面规格](../docs/frontend/page-spec.md)与[前端指南](../docs/frontend/dev-guide.md)，实际差距见[能力核查](../docs/evidence/mcp-capability-audit-20261029.md)及对应工作项。
 
 ## 运行
 
 ```bash
 pnpm install
-pnpm dev:preview   # 127.0.0.1:5175，合成后端（src/preview/server.ts，无需 Java）
-pnpm dev           # 真实后端模式：代理 /backend/admin→8080、/backend/authz→8081、/backend/gateway→8082
+pnpm dev:preview   # 127.0.0.1:25175，合成后端（src/preview/server.ts，无需 Java）
+pnpm dev           # 真实后端模式：代理 /backend/admin→28080、/backend/authz→28081、/backend/gateway→28082
 pnpm test          # node --experimental-strip-types --test tests/*.test.ts（契约 + 纯函数）
 pnpm check         # eslint + prettier + tsc + vite build
 ```
@@ -24,7 +24,7 @@ Node 版本随根仓 [开发环境](../docs/ops/development-environment.md)（�
 
 ## 2026-10-30 迁移记录（历史快照）
 
-以下保留当时的页面迁移描述，不代表完整后端联调、生产可用或逐页验收。后续改动与已知真实模式缺口以[能力核查](../docs/evidence/mcp-capability-audit-20261030.md)、源码和工作项为准。
+以下保留当时的页面迁移描述，不代表完整后端联调、生产可用或逐页验收。后续改动与已知真实模式缺口以[能力核查](../docs/evidence/mcp-capability-audit-20261029.md)、源码和工作项为准。
 
 - 路由对等：admin 13 + me 8（含 4 条详情前缀路由）全部就位；差异仅 Vue 的静态错误页样式细节。
 - 功能对等：数据源（列表/详情/编辑/创建/测试/同步/冲突）、元数据与字典（含字典编辑 + 变基）、权限矩阵（三栏 + 新增规则 + 有效权限预览）、管理委派（新建/撤销）、部门/用户/角色/平台与客户端 CRUD（含 secret 一次性展示）、审计（列表 + 解密弹窗 30s 自动清除）、操作日志、个人门户（字典/接入 4 步向导 + 服务端模板/令牌创建/授权/历史 + 详情/安全）。
