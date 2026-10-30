@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { BellIcon, DotsIcon, LogoIcon, SearchIcon, UserIcon } from '../components/Icons';
+import { LogoIcon, SearchIcon, UserIcon } from '../components/Icons';
 import { GlobalSearch } from '../components/common';
-import { CloseIcon, DocumentIcon } from '../components/Icons';
+import { ChevronRightIcon, CloseIcon, DocumentIcon } from '../components/Icons';
 import { listDatasources } from '../services/data';
 
 export interface NavItem {
@@ -47,6 +47,16 @@ export function AppShell({
   onSwitchRealm?: (realm: 'admin' | 'me') => void;
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
       <header
@@ -73,20 +83,18 @@ export function AppShell({
         <div className="app-shell-search" style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
           <GlobalSearch onOpen={() => setSearchOpen(true)} />
         </div>
-        <button className="btn btn--link" aria-label="通知" style={{ color: 'var(--ptmcp-text-muted)', fontSize: 17 }}>
-          <BellIcon />
-        </button>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <span className="chip-btn" style={{ background: 'var(--ptmcp-chrome)', border: '1px solid var(--ptmcp-border)' }}>
           <span
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: 28,
-              height: 28,
+              width: 26,
+              height: 26,
               borderRadius: '50%',
               background: 'var(--ptmcp-blue-soft)',
-              color: 'var(--ptmcp-blue)',
+              color: 'var(--ptmcp-blue-text)',
+              fontSize: 13,
             }}
           >
             <UserIcon />
@@ -97,14 +105,10 @@ export function AppShell({
           </span>
         </span>
         {onLogout ? (
-          <button className="btn btn--secondary" onClick={onLogout} style={{ padding: '4px 12px', fontSize: 12.5 }}>
+          <button className="btn btn--secondary" onClick={onLogout} style={{ padding: '5px 12px', fontSize: 12.5 }}>
             退出登录
           </button>
-        ) : (
-          <button className="btn btn--link" aria-label="更多" style={{ color: 'var(--ptmcp-text-muted)', fontSize: 17 }}>
-            <DotsIcon />
-          </button>
-        )}
+        ) : null}
       </header>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <nav
@@ -185,31 +189,26 @@ export function AppShell({
                   return (
                     <button
                       key={item.key}
+                      className="nav-item"
                       onClick={() => onNavigate(item.key)}
                       aria-current={selected}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        width: '100%',
-                        padding: '8px 12px',
-                        margin: '1px 0',
-                        border: 'none',
-                        borderRadius: 8,
-                        background: selected ? 'var(--ptmcp-selected)' : 'none',
-                        color: selected ? 'var(--ptmcp-blue)' : 'var(--ptmcp-text-muted)',
-                        fontWeight: selected ? 700 : 500,
-                        fontSize: 13,
-                        textAlign: 'left',
-                        position: 'relative',
-                      }}
+                      title={item.label}
+                      style={{ position: 'relative' }}
                     >
                       {selected ? (
                         <span
-                          style={{ position: 'absolute', left: -8, top: 6, bottom: 6, width: 3, borderRadius: 2, background: 'var(--ptmcp-blue)' }}
+                          style={{
+                            position: 'absolute',
+                            left: -8,
+                            top: 6,
+                            bottom: 6,
+                            width: 3,
+                            borderRadius: 2,
+                            background: 'var(--ptmcp-blue)',
+                          }}
                         />
                       ) : null}
-                      <span style={{ fontSize: 15, opacity: 0.9 }}>{item.icon}</span>
+                      <span style={{ fontSize: 15, display: 'inline-flex' }}>{item.icon}</span>
                       <span className="nav-label">{item.label}</span>
                     </button>
                   );
@@ -251,7 +250,9 @@ export function AppShell({
 function SearchOverlay({ onClose, onNavigate, groups }: { onClose: () => void; onNavigate: (k: string) => void; groups: NavGroup[] }) {
   const [keyword, setKeyword] = useState('');
   const [hits, setHits] = useState<SearchHit[]>([]);
+  const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => inputRef.current?.focus(), []);
   useEffect(() => {
     let cancelled = false;
@@ -278,6 +279,32 @@ function SearchOverlay({ onClose, onNavigate, groups }: { onClose: () => void; o
       cancelled = true;
     };
   }, [keyword, groups]);
+  useEffect(() => setActive(0), [keyword]);
+  useEffect(() => {
+    listRef.current?.querySelectorAll<HTMLElement>('.cmd-row')[active]?.scrollIntoView({ block: 'nearest' });
+  }, [active]);
+  const openHit = (hit: SearchHit | undefined) => {
+    if (!hit) return;
+    onNavigate(hit.path);
+    onClose();
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (hits.length) setActive((i) => (i + 1) % hits.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (hits.length) setActive((i) => (i - 1 + hits.length) % hits.length);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        openHit(hits[active]);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [hits, active, onClose]);
   return (
     <div
       onClick={onClose}
@@ -295,6 +322,7 @@ function SearchOverlay({ onClose, onNavigate, groups }: { onClose: () => void; o
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
+        aria-label="全局搜索"
         style={{
           width: 520,
           maxHeight: '60vh',
@@ -313,47 +341,54 @@ function SearchOverlay({ onClose, onNavigate, groups }: { onClose: () => void; o
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="搜索功能、资源或关键词"
+            aria-controls="cmdk-results"
+            aria-label="搜索关键词"
             style={{ flex: 1, border: 'none', outline: 'none', fontSize: 14, background: 'none' }}
           />
-          <button className="btn btn--link" aria-label="关闭" onClick={onClose} style={{ color: 'var(--ptmcp-text-faint)' }}>
+          <button className="btn btn--icon" aria-label="关闭搜索" onClick={onClose}>
             <CloseIcon />
           </button>
         </div>
-        <div style={{ overflowY: 'auto' }}>
+        <div id="cmdk-results" ref={listRef} role="listbox" aria-label="搜索结果" style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
           {hits.length === 0 ? (
             <div style={{ padding: '22px 16px', fontSize: 13, color: 'var(--ptmcp-text-faint)' }}>
               {keyword ? '没有匹配的结果。' : '输入以搜索导航项和数据源。'}
             </div>
           ) : (
-            hits.map((h) => (
+            hits.map((h, i) => (
               <button
                 key={h.id}
-                onClick={() => {
-                  onNavigate(h.path);
-                  onClose();
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  width: '100%',
-                  padding: '10px 16px',
-                  border: 'none',
-                  background: 'none',
-                  textAlign: 'left',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--ptmcp-hover)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                role="option"
+                aria-selected={i === active}
+                className={`cmd-row${i === active ? ' is-active' : ''}`}
+                onMouseEnter={() => setActive(i)}
+                onClick={() => openHit(h)}
               >
-                <DocumentIcon style={{ color: 'var(--ptmcp-text-faint)' }} />
+                <DocumentIcon style={{ color: 'var(--ptmcp-text-faint)', flex: 'none' }} />
                 <span className="cell-stack">
                   <strong>{h.title}</strong>
                   <span>{h.subtitle}</span>
                 </span>
+                {i === active ? <ChevronRightIcon style={{ color: 'var(--ptmcp-blue-text)', flex: 'none' }} /> : null}
               </button>
             ))
           )}
         </div>
+        <footer
+          style={{
+            display: 'flex',
+            gap: 14,
+            padding: '8px 16px',
+            borderTop: '1px solid var(--ptmcp-border)',
+            background: 'var(--ptmcp-chrome)',
+            fontSize: 11.5,
+            color: 'var(--ptmcp-text-faint)',
+          }}
+        >
+          <span>↑ ↓ 选择</span>
+          <span>⏎ 打开</span>
+          <span>esc 关闭</span>
+        </footer>
       </div>
     </div>
   );

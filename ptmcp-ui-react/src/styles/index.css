@@ -32,13 +32,16 @@ select {
 :root {
   --ptmcp-blue: #0071e3;
   --ptmcp-blue-dark: #005bb8;
+  /* 着色面（选中态、浅蓝底）上的蓝文本：#0071e3 在白底 4.70:1 达标，但在浅蓝底只有 4.19:1。 */
+  --ptmcp-blue-text: #0061c9;
   --ptmcp-blue-soft: #e8f2fd;
+  --ptmcp-blue-bg: rgba(0, 113, 227, 0.08);
   --ptmcp-selected: #eaf3fd;
   --ptmcp-heading: #1b2733;
   --ptmcp-text: #354a5f;
   --ptmcp-text-strong: #1b2733;
   --ptmcp-text-muted: #556b7e;
-  --ptmcp-text-faint: #667582;
+  --ptmcp-text-faint: #5b6a77;
   --ptmcp-border: #dfe4e9;
   --ptmcp-border-strong: #c9d1d8;
   --ptmcp-border-row: #eef1f4;
@@ -211,6 +214,7 @@ select {
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 7px 16px;
   border: 1px solid transparent;
@@ -219,7 +223,10 @@ select {
   font-weight: 600;
   line-height: 18px;
   white-space: nowrap;
-  transition: background 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 .btn--primary {
   background: var(--ptmcp-blue);
@@ -228,6 +235,10 @@ select {
 .btn--primary:hover {
   background: var(--ptmcp-blue-dark);
 }
+.btn--primary:active {
+  background: var(--ptmcp-blue-dark);
+  filter: brightness(0.96);
+}
 .btn--secondary {
   background: var(--ptmcp-surface);
   border-color: var(--ptmcp-border-strong);
@@ -235,16 +246,35 @@ select {
 }
 .btn--secondary:hover {
   background: var(--ptmcp-hover);
+  border-color: var(--ptmcp-text-faint);
+}
+.btn--secondary:active {
+  background: var(--ptmcp-band);
 }
 .btn--link {
   padding: 0;
   border: none;
   background: none;
-  color: var(--ptmcp-blue);
+  color: var(--ptmcp-blue-text);
   font-weight: 600;
 }
 .btn--link:hover {
   text-decoration: underline;
+}
+/* 图标按钮：把 17px 的字形撑成 32×32 可点区域（WCAG 2.2 AA 目标尺寸）。 */
+.btn--icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ptmcp-text-muted);
+  border-radius: var(--ptmcp-radius-control);
+}
+.btn--icon:hover {
+  background: var(--ptmcp-hover);
+  color: var(--ptmcp-text-strong);
+  text-decoration: none;
 }
 .btn:disabled {
   opacity: 0.5;
@@ -266,14 +296,35 @@ select {
   border-radius: var(--ptmcp-radius-control);
   background: var(--ptmcp-surface);
   font-size: 13px;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.input:hover:not(:disabled),
+.select:hover:not(:disabled) {
+  border-color: var(--ptmcp-text-faint);
 }
 .input:focus,
 .select:focus {
   border-color: var(--ptmcp-blue);
+  box-shadow: 0 0 0 3px var(--ptmcp-blue-bg);
   outline: none;
 }
 .input::placeholder {
   color: var(--ptmcp-text-faint);
+}
+.input:disabled,
+.select:disabled {
+  background: var(--ptmcp-chrome);
+  color: var(--ptmcp-text-muted);
+  cursor: not-allowed;
+}
+input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--ptmcp-blue);
+  cursor: pointer;
+  vertical-align: middle;
 }
 .input-wrap {
   position: relative;
@@ -348,7 +399,7 @@ select {
   font-size: 12px;
 }
 .link {
-  color: var(--ptmcp-blue);
+  color: var(--ptmcp-blue-text);
   font-weight: 600;
   background: none;
   border: none;
@@ -356,6 +407,194 @@ select {
 }
 .link:hover {
   text-decoration: underline;
+}
+/* 表格行内主链接：行高保持紧凑，但把可点高度抬到 24px。 */
+.data-table .link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+}
+.data-table tbody tr {
+  transition: background 0.12s ease;
+}
+/* 分页箭头与页码统一 28×28，避免只有 13px 的图标点击区。 */
+.page-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: none;
+  color: var(--ptmcp-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.page-btn:hover:not(:disabled) {
+  background: var(--ptmcp-hover);
+  color: var(--ptmcp-text-strong);
+}
+.page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.page-btn.is-active {
+  border-color: var(--ptmcp-blue-text);
+  background: var(--ptmcp-blue-soft);
+  color: var(--ptmcp-blue-text);
+}
+/* 侧栏行：悬停给浅底，选中行用左侧蓝条 + 蓝字。 */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  margin: 1px 0;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--ptmcp-text-muted);
+  font-weight: 500;
+  font-size: 13px;
+  text-align: left;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.nav-item:hover {
+  background: var(--ptmcp-hover);
+  color: var(--ptmcp-text-strong);
+}
+.nav-item[aria-current='true'] {
+  background: var(--ptmcp-selected);
+  color: var(--ptmcp-blue-text);
+  font-weight: 700;
+}
+.nav-item:focus-visible {
+  outline: 2px solid var(--ptmcp-blue);
+  outline-offset: 1px;
+}
+.chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 8px 0 4px;
+  border: 1px solid transparent;
+  border-radius: var(--ptmcp-radius-pill);
+  background: none;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+.chip-btn:hover {
+  background: var(--ptmcp-hover);
+  border-color: var(--ptmcp-border);
+}
+/* 命令面板结果行（⌘K） */
+.cmd-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  border-bottom: 1px solid var(--ptmcp-border-row);
+  background: none;
+  color: var(--ptmcp-text);
+  text-align: left;
+}
+.cmd-row:last-child {
+  border-bottom: none;
+}
+.cmd-row.is-active {
+  background: var(--ptmcp-selected);
+}
+.cmd-row.is-active strong {
+  color: var(--ptmcp-blue-text);
+}
+.search-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--ptmcp-radius-pill);
+  border: 1px solid var(--ptmcp-border);
+  background: var(--ptmcp-chrome);
+  color: var(--ptmcp-text-faint);
+  font-size: 13px;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.search-trigger:hover {
+  border-color: var(--ptmcp-border-strong);
+  box-shadow: inset 0 0 0 1px var(--ptmcp-border-strong);
+}
+.search-trigger kbd {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid var(--ptmcp-border-strong);
+  border-radius: 4px;
+  background: var(--ptmcp-surface);
+  font-family: inherit;
+  font-size: 11px;
+}
+/* 页签：下划线随状态着色，支持左右方向键切换。 */
+.tab-btn {
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--ptmcp-text-muted);
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: -1px;
+  transition:
+    color 0.12s ease,
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+.tab-btn:hover {
+  color: var(--ptmcp-text-strong);
+  background: var(--ptmcp-hover);
+  border-radius: 6px 6px 0 0;
+}
+.tab-btn.is-active {
+  border-bottom-color: var(--ptmcp-blue);
+  color: var(--ptmcp-blue-text);
+}
+.tab-btn:focus-visible {
+  outline: 2px solid var(--ptmcp-blue);
+  outline-offset: -2px;
+}
+/* 单选卡片：整行可点，悬停给出边框反馈。 */
+.option-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 16px;
+  text-align: left;
+  background: var(--ptmcp-surface);
+  border: 1px solid var(--ptmcp-border);
+  border-radius: var(--ptmcp-radius-panel);
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.option-card:hover {
+  border-color: var(--ptmcp-border-input);
+  box-shadow: var(--ptmcp-shadow);
+}
+.option-card.is-selected {
+  background: var(--ptmcp-selected);
+  border-color: var(--ptmcp-blue);
 }
 
 /* ─── 响应式：平板收窄为图标栏，手机隐藏全局搜索与副标题 ─── */
@@ -437,5 +676,17 @@ textarea:focus-visible,
     width: 100% !important;
     min-height: 220px;
     max-height: 340px;
+  }
+}
+
+/* ─── 动效偏好：尊重系统"减少动态效果"（WCAG 2.1 AA 2.3.3） ─── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

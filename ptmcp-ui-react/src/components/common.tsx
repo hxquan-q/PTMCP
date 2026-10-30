@@ -71,7 +71,7 @@ export function Dialog({
           }}
         >
           <strong style={{ fontSize: 15, color: 'var(--ptmcp-heading)' }}>{title}</strong>
-          <button className="btn btn--link" aria-label="关闭" onClick={onClose} style={{ color: 'var(--ptmcp-text-muted)', fontSize: 16 }}>
+          <button className="btn btn--icon" aria-label="关闭" onClick={onClose}>
             <CloseIcon />
           </button>
         </header>
@@ -251,24 +251,39 @@ export function Select({
 }
 
 export function Tabs({ tabs, active, onChange }: { tabs: { key: string; label: ReactNode }[]; active: string; onChange: (k: string) => void }) {
+  const refs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const move = (dir: number) => {
+    const i = tabs.findIndex((t) => t.key === active);
+    const next = tabs[(i + dir + tabs.length) % tabs.length];
+    if (!next) return;
+    onChange(next.key);
+    refs.current[next.key]?.focus();
+  };
   return (
-    <div role="tablist" style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--ptmcp-border)', marginBottom: 14 }}>
+    <div
+      role="tablist"
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          move(1);
+        } else if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          move(-1);
+        }
+      }}
+      style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--ptmcp-border)', marginBottom: 14 }}
+    >
       {tabs.map((t) => (
         <button
           key={t.key}
-          role="tab"
-          aria-selected={active === t.key}
-          onClick={() => onChange(t.key)}
-          style={{
-            padding: '8px 14px',
-            border: 'none',
-            borderBottom: active === t.key ? '2px solid var(--ptmcp-blue)' : '2px solid transparent',
-            background: 'none',
-            color: active === t.key ? 'var(--ptmcp-blue)' : 'var(--ptmcp-text-muted)',
-            fontWeight: 600,
-            fontSize: 13,
-            marginBottom: -1,
+          ref={(el) => {
+            refs.current[t.key] = el;
           }}
+          role="tab"
+          tabIndex={active === t.key ? 0 : -1}
+          aria-selected={active === t.key}
+          className={`tab-btn${active === t.key ? ' is-active' : ''}`}
+          onClick={() => onChange(t.key)}
         >
           {t.label}
         </button>
@@ -337,23 +352,7 @@ export function OptionCard({
   onSelect: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={selected}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        width: '100%',
-        padding: '13px 16px',
-        textAlign: 'left',
-        background: selected ? 'var(--ptmcp-selected)' : 'var(--ptmcp-surface)',
-        border: `1px solid ${selected ? 'var(--ptmcp-blue)' : 'var(--ptmcp-border)'}`,
-        borderRadius: 'var(--ptmcp-radius-panel)',
-        transition: 'border-color .15s ease, background .15s ease',
-      }}
-    >
+    <button type="button" onClick={onSelect} aria-pressed={selected} className={`option-card${selected ? ' is-selected' : ''}`}>
       <CellIcon icon={Icon} large />
       <span className="cell-stack" style={{ flex: 1 }}>
         <strong style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -459,7 +458,7 @@ export function Drawer({
             </strong>
             {subtitle ? <span>{subtitle}</span> : null}
           </div>
-          <button className="btn btn--link" aria-label="关闭" onClick={onClose} style={{ color: 'var(--ptmcp-text-muted)', fontSize: 16 }}>
+          <button className="btn btn--icon" aria-label="关闭" onClick={onClose}>
             <CloseIcon />
           </button>
         </header>
@@ -491,33 +490,44 @@ export function Pagination({ total, pageSize, page, onPage }: { total: number; p
   const pages = Math.max(1, Math.ceil(total / pageSize));
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-      <button className="btn btn--link" disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label="上一页">
+      <button className="page-btn" disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label="上一页">
         <ChevronRightIcon style={{ transform: 'rotate(180deg)' }} />
       </button>
-      {Array.from({ length: pages }, (_, i) => i + 1).map((p) => (
-        <button
-          key={p}
-          onClick={() => onPage(p)}
-          aria-current={p === page}
-          style={{
-            minWidth: 26,
-            height: 26,
-            borderRadius: 6,
-            border: p === page ? '1px solid var(--ptmcp-blue)' : '1px solid transparent',
-            background: p === page ? 'var(--ptmcp-blue-soft)' : 'none',
-            color: p === page ? 'var(--ptmcp-blue)' : 'var(--ptmcp-text-muted)',
-            fontWeight: p === page ? 700 : 500,
-            fontSize: 12,
-          }}
-        >
-          {p}
-        </button>
-      ))}
-      <button className="btn btn--link" disabled={page >= pages} onClick={() => onPage(page + 1)} aria-label="下一页">
+      {pageNums(page, pages).map((p, i) =>
+        p === 'gap' ? (
+          <span key={`gap-${i}`} style={{ padding: '0 2px', color: 'var(--ptmcp-text-faint)' }} aria-hidden>
+            …
+          </span>
+        ) : (
+          <button
+            key={p}
+            className={`page-btn${p === page ? ' is-active' : ''}`}
+            onClick={() => onPage(p)}
+            aria-current={p === page ? 'page' : undefined}
+            aria-label={`第 ${p} 页`}
+          >
+            {p}
+          </button>
+        ),
+      )}
+      <button className="page-btn" disabled={page >= pages} onClick={() => onPage(page + 1)} aria-label="下一页">
         <ChevronRightIcon />
       </button>
     </span>
   );
+}
+
+/** 页码窗口：页数多时只显示首、尾、当前附近，其余折叠为省略号。 */
+function pageNums(page: number, pages: number): (number | 'gap')[] {
+  if (pages <= 7) return Array.from({ length: pages }, (_, i) => i + 1);
+  const from = Math.max(2, page - 1);
+  const to = Math.min(pages - 1, page + 1);
+  const out: (number | 'gap')[] = [1];
+  if (from > 2) out.push('gap');
+  for (let p = from; p <= to; p++) out.push(p);
+  if (to < pages - 1) out.push('gap');
+  out.push(pages);
+  return out;
 }
 
 export function EmptyState({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
@@ -553,35 +563,10 @@ const DocumentSvg = () => (
 /** ⌘K 风格全局搜索输入(纯 UI,数据源由调用方注入) */
 export function GlobalSearch({ onOpen }: { onOpen: () => void }) {
   return (
-    <button
-      onClick={onOpen}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 8,
-        height: 32,
-        padding: '0 10px',
-        borderRadius: 'var(--ptmcp-radius-pill)',
-        border: '1px solid var(--ptmcp-border)',
-        background: 'var(--ptmcp-chrome)',
-        color: 'var(--ptmcp-text-faint)',
-        fontSize: 13,
-      }}
-    >
+    <button className="search-trigger" onClick={onOpen}>
       <SearchIcon />
       <span>搜索功能、资源或关键词</span>
-      <kbd
-        style={{
-          marginLeft: 8,
-          padding: '1px 6px',
-          borderRadius: 4,
-          border: '1px solid var(--ptmcp-border-strong)',
-          background: 'var(--ptmcp-surface)',
-          fontSize: 11,
-        }}
-      >
-        ⌘K
-      </kbd>
+      <kbd>⌘K</kbd>
     </button>
   );
 }
