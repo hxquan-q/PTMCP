@@ -322,6 +322,10 @@ select {
   color: var(--ptmcp-text-muted);
   cursor: not-allowed;
 }
+/* 校验失败必须肉眼可辨，不能只靠颜色：aria-invalid 同步给出语义。 */
+.input--invalid:not(:focus) {
+  border-color: var(--ptmcp-red);
+}
 input[type='checkbox'] {
   width: 16px;
   height: 16px;
@@ -995,6 +999,62 @@ textarea:focus-visible,
   height: 1px;
   opacity: 0;
   pointer-events: none;
+}
+
+/* ─── P-01 登录页：卡片按窄屏自适应，不再固定 360px 宽 ─── */
+.login-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: linear-gradient(180deg, var(--ptmcp-canvas) 0%, var(--ptmcp-blue-bg) 100%);
+}
+.login-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  max-width: 360px;
+  padding: 32px 30px;
+  background: var(--ptmcp-surface);
+  border: 1px solid var(--ptmcp-border);
+  border-radius: var(--ptmcp-radius-panel);
+  box-shadow: var(--ptmcp-shadow);
+}
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.login-brand-mark {
+  font-size: 30px;
+  color: var(--ptmcp-blue);
+}
+.login-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--ptmcp-heading);
+}
+.login-subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ptmcp-text-muted);
+}
+.login-submit {
+  width: 100%;
+  margin-top: 6px;
+}
+.login-footnote {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ptmcp-text-faint);
+  text-align: center;
 }
 
 /* ─── 权限矩阵窄屏：三栏改纵向堆叠，隐藏拖拽分隔线 ─── */

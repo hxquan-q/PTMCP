@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
 import { CheckIcon, ChevronRightIcon, CloseIcon, InfoIcon, SearchIcon, WarningIcon } from './Icons';
 import type { IconComponent } from './Icons';
 
@@ -116,6 +116,9 @@ export function TextInput({
   maxLength,
   autoComplete,
   label,
+  invalid,
+  describedBy,
+  inputRef,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -125,18 +128,24 @@ export function TextInput({
   maxLength?: number;
   autoComplete?: string;
   label?: string;
+  invalid?: boolean;
+  describedBy?: string;
+  inputRef?: Ref<HTMLInputElement>;
 }) {
   return (
     <input
-      className="input"
+      className={invalid ? 'input input--invalid' : 'input'}
       style={{ width: '100%' }}
       type={type ?? 'text'}
+      ref={inputRef}
       value={value}
       disabled={disabled}
       maxLength={maxLength}
       autoComplete={autoComplete}
       placeholder={placeholder}
       aria-label={label}
+      aria-invalid={invalid || undefined}
+      aria-describedby={describedBy}
       onChange={(e) => onChange(e.target.value)}
     />
   );
@@ -386,7 +395,7 @@ export function OptionCard({
   );
 }
 
-export function Alert({ kind, title, children }: { kind: 'info' | 'warning' | 'danger'; title?: string; children?: ReactNode }) {
+export function Alert({ kind, title, id, children }: { kind: 'info' | 'warning' | 'danger'; title?: string; id?: string; children?: ReactNode }) {
   const styles = {
     info: { bg: 'var(--ptmcp-bg-accent)', fg: 'var(--ptmcp-blue-dark)', Icon: InfoIcon },
     warning: { bg: 'var(--ptmcp-bg-warning)', fg: 'var(--ptmcp-orange)', Icon: WarningIcon },
@@ -394,7 +403,8 @@ export function Alert({ kind, title, children }: { kind: 'info' | 'warning' | 'd
   }[kind];
   return (
     <div
-      role="status"
+      id={id}
+      role={kind === 'danger' ? 'alert' : 'status'}
       style={{
         display: 'flex',
         gap: 10,

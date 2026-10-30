@@ -115,14 +115,35 @@ Updated: 2026-10-31
 
 实际检查：`pnpm exec prettier --write`（3 页 + `common.tsx` + `index.css`）；`pnpm exec eslint --max-warnings 0` 覆盖 `DepartmentsPage.tsx`、`UsersPage.tsx`、`RolesPage.tsx`、`common.tsx` 无输出；`pnpm exec tsc --noEmit` 通过；`node --experimental-strip-types --test tests/*.test.ts` 164/164 通过；`pnpm build` 通过（CSS 25.15 kB / gzip 5.93 kB，JS 462.72 kB / gzip 127.74 kB）；仓库根 `python scripts/check.py` 74 测试 OK。
 
+### 切片 U6：P-01 登录页逐页细节
+
+`src/views/auth/LoginPage.tsx` 是共享工作树里最后一个未被 DEV-20261031-audit-fixes 占用的页面。它的问题集中在“错误说得不准、状态没有语义、页脚声称做不到的事”：
+
+- 文档里没有任何标题：品牌名 `PTMCP` 只是一个 `div`，读屏用户进入页面拿不到 heading。改为 `<h1 class="login-title">` + `<p class="login-subtitle">`，`form` 保留可访问名「登录 PTMCP」并补 `aria-busy`。
+- 校验只有一句笼统文案：用户名空、密码空、两者都空都打印「请输入用户名和密码。」，且不指出缺哪个字段、焦点仍在原处。现按缺失字段分别报「请输入用户名。」「请输入密码。」，给对应输入框加 `aria-invalid` 与 `aria-describedby=login-error`，并把焦点移到该框；该字段一旦开始输入即清除错误态。
+- 共享层 `Alert` 此前一律 `role="status"`，登录失败这种必须立刻播报的通知会被推迟。现按语义分级：danger → `role="alert"`，info/warning 保持 `role="status"`，并新增可选 `id` 供 `aria-describedby` 引用。该改动会影响全部页面的 danger 提示播报时机（仅 aria，不改布局与文案），其余页面仍由各自所有者验收。
+- 把“登录后置步骤失败”报成“登录失败”：`login()` 在 POST 之后还要刷新 CSRF，两步共用一个 `catch`；若失败发生在刷新阶段，服务端会话其实已建立，旧页面会留在登录框里报“登录失败”。现改为以服务端会话为准——失败后核对 `getSession()`，已登录则正常进入控制台，只有确认未登录才显示失败消息与 `requestId`。
+- 页脚写「登录行为将被审计」，但 `AdminSessionService.login/recordFailure` 只做失败计数与 `LOGIN_LOCKED`（429），后端登录路径没有写入任何审计记录，PRD 与安全文档也无该要求——属于凭空声称。改为可核验陈述：连续多次失败会临时锁定登录，锁定时长以服务端提示为准；同时不实现前端倒计时解锁（页面规格明确禁止）。
+- 控件与响应式：卡片固定 `width: 360`、容器 `height: 100vh`，窄屏溢出、矮屏无处滚动。改为 `.login-shell{min-height:100vh/100dvh;padding}` + `.login-card{width:100%;max-width:360px}`；散落内联样式移入 `.login-brand/.login-brand-mark/.login-title/.login-subtitle/.login-submit/.login-footnote`；新增 `.input--invalid:not(:focus)` 红边（聚焦时仍保留蓝色焦点环，避免与焦点态互相吞掉）。按页面规格不新增“记住密码”和“查看当前密码”，密码不裁剪（仅裁剪用户名）。
+
+浏览器实测（隔离合成预览，1440×900，经退出登录 → 登录页 → 重新登录走通真实流程）：`h1` 恰 1 个「PTMCP」，`form` landmark 名「登录 PTMCP」且 `aria-busy=false`；两输入框可访问名取自 `<label>`（用户名/密码），298×34px；页内可聚焦元素恰 3 个，真实 `Tab` 首站落用户名，焦点环 `rgb(53,74,95) 3px`。空字段提交得 `role=alert`、「无法登录 / 请输入用户名。」、`id=login-error`、用户名 `aria-invalid=true` + `aria-describedby=login-error` 且焦点落用户名；只缺密码时同套路落密码框，失焦后该框边框 `rgb(165,11,15)`、合法框回到 `rgb(139,154,168)`；输入即清除 Alert 与 `aria-invalid`。实测对比度（对白卡）：标题 15.17:1、副标题 5.54:1、脚注 12px 5.57:1、输入正文 9.15:1，均达 AA。窄屏（工具下限 500×600）横向溢出 0、卡片 360 宽居中（x=70）且完整落在视口内。`requestSubmit()`（浏览器原生提交路径，等价于表单内 Enter）登录成功后离开登录页并落 `#/admin/datasources`，预览会话已复位为登录态。产物 `p01-login-1440.jpeg`、`p01-login-error-1440.jpeg`（本宿主无图像通道，仅供用户查看）。
+
+未验证：预览 transport 的 `login` 恒返回成功且 `signedIn` 初值为 `true`，所以服务端拒绝（`AUTHENTICATION_FAILED`）、429 锁定文案、`requestId` 显示，以及“POST 成功但 CSRF 刷新失败时按会话进入控制台”的新分支只有代码与类型门禁依据，未在浏览器复现；请求进行中的 `aria-busy=true`/按钮禁用态因预览在一帧内返回而未被捕获（非竞态可复现）；人工体验接受未做。
+
+实际检查：`pnpm exec prettier --write`（3 文件，`LoginPage.tsx` 与 `index.css` unchanged、`common.tsx` 因签名换行重排）；`pnpm exec eslint --max-warnings 0` 覆盖 `LoginPage.tsx`、`common.tsx` 无输出；`pnpm exec tsc --noEmit` 通过；`node --experimental-strip-types --test tests/*.test.ts` 退出 0（164/164）；`pnpm build` 通过（CSS 26.09 kB / gzip 6.11 kB，JS 463.16 kB / gzip 128.05 kB）；仓库根 `python scripts/check.py` 74 测试 OK。
+
 ### 尚未做
 
-个人门户其余页面（`MePages.tsx` 在 DEV-20261031-audit-fixes 占用清单内，须后接）与 `AuditPage`/`DetailPages` 的逐页细节。P-02 数据源页的死控件与复选区仍待处理，但该文件与 `services/*`、`dsForm.ts`、`platformForm.ts` 等正被 DEV-20261031-audit-fixes 的未提交改动占用，接管前须先确认对方落地状态，避免同文件互踩。DESIGN.md 记录的 SAP 调色板（`#0057d2`）与实现所用 Apple 调色板（`#0071e3`）之间的契约偏差处置——需用户确认以哪一侧为准，未擅自动手。P-10 的自增权防护与 NAMESPACE/DATASOURCE 级授权按上文理由保留未实现。
+共享工作树里未被 DEV-20261031-audit-fixes 占用的页面已逐页走完（P-01/P-03/P-04/P-05/P-06/P-07/P-10/P-13）。仍在待接清单：P-02 数据源页、P-08/P-09 平台与客户端页、`DetailPages`、`DelegationsPage`、`AuditPage`、`MePages`（个人门户其余页）——这些文件当前均被对方未提交改动占用，接管前须先确认其落地状态，避免同文件互踩。`table-scroll` 可聚焦区域在 21 处出现中已合规 3 处，其余同样落在上述占用文件内。DESIGN.md 记录的 SAP 调色板（`#0057d2`）与实现所用 Apple 调色板（`#0071e3`）之间的契约偏差处置——需用户确认以哪一侧为准，未擅自动手。P-10 的自增权防护与 NAMESPACE/DATASOURCE 级授权按上文理由保留未实现；组织部门写操作缺权限码，未擅自新增。
 
 ## 结果与证据
 
-设计层：U1–U5 修复的是可度量的可达性、控件与状态诚实性缺陷，不等于按设计图完成视觉还原（图像通道不可用）。除配色与热区外，实际改动集中在“页面声称却做不到的能力”：假数据列表、语义错误的测试连接、无处理器的死链接、把失败显示成空、无脑报成功的复制、把“成员数未知”当成“0 个成员”放行删除、把 3 次非原子写入报成一次保存、用不完整目录覆盖真实角色/权限分配，均已按可核验来源收紧或移除。验证层：自动化门禁与浏览器交互已跑，U5 还发现并修掉一个只有实跑才能暴露的回归（`setLoading(false)` 丢失）；人工体验接受与真实后端联调未做。本项不改后端，也不把框架构建当作业务验收。`Acceptance` 仍为 pending：设计图比对与人工接受是用户的通道，不由本项自封。
+设计层：U1–U6 修复的是可度量的可达性、控件与状态诚实性缺陷，不等于按设计图完成视觉还原（图像通道不可用）。除配色与热区外，实际改动集中在“页面声称却做不到的能力”：假数据列表、语义错误的测试连接、无处理器的死链接、把失败显示成空、无脑报成功的复制、把“成员数未知”当成“0 个成员”放行删除、把 3 次非原子写入报成一次保存、用不完整目录覆盖真实角色/权限分配、以及登录页那句没有实现依据的“登录行为将被审计”，均已按可核验来源收紧或移除。验证层：自动化门禁与浏览器交互已跑，U5 还发现并修掉一个只有实跑才能暴露的回归（`setLoading(false)` 丢失）；人工体验接受与真实后端联调未做。本项不改后端，也不把框架构建当作业务验收。`Acceptance` 仍为 pending：设计图比对与人工接受是用户的通道，不由本项自封。
 
 ## 交接
 
-切片 U3（P-13，提交 `c869979`）、U4（P-04，提交 `b4f0acc`）与 U5（P-05/P-06/P-07 组织页，随本条提交）已完成；本项已提交路径限于 `src/views/me/IntegrationsPage.tsx`、`src/views/admin/MetadataPage.tsx`、`src/views/admin/UsersPage.tsx`、`src/views/admin/RolesPage.tsx`、`src/views/admin/DepartmentsPage.tsx`、`src/components/common.tsx`、`src/layouts/AppShell.tsx`、`src/styles/index.css`、`src/services/http.ts` 与本工作项，其余 DIRTY 路径属 DEV-20261031-audit-fixes，未暂存、未改动。下一个焦点：个人门户 `MePages.tsx` 与 `AuditPage`/`DetailPages`（三者均在对方占用清单内，须先确认 `DEV-20261031-audit-fixes` 落地状态再接管，避免同文件互踩）；P-02 数据源页同理。每个切片只暂存自己改过的路径。预览端口 25175 用完须停止并确认无监听。待用户决断：DESIGN.md 与实现的调色板偏差以哪侧为准；P-13 普通模式是否需要后端提供“本人接入列表”端点（当前按契约缺失处理，只显示空态与出口，不伪造）；组织部门写操作是否补权限码（`SENSITIVE_ACTIONS` 现无该码，未擅自新增）。远端提示仓库已迁移到 `github.com/hxquan-q/PTMCP`，历次推送仍按既有 origin 成功；是否更新 remote URL 属配置变更，未擅自修改。
+切片 U3（P-13，提交 `c869979`）、U4（P-04，提交 `b4f0acc`）、U5（P-05/P-06/P-07 组织页，提交 `88966ca`）与 U6（P-01 登录页，随本条提交）已完成。本项累计只触碰这些路径：`src/views/auth/LoginPage.tsx`、`src/views/me/IntegrationsPage.tsx`、`src/views/admin/{MetadataPage,UsersPage,RolesPage,DepartmentsPage,PermissionsPage}.tsx`、`src/components/common.tsx`、`src/layouts/AppShell.tsx`、`src/styles/index.css`、`src/services/http.ts` 与本工作项；其余 DIRTY 路径属 DEV-20261031-audit-fixes，未暂存、未改动。
+
+两条需要对方窗口知道的事实：其一，U5 之后 `UsersPage.tsx:9` 的未使用 `RequestIdText` 导入已消失，该工作项记录的共享前端 `pnpm check` 阻断点（其工作项第 92 行）不再成立，可以重跑集成门禁；其二，U6 把共享 `Alert` 的 danger 通知从 `role="status"` 改为 `role="alert"`，会影响其未提交页面里 danger 提示的播报时机（只改 aria 语义，布局与文案不变）；已核对其 `tests/browser/` 与 `tests/` 中没有针对 `[role=status]` 的断言（仅 `Toast.tsx` 与 `DetailPages.tsx` 自带 `role="status"` 节点，未受影响），但 danger 提示的读屏表现仍需由其页面所有者在真实后端下复核。
+
+下一个焦点：本项在共享工作树里能独立接管的路由已全部走完，余下 P-02 数据源页、平台与客户端页、`DetailPages`、`DelegationsPage`、`AuditPage`、`MePages` 均处于对方未提交改动中，须待 DEV-20261031-audit-fixes 落地（提交或明确放弃）后再接管，避免同文件互踩。每个切片只暂存自己改过的路径。预览端口 25175 用完须停止并确认无监听。待用户决断：DESIGN.md 与实现的调色板偏差以哪侧为准；P-13 普通模式是否需要后端提供“本人接入列表”端点（当前按契约缺失处理，只显示空态与出口，不伪造）；组织部门写操作是否补权限码（`SENSITIVE_ACTIONS` 现无该码，未擅自新增）；登录页“是否应当审计登录行为”按后端现状已改为不声称，若产品要求审计，属后端能力缺口而非页面文案问题。远端提示仓库已迁移到 `github.com/hxquan-q/PTMCP`，历次推送仍按既有 origin 成功；是否更新 remote URL 属配置变更，未擅自修改。
