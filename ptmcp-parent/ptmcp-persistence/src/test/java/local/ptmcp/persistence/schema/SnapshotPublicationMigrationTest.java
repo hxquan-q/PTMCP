@@ -103,7 +103,6 @@ class SnapshotPublicationMigrationTest {
                             .dataSource(
                                     mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())
                             .locations("classpath:db/ptmcp-migration")
-                            .target("8")
                             .cleanDisabled(true)
                             .load();
             assertEquals(7, upgraded.migrate().migrationsExecuted);
