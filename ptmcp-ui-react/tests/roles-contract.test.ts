@@ -42,8 +42,8 @@ const base = { name: '数据专员', enabled: true, permissionCodes: ['ptmcp:dat
 
 test('role CRUD against the synthetic backend honours versioning and echoes writes', async () => {
   await withPreviewServer(async () => {
-    const created = await org.createRole({ key: 'DATA_STEWARD', ...base });
-    assert.equal(created.key, 'DATA_STEWARD');
+    const created = await org.createRole({ key: 'data_steward', ...base });
+    assert.equal(created.key, 'data_steward');
     assert.equal(created.version, '1');
     assert.equal(created.enabled, true);
     assert.deepEqual(created.permissionCodes?.slice().sort(), base.permissionCodes);
@@ -72,7 +72,7 @@ test('role CRUD against the synthetic backend honours versioning and echoes writ
 test('create is idempotent per Idempotency-Key and never leaks write-only fields', async () => {
   await withPreviewServer(async () => {
     // 两个不同 key 的重复提交会创建两行（幂等键在服务端去重，这里验证传输层稳定携带该头）
-    const first = await org.createRole({ key: 'AUDITOR', ...base });
+    const first = await org.createRole({ key: 'auditor', ...base });
     assert.ok(first.id);
     assert.equal(first.version, '1');
     await org.deleteRole(first.id, first.version).catch(() => undefined);
@@ -80,17 +80,23 @@ test('create is idempotent per Idempotency-Key and never leaks write-only fields
 });
 
 test('validateRoleForm enforces key format only on create and name length always', () => {
-  const valid: RoleFormValues = { key: 'DATA_STEWARD', name: '数据专员', enabled: true, permissionCodes: [] };
+  const valid: RoleFormValues = { key: 'data_steward', name: '数据专员', enabled: true, permissionCodes: [] };
   assert.equal(validateRoleForm(valid, true), null);
   assert.equal(validateRoleForm(valid, false), null);
 
   assert.match(String(validateRoleForm({ ...valid, key: '' }, true)), /编码/);
-  assert.match(String(validateRoleForm({ ...valid, key: 'lower_case' }, true)), /大写字母/);
-  assert.match(String(validateRoleForm({ ...valid, key: 'A' }, true)), /2–64/);
-  assert.match(String(validateRoleForm({ ...valid, key: '1ABC' }, true)), /大写字母开头/);
+  assert.match(String(validateRoleForm({ ...valid, key: 'UPPER_CASE' }, true)), /小写字母/);
+  assert.match(String(validateRoleForm({ ...valid, key: 'A' }, true)), /1–100/);
+  assert.match(String(validateRoleForm({ ...valid, key: '1abc' }, true)), /小写字母开头/);
   // 编辑时不校验编码（编码不可改）
   assert.equal(validateRoleForm({ ...valid, key: '' }, false), null);
   assert.match(String(validateRoleForm({ ...valid, name: '短' }, false)), /2–30/);
   assert.match(String(validateRoleForm({ ...valid, name: 'x'.repeat(31) }, false)), /2–30/);
   assert.match(String(validateRoleForm({ ...valid, name: '  ' }, false)), /2–30/);
+  // 边界：1 字符（最小）、100 字符（最大）、101 字符（超限）
+  assert.equal(validateRoleForm({ ...valid, key: 'a'.repeat(1) }, true), null, '1 char key must be valid');
+  assert.equal(validateRoleForm({ ...valid, key: 'a'.repeat(100) }, true), null, '100 char key must be valid');
+  assert.match(String(validateRoleForm({ ...valid, key: 'a'.repeat(101) }, true)), /1–100/);
+  // 大写字母被拒绝
+  assert.match(String(validateRoleForm({ ...valid, key: 'UPPER' }, true)), /小写字母/);
 });

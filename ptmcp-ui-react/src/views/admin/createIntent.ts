@@ -3,12 +3,19 @@ import type { RoleWrite } from '../../services/orgPortalApi';
 
 export interface CreateIntent {
   readonly key: string;
-  readonly body: Readonly<RoleWrite & { key: string }>;
+  readonly body: Readonly<Omit<RoleWrite & { key: string }, 'permissionCodes'>> & { readonly permissionCodes: readonly string[] };
 }
 
 /** 首次提交：生成新 key + 冻结 body 快照（不可变）。 */
 export function createIntent(body: RoleWrite & { key: string }, key: string): CreateIntent {
-  return { key, body: Object.freeze({ ...body }) };
+  return {
+    key,
+    body: Object.freeze({
+      ...body,
+      // 数组复制：外部改原数组不影响意图；父级 freeze 阻止属性重赋值
+      permissionCodes: Object.freeze([...body.permissionCodes]),
+    }),
+  };
 }
 
 /** UNKNOWN 重试：返回原意图（同 key 同 body），不生成新意图。 */

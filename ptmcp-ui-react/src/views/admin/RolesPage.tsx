@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import { Alert, Badge, Dialog, EmptyState, Field, PageHeader, SearchInput, StatusDot, TextInput, useDebounced } from '../../components/common';
 import { CloseIcon, EditIcon, PlusIcon } from '../../components/Icons';
 import { request } from '../../services/http';
-import { createRole, deleteRole, listRoles, updateRole, type RoleRow, type RoleWrite } from '../../services/orgPortalApi';
+import { createRole, deleteRole, listRoles, updateRole, type RoleRow } from '../../services/orgPortalApi';
 import { idempotencyKey } from '../../services/http';
+import { createIntent } from './createIntent';
+import { classifySubmitError, shouldPreserveIntent, submitErrorMessage, uncertainActionLabel, uncertainNotice } from './submitError';
 import { validateRoleForm, type RoleFormValues } from './roleForm';
 import { useSensitivePermissions } from '../../permissionsContext';
 import { showToast } from '../../toast';
@@ -237,7 +239,7 @@ function RoleDialog({
   const [saving, setSaving] = useState(false);
   const [uncertain, setUncertain] = useState(false);
   const idemKeyRef = useRef<string>('');
-  const snapshotRef = useRef<(RoleWrite & { key: string }) | null>(null);
+  const snapshotRef = useRef<ReturnType<typeof createIntent>['body'] | null>(null);
   const [formError, setFormError] = useState('');
   const [conflict, setConflict] = useState<string | null>(null);
 
@@ -247,7 +249,7 @@ function RoleDialog({
     return kw ? permissionOptions.filter((c) => c.toLowerCase().includes(kw)) : permissionOptions;
   }, [permissionOptions, codeFilter]);
   const selected = new Set(values.permissionCodes);
-  const errors = validateRoleForm(values, !!role);
+  const errors = validateRoleForm(values, !role);
 
   const toggleCode = (code: string) => {
     setValues((v) => ({
@@ -259,7 +261,9 @@ function RoleDialog({
   const submit = async () => {
     setFormError('');
     setConflict(null);
-    const err = validateRoleForm(values, !!role);
+    // 编辑不是幂等写：结果未知后禁止原地重提，必须关闭并刷新核对最新版本。
+    if (uncertain && role) return;
+    const err = validateRoleForm(values, !role);
     if (err) {
       setFormError(err);
       return;
@@ -275,23 +279,28 @@ function RoleDialog({
         await updateRole(role.id, body, role.version);
       } else if (uncertain && snapshotRef.current) {
         // OPERATION_UNKNOWN 重试：复用冻结快照+原 key（不改 body）
-        await createRole(snapshotRef.current, idemKeyRef.current);
+        await createRole({ ...snapshotRef.current, permissionCodes: [...snapshotRef.current.permissionCodes] }, idemKeyRef.current);
       } else {
         // 首次提交：生成 key + 冻结 body 快照
-        idemKeyRef.current = idempotencyKey();
-        snapshotRef.current = Object.freeze({ ...body, key: values.key.trim() });
-        await createRole(snapshotRef.current, idemKeyRef.current);
+        const intent = createIntent({ ...body, key: values.key.trim() }, idempotencyKey());
+        idemKeyRef.current = intent.key;
+        snapshotRef.current = intent.body;
+        await createRole({ ...snapshotRef.current, permissionCodes: [...snapshotRef.current.permissionCodes] }, idemKeyRef.current);
       }
       onSaved();
       showToast(role ? '角色已更新' : '角色已创建');
     } catch (e) {
       const err = e as { status?: number; code?: string; message?: string };
-      if (err.code === 'OPERATION_UNKNOWN') {
+      const outcome = classifySubmitError(err);
+      if (shouldPreserveIntent(outcome)) {
         setUncertain(true);
         setFormError('');
-      } else if (err.status === 412) setConflict('该角色已被他人修改。请复制本地修改后刷新，再重新提交。');
-      else if (err.status === 409) setConflict('编码已存在，请更换角色编码。');
-      else setFormError(err.message || '保存失败，请稍后重试。');
+      } else {
+        setUncertain(false);
+        const msg = submitErrorMessage(outcome, err.message || '保存失败，请稍后重试。', role ? 'edit' : 'create');
+        if (outcome === 'conflict' || outcome === 'duplicate') setConflict(msg);
+        else setFormError(msg);
+      }
     } finally {
       setSaving(false);
     }
@@ -300,14 +309,14 @@ function RoleDialog({
   return (
     <Dialog open title={role ? `编辑角色 · ${role.name}` : '新建角色'} onClose={onClose} width={560}>
       {conflict ? (
-        <Alert kind="warning" title="版本冲突（412）">
+        <Alert kind="warning" title="版本冲突">
           {conflict}
           <button className="link" style={{ marginLeft: 8 }} onClick={() => window.location.reload()}>
             刷新页面
           </button>
         </Alert>
       ) : null}
-      <Field label="角色编码" hint={role ? '编码创建后不可修改' : '大写字母开头，可含数字与下划线'}>
+      <Field label="角色编码" hint={role ? '编码创建后不可修改' : '小写字母开头，1–100字符'}>
         <TextInput
           value={values.key}
           onChange={(v) => setValues((s) => ({ ...s, key: v }))}
@@ -365,7 +374,7 @@ function RoleDialog({
       </Field>
       {uncertain ? (
         <Alert kind="warning" title="操作结果未知">
-          服务端可能已处理该请求但结果不确定。用同一请求键重试是安全的（不会重复创建），但结果仍可能不确定。若多次不确定，请关闭后刷新列表核对，或联系管理员。
+          {uncertainNotice(role ? 'edit' : 'create')}
         </Alert>
       ) : null}
       {formError ? <Alert kind="danger">{formError}</Alert> : null}
@@ -373,8 +382,13 @@ function RoleDialog({
         <button className="btn btn--secondary" onClick={onClose} disabled={saving}>
           取消
         </button>
-        <button className="btn btn--primary" onClick={submit} disabled={saving || !!errors}>
-          {saving ? '保存中…' : uncertain ? '用同一请求键确认' : role ? '保存修改' : '创建角色'}
+        <button
+          className="btn btn--primary"
+          onClick={submit}
+          disabled={saving || !!errors || (uncertain && !!role)}
+          title={uncertain && role ? '编辑不是幂等写：请关闭对话框并刷新列表核对最新版本后再操作' : undefined}
+        >
+          {saving ? '保存中…' : uncertain ? (role ? '请关闭并刷新核对' : uncertainActionLabel('create')) : role ? '保存修改' : '创建角色'}
         </button>
       </div>
     </Dialog>

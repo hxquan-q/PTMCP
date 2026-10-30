@@ -41,8 +41,11 @@ test('templatesFromConfig keeps arrays, numbers and empty containers; rejects no
 });
 
 test('authAvailability gates cards by what the platform actually supports', () => {
-  assert.deepEqual(authAvailability(null), { 'oauth-pat': true, apikey: true, none: true });
-  assert.deepEqual(authAvailability([]), { 'oauth-pat': true, apikey: true, none: true });
+  // 服务端未返回认证元数据时 fail-closed：未知不等于支持。
+  assert.deepEqual(authAvailability(null), { 'oauth-pat': false, apikey: false, none: false });
+  assert.deepEqual(authAvailability([]), { 'oauth-pat': false, apikey: false, none: false });
+  assert.deepEqual(authAvailability(undefined), { 'oauth-pat': false, apikey: false, none: false });
+  assert.deepEqual(authAvailability(['unknown-method']), { 'oauth-pat': false, apikey: false, none: false });
   assert.deepEqual(authAvailability(['OAuth', 'PAT']), { 'oauth-pat': true, apikey: false, none: false });
   assert.deepEqual(authAvailability(['oauth']), { 'oauth-pat': true, apikey: false, none: false });
   assert.deepEqual(authAvailability(['API_KEY']), { 'oauth-pat': false, apikey: true, none: false });
@@ -64,7 +67,7 @@ test('mcp-config contract: server template drives the wizard, auth list comes fr
     const cfg = await mePortalApi.mcpConfig('1', 'GENERIC');
     assert.equal(cfg.transport, 'streamable-http');
     assert.ok(cfg.authentication.includes('PAT'));
-    assert.equal(cfg.compatibilityStatus, 'NOT_VALIDATED');
+    assert.equal(cfg.compatibilityStatus, 'UNVERIFIED');
     const t = templatesFromConfig(cfg.configTemplate);
     assert.ok(t, 'server configTemplate must be valid JSON');
     assert.match(t.json, /mcpServers/);

@@ -19,7 +19,7 @@ CHECKS = (
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--all', dest='all_projects', action='store_true', help='Also run Maven verify, isolated quality probes, pnpm check and frontend contracts; select the development environment first.')
+    parser.add_argument('--all', dest='all_projects', action='store_true', help='Also run Maven verify, isolated quality probes, pnpm check and frontend tests; select the development environment first.')
     parser.add_argument('--maven-cache-seed', help='Optional read-only cache seed for isolated Maven probes; requires --all.')
     args = parser.parse_args()
     if args.maven_cache_seed and not args.all_projects:
@@ -38,8 +38,8 @@ def main() -> int:
         commands = (
             (['mvnw.cmd', '-B', '-ntp', 'verify'] if os.name == 'nt' else ['sh', './mvnw', '-B', '-ntp', 'verify'], ROOT / 'ptmcp-parent'),
             (probes, ROOT),
-            (['pnpm.cmd', 'check'] if os.name == 'nt' else ['pnpm', 'check'], ROOT / 'ptmcp-ui'),
-            (['pnpm.cmd', 'test:contracts'] if os.name == 'nt' else ['pnpm', 'test:contracts'], ROOT / 'ptmcp-ui'),
+            (['pnpm.cmd', 'check'] if os.name == 'nt' else ['pnpm', 'check'], ROOT / 'ptmcp-ui-react'),
+            (['pnpm.cmd', 'test'] if os.name == 'nt' else ['pnpm', 'test'], ROOT / 'ptmcp-ui-react'),
         )
         for command, directory in commands:
             if os.name == 'nt' and command[0].lower().endswith('.cmd'):

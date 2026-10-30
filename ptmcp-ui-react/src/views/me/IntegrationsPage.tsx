@@ -24,7 +24,6 @@ import {
   CopyIcon,
   DesktopIcon,
   DocumentIcon,
-  FlaskIcon,
   GearIcon,
   InfoIcon,
   MonitorIcon,
@@ -34,10 +33,10 @@ import {
   ShieldIcon,
   StreamIcon,
   WarningIcon,
-  LockIcon,
   type IconComponent,
 } from '../../components/Icons';
 import { mePortalApi, type McpConfig, type PlatformItem } from '../../services/mePortalApi';
+import { frontendPreview } from '../../services/frontendMode';
 import { authAvailability, templatesFromConfig } from './mcpTemplate';
 import { testDatasource } from '../../services/access';
 
@@ -57,7 +56,8 @@ interface IntegrationRow {
   updatedAt: string;
 }
 
-const INTEGRATIONS: IntegrationRow[] = [
+/** 仅合成预览模式展示的样例接入记录；正常模式没有对应服务端列表接口，必须留空。 */
+const PREVIEW_INTEGRATIONS: IntegrationRow[] = [
   {
     id: '1',
     name: '个人开发环境',
@@ -152,22 +152,9 @@ const CLIENT_TYPES: { value: string; label: string; desc: string; icon: IconComp
   { value: 'VSCODE', label: 'VS Code', desc: 'Visual Studio Code', icon: MonitorIcon },
 ];
 
-const PLATFORMS: { value: string; tier: number; name: string; desc: string; tag?: string; icon: IconComponent }[] = [
-  { value: 'T3', tier: 3, name: '合成桌面平台', desc: '企业协同开发与数据分析环境，推荐正式接入使用。', tag: '推荐', icon: DesktopIcon },
-  { value: 'T2', tier: 2, name: '合成分析平台', desc: '数据分析与报表场景环境。', icon: FlaskIcon },
-  { value: 'T1', tier: 1, name: '测试平台', desc: '开发调试环境，资源独立。', icon: FlaskIcon },
-  { value: 'CUSTOM', tier: 0, name: '自定义平台', desc: '手动配置平台地址。', icon: GearIcon },
-];
-
-const TRANSPORTS = [
-  { value: 'streamable-http', label: 'streamable-http', desc: '通过 HTTP 流式连接 MCP 服务端', icon: StreamIcon },
-  { value: 'stdio', label: 'stdio', desc: '本地进程标准输入输出', icon: MonitorIcon },
-];
-const AUTHS = [
-  { value: 'oauth-pat', label: 'OAuth / PAT', desc: '推荐使用，支持个人访问令牌（PAT）', icon: ShieldIcon },
-  { value: 'apikey', label: 'API Key', desc: '使用固定的 API Key 认证', icon: GearIcon },
-  { value: 'none', label: '无认证', desc: '仅适用于测试环境', icon: LockIcon },
-];
+/** 服务端 me/mcp-config 只返回 streamable-http 与 oauth/pat，UI 不再展示其他选项。 */
+const TRANSPORTS = [{ value: 'streamable-http', label: 'streamable-http', desc: '通过 HTTP 流式连接 MCP 服务端', icon: StreamIcon }];
+const AUTHS = [{ value: 'oauth-pat', label: 'OAuth / PAT', desc: '推荐使用，支持个人访问令牌（PAT）', icon: ShieldIcon }];
 
 const PLATFORM_FILTER_OPTIONS = [
   { value: '', label: '全部平台' },
@@ -192,6 +179,8 @@ export function IntegrationsPage() {
 
 /* ═══════════ 列表视图 ═══════════ */
 function IntegrationList({ onCreate }: { onCreate: () => void }) {
+  /* 正常模式没有服务端「我的接入」列表接口：不得展示样例数据，只保留空态与新建入口。 */
+  const integrations = frontendPreview ? PREVIEW_INTEGRATIONS : [];
   const [tab, setTab] = useState('all');
   const [keyword, setKeyword] = useState('');
   const [platformFilter, setPlatformFilter] = useState('');
@@ -202,24 +191,24 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
 
   const stats = useMemo(
     () => [
-      { icon: DocumentIcon, value: INTEGRATIONS.length, label: '全部接入', hint: '配置总量', tone: undefined },
+      { icon: DocumentIcon, value: integrations.length, label: '全部接入', hint: '配置总量', tone: undefined },
       {
         icon: CheckIcon,
-        value: INTEGRATIONS.filter((r) => r.status === '已生效').length,
+        value: integrations.filter((r) => r.status === '已生效').length,
         label: '已启用',
         hint: '可正常使用',
         tone: 'success' as const,
       },
       {
         icon: WarningIcon,
-        value: INTEGRATIONS.filter((r) => r.status === '未验证' || r.status === '配置中').length,
+        value: integrations.filter((r) => r.status === '未验证' || r.status === '配置中').length,
         label: '待验证',
         hint: '需要完成验证',
         tone: 'warning' as const,
       },
       {
         icon: InfoIcon,
-        value: INTEGRATIONS.filter((r) => r.status === '异常').length,
+        value: integrations.filter((r) => r.status === '异常').length,
         label: '异常',
         hint: '连接或认证失败',
         tone: 'danger' as const,
@@ -228,13 +217,13 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
     [],
   );
   const tabs = [
-    { key: 'all', label: `全部 (${INTEGRATIONS.length})` },
-    { key: 'enabled', label: `已启用 (${INTEGRATIONS.filter((r) => r.status === '已生效').length})` },
-    { key: 'pending', label: `待验证 (${INTEGRATIONS.filter((r) => r.status === '未验证' || r.status === '配置中').length})` },
-    { key: 'error', label: `异常 (${INTEGRATIONS.filter((r) => r.status === '异常').length})` },
+    { key: 'all', label: `全部 (${integrations.length})` },
+    { key: 'enabled', label: `已启用 (${integrations.filter((r) => r.status === '已生效').length})` },
+    { key: 'pending', label: `待验证 (${integrations.filter((r) => r.status === '未验证' || r.status === '配置中').length})` },
+    { key: 'error', label: `异常 (${integrations.filter((r) => r.status === '异常').length})` },
   ];
   const rows = useMemo(() => {
-    let list = INTEGRATIONS;
+    let list = integrations;
     if (tab === 'enabled') list = list.filter((r) => r.status === '已生效');
     // 待验证口径与统计卡一致：未验证 + 配置中（已配置但尚未生效）
     if (tab === 'pending') list = list.filter((r) => r.status === '未验证' || r.status === '配置中');
@@ -404,7 +393,14 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
               {pageRows.length === 0 ? (
                 <tr>
                   <td colSpan={8}>
-                    <EmptyState title="暂无接入配置" description="点击右上角「新建接入」开始配置" />
+                    <EmptyState
+                      title="暂无接入配置"
+                      description={
+                        frontendPreview
+                          ? '点击右上角「新建接入」开始配置'
+                          : '当前没有服务端登记的接入记录。点击「新建接入」，按平台目录生成真实客户端配置模板。'
+                      }
+                    />
                   </td>
                 </tr>
               ) : null}
@@ -440,7 +436,7 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
 /* ═══════════ 向导视图（4 步 + 完成页） ═══════════ */
 function Wizard({ onExit }: { onExit: () => void }) {
   const [step, setStep] = useState(0);
-  const [platform, setPlatform] = useState('T3');
+  const [platform, setPlatform] = useState('');
   const [client, setClient] = useState('GENERIC');
   const [transport, setTransport] = useState('streamable-http');
   const [auth, setAuth] = useState('oauth-pat');
@@ -448,74 +444,117 @@ function Wizard({ onExit }: { onExit: () => void }) {
   const [format, setFormat] = useState<'json' | 'yaml'>('json');
   const [copied, setCopied] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<'ok' | 'fail' | null>(null);
+  const [testResult, setTestResult] = useState<'demo-ok' | 'fail' | null>(null);
   const [done, setDone] = useState(false);
   const [platformItems, setPlatformItems] = useState<PlatformItem[]>([]);
+  const [platformCursor, setPlatformCursor] = useState<string | null>(null);
+  const [platformLoading, setPlatformLoading] = useState(true);
+  const [platformError, setPlatformError] = useState('');
   const [mcpCfg, setMcpCfg] = useState<McpConfig | null>(null);
   const [cfgLoading, setCfgLoading] = useState(false);
   const [cfgError, setCfgError] = useState('');
-  const cfgKey = `${platform}:${client}`;
+  const [cfgRetry, setCfgRetry] = useState(0);
 
-  const platformMeta = PLATFORMS.find((p) => p.value === platform)!;
+  const platformMeta = platformItems.find((p) => p.id === platform) ?? null;
   const clientMeta = CLIENT_TYPES.find((c) => c.value === client)!;
   const authMeta = AUTHS.find((a) => a.value === auth)!;
   const inferredName = name || `${clientMeta.label}接入`;
 
-  /* 平台目录一次拉取：向导的平台选择映射到服务端平台 id */
+  /* 平台目录来自 me/access-context?level=PLATFORM：只用真实 platformId，不按 tier 猜或回退。 */
   useEffect(() => {
+    let cancelled = false;
+    setPlatformLoading(true);
+    setPlatformError('');
     mePortalApi.accessContext
       .platforms()
-      .then((ctx) => setPlatformItems(ctx.items))
-      .catch(() => setPlatformItems([]));
+      .then((ctx) => {
+        if (cancelled) return;
+        setPlatformItems(ctx.items);
+        setPlatformCursor(ctx.nextCursor);
+      })
+      .catch((error: unknown) => !cancelled && setPlatformError((error as Error).message || '平台目录加载失败'))
+      .finally(() => !cancelled && setPlatformLoading(false));
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  /* 进入连接方式/模板步骤时按（平台, 客户端）拉服务端 mcp-config；同键已拉则跳过 */
+  const loadMorePlatforms = () => {
+    if (!platformCursor || platformLoading) return;
+    setPlatformLoading(true);
+    setPlatformError('');
+    mePortalApi.accessContext
+      .platforms(platformCursor)
+      .then((ctx) => {
+        setPlatformItems((prev) => [...prev, ...ctx.items]);
+        setPlatformCursor(ctx.nextCursor);
+      })
+      .catch((error: unknown) => setPlatformError((error as Error).message || '平台目录加载失败'))
+      .finally(() => setPlatformLoading(false));
+  };
+
+  /* 进入连接方式/模板步骤后，用所选真实 platformId + clientType 拉 mcp-config；无平台不发请求。 */
   useEffect(() => {
-    if (step < 2 || mcpCfg) return;
+    if (step < 2 || !platform || mcpCfg) return;
     let cancelled = false;
     setCfgLoading(true);
     setCfgError('');
-    const serverPlatformId = platformItems.find((p) => p.tier === platformMeta.tier)?.id ?? platformItems[0]?.id ?? '1';
     mePortalApi
-      .mcpConfig(serverPlatformId, client)
+      .mcpConfig(platform, client)
       .then((cfg) => !cancelled && setMcpCfg(cfg))
-      .catch(() => !cancelled && setCfgError('服务端模板获取失败，下方展示通用模板。'))
+      .catch((error: unknown) => !cancelled && setCfgError((error as Error).message || '服务端模板获取失败'))
       .finally(() => !cancelled && setCfgLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [step, cfgKey, mcpCfg, platformItems, platformMeta]);
+  }, [step, platform, client, mcpCfg, cfgRetry]);
 
   /* 换平台/客户端后旧配置作废，重新拉取 */
-  useEffect(() => {
+  const choosePlatform = (id: string) => {
+    setPlatform(id);
     setMcpCfg(null);
-  }, [cfgKey]);
-
-  const templates = (mcpCfg && templatesFromConfig(mcpCfg.configTemplate)) || {
-    json: '{\n  "mcpServers": {\n    "synthetic": {\n      "url": "https://mcp.example.test/mcp",\n      "headers": {\n        "Authorization": "Bearer <YOUR_PAT>"\n      }\n    }\n  }\n}',
-    yaml: 'mcpServers:\n  synthetic:\n    url: https://mcp.example.test/mcp\n    headers:\n      Authorization: "Bearer <YOUR_PAT>"',
+    setCfgError('');
   };
-  const templateJson = templates.json;
-  const templateYaml = templates.yaml;
-  const authAllowed = authAvailability(mcpCfg?.authentication);
+  const chooseClient = (id: string) => {
+    setClient(id);
+    setMcpCfg(null);
+    setCfgError('');
+  };
 
-  const canNext = (step === 0 && !!platform) || (step === 1 && !!client) || (step === 2 && !!transport && !!auth) || step === 3;
+  /* 只用服务端模板；解析失败视为错误，不回退示例模板。 */
+  const templates = mcpCfg ? templatesFromConfig(mcpCfg.configTemplate) : null;
+  const template = templates ? templates[format] : '';
+  const templateReady = !!mcpCfg && !!templates && !cfgError;
+  const authAllowed = authAvailability(mcpCfg?.authentication);
+  // 只有服务端能力已成功返回时才展示“不支持”；加载/失败期间保持不可选，避免把未知当成不支持或支持。
+  const authKnown = !!mcpCfg && !cfgError;
+
+  const canNext =
+    (step === 0 && !!platform) ||
+    (step === 1 && !!client) ||
+    // 认证方式必须由服务端 mcp-config.authentication 实际支持，元数据缺失时 fail-closed。
+    (step === 2 && transport === 'streamable-http' && auth === 'oauth-pat' && authAllowed['oauth-pat']) ||
+    (step === 3 && templateReady);
+
+  const isPreview = frontendPreview;
 
   const runTest = async () => {
+    if (!isPreview) return;
     setTesting(true);
     setTestResult(null);
     try {
       await testDatasource('preview');
-      setTestResult('ok');
+      setTestResult('demo-ok');
     } catch {
-      setTestResult('ok'); // 演示环境视为通过
+      setTestResult('fail');
     } finally {
       setTesting(false);
     }
   };
 
   const copy = () => {
-    navigator.clipboard?.writeText(format === 'json' ? templateJson : templateYaml).catch(() => undefined);
+    if (!template) return;
+    navigator.clipboard?.writeText(template).catch(() => undefined);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -523,7 +562,7 @@ function Wizard({ onExit }: { onExit: () => void }) {
   if (done) {
     return (
       <>
-        <PageHeader title="新建 MCP 接入" description="您已完成 MCP 接入配置，可以在客户端使用以下配置。" />
+        <PageHeader title="新建 MCP 接入" description="已按所选平台与客户端生成配置模板；实际接入由客户端握手验证。" />
         <div className="table-card" style={{ maxWidth: 860, margin: '0 auto', padding: '32px 36px' }}>
           <div style={{ textAlign: 'center', marginBottom: 22 }}>
             <span
@@ -542,27 +581,32 @@ function Wizard({ onExit }: { onExit: () => void }) {
             >
               <CheckIcon />
             </span>
-            <h2 style={{ margin: 0, fontSize: 20, color: 'var(--ptmcp-heading)' }}>接入配置已完成</h2>
+            <h2 style={{ margin: 0, fontSize: 20, color: 'var(--ptmcp-heading)' }}>配置模板已生成</h2>
             <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>
-              MCP 客户端接入配置已创建，你可以在下方查看配置信息，并进行连接测试。
+              配置来自服务端按平台与客户端生成的模板；是否真正连通需由客户端完成 MCP 握手后验证。
             </p>
           </div>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 22 }}>
-            <button className="btn btn--primary" onClick={runTest} disabled={testing}>
+            <button
+              className="btn btn--primary"
+              onClick={runTest}
+              disabled={testing || !isPreview}
+              title={isPreview ? undefined : 'MCP 连接由客户端完成握手，此处不可代替客户端验证'}
+            >
               <RefreshIcon /> {testing ? '测试中…' : '测试连接'}
             </button>
-            <button className="btn btn--secondary" onClick={copy}>
+            <button className="btn btn--secondary" onClick={copy} disabled={!template}>
               <CopyIcon /> 复制配置
             </button>
           </div>
-          {testResult === 'ok' ? (
-            <Alert kind="info" title="连接测试通过">
-              MCP 服务端可达，凭证占位待客户端替换后即可调用。
+          {testResult === 'demo-ok' ? (
+            <Alert kind="info" title="演示：连接测试（仅 preview 模式）">
+              当前为合成后端演示，此测试仅演示 UI 流程，不代表真实 MCP 连接。实际 MCP 连接由客户端完成握手。
             </Alert>
           ) : null}
           {testResult === 'fail' ? (
-            <Alert kind="danger" title="连接测试失败">
-              请检查 PAT 是否有效，或稍后重试。
+            <Alert kind="danger" title="测试失败">
+              连接测试失败，请检查配置后重试。
             </Alert>
           ) : null}
 
@@ -579,12 +623,13 @@ function Wizard({ onExit }: { onExit: () => void }) {
           >
             {[
               ['接入名称', inferredName],
-              ['平台', `${platformMeta.name} · Tier ${platformMeta.tier}`],
+              ['平台', platformMeta ? `${platformMeta.name} · Tier ${platformMeta.tier}` : '—'],
+              ['平台 ID', platform || '—'],
               ['客户端', clientMeta.label],
               ['传输方式', transport],
               ['认证方式', authMeta.label],
-              ['状态', '已生效'],
-              ['创建时间', '2026-10-29 16:08'],
+              ['状态', '模板已生成（待客户端验证）'],
+              ['兼容性', mcpCfg?.compatibilityStatus === 'UNVERIFIED' ? '尚未验证' : (mcpCfg?.validatedVersion ?? '—')],
             ].map(([k, v]) => (
               <div key={k}>
                 <div style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>{k}</div>
@@ -654,20 +699,37 @@ function Wizard({ onExit }: { onExit: () => void }) {
       <div className="table-card" style={{ padding: '22px 24px' }}>
         {step === 0 && (
           <>
-            <StepHeading n={1} title="选择平台" desc="选择您要接入的 PTMCP 平台环境" />
+            <StepHeading n={1} title="选择平台" desc="平台目录来自当前账号可见的授权范围（me/access-context）" />
+            {platformLoading && platformItems.length === 0 ? (
+              <p style={{ margin: '0 0 8px', fontSize: 12.5, color: 'var(--ptmcp-text-muted)' }}>正在加载平台目录…</p>
+            ) : null}
+            {platformError ? (
+              <Alert kind="danger" title="平台目录加载失败">
+                {platformError}
+              </Alert>
+            ) : null}
+            {!platformLoading && !platformError && platformItems.length === 0 ? (
+              <Alert kind="warning" title="没有可用平台">
+                当前账号没有可见的平台，无法生成 MCP 接入配置。请联系管理员开通平台授权后重试。
+              </Alert>
+            ) : null}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
-              {PLATFORMS.map((p) => (
+              {platformItems.map((p) => (
                 <OptionCard
-                  key={p.value}
-                  icon={p.icon}
+                  key={p.id}
+                  icon={DesktopIcon}
                   title={`${p.name} · Tier ${p.tier}`}
-                  description={p.desc}
-                  tag={p.tag}
-                  selected={platform === p.value}
-                  onSelect={() => setPlatform(p.value)}
+                  description={`目录模式 ${p.catalogMode} · 平台 ID ${p.id}`}
+                  selected={platform === p.id}
+                  onSelect={() => choosePlatform(p.id)}
                 />
               ))}
             </div>
+            {platformCursor ? (
+              <button className="btn btn--secondary" style={{ marginTop: 10 }} onClick={loadMorePlatforms} disabled={platformLoading}>
+                {platformLoading ? '加载中…' : '加载更多平台'}
+              </button>
+            ) : null}
             <Alert kind="info" title="平台说明">
               不同平台的资源隔离、配额和访问策略不同，请根据实际使用场景选择合适的平台环境。
             </Alert>
@@ -685,7 +747,7 @@ function Wizard({ onExit }: { onExit: () => void }) {
                   title={c.label}
                   description={c.desc}
                   selected={client === c.value}
-                  onSelect={() => setClient(c.value)}
+                  onSelect={() => chooseClient(c.value)}
                 />
               ))}
             </div>
@@ -720,14 +782,28 @@ function Wizard({ onExit }: { onExit: () => void }) {
                       icon={a.icon}
                       title={a.label}
                       description={a.desc}
-                      tag={authAllowed[a.value as keyof typeof authAllowed] ? undefined : '该平台不支持'}
+                      tag={authKnown && !authAllowed[a.value as keyof typeof authAllowed] ? '该平台不支持' : undefined}
                       selected={auth === a.value}
-                      onSelect={() => authAllowed[a.value as keyof typeof authAllowed] && setAuth(a.value)}
+                      onSelect={() => authKnown && authAllowed[a.value as keyof typeof authAllowed] && setAuth(a.value)}
                     />
                   ))}
                 </div>
               </div>
             </div>
+            {cfgLoading ? <Alert kind="info">正在读取该平台的 MCP 能力与配置模板…</Alert> : null}
+            {cfgError ? (
+              <Alert kind="danger" title="MCP 能力获取失败">
+                {cfgError}。未取得服务端能力时不能继续（fail-closed）。
+                <button className="link" style={{ marginLeft: 8 }} onClick={() => setCfgRetry((n) => n + 1)}>
+                  重试
+                </button>
+              </Alert>
+            ) : null}
+            {!cfgLoading && !cfgError && mcpCfg && !authAllowed['oauth-pat'] ? (
+              <Alert kind="warning" title="认证能力未确认">
+                服务端未返回 OAuth/PAT 认证能力（或该平台不支持），无法生成 MCP 配置。请返回上一步确认平台与客户端，或联系管理员补全认证元数据。
+              </Alert>
+            ) : null}
           </>
         )}
 
@@ -738,14 +814,19 @@ function Wizard({ onExit }: { onExit: () => void }) {
               <p style={{ margin: '0 0 8px', fontSize: 12.5, color: 'var(--ptmcp-text-muted)' }}>正在从服务端获取当前平台/客户端的配置模板…</p>
             ) : null}
             {cfgError ? (
-              <Alert kind="warning" title="模板来源">
-                {cfgError}
+              <Alert kind="danger" title="模板获取失败">
+                {cfgError}。未取得服务端模板时不能复制或完成配置，请返回连接方式步骤点击重试。
+              </Alert>
+            ) : null}
+            {!cfgLoading && !cfgError && mcpCfg && !templates ? (
+              <Alert kind="danger" title="模板解析失败">
+                服务端返回的 configTemplate 不是合法 JSON，无法生成客户端配置；请返回上一步重试或联系管理员。
               </Alert>
             ) : null}
             {!cfgLoading && mcpCfg ? (
               <p style={{ margin: '0 0 8px', fontSize: 12.5, color: 'var(--ptmcp-text-muted)' }}>
                 模板由服务端按所选平台与客户端生成；验证版本：
-                {mcpCfg.compatibilityStatus === 'NOT_VALIDATED' ? '尚未验证（PAT 仅作为占位符使用）' : (mcpCfg.validatedVersion ?? '未知')}。
+                {mcpCfg.compatibilityStatus === 'UNVERIFIED' ? '尚未验证（PAT 仅作为占位符使用）' : (mcpCfg.validatedVersion ?? '未知')}。
               </p>
             ) : null}
             <Alert kind="warning" title="模板包含凭证占位符">
@@ -790,30 +871,36 @@ function Wizard({ onExit }: { onExit: () => void }) {
                   </button>
                 ))}
               </div>
-              <button className="btn btn--secondary" onClick={copy}>
+              <button className="btn btn--secondary" onClick={copy} disabled={!template}>
                 <CopyIcon /> {copied ? '已复制' : '复制模板'}
               </button>
             </div>
-            <pre
-              style={{
-                margin: 0,
-                padding: '16px 18px',
-                background: '#0d1526',
-                color: '#c8dcf5',
-                borderRadius: 10,
-                fontSize: 12.5,
-                lineHeight: 1.65,
-                overflowX: 'auto',
-                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-              }}
-            >
-              {(format === 'json' ? templateJson : templateYaml).split('\n').map((line, i) => (
-                <div key={i} style={{ display: 'flex' }}>
-                  <span style={{ width: 28, flex: 'none', color: '#4c6184', userSelect: 'none' }}>{i + 1}</span>
-                  <span>{line}</span>
-                </div>
-              ))}
-            </pre>
+            {template ? (
+              <pre
+                style={{
+                  margin: 0,
+                  padding: '16px 18px',
+                  background: '#0d1526',
+                  color: '#c8dcf5',
+                  borderRadius: 10,
+                  fontSize: 12.5,
+                  lineHeight: 1.65,
+                  overflowX: 'auto',
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                }}
+              >
+                {template.split('\n').map((line, i) => (
+                  <div key={i} style={{ display: 'flex' }}>
+                    <span style={{ width: 28, flex: 'none', color: '#4c6184', userSelect: 'none' }}>{i + 1}</span>
+                    <span>{line}</span>
+                  </div>
+                ))}
+              </pre>
+            ) : (
+              <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ptmcp-text-muted)' }}>
+                尚未取得服务端模板；取得前不展示任何示例配置，复制与完成均不可用。
+              </p>
+            )}
           </>
         )}
 
@@ -827,7 +914,12 @@ function Wizard({ onExit }: { onExit: () => void }) {
               下一步 <ArrowRightIcon />
             </button>
           ) : (
-            <button className="btn btn--primary" onClick={() => setDone(true)}>
+            <button
+              className="btn btn--primary"
+              disabled={!templateReady}
+              title={templateReady ? undefined : '未取得服务端模板，不能完成配置'}
+              onClick={() => setDone(true)}
+            >
               完成并验证 <ArrowRightIcon />
             </button>
           )}

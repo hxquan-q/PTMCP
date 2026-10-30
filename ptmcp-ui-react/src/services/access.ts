@@ -20,9 +20,9 @@ export interface Grant extends GrantWrite {
   status: string;
   version: string;
 }
+/** 与服务端 PreviewResponse 对齐：resourceId 为 ResourceIds 编码值，sourceGrantIds 为授权行 id。 */
 export interface Preview {
-  decisions: { resourceId: string; meta: boolean; read: boolean; sourceGrantIds: string[]; reasonCodes?: string[] }[];
-  versions?: Record<string, string>;
+  decisions: { resourceId: string; meta: boolean; read: boolean; sourceGrantIds: string[] }[];
   evaluatedAt: string;
   nextBoundaryAt: string | null;
 }
@@ -54,24 +54,31 @@ export async function deleteGrant(id: string, signal?: AbortSignal): Promise<voi
   await request(`/api/v1/admin/acl/grants/${id}`, { method: 'DELETE', signal, headers: etag ? { 'If-Match': etag } : undefined });
 }
 
+/** 服务端 PreviewRequest 只接受 subjectUserId；ROLE/DEPT 预览未实现。 */
 export interface PreviewAccessParams {
-  subjectType: SubjectType;
-  subjectId: string;
+  subjectUserId: string;
   platformId: string;
+  /** ResourceIds 编码空间（OBJECT=(3<<48)|tableId），1..100 个。 */
   resourceIds: string[];
   at?: string;
 }
 
 export async function previewAccess(params: PreviewAccessParams, signal?: AbortSignal): Promise<Preview> {
   const body: Record<string, unknown> = {
-    subjectType: params.subjectType,
-    subjectId: params.subjectId,
+    subjectUserId: params.subjectUserId,
     platformId: params.platformId,
     resourceIds: params.resourceIds,
   };
   if (params.at) body.at = params.at;
   const { data } = await request<Preview>('/api/v1/admin/acl/preview', { method: 'POST', body, signal });
-  return data;
+  return {
+    ...data,
+    decisions: (data.decisions ?? []).map((decision) => ({
+      ...decision,
+      resourceId: String(decision.resourceId),
+      sourceGrantIds: (decision.sourceGrantIds ?? []).map((id) => String(id)),
+    })),
+  };
 }
 
 /* ─── 管理控制台:平台 / 客户端 / 委派 / 审计 / 任务 / 全部规则 ─── */
@@ -99,6 +106,10 @@ export interface ClientRow {
   platformId: string;
   name: string;
   type: string;
+  authMethods: string[];
+  redirectUris: string[];
+  allowedScopes: string[];
+  jwksUri: string | null;
   status: string;
   version: string;
 }
@@ -202,10 +213,15 @@ export interface PlatformWrite {
   status: string;
 }
 
+/** 客户端写入体：与服务端 ClientWrite 一致，status/allowedScopes 必填。 */
 export interface ClientWrite {
   name: string;
   type: string;
   authMethods: string[];
+  redirectUris: string[];
+  allowedScopes: string[];
+  jwksUri: string | null;
+  status: string;
 }
 
 /** 客户端创建响应：CONFIDENTIAL + client_secret_basic 时一次性返回明文 secret。 */

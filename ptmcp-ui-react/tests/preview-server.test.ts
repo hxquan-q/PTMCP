@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
+import { registerHooks } from 'node:module';
 import test from 'node:test';
-import { createPreviewServer } from '../src/preview/server.ts';
+
+// Vite resolves extensionless source imports; mirror that only while loading these TS modules.
+const sourceImports = registerHooks({
+  resolve(specifier: string, context: { parentURL?: string }, nextResolve: (s: string, c: unknown) => unknown) {
+    const extensionlessSource = context.parentURL?.includes('/src/') && specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier);
+    return nextResolve(extensionlessSource ? `${specifier}.ts` : specifier, context);
+  },
+});
+const { createPreviewServer } = await import('../src/preview/server.ts');
+sourceImports.deregister();
 
 test('preview is isolated, versioned and never returns a persisted secret', async () => {
   const server = createPreviewServer();
@@ -18,6 +28,10 @@ test('preview is isolated, versioned and never returns a persisted secret', asyn
     name: '演示客户端',
     type: 'CONFIDENTIAL',
     authMethods: ['client_secret_basic'],
+    redirectUris: ['https://client.example.test/callback'],
+    allowedScopes: ['mcp:catalog'],
+    jwksUri: null,
+    status: 'ACTIVE',
   });
   assert.ok(client.data.clientSecret);
   const detail = await read(`/api/v1/admin/clients/${client.data.client.id}`);

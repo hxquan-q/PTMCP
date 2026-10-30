@@ -30,6 +30,7 @@ import {
   UsersIcon,
 } from '../../components/Icons';
 import { createGrant, deleteGrant, listGrants, previewAccess, type Grant, type SubjectType } from '../../services/access';
+import { decodeResourceId, encodeObjectIds } from '../../services/resourceIds';
 import { listDatasources, listMetadata, type DatasourceRead, type MetadataObject } from '../../services/data';
 import { buildTree, type ResourceNode } from './resourceTree';
 import { useSensitivePermissions } from '../../permissionsContext';
@@ -70,7 +71,7 @@ export function PermissionsPage() {
   const [platforms, setPlatforms] = useState<PlatformItem[]>([]);
   const [platformId, setPlatformId] = useState('');
   const [previewAt, setPreviewAt] = useState('');
-  const [previewResult, setPreviewResult] = useState<{ resourceId: string; meta: boolean; read: boolean; reasonCodes?: string[] }[] | null>(null);
+  const [previewResult, setPreviewResult] = useState<{ resourceId: string; meta: boolean; read: boolean; sourceGrantIds: string[] }[] | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
   const [colWidths, setColWidths] = useState<[number, number]>([25, 25]); // 前两个栏 %,第三栏取余
@@ -266,8 +267,12 @@ export function PermissionsPage() {
   const grantPageRows = grantRows.slice((grantPage - 1) * grantPageSize, grantPage * grantPageSize);
   const subject = subjects.find((s) => s.id === subjectId);
 
-  /* 预览 resourceIds — 取当前树中所有 OBJECT 节点 */
-  const allObjectIds = useMemo(() => tree.flatMap((schema) => (schema.children ?? []).map((c) => c.resourceId).filter(Boolean) as string[]), [tree]);
+  /* 预览 resourceIds — 取当前树中所有 OBJECT 节点，编码进 ResourceIds 空间（服务端上限 100）。 */
+  const rawObjectIds = useMemo(() => tree.flatMap((schema) => (schema.children ?? []).map((c) => c.resourceId).filter(Boolean) as string[]), [tree]);
+  const encodedObjects = useMemo(() => encodeObjectIds(rawObjectIds.slice(0, 100)), [rawObjectIds]);
+  const allObjectIds = encodedObjects.ids;
+  const previewSubjectSupported = subjectType === 'USER';
+  const previewTruncated = rawObjectIds.length > 100;
 
   /* 拖拽分栏 */
   const containerRef = useRef<HTMLDivElement>(null);
@@ -584,26 +589,35 @@ export function PermissionsPage() {
               </label>
               <button
                 className="btn btn--primary"
-                disabled={!subjectId || !platformId || !allObjectIds.length || previewLoading}
+                disabled={!previewSubjectSupported || !subjectId || !platformId || !allObjectIds.length || previewLoading || !!encodedObjects.error}
+                title={previewSubjectSupported ? undefined : '服务端预览接口只支持用户主体；角色/部门预览暂不可用'}
                 onClick={() => {
                   setPreviewLoading(true);
                   setPreviewError('');
                   setPreviewResult(null);
                   previewAccess({
-                    subjectType,
-                    subjectId,
+                    subjectUserId: subjectId,
                     platformId,
                     resourceIds: allObjectIds,
                     ...(previewAt ? { at: new Date(previewAt).toISOString() } : {}),
                   })
                     .then((res) => setPreviewResult(res.decisions))
-                    .catch(() => setPreviewError('预览计算失败，请确认主体与平台已选择。'))
+                    .catch(() => setPreviewError('预览计算失败，请确认用户主体与平台已选择。'))
                     .finally(() => setPreviewLoading(false));
                 }}
               >
                 <BarChartIcon /> {previewLoading ? '计算中…' : '计算有效权限'}
               </button>
             </div>
+            {!previewSubjectSupported ? (
+              <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
+                当前主体为{subjectType === 'ROLE' ? '角色' : '部门'}：服务端预览接口只接受用户主体，请切换到用户后再计算。
+              </p>
+            ) : null}
+            {encodedObjects.error ? <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--ptmcp-red)' }}>{encodedObjects.error}</p> : null}
+            {previewTruncated && !encodedObjects.error ? (
+              <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>当前对象数超过服务端单次上限，仅预览前 100 个对象。</p>
+            ) : null}
             {previewError ? (
               <div style={{ marginTop: 12 }}>
                 <Alert kind="danger" title="计算失败">
@@ -624,17 +638,21 @@ export function PermissionsPage() {
                   </thead>
                   <tbody>
                     {previewResult.map((d) => {
-                      const obj = metadataObjects.find((o) => o.id === d.resourceId);
+                      const decoded = decodeResourceId(d.resourceId);
+                      const obj = decoded?.type === 'OBJECT' ? metadataObjects.find((o) => o.id === decoded.tableId) : undefined;
+                      const label = obj?.objectName ?? obj?.tableName ?? `${decoded?.type ?? 'RESOURCE'} #${decoded?.tableId ?? d.resourceId}`;
                       return (
                         <tr key={d.resourceId}>
-                          <td style={{ fontWeight: 500 }}>{obj?.objectName ?? obj?.tableName ?? d.resourceId}</td>
+                          <td style={{ fontWeight: 500 }}>{label}</td>
                           <td style={{ textAlign: 'center' }}>
                             <StatusDot tone={d.meta ? 'success' : 'danger'}>{d.meta ? '允许' : '拒绝'}</StatusDot>
                           </td>
                           <td style={{ textAlign: 'center' }}>
                             <StatusDot tone={d.read ? 'success' : 'danger'}>{d.read ? '允许' : '拒绝'}</StatusDot>
                           </td>
-                          <td style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>{(d.reasonCodes ?? []).join(', ')}</td>
+                          <td style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
+                            {d.sourceGrantIds.length ? `授权 ${d.sourceGrantIds.join(', ')}` : '无命中规则'}
+                          </td>
                         </tr>
                       );
                     })}

@@ -95,10 +95,10 @@
               }
             },
             "frontend": {
-              "name": "Frozen install, frontend checks and contracts",
+              "name": "Frozen install, frontend checks and tests",
               "step": "Command",
               "with": {
-                "run": "set -euo pipefail\nexport PATH=\"/opt/node-v24.22.1-linux-x64/bin:$PATH\"\nnode --version\nnpm install --global pnpm@11.9.0\npnpm --version\npnpm --dir ptmcp-ui install --frozen-lockfile --ignore-scripts\npnpm --dir ptmcp-ui check\npnpm --dir ptmcp-ui test:contracts\n"
+                "run": "set -euo pipefail\nexport PATH=\"/opt/node-v24.22.1-linux-x64/bin:$PATH\"\nnode --version\nnpm install --global pnpm@11.9.0\npnpm --version\npnpm --dir ptmcp-ui-react install --frozen-lockfile --ignore-scripts\npnpm --dir ptmcp-ui-react check\npnpm --dir ptmcp-ui-react test\n"
               }
             }
           },

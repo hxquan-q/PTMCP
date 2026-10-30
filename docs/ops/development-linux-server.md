@@ -1,6 +1,6 @@
 # Linux 开发服务器
 
-本页说明如何在当前 Linux 服务器上用 `scripts/Dev-Linux.sh` 启动 PTMCP 的本地开发环境。它只管理专用的 `ptmcp-dev` Compose 项目和本机开发凭据，不是生产部署流程。
+本页保留 Linux 开发服务器的环境与脚本记录，不是生产部署流程。`scripts/Dev-Linux.sh` 的 UI 路径已改为 `ptmcp-ui-react`，默认端口随 React 工程改为 5175（`PTMCP_UI_PUBLIC=true` 时仍为 5173），并已通过 `bash -n` 语法检查；但尚未在 Linux 主机实际执行，不能声称一键启动已验证。React 手动启动和端口以[工程说明](../../ptmcp-ui-react/README.md)为准。涉及容器、凭据和持久卷的操作须先确认环境及授权，尤其不能把下文 reset 示例当作可直接执行的修复建议。
 
 ## 前置条件
 
@@ -50,11 +50,11 @@ cd /home/ubuntu/ALLSTAR_DATACHAT_SUB
 PTMCP_MYSQL_IMAGE=mysql:8.0 ./scripts/Dev-Linux.sh up
 ```
 
-这不是目标基线。最终仍应切回 `config/dev/compose.yaml` 中固定的 8.4 digest；切换前执行 `./scripts/Dev-Linux.sh reset --yes`，再不带环境变量运行 `up`。也可以把 `PTMCP_MYSQL_IMAGE='mysql:8.0'` 临时写入 `.local/dev/dev.env`（该文件已 gitignore），验证完成后删除该行。
+这不是目标基线。切回 `config/dev/compose.yaml` 的 8.4 digest 前，必须评估数据卷和迁移兼容性；清空开发库属于破坏性操作，须先核对目标、备份及获得明确授权，不能直接按旧脚本重置。临时覆盖可写入被忽略的 `.local/dev/dev.env`，但只适用于获准的隔离开发环境。
 
 ## 访问
 
-- 前端：`http://127.0.0.1:5173`
+- React 默认前端：`http://127.0.0.1:5175`（公开开发模式为 5173）
 - admin：`http://127.0.0.1:8080`
 - authz：`http://127.0.0.1:8081`
 - gateway：`http://127.0.0.1:8082`
@@ -65,10 +65,10 @@ PTMCP_MYSQL_IMAGE=mysql:8.0 ./scripts/Dev-Linux.sh up
 cat .local/dev/admin-credentials.txt
 ```
 
-Vite 默认只绑定 `127.0.0.1`。从其他机器访问时优先使用 SSH 隧道，只需转发 5173；前端代理会在服务器上访问三个后端：
+Vite 默认只绑定 `127.0.0.1`。从其他机器访问默认开发模式时优先使用 SSH 隧道，转发 5175；前端代理会在服务器上访问三个后端：
 
 ```bash
-ssh -L 5173:127.0.0.1:5173 <user>@<server>
+ssh -L 5175:127.0.0.1:5175 <user>@<server>
 ```
 
 ## 临时公网访问
@@ -87,7 +87,7 @@ sudo ufw allow 5173/tcp
 # 4. 访问 http://<公网IP>:5173
 ```
 
-也可以直接手工运行 `cd ptmcp-ui && pnpm dev:public`。
+React 前端可在 `ptmcp-ui-react` 中按[工程说明](../../ptmcp-ui-react/README.md)手工启动；`pnpm dev` 默认只绑定本机，`dev:public` 会绑定所有网卡且仅可在明确授权的隔离开发环境使用。
 
 **安全边界**：Vite 是开发服务器，当前链路由 HTTP 承载，管理员密码和会话 Cookie 会明文传输。不要用于生产、真实业务数据或长期暴露；建议在云安全组限制来源 IP，或改用 SSH 隧道。恢复默认时把 `PTMCP_UI_PUBLIC` 设为 `false` 并重启 UI，然后执行 `sudo ufw delete allow 5173/tcp`。
 
@@ -108,17 +108,18 @@ sudo ufw allow 5173/tcp
 
 `start` 会在后台启动 admin、authz 和前端，日志与 PID 位于 `.local/dev/run/`。`reset --yes` 会删除专用数据库卷和新管理员密码；它不会删除 `config/dev/secrets/` 与 `.local/dev/dev.env`。
 
-前端检查和构建必须在 `ptmcp-ui` 目录内执行，这样 corepack 才会按 `package.json` 使用 pnpm 11.9.0：
+React 前端检查在 `ptmcp-ui-react` 目录执行，并先确认 Node/pnpm 版本符合该目录的 `package.json`：
 
 ```bash
-cd ptmcp-ui
+cd ptmcp-ui-react
 pnpm check
+pnpm test
 ```
 
 ## 迁移与种子数据
 
 - 迁移文件仍以 `ptmcp-parent/ptmcp-persistence/src/main/resources/db/ptmcp-migration/V*.sql` 为唯一来源。
-- 本地脚本使用 `ptmcp_dev_schema_migration` 记录版本和 SHA-256 校验和；它不是 Flyway 的 `flyway_schema_history`。修改已应用的迁移文件会导致脚本拒绝继续，此时按提示 `reset --yes` 重建即可。
+- 本地脚本使用 `ptmcp_dev_schema_migration` 记录版本和 SHA-256 校验和；它不是 Flyway 的 `flyway_schema_history`。已应用迁移发生校验冲突时先停止并核对迁移、数据及恢复方案；不得为了消除失败直接清空数据卷。
 - `scripts/dev_identity.sql` 是本地 OAuth 账号所需的 `sys_user` 表。生产环境的 `sys_user` 由宿主身份库提供，不能把该文件应用到生产元库。
 - `scripts/dev_seed_admin.py` 只生成随机密码、BCrypt 哈希和本地种子 SQL；密码不会打印到终端，也不会写入仓库。
 
@@ -137,5 +138,5 @@ pnpm check
 - **MySQL 8.4 拉取慢或卡住**：Compose 使用固定 digest，首次需要下载镜像。若 Docker 的某个层长时间停在 `Verifying Checksum`，可取消拉取后重试；仅在本机开发链路阻塞时，按上文临时使用 `mysql:8.0`。8.0 结果不能写成 8.4 验证通过。
 - **JDK 版本错误**：执行 `./scripts/Dev-Linux.sh doctor`，确认使用 Java 21。
 - **Maven Wrapper 首次下载慢**：脚本优先使用系统 Maven 3.9.9；没有时回退到 Wrapper。
-- **pnpm 版本错误**：在 `ptmcp-ui` 目录内执行命令，不要从仓库根用 `pnpm --dir` 触发 corepack 的默认版本。
-- **管理员密码丢失**：执行 `./scripts/Dev-Linux.sh reset --yes` 重建本地库并生成新密码。
+- **pnpm 版本错误**：在 `ptmcp-ui-react` 目录内检查 packageManager 和 engines，不要假定仓库根目录的默认版本一致。
+- **管理员密码丢失**：先核对目标环境、账号恢复方案与备份；重建会删除本地数据库卷，只能在明确授权后于可丢弃的隔离环境执行。

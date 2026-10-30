@@ -21,7 +21,7 @@ SKIP_PERMISSIONS = {"ptmcp:session-expired"}
 
 def collect_permissions(root: Path) -> list[str]:
     codes: set[str] = set()
-    for base in (root / "ptmcp-ui" / "src", root / "docs" / "frontend"):
+    for base in (root / "ptmcp-ui-react" / "src", root / "docs" / "frontend"):
         if not base.exists():
             continue
         for path in base.rglob("*"):

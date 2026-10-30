@@ -6,6 +6,26 @@ let scenario: PreviewScenario = 'normal';
 export function setPreviewScenario(value: PreviewScenario): void {
   scenario = value;
 }
+import { decodeResourceId } from '../services/resourceIds';
+
+/** 与后端 ClientAdminService.normalize 对齐的必填校验：预览也必须拒绝缺少 status/allowedScopes 的旧三字段请求体。 */
+function invalidClientWrite(body: Row): boolean {
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const methods = body.authMethods;
+  const scopes = body.allowedScopes;
+  return (
+    name.length < 1 ||
+    name.length > 200 ||
+    (body.type !== 'PUBLIC' && body.type !== 'CONFIDENTIAL') ||
+    (body.status !== 'ACTIVE' && body.status !== 'DISABLED') ||
+    !Array.isArray(methods) ||
+    methods.length === 0 ||
+    !Array.isArray(scopes) ||
+    scopes.length === 0 ||
+    !Array.isArray(body.redirectUris)
+  );
+}
+
 interface PreviewOptions {
   method?: string;
   body?: unknown;
@@ -700,7 +720,7 @@ export function createPreviewServer() {
         url: 'https://mcp.example.test/mcp',
         authentication: ['OAuth', 'PAT'],
         configTemplate: '{"mcpServers":{"synthetic":{"url":"https://mcp.example.test/mcp","headers":{"Authorization":"Bearer <YOUR_PAT>"}}}}',
-        compatibilityStatus: 'NOT_VALIDATED',
+        compatibilityStatus: 'UNVERIFIED',
         validatedVersion: null,
       });
     if (resource === 'acl' && id === 'effective')
@@ -716,26 +736,28 @@ export function createPreviewServer() {
         nextCursor: null,
       });
     if (resource === 'acl' && id === 'preview') {
-      const subjectGrants = tables.grants.filter(
-        (g) => g.subjectType === body.subjectType && String(g.subjectId) === String(body.subjectId) && g.status === 'ACTIVE',
-      );
+      // 与真实 AclGrantAdminController 对齐：只接受 subjectUserId，resourceIds 为 ResourceIds 编码值。
+      const subjectUserId = String(body.subjectUserId ?? '');
+      const subjectGrants = tables.grants.filter((g) => g.subjectType === 'USER' && String(g.subjectId) === subjectUserId && g.status === 'ACTIVE');
       return response({
-        decisions: ((body.resourceIds as string[]) ?? []).map((resourceId) => {
-          const matched = subjectGrants.filter((g) => String(g.resourceId) === String(resourceId) && g.action === 'READ');
+        decisions: ((body.resourceIds as string[]) ?? []).map((encoded) => {
+          // 与 ResourceIds.typeOf/tableIdOf 一致：类型位不合法或未编码的 id 不命中任何规则（all-deny）。
+          const decoded = decodeResourceId(String(encoded));
+          const matched = decoded
+            ? subjectGrants.filter((g) => g.resourceType === decoded.type && String(g.resourceId) === decoded.tableId && g.action === 'READ')
+            : [];
           const deny = matched.find((g) => g.effect === 'DENY');
           const allow = matched.find((g) => g.effect === 'ALLOW');
           const read = !!allow && !deny;
           return {
-            resourceId,
+            resourceId: encoded,
             meta: read,
             read,
             sourceGrantIds: matched.map((g) => String(g.id)),
-            reasonCodes: deny ? ['DENY_MATCHED'] : allow ? ['SYNTHETIC_PREVIEW'] : ['NO_GRANT'],
           };
         }),
         evaluatedAt: now,
         nextBoundaryAt: null,
-        versions: { securityVersion: '1' },
       });
     }
     if (resource === 'platforms' && action === 'scopes') {
@@ -829,6 +851,7 @@ export function createPreviewServer() {
       );
     }
     if (method === 'POST') {
+      if (table === 'clients' && invalidClientWrite(body)) return fail(400, 'INVALID_ARGUMENT');
       const created: Row = { ...body, id: String(++serial), version: '1', status: body.status ?? 'ACTIVE', createdAt: now };
       // Write-only inputs are never retained in fixtures or included in list/detail DTOs.
       for (const key of ['credential', 'initialPassword', 'newPassword', 'proofConfig']) delete created[key];
@@ -874,6 +897,7 @@ export function createPreviewServer() {
       return response({ ...row, deleted: true, revoked: true });
     }
     if (method === 'PUT' || method === 'PATCH') {
+      if (table === 'clients' && invalidClientWrite(body)) return fail(400, 'INVALID_ARGUMENT');
       if (subAction === 'dictionary') {
         row.dictionary = { ...body, version: String(Number((row.dictionary as Row).version) + 1) };
         row.dictionaryTitle = body.title;

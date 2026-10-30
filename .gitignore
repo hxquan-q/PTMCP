@@ -5,7 +5,6 @@ node_modules/
 config/dev/secrets/
 target/
 dist/
-ptmcp-ui/src/components.d.ts
 .local/
 .playwright-mcp/
 .env

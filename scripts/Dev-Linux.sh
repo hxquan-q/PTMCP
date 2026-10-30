@@ -37,6 +37,11 @@ require_cmd() {
     command -v "$1" >/dev/null 2>&1 || die "missing command: $1"
 }
 
+ui_port() {
+    # React 工程：pnpm dev 绑定 127.0.0.1:5175；PTMCP_UI_PUBLIC=true 时 dev:public 绑定 5173。
+    if [ "${PTMCP_UI_PUBLIC:-false}" = "true" ]; then printf '5173'; else printf '5175'; fi
+}
+
 require_infra_tools() {
     require_cmd docker
     docker compose version >/dev/null 2>&1 || die "docker compose is required"
@@ -419,8 +424,9 @@ status() {
             echo "${name}: down"
         fi
     done
-    if curl -fsS --max-time 2 "http://127.0.0.1:5173/" >/dev/null 2>&1; then
-        echo "ui: UP (http://127.0.0.1:5173)"
+    local ui_url="http://127.0.0.1:$(ui_port)/"
+    if curl -fsS --max-time 2 "$ui_url" >/dev/null 2>&1; then
+        echo "ui: UP ($ui_url)"
     else
         echo "ui: down"
     fi
@@ -467,7 +473,7 @@ run_ui() {
     require_cmd node
     require_cmd pnpm
     load_env
-    cd "$ROOT/ptmcp-ui"
+    cd "$ROOT/ptmcp-ui-react"
     if [ ! -d node_modules ]; then
         info "installing frontend dependencies"
         pnpm install --frozen-lockfile --ignore-scripts
@@ -508,7 +514,7 @@ set -Eeuo pipefail
 set -a
 . "$ENV_FILE"
 set +a
-cd "$ROOT/ptmcp-ui"
+cd "$ROOT/ptmcp-ui-react"
 if [ ! -d node_modules ]; then
     pnpm install --frozen-lockfile --ignore-scripts
 fi
@@ -582,9 +588,9 @@ start() {
     detect_java_home
     load_env
 
-    if [ ! -d "$ROOT/ptmcp-ui/node_modules" ]; then
+    if [ ! -d "$ROOT/ptmcp-ui-react/node_modules" ]; then
         info "installing frontend dependencies before start"
-        (cd "$ROOT/ptmcp-ui" && pnpm install --frozen-lockfile --ignore-scripts)
+        (cd "$ROOT/ptmcp-ui-react" && pnpm install --frozen-lockfile --ignore-scripts)
     fi
 
     start_one admin
@@ -599,7 +605,7 @@ start() {
     if [ "${PTMCP_GATEWAY_ENABLED:-false}" = "true" ]; then
         wait_health gateway "http://127.0.0.1:8082/actuator/health" || true
     fi
-    wait_health ui "http://127.0.0.1:5173/" || true
+    wait_health ui "http://127.0.0.1:$(ui_port)/" || true
     status
 }
 
@@ -699,7 +705,7 @@ Typical first run:
   ./scripts/Dev-Linux.sh build
   ./scripts/Dev-Linux.sh start
 
-Open http://127.0.0.1:5173 and use the credentials in
+Open http://127.0.0.1:5175 (PTMCP_UI_PUBLIC=true: 5173) and use the credentials in
 .local/dev/admin-credentials.txt. The admin password is random and never
 printed by this script.
 EOF

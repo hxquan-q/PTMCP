@@ -32,7 +32,7 @@ function toYamlLines(value: unknown, indent: number): string[] {
   return [`${pad}${yamlScalar(value)}`];
 }
 
-/** 解析失败返回 null（调用方回退到通用模板并提示）。 */
+/** 解析失败返回 null；调用方必须禁用复制/完成并提示，不得回退示例或通用模板。 */
 export function templatesFromConfig(rawConfigTemplate: string): McpTemplates | null {
   let parsed: unknown;
   try {
@@ -47,9 +47,9 @@ export function templatesFromConfig(rawConfigTemplate: string): McpTemplates | n
   };
 }
 
-/** 服务端 authentication 数组 → 认证卡片可用性（未返回时全部可用）。 */
+/** 服务端 authentication 数组 → 认证卡片可用性；未返回认证元数据时全部不可用（fail-closed，未知不等于支持）。 */
 export function authAvailability(serverAuthentication: string[] | null | undefined): Record<'oauth-pat' | 'apikey' | 'none', boolean> {
-  if (!serverAuthentication || serverAuthentication.length === 0) return { 'oauth-pat': true, apikey: true, none: true };
+  if (!serverAuthentication || serverAuthentication.length === 0) return { 'oauth-pat': false, apikey: false, none: false };
   const list = serverAuthentication.map((item) => item.toUpperCase());
   return {
     'oauth-pat': list.includes('OAUTH') || list.includes('PAT') || list.includes('OAUTH / PAT'),

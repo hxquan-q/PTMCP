@@ -204,9 +204,19 @@ test('platform and client DTOs carry only config fields, never scope or secret s
     assertExactKeys(bodies[1]!, ['code', 'name', 'tier', 'catalogMode', 'proofMode', 'status'], 'updatePlatform');
     assert.ok(!('proofConfigured' in bodies[1]!), 'updatePlatform must not include proofConfigured (read-only)');
 
-    // createClient：3 个业务字段，不含 platformId（在 URL 路径中）
-    await access.createClient('1', { name: 'DTO客户端', type: 'CONFIDENTIAL', authMethods: ['client_secret_basic'] }).catch(() => undefined);
-    assertExactKeys(bodies[2]!, ['name', 'type', 'authMethods'], 'createClient');
+    // createClient：完整 ClientWrite（status/allowedScopes 必填，旧三字段会被真实后端 400），不含 platformId（在 URL 路径中）
+    await access
+      .createClient('1', {
+        name: 'DTO客户端',
+        type: 'CONFIDENTIAL',
+        authMethods: ['client_secret_basic'],
+        redirectUris: ['https://client.example.test/callback'],
+        allowedScopes: ['mcp:catalog'],
+        jwksUri: null,
+        status: 'ACTIVE',
+      })
+      .catch(() => undefined);
+    assertExactKeys(bodies[2]!, ['name', 'type', 'authMethods', 'redirectUris', 'allowedScopes', 'jwksUri', 'status'], 'createClient');
     assert.ok(!('platformId' in bodies[2]!), 'createClient must not include platformId (it is in the URL path)');
     assert.ok(!('clientId' in bodies[2]!), 'createClient must not include clientId (server-assigned)');
     assert.ok(!('clientSecret' in bodies[2]!), 'createClient must not include clientSecret (server-generated)');

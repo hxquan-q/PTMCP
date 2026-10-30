@@ -61,7 +61,7 @@ def main() -> int:
     for scope in SCOPES:
         markdown.update((DOCS / scope).rglob("*.md"))
     markdown.update((ROOT / "tasks").rglob("*.md"))
-    for project in ('ptmcp-parent', 'ptmcp-ui'):
+    for project in ('ptmcp-parent', 'ptmcp-ui-react'):
         markdown.update((ROOT / project).glob('*.md'))
     for lifecycle in ("proposed", "implemented", "rejected"):
         markdown.update((ROOT / ".agents" / "notes" / lifecycle).rglob("*.md"))

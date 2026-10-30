@@ -1,5 +1,7 @@
 # 云效流水线与代码检测
 
+> **2026-10-26 云端配置快照**：下文含旧 `ptmcp-ui`/Vue 前端任务，是当时云端配置的只读记录。仓库入口已于 2026-10-30 迁移为 `ptmcp-ui-react` 的 `pnpm check` + `pnpm test`，本文件的 `yunxiao-pipeline.json` 副本已同步；云端 Flow 尚未回读或重新应用，不代表已适配 React 或已通过。任何调整前须回读当前配置并经授权，不能仅修改本文后宣称云端生效。
+
 日期：2026-10-26。适用于 Codeup 仓库 `Allstar_AI/ALLSTAR_DATACHAT_SUB`（组织
 `621301e6c5006adb19febbd6`，仓库 ID `7609410`）。本页记录云效侧实际配置；流水线配置由
 Flow API 保存，不假设仓库内的文件会自动同步。
@@ -25,10 +27,11 @@ Flow API 保存，不假设仓库内的文件会自动同步。
    `sh ./mvnw -B -ntp verify`（不跳测试），随后执行
    `python scripts/check_backend_quality.py --seed-repository "$HOME/.m2/repository" --timeout 240`。
    安装步骤附带的 Maven 3.9.3 不用于构建，仓库 Wrapper 固定 3.9.9。
-3. **前端 ESLint/Prettier/类型检查/构建/契约测试**（15 分钟超时）：从 Node 官网下载
+3. **前端 ESLint/Prettier/类型检查/构建/测试**（15 分钟超时）：从 Node 官网下载
    Node 24.22.1，固定 SHA256 校验并缓存归档，安装 pnpm 11.9.0，
-   执行 `pnpm --dir ptmcp-ui install --frozen-lockfile --ignore-scripts`、
-   `pnpm --dir ptmcp-ui check`、`pnpm --dir ptmcp-ui test:contracts`。
+   执行 `pnpm --dir ptmcp-ui-react install --frozen-lockfile --ignore-scripts`、
+   `pnpm --dir ptmcp-ui-react check`、`pnpm --dir ptmcp-ui-react test`。
+   （2026-10-26 快照中为 `ptmcp-ui` + `test:contracts`；本副本已按仓库现行入口更新，云端待回读。）
 
 不再每次执行 `dnf install`。第 4 次运行的日志显示仅仓库索引刷新就超过 15 分钟，阻塞后续
 运行；改用工具步骤及已校验归档，避免重复刷新不相关软件仓库。Flow 的既有缓存包含
@@ -45,7 +48,7 @@ Node 24.22.1 Linux x64 的固定 SHA256：
 需要在控制台开启后端任务的 Docker Daemon，或接入有 Docker 的专用 Linux 构建集群，
 再用双方言真实测试验证。当前未取得完整云端 PASS，不部署、不发布；扫描门禁阈值未修改。
 
-本地根 `python scripts/check.py --all` 与 GitHub 工作流已补齐 `test:contracts`。
+本地根 `python scripts/check.py --all` 与 GitHub 工作流已改为 `ptmcp-ui-react` 的 `pnpm check` + `pnpm test`（Windows 本机退出码 0）；云端 Flow 仍待回读更新。
 本地改动尚未推送，云端当前验证的是 Codeup 已有提交与新 Flow 配置；配置保存与运行通过
 分别记录。实际结果与交接见 [流水线工作项](../../tasks/work-items/DEV-20261026-yunxiao-pipeline.md)。
 
@@ -80,7 +83,7 @@ aliyun devops flow-update-pipeline \
 | 语言 | Java、TypeScript |
 | 触发 | `dev` 分支的提交（commit）和合并请求（merge_request） |
 | 质量门禁 | blocker `<= 0`；critical/major 当前不设上限 |
-| 生成文件 | `ptmcp-ui/src/components.d.ts` 不再纳入 Git（`.gitignore`），由 unplugin-vue-components 在本地/构建时生成；代码检测不扫描该生成产物 |
+| 生成文件 | Vue 工程移除后 `ptmcp-ui/src/components.d.ts` 与对应 `.gitignore` 条目一并删除；React 工程无同源生成产物 |
 
 规则包：
 

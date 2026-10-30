@@ -31,10 +31,13 @@ import {
 import { departmentDepth, validateUserForm, type UserFormValues } from './orgForms';
 import { passwordError } from '../me/passwordForm';
 import { useSensitivePermissions } from '../../permissionsContext';
+import { frontendPreview } from '../../services/frontendMode';
 import { showToast } from '../../toast';
 
 export function UsersPage() {
   const { can } = useSensitivePermissions();
+  /* 后端 UserAdminController 未提供 DELETE /admin/users/{id}；仅合成预览后端支持删除。 */
+  const canDeleteUsers = frontendPreview && can('userDelete');
   const [rows, setRows] = useState<UserRow[]>([]);
   const [roles, setRoles] = useState<RoleRow[]>([]);
   const [depts, setDepts] = useState<DepartmentRow[]>([]);
@@ -189,7 +192,9 @@ export function UsersPage() {
                     </button>
                     <button
                       className="link"
-                      style={{ marginLeft: 10, color: 'var(--ptmcp-red)' }}
+                      style={{ marginLeft: 10, color: canDeleteUsers ? 'var(--ptmcp-red)' : 'var(--ptmcp-text-faint)' }}
+                      disabled={!canDeleteUsers}
+                      title={canDeleteUsers ? undefined : '当前后端未提供删除用户接口（仅合成预览模式可用）'}
                       onClick={() => setDeleting(r)}
                       aria-label={`删除 ${r.displayName}`}
                     >
@@ -241,7 +246,7 @@ export function UsersPage() {
             <button
               className="btn btn--primary"
               style={{ background: 'var(--ptmcp-red)' }}
-              disabled={busy || !can('userDelete')}
+              disabled={busy || !canDeleteUsers}
               onClick={async () => {
                 if (!deleting) return;
                 setBusy(true);
@@ -260,6 +265,11 @@ export function UsersPage() {
           </>
         }
       >
+        {!canDeleteUsers ? (
+          <Alert kind="warning" title="删除不可用">
+            当前后端未提供删除用户接口，正常模式禁止提交删除请求；请改用「停用」。
+          </Alert>
+        ) : null}
         <p style={{ margin: 0, fontSize: 13, color: 'var(--ptmcp-text)' }}>
           确认删除用户「{deleting?.displayName || deleting?.username}」？该账号将立即无法登录，历史审计记录保留。
         </p>

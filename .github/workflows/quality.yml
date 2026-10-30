@@ -86,7 +86,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: ptmcp-ui
+        working-directory: ptmcp-ui-react
     steps:
       - uses: actions/checkout@v4
         with:
@@ -99,7 +99,7 @@ jobs:
         with:
           node-version: '24.22.1'
           cache: pnpm
-          cache-dependency-path: ptmcp-ui/pnpm-lock.yaml
+          cache-dependency-path: ptmcp-ui-react/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm check
-      - run: pnpm test:contracts
+      - run: pnpm test
