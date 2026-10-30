@@ -13,7 +13,7 @@ export interface SessionInfo {
 
 /** 探测当前会话；未登录时抛 401 ApiError。 */
 export async function getSession(signal?: AbortSignal): Promise<SessionInfo> {
-  const { data } = await request<SessionInfo>('/api/v1/session', { signal });
+  const { data } = await request<SessionInfo>('/api/v1/session/me', { signal });
   return data;
 }
 

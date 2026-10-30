@@ -18,7 +18,7 @@ interface SessionInfo {
 }
 
 async function getSession(signal?: AbortSignal): Promise<SessionInfo> {
-  const { data } = await request<SessionInfo>('/api/v1/session', { signal });
+  const { data } = await request<SessionInfo>('/api/v1/session/me', { signal });
   return data;
 }
 
