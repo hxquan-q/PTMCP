@@ -166,6 +166,8 @@ class McpTier1ProofTest {
                     "INSERT INTO sys_dept (dept_id,parent_id,ancestors,dept_name,status,del_flag,create_time,update_time) VALUES (1,0,'0','test','0','0',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
             statement.execute(
                     "INSERT INTO sys_user_profile (user_id,dept_id,display_name,password_hash,status,create_time,update_time) VALUES (1,1,'test','unused','ACTIVE',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
+            statement.execute(
+                    "INSERT INTO sys_user_security (user_id,auth_version,identity_version,identity_state,version,create_time,update_time) VALUES (1,1,1,'READY',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
         }
         insertPlatform(
                 1,

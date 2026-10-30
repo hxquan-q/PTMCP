@@ -347,6 +347,8 @@ class McpPgQueryFlowTest {
             sql.execute(
                     "INSERT INTO sys_user_profile (user_id,dept_id,display_name,password_hash,status,create_time,update_time) VALUES (1,1,'test','unused','ACTIVE',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
             sql.execute(
+                    "INSERT INTO sys_user_security (user_id,auth_version,identity_version,identity_state,version,create_time,update_time) VALUES (1,1,1,'READY',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
+            sql.execute(
                     "INSERT INTO platform_registry (id,code,name,tier,status,catalog_mode,proof_mode,create_time,update_time,created_by,updated_by) VALUES (1,'test','test',3,'ACTIVE','DISCOVER','NONE',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),1,1)");
         }
         CredentialCipher.Sealed credential =
