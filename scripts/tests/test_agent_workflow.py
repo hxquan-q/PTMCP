@@ -117,6 +117,31 @@ class WorkflowGateTests(unittest.TestCase):
         self.note.write_text(NOTE + "\n## Proposal\n待落地。\n", encoding="utf-8")
         self.assertTrue(any("proposal" in e for e in self.errors()))
 
+    def test_note_required_sections_must_follow_lifecycle_order(self):
+        self.note.write_text(NOTE.replace("## Problem\n上下文丢失。\n", "").replace(
+            "## Alternatives considered", "## Problem\n上下文丢失。\n## Alternatives considered"),
+            encoding="utf-8")
+        self.assertTrue(any("order" in e for e in self.errors()))
+
+    def test_note_duplicate_section_is_rejected(self):
+        self.note.write_text(NOTE + "\n## Decision\n另一套决定。\n", encoding="utf-8")
+        self.assertTrue(any("duplicate" in e for e in self.errors()))
+
+    def test_proposed_note_uses_proposal_section_order(self):
+        self.note.unlink()
+        proposed = ("# Agent Note: 流程取舍\n\nStatus: proposed\n\n"
+                    "## Proposal\n建议。\n## Problem\n问题。\n"
+                    "## Alternatives considered\n无。\n## Acceptance criteria\n验证。\n"
+                    "## Risks\n风险。\n")
+        self.write(".agents/notes/proposed/process/2026-10-23-workflow.md", proposed)
+        self.assertTrue(any("order" in e for e in self.errors()))
+
+    def test_note_free_sections_and_fenced_examples_are_allowed(self):
+        self.note.write_text(NOTE.replace("## Alternatives considered", (
+            "## 背景\n额外说明。\n```md\n## Decision\n示例。\n```\n"
+            "## Alternatives considered")), encoding="utf-8")
+        self.assertEqual([], self.errors())
+
     def test_invalid_calendar_date_is_rejected(self):
         self.note.rename(self.note.with_name("2026-02-30-workflow.md"))
         self.assertTrue(any("date" in e for e in self.errors()))

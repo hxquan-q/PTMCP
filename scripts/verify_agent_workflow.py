@@ -118,6 +118,15 @@ def check_note(path: Path, root: Path) -> list[str]:
     if lifecycle == "archived" and not valid_date(field(text, "Archived")):
         errors.append(f"{label}: archived requires Archived date")
     errors.extend(require_sections(text, required, label))
+    headings = re.findall(r"^## ([^\n]+)$", text, re.M)
+    if len(headings) != len(set(headings)):
+        errors.append(f"{label}: duplicate note section")
+    ordered = (["Problem", "Decision", "Alternatives considered", "Consequences", "Verification"]
+               if lifecycle in {"implemented", "archived"} else
+               ["Problem", "Proposal", "Alternatives considered", "Acceptance criteria", "Risks"])
+    present = [heading for heading in headings if heading in ordered]
+    if len(present) == len(ordered) and present != ordered:
+        errors.append(f"{label}: required note sections are out of order")
     return errors
 
 
