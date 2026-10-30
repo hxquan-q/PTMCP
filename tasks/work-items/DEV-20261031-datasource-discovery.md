@@ -79,6 +79,11 @@ Verification 终值 PASS 即此结论。
 
 ## 交接
 
+- 归属勘误（4132a00）：该提交中 docs/backend/api-spec.md 的差异含两处归属——§7 list_datasources
+  契约段落属本切片；约 112 行 PlatformWrite `proofConfig` 仅写段落属 DEV-20261031-audit-fixes 窗口
+  （其提交前编辑发生在本切片归属核查之后，整文件暂存时被一并带入落库，来源窗口已确认不回退不改写）。
+  该段落的行为契约由归属窗口验证与验收，本切片的门禁结论（validate_docs PASS、全 reactor verify）
+  不构成对其安全切片的验收；其时序更早的基线内容其余未受影响。
 - 多窗口边界：本轮提交仅含 ptmcp-parent 后端 6 文件、docs 7 文件与本工作项及迁移测试单行修复；
   React 窗口文件（含 dateTime.ts、platformForm.ts、tests/browser/ 等）、gateway pom.xml、
   PlatformProofRoundTripTest、PlatformAdminService、authentication.md、DEV-20261028-gateway-completion.md
