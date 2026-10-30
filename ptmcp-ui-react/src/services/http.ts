@@ -180,6 +180,17 @@ export function errorText(error: unknown): string {
   return '操作未完成，请稍后重试。';
 }
 
+export interface Failure {
+  message: string;
+  requestId: string;
+}
+
+/** 读取失败的可展示归一化：服务端错误保留原消息与 requestId，网络/取消只给页面级说明。 */
+export function readFailure(error: unknown, fallback: string): Failure {
+  if (error instanceof ApiError) return { message: error.message, requestId: error.requestId ?? '' };
+  return { message: fallback, requestId: '' };
+}
+
 export function idempotencyKey(): string {
   return newUuid();
 }

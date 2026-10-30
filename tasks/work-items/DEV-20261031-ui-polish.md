@@ -77,9 +77,29 @@ Updated: 2026-10-31
 
 未验证：普通模式（非预览）空态无法在浏览器走通——未登录时应用渲染 `LoginPage`，该分支只有代码级依据；真实后端联调、人工体验接受未做。
 
+### 切片 U4：P-04 元数据页逐页细节
+
+`src/views/admin/MetadataPage.tsx` 与 P-13 是同一类问题——页面把“读不到”说成“没有”，把“没返回”说成“否”：
+
+- 数据源目录读取失败时 `catch(() => undefined)` 静默吞掉，页面留下一个空下拉和空表；元数据读取失败时 `catch` 清空行，随后显示「没有匹配的元数据对象」。现在两类失败各自成为可辨识的 danger 态，显示服务端消息与 `requestId`、「重新读取」按钮，并在元数据失败处明写“列表当前不可信，请勿据此判断对象是否已授权”。续读失败也不再静默：页脚给出原因并把按钮文案切到「重试续读」，游标保留。
+- `authorized` / `metadataVisible` 在契约里是可选字段，旧代码用三元把它们当成必然布尔：字段缺失时渲染「未授权」「隐藏」，属于凭空断言。改为 `StateDot` 三态，非布尔一律显示「未知」。
+- 空态按原因分流：无数据源（前往数据源页）、搜索无匹配（回显关键字并提供「清空搜索」）、无关键字且该源为空（说明可能尚未同步或快照未发布，不假装本页能触发同步）。切换数据源或关键字时先清空旧行，避免把上一批结果显示成新数据源的容量。
+- 计数诚实化：`MetadataPage` 契约只有 `items/nextCursor`，没有总数，页眉与页脚统一改成「已加载 N 个」，并按游标显示「服务端仍有更多 / 已到末尾」，附「契约未返回总数」。此前写死的「共 N 个对象」是过度声称。
+- 可达性与控件：读取中不再留下空表，而是区域内的「正在读取…」说明；`aria-live="polite"` 状态句覆盖加载/失败/已加载数量；列表容器补 `role="region"`+`aria-label`+`tabIndex=0`；下拉补可见 `数据源` 标签（此前可访问名来自首个选项文本），`SearchInput` 新增可选 `label` 落到 `aria-label`；表头补 `scope="col"`；行内「详情」按钮补 `aria-label="查看 … 详情"`，读屏不再只听到“详情”。
+- 移除死别名 `const filtered = rows;`；工具栏与页脚的散落内联样式移入 `.table-toolbar`/`.toolbar-status`/`.table-state`/`.footer-note`/`.footer-error`。
+- 共享层收敛：把 U3 里页面内私有的 `describeFailure`/`RequestIdText` 上移为 `services/http.ts` 的 `readFailure`（ApiError 保留服务端消息与 requestId，网络/取消只回落到页面级说明）与 `components/common.tsx` 的 `RequestIdText`（requestId 为空时不渲染），P-13 与 P-04 共用，不再各写一份。
+
+浏览器实测（隔离合成预览，1440×900）：区域 `{role:region,label:元数据对象列表,tabindex:0}`；下拉可见标签拼接为「数据源 · 6 个选项」且未禁用；搜索框 `aria-label=搜索对象名或表名`；初始 3 行、播报「已加载 3 个元数据对象」、页脚「已加载 3 个 · 已到末尾（契约未返回总数）」；输入 `zzz-not-exist` 后 rows 0、空态标题回显关键字、描述与「清空搜索」出现，点击清空后恢复 3 行且播报同步；切到第 2 个数据源后重载为 2 行并播报「已加载 2 个元数据对象」；本页文本 AA 对比度不达标项 0、按钮热区 <24px 项 0；「详情」可访问名为「查看 synthetic_orders 详情」等。截图 `p04-metadata-1440.png`（无图像通道，仅供用户查看）。
+
+未验证：预览种子恒把 `authorized`/`metadataVisible` 置为 `true`，「未知」分支与真实后端的失败/409 路径只有代码级依据，未在浏览器复现；人工体验接受未做。
+
+实际检查：`pnpm exec prettier --write`（5 文件）；`pnpm exec eslint --max-warnings 0` 覆盖 `MetadataPage.tsx`、`IntegrationsPage.tsx`、`common.tsx`、`services/http.ts` 无输出；`pnpm exec tsc --noEmit` 通过；`node --experimental-strip-types --test tests/*.test.ts` 退出 0（164/164）；`pnpm build` 通过（CSS 24.40 kB / gzip 5.80 kB，JS 454.23 kB / gzip 125.17 kB）；仓库根 `python scripts/check.py` 74 测试 OK。
+
+`table-scroll` 可聚焦区域这一项在 21 处出现中，此前只有 1 处合规；本切片另修 1 处，其余位于 DEV-20261031-audit-fixes 占用文件（`DatasourcesPage/PlatformsPage/DetailPages/DelegationsPage/AuditPage`）与后续组织页、个人门户页，按页推进，不一次性覆盖他人未提交改动。
+
 ### 尚未做
 
-P-04 元数据、P-05/P-06/P-07 组织页的逐页细节。P-02 数据源页的死控件与复选区仍待处理，但该文件与 `DatasourcesPage.tsx`、`services/*`、`dsForm.ts`、`platformForm.ts` 等正被 DEV-20261031-audit-fixes 的未提交改动占用，接管前须先确认对方落地状态，避免同文件互踩。DESIGN.md 记录的 SAP 调色板（`#0057d2`）与实现所用 Apple 调色板（`#0071e3`）之间的契约偏差处置——需用户确认以哪一侧为准，未擅自动手。P-10 的自增权防护与 NAMESPACE/DATASOURCE 级授权按上文理由保留未实现。
+P-05/P-06/P-07 组织页（用户/角色/部门）与个人门户其余页面的逐页细节。P-02 数据源页的死控件与复选区仍待处理，但该文件与 `DatasourcesPage.tsx`、`services/*`、`dsForm.ts`、`platformForm.ts` 等正被 DEV-20261031-audit-fixes 的未提交改动占用，接管前须先确认对方落地状态，避免同文件互踩。DESIGN.md 记录的 SAP 调色板（`#0057d2`）与实现所用 Apple 调色板（`#0071e3`）之间的契约偏差处置——需用户确认以哪一侧为准，未擅自动手。P-10 的自增权防护与 NAMESPACE/DATASOURCE 级授权按上文理由保留未实现。
 
 ## 结果与证据
 
@@ -87,4 +107,4 @@ P-04 元数据、P-05/P-06/P-07 组织页的逐页细节。P-02 数据源页的�
 
 ## 交接
 
-切片 U3（P-13 MCP 接入配置）已完成并随本项提交；已提交路径为 `src/views/me/IntegrationsPage.tsx`、`src/components/common.tsx`、`src/layouts/AppShell.tsx`、`src/styles/index.css` 与本工作项，其余 DIRTY 路径属 DEV-20261031-audit-fixes，未暂存、未改动。下一个焦点：P-04 元数据页（`src/views/admin/MetadataPage.tsx`，若不在他人占用清单内），随后 P-05/P-06/P-07 组织页。P-02 数据源页须等对方未提交改动落地后再接管，避免同文件互踩。每个切片只暂存自己改过的路径。预览端口 25175 用完须停止并确认无监听。两项待用户决断：DESIGN.md 与实现的调色板偏差以哪侧为准；P-13 普通模式是否需要后端提供“本人接入列表”端点（当前按契约缺失处理，只显示空态与出口，不伪造）。
+切片 U3（P-13 MCP 接入配置，提交 `c869979`）与切片 U4（P-04 元数据页，随本条提交）已完成；已提交路径限于 `src/views/me/IntegrationsPage.tsx`、`src/views/admin/MetadataPage.tsx`、`src/components/common.tsx`、`src/layouts/AppShell.tsx`、`src/styles/index.css`、`src/services/http.ts` 与本工作项，其余 DIRTY 路径属 DEV-20261031-audit-fixes，未暂存、未改动。下一个焦点：P-05/P-06/P-07 组织页（`UsersPage.tsx`、`RolesPage.tsx`、`DepartmentsPage.tsx`，均未被他人占用），随后个人门户 `MePages.tsx`（该文件在对方占用清单内，须后接）。P-02 数据源页须等对方未提交改动落地后再接管，避免同文件互踩。每个切片只暂存自己改过的路径。预览端口 25175 用完须停止并确认无监听。两项待用户决断：DESIGN.md 与实现的调色板偏差以哪侧为准；P-13 普通模式是否需要后端提供“本人接入列表”端点（当前按契约缺失处理，只显示空态与出口，不伪造）。远端提示仓库已迁移到 `github.com/hxquan-q/PTMCP`，本次推送仍按既有 origin 成功；是否更新 remote URL 属配置变更，未擅自修改。

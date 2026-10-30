@@ -207,16 +207,25 @@ export function SearchInput({
   onChange,
   placeholder,
   width,
+  label,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   width?: number | string;
+  label?: string;
 }) {
   return (
     <span className="input-wrap" style={{ width }}>
       <SearchIcon className="input-icon" />
-      <input className="input" style={{ width: '100%' }} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+      <input
+        className="input"
+        style={{ width: '100%' }}
+        value={value}
+        placeholder={placeholder}
+        aria-label={label ?? placeholder}
+        onChange={(e) => onChange(e.target.value)}
+      />
     </span>
   );
 }
@@ -400,6 +409,15 @@ export function Alert({ kind, title, children }: { kind: 'info' | 'warning' | 'd
         {children}
       </div>
     </div>
+  );
+}
+
+export function RequestIdText({ requestId }: { requestId: string }) {
+  if (!requestId) return null;
+  return (
+    <span style={{ display: 'block', marginTop: 6, fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
+      requestId：<code>{requestId}</code>（可凭此向管理员排查该次请求）
+    </span>
   );
 }
 

@@ -8,6 +8,7 @@ import {
   OptionCard,
   PageHeader,
   Pagination,
+  RequestIdText,
   SearchInput,
   Select,
   StatCard,
@@ -36,6 +37,7 @@ import {
   type IconComponent,
 } from '../../components/Icons';
 import { mePortalApi, type McpConfig, type PlatformItem } from '../../services/mePortalApi';
+import { readFailure } from '../../services/http';
 import { frontendPreview } from '../../services/frontendMode';
 import { authAvailability, templatesFromConfig } from './mcpTemplate';
 
@@ -420,12 +422,6 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
 
 /* ═══════════ 向导视图（4 步 + 完成页） ═══════════ */
 
-/** 失败信息 + 服务端 requestId：P-13 要求失败时保留已选项并给出可排查的 requestId。 */
-function describeFailure(error: unknown, fallback: string): { message: string; requestId: string } {
-  const err = error as { message?: string; requestId?: string | null };
-  return { message: err?.message || fallback, requestId: err?.requestId ?? '' };
-}
-
 function Wizard({ onExit }: { onExit: () => void }) {
   const [step, setStep] = useState(0);
   const [platform, setPlatform] = useState('');
@@ -461,7 +457,7 @@ function Wizard({ onExit }: { onExit: () => void }) {
         setPlatformItems(ctx.items);
         setPlatformCursor(ctx.nextCursor);
       })
-      .catch((error: unknown) => !cancelled && setPlatformError(describeFailure(error, '平台目录加载失败')))
+      .catch((error: unknown) => !cancelled && setPlatformError(readFailure(error, '平台目录加载失败')))
       .finally(() => !cancelled && setPlatformLoading(false));
     return () => {
       cancelled = true;
@@ -478,7 +474,7 @@ function Wizard({ onExit }: { onExit: () => void }) {
         setPlatformItems((prev) => [...prev, ...ctx.items]);
         setPlatformCursor(ctx.nextCursor);
       })
-      .catch((error: unknown) => setPlatformError(describeFailure(error, '平台目录加载失败')))
+      .catch((error: unknown) => setPlatformError(readFailure(error, '平台目录加载失败')))
       .finally(() => setPlatformLoading(false));
   };
 
@@ -491,7 +487,7 @@ function Wizard({ onExit }: { onExit: () => void }) {
     mePortalApi
       .mcpConfig(platform, client)
       .then((cfg) => !cancelled && setMcpCfg(cfg))
-      .catch((error: unknown) => !cancelled && setCfgError(describeFailure(error, '服务端模板获取失败')))
+      .catch((error: unknown) => !cancelled && setCfgError(readFailure(error, '服务端模板获取失败')))
       .finally(() => !cancelled && setCfgLoading(false));
     return () => {
       cancelled = true;
@@ -902,14 +898,6 @@ function Wizard({ onExit }: { onExit: () => void }) {
 }
 
 /** 失败时给出可排查的服务端 requestId（P-13），只读展示，不复制凭证。 */
-function RequestIdText({ requestId }: { requestId: string }) {
-  return (
-    <span style={{ display: 'block', marginTop: 6, fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
-      requestId：<code>{requestId}</code>（可凭此向管理员排查该次请求）
-    </span>
-  );
-}
-
 function StepHeading({ n, title, desc }: { n: number; title: string; desc: string }) {
   return (
     <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 16 }}>
