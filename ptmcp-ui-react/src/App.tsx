@@ -398,31 +398,34 @@ export function App() {
     },
     [navigate],
   );
-  /* `/` 正在按权限重定向，渲染空帧等 effect 完成即可。 */
-  if (sessionState === 'signed-in' && path === '/') return null;
-  if (sessionState === 'signed-in' && resolved.match === 'none') {
+  /* 首次进入或刷新：先核对会话，避免把已登录用户闪回登录页、中途又被替换掉。 */
+  if (sessionState === 'probing') return <BootstrapScreen label="正在核对登录状态…" />;
+  /* 未登录（含会话过期）一律先回到登录页，避免把鉴权前的地址渲染成 403/404。 */
+  if (sessionState !== 'signed-in') {
+    return (
+      <LoginPage
+        reason={expiredNote || undefined}
+        onLoggedIn={() => {
+          setExpiredNote('');
+          pendingReturnRef.current = returnTo;
+          probe();
+        }}
+      />
+    );
+  }
+
+  /* `/` 正在按权限重定向：给出明确的等待帧，不留无说明的空白。 */
+  if (path === '/') return <BootstrapScreen label="正在打开首页…" />;
+  if (resolved.match === 'none') {
     return <StaticErrorCard code="404" title="页面不存在" description={`没有找到 ${path} 对应的页面。`} onBack={() => navigate(homePath)} />;
   }
-  if (sessionState === 'signed-in' && denied && route) {
+  if (denied && route) {
     return (
       <StaticErrorCard
         code="403"
         title="无权访问"
         description={`当前账号缺少 ${route.permission} 权限，无法访问该页面。如需开通请联系平台管理员。`}
         onBack={() => navigate(homePath)}
-      />
-    );
-  }
-
-  if (sessionState !== 'signed-in') {
-    return (
-      <LoginPage
-        reason={sessionState === 'anonymous' ? expiredNote || undefined : undefined}
-        onLoggedIn={() => {
-          setExpiredNote('');
-          pendingReturnRef.current = returnTo;
-          probe();
-        }}
       />
     );
   }
@@ -456,17 +459,34 @@ export function App() {
   );
 }
 
-function StaticErrorCard({ code, title, description, onBack }: { code: string; title: string; description: string; onBack: () => void }) {
+/** 鉴权与重定向期间的等待帧：不显示可操作内容，避免用户在状态未定时误点。 */
+function BootstrapScreen({ label }: { label: string }) {
   return (
-    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--ptmcp-canvas)' }}>
-      <div className="table-card" style={{ width: 420, padding: '30px 28px', textAlign: 'center' }}>
-        <div style={{ fontSize: 40, fontWeight: 800, color: 'var(--ptmcp-blue)' }}>{code}</div>
-        <h1 style={{ margin: '8px 0 6px', fontSize: 17, color: 'var(--ptmcp-heading)' }}>{title}</h1>
-        <p style={{ margin: '0 0 18px', fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>{description}</p>
-        <button className="btn btn--primary" onClick={onBack}>
+    <div className="boot-shell" role="status">
+      <span className="boot-mark" aria-hidden="true" />
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function StaticErrorCard({ code, title, description, onBack }: { code: string; title: string; description: string; onBack: () => void }) {
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  /* 整页替换时焦点仍停留在原位置，读屏不会念出原因；挂载后把焦点移到标题。 */
+  useEffect(() => {
+    titleRef.current?.focus();
+  }, []);
+  return (
+    <main className="error-shell">
+      <div className="error-card">
+        <p className="error-code">{code}</p>
+        <h1 ref={titleRef} className="error-title" tabIndex={-1}>
+          {title}
+        </h1>
+        <p className="error-desc">{description}</p>
+        <button type="button" className="btn btn--primary" onClick={onBack}>
           返回首页
         </button>
       </div>
-    </div>
+    </main>
   );
 }

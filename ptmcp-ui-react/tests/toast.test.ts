@@ -6,7 +6,9 @@ import {
   deduplicateToasts,
   filterExpired,
   getToasts,
+  pauseToast,
   resetToasts,
+  resumeToast,
   showToast,
   subscribeToasts,
   type ToastMessage,
@@ -124,5 +126,48 @@ test('resetToasts notifies subscribers with empty list (ToastContainer depends o
   resetToasts();
   assert.ok(lengths.includes(0), 'subscriber must receive an empty-array notification on reset — otherwise ToastContainer stays stale');
   off();
+  resetToasts();
+});
+
+test('danger toasts stay until dismissed (WCAG 2.2.1：失败不能在读完前静默消失)', async () => {
+  resetToasts();
+  showToast('写入失败，请检查权限配置', 'danger', 60);
+  await new Promise((r) => setTimeout(r, 150));
+  const still = getToasts();
+  assert.equal(still.length, 1, 'danger tone must ignore maxAgeMs');
+  assert.equal(still[0]!.expiresAt, null, 'sticky toast must be marked as never expiring');
+  dismissToast(still[0]!.id);
+  assert.equal(getToasts().length, 0);
+  resetToasts();
+});
+
+test('pauseToast freezes the countdown and resumeToast continues with the remaining time', async () => {
+  resetToasts();
+  showToast('同步完成', 'success', 120);
+  const id = getToasts()[0]!.id;
+  pauseToast(id);
+  assert.equal(getToasts()[0]!.expiresAt, null, 'paused toast must not be treated as expired while filtered');
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(getToasts().length, 1, 'hover/focus must hold the toast open past its deadline');
+  resumeToast(id);
+  assert.ok(typeof getToasts()[0]!.expiresAt === 'number', 'resumed toast must get a new deadline');
+  await new Promise((r) => setTimeout(r, 250));
+  assert.equal(getToasts().length, 0, 'remaining time must still expire after resume');
+  resetToasts();
+});
+
+test('dismissToast clears the pending timer (no stale dismissal after manual close)', async () => {
+  resetToasts();
+  showToast('第一条', 'success', 80);
+  const first = getToasts()[0]!.id;
+  dismissToast(first);
+  showToast('第二条', 'info', 4000);
+  const second = getToasts()[0]!.id;
+  await new Promise((r) => setTimeout(r, 150));
+  assert.deepEqual(
+    getToasts().map((t) => t.id),
+    [second],
+    'the dismissed toast timer must not remove the next one',
+  );
   resetToasts();
 });

@@ -1,35 +1,55 @@
 import { useEffect, useState } from 'react';
-import { composeToastDisplay, dismissToast, subscribeToasts, type ToastMessage } from '../toast';
+import { CheckIcon, CloseIcon, InfoIcon, WarningIcon, type IconComponent } from './Icons';
+import { composeToastDisplay, dismissToast, pauseToast, resumeToast, subscribeToasts, type ToastMessage } from '../toast';
 
-const TONE_STYLE: Record<ToastMessage['tone'], React.CSSProperties> = {
-  success: { borderLeft: '3px solid var(--ptmcp-green)' },
-  warning: { borderLeft: '3px solid var(--ptmcp-orange)' },
-  danger: { borderLeft: '3px solid var(--ptmcp-red)' },
-  info: { borderLeft: '3px solid var(--ptmcp-blue)' },
+const TONE_META: Record<ToastMessage['tone'], { Icon: IconComponent; label: string }> = {
+  success: { Icon: CheckIcon, label: '成功提示' },
+  warning: { Icon: WarningIcon, label: '警告提示' },
+  danger: { Icon: WarningIcon, label: '失败提示' },
+  info: { Icon: InfoIcon, label: '通知' },
 };
 
-/** 右上角 toast 容器：订阅 toast 队列，4s 自动消失，点击提前关闭。 */
+/**
+ * 右下角通知栈。两个实时区域常驻挂载（只有内容会变），否则屏幕阅读器会漏掉第一条公告：
+ * 失败走 assertive，其余走 polite。悬停或键盘聚焦会冻结自动消失，关闭按钮是真实按钮，键盘可达。
+ */
 export function ToastContainer() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   useEffect(() => subscribeToasts(setToasts), []);
   const visible = composeToastDisplay(toasts, Date.now());
-  if (!visible.length) return null;
+  const failed = visible.filter((t) => t.tone === 'danger');
+  const others = visible.filter((t) => t.tone !== 'danger');
+  return (
+    <div className="toast-stack">
+      <div className="toast-group" role="alert" aria-live="assertive" aria-label="失败通知">
+        {failed.map((t) => (
+          <ToastItem key={t.id} toast={t} />
+        ))}
+      </div>
+      <div className="toast-group" role="status" aria-live="polite" aria-label="操作通知">
+        {others.map((t) => (
+          <ToastItem key={t.id} toast={t} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ToastItem({ toast }: { toast: ToastMessage }) {
+  const { Icon, label } = TONE_META[toast.tone];
   return (
     <div
-      role="status"
-      aria-live="polite"
-      style={{ position: 'fixed', top: 60, right: 20, zIndex: 100, display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'auto' }}
+      className={`toast toast--${toast.tone}`}
+      onMouseEnter={() => pauseToast(toast.id)}
+      onMouseLeave={() => resumeToast(toast.id)}
+      onFocusCapture={() => pauseToast(toast.id)}
+      onBlurCapture={() => resumeToast(toast.id)}
     >
-      {visible.map((t) => (
-        <div
-          key={t.id}
-          className="table-card"
-          style={{ padding: '10px 16px', minWidth: 220, maxWidth: 360, fontSize: 13, cursor: 'pointer', ...TONE_STYLE[t.tone] }}
-          onClick={() => dismissToast(t.id)}
-        >
-          {t.text}
-        </div>
-      ))}
+      <Icon className="toast-icon" />
+      <span className="toast-text">{toast.text}</span>
+      <button type="button" className="toast-close" aria-label={`关闭${label}`} onClick={() => dismissToast(toast.id)}>
+        <CloseIcon />
+      </button>
     </div>
   );
 }

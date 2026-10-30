@@ -1057,6 +1057,176 @@ textarea:focus-visible,
   text-align: center;
 }
 
+/* ── 通知栈：失败常驻需手动关闭，其余自动消失；悬停/聚焦冻结计时 ── */
+.toast-stack {
+  position: fixed;
+  top: 68px;
+  right: 20px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  max-width: min(360px, calc(100vw - 32px));
+  pointer-events: none;
+}
+.toast-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--ptmcp-surface);
+  border: 1px solid var(--ptmcp-border);
+  border-left: 3px solid var(--ptmcp-border-strong);
+  border-radius: var(--ptmcp-radius-control);
+  box-shadow: var(--ptmcp-shadow-pop);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ptmcp-text);
+  pointer-events: auto;
+}
+.toast--success {
+  border-left-color: var(--ptmcp-green);
+}
+.toast--warning {
+  border-left-color: var(--ptmcp-orange);
+}
+.toast--danger {
+  border-left-color: var(--ptmcp-red);
+}
+.toast--info {
+  border-left-color: var(--ptmcp-blue);
+}
+.toast-icon {
+  flex: none;
+  margin-top: 1px;
+  font-size: 15px;
+}
+.toast--success .toast-icon {
+  color: var(--ptmcp-green);
+}
+.toast--warning .toast-icon {
+  color: var(--ptmcp-orange);
+}
+.toast--danger .toast-icon {
+  color: var(--ptmcp-red);
+}
+.toast--info .toast-icon {
+  color: var(--ptmcp-blue-text);
+}
+.toast-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.toast-close {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--ptmcp-radius-control);
+  background: transparent;
+  color: var(--ptmcp-text-faint);
+  font-size: 14px;
+  cursor: pointer;
+}
+.toast-close:hover {
+  background: var(--ptmcp-bg-neutral);
+  color: var(--ptmcp-heading);
+}
+.toast-close:focus-visible {
+  outline: 2px solid var(--ptmcp-blue);
+  outline-offset: 1px;
+}
+
+/* ── 会话核对 / 权限重定向等待帧 ── */
+.boot-shell {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--ptmcp-canvas);
+  font-size: 13px;
+  color: var(--ptmcp-text-muted);
+}
+.boot-mark {
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--ptmcp-border-strong);
+  border-top-color: var(--ptmcp-blue);
+  border-radius: 50%;
+  animation: ptmcp-spin 0.9s linear infinite;
+}
+@keyframes ptmcp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── 403 / 404 整页提示 ── */
+.error-shell {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: var(--ptmcp-canvas);
+}
+.error-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 30px 28px;
+  background: var(--ptmcp-surface);
+  border: 1px solid var(--ptmcp-border);
+  border-radius: var(--ptmcp-radius-panel);
+  box-shadow: var(--ptmcp-shadow);
+  text-align: center;
+}
+.error-code {
+  margin: 0;
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--ptmcp-blue);
+}
+.error-title {
+  margin: 8px 0 6px;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ptmcp-heading);
+}
+.error-title:focus {
+  outline: none;
+}
+.error-desc {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ptmcp-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* 窄屏通知改为底部整宽，避免遮挡顶栏操作区 */
+@media (max-width: 620px) {
+  .toast-stack {
+    top: auto;
+    right: 16px;
+    bottom: 16px;
+    left: 16px;
+    max-width: none;
+  }
+}
+
 /* ─── 权限矩阵窄屏：三栏改纵向堆叠，隐藏拖拽分隔线 ─── */
 @media (max-width: 900px) {
   .perm-workspace {
