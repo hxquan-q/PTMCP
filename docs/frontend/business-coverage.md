@@ -2,15 +2,17 @@
 
 源码核对日期：2026-10-29（接口事实校准；布局切片为2026-10-27）。对应[页面规格](page-spec.md)的18组页面；本表记录范围、代码位置与契约差距，不是任务状态总表或验收报告。执行状态、网络证据、截图、人工接受和 `NOT_RUN` 原因由 `tasks/work-items/T17-sap-refine.md` 维护；本轮源码与运行核查见[能力报告](../evidence/mcp-capability-audit-20261029.md)。
 
+> 2026-10-30 更新：前端已由 Vue 切换为 React（ptmcp-ui-react）。本表保留 2026-10-29 的 Vue 源码核对记录作为历史证据；当前工程路径以 ptmcp-ui-react 源码为准。
+
 本轮已落地：全站工作台公共 PageHeader（30px/600，支持返回/状态/操作与 titleId 关联）、SAP chrome 筛选栏与顶底分割线表格、CursorFooter 已加载数量/加载锁、StatusBadge 四类语义（启停/连接/判定/执行）、PageState 空错恢复与 requestId 复制、EvidenceFields 结构化证据（权限预览/审计详情）、权限三栏工作台与判定公式、审计主从速览、字典四层级联独立 loading/错误/重试、接入页客户端卡片与凭证占位符高亮、Users 表单 DTO 边界分组；Datasources/Metadata 迁移公共 useCursorPage（CURSOR_STALE 回首页收拢）。
 
-本次增加独立 `frontend-preview` 开发模式，入口及启动命令见[前端README](../../ptmcp-ui/README.md#不依赖后端的完整前端预览)。30个导航入口覆盖18组页面的前端展示；AS登录/同意为独立预览，实际仍由授权服务承载。预览提供合成数据与空/错/慢/冲突状态，绝不代表真实后端、安全或OAuth验收。
+本次增加独立 `frontend-preview` 开发模式，入口及启动命令见[前端README](../../ptmcp-ui-react/README.md)。30个导航入口覆盖18组页面的前端展示；AS登录/同意为独立预览，实际仍由授权服务承载。预览提供合成数据与空/错/慢/冲突状态，绝不代表真实后端、安全或OAuth验收。
 
 核对包含管理/个人门户源码及本次登录、ACL、组织/个人修复切片；各切片的集成与运行证据仍由工作项记录。下表“已有”仅说明实现或端点存在；仍须按页面规格逐项验证。当前没有18组全流程通过或已发布的证据。
 
 ## 源码与接口入口
 
-- 前端页面路径以下均相对 `ptmcp-ui/src/views/`；请求模块位于 `ptmcp-ui/src/services/`。路由与操作码映射见[router](../../ptmcp-ui/src/router/index.ts)，统一HTTP实现见[http](../../ptmcp-ui/src/services/http.ts)。
+- 前端页面路径以下均相对 `ptmcp-ui/src/views/`（Vue 历史核对）；请求模块位于 `ptmcp-ui/src/services/`。路由与操作码映射见 `ptmcp-ui/src/router/index.ts`，统一HTTP实现见 `ptmcp-ui/src/services/http.ts`。
 - 管理Controller位于 `ptmcp-parent/ptmcp-admin/src/main/java/local/ptmcp/admin/api/`；个人门户与会话分别在同模块的 `me/`、`session/`。
 - API实施证据入口：[数据源与元数据](../../tasks/work-items/T15-b.md)、[组织与ACL](../../tasks/work-items/T16-a.md)、[会话与个人门户](../../tasks/work-items/T17-api-b.md)、[管理审计与平台只读接口](../../tasks/work-items/T17-api-c.md)。这些后端记录不能替代本轮浏览器验收。
 - P-08/P-09/P-11已具备真实服务端接线，不能再按早期预览阶段整体判为禁用；具体未落地字段/动作仍需禁用。`FrameworkHome.vue` 为旧框架样例，不再是 `/` 的业务入口；`/` 经守卫选择有权限的管理入口或个人字典。

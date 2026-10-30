@@ -2,43 +2,45 @@
 
 版本：1.2-business · 日期：2026-10-25 · 状态：业务页面与会话适配已进入实现/联调，逐页验收仍待证据确认。
 
-本文定义前端实施与验收要求；当前可运行工程与命令见[ptmcp-ui README](../../ptmcp-ui/README.md)。[总体方案](../总体方案.md)、[PRD](../product/PRD.md)和[API 契约](../backend/api-spec.md)优先定义业务/接口；[页面规格](page-spec.md)定义逐页目标，[业务覆盖矩阵](business-coverage.md)记录源码映射与已知差距。运行结果、人工接受和未验证项由 `tasks/work-items/T17-ui-business.md` 维护。
+本文定义前端实施与验收要求；当前可运行工程与命令见[ptmcp-ui-react README](../../ptmcp-ui-react/README.md)。[总体方案](../总体方案.md)、[PRD](../product/PRD.md)和[API 契约](../backend/api-spec.md)优先定义业务/接口；[页面规格](page-spec.md)定义逐页目标，[业务覆盖矩阵](business-coverage.md)记录源码映射与已知差距。运行结果、人工接受和未验证项由 `tasks/work-items/T17-ui-business.md` 维护。
 
 ## 1. 来源与工程边界
 
-采用 Vue3/TypeScript/Element Plus，根目录ptmcp-ui已按plus-ui入口与配置最小裁剪建立，具体来源与边界见[UPSTREAM](../../ptmcp-ui/UPSTREAM.md)。Reference中的后台参考源码不是UI运行入口。
+采用 React19/TypeScript/Vite（Tailwind CSS 4 负责样式），工程位于根目录 ptmcp-ui-react；原 Vue 工程已移除，迁移取舍见[React 启动决策笔记](../../.agents/notes/implemented/architecture/2026-10-29-react-app-bootstrap.md)。Reference中的后台参考源码不是UI运行入口。
 
-当前package/锁文件固定Node24/pnpm，已接入Iconify、Tailwind、Animate.css和VueUse Motion。现有管理/个人工作台、统一请求层、内存会话/权限store与业务页面在本工程实施；Reference仍仅用于参考。缺少后端契约的页面明确展示不可用，不使用模拟成功替代联调。
+当前package/锁文件固定Node24/pnpm，样式使用Tailwind CSS 4与工程自有设计令牌，不引入第三方组件库。现有管理/个人工作台、统一请求层、内存会话/权限上下文与业务页面在本工程实施；Reference仍仅用于参考。缺少后端契约的页面明确展示不可用，不使用模拟成功替代联调。
 
 当前目录分工（以源码为准，新增目录应由实际职责驱动）：
 
 ```text
-ptmcp-ui/
+ptmcp-ui-react/
   src/
     services/            # 统一HTTP传输、资源API及核对的DTO
     adapters/            # 资源身份、传输字段与页面模型转换
-    components/common/   # 页面头部、状态、错误页与工作台壳
+    components/          # 公共状态、图标、Toast与工作台基础组件
     layouts/             # 管理与个人布局、导航、错误页
-    router/              # 路由、菜单能力、登录恢复
-    stores/              # 仅内存会话/权限、非敏感UI偏好
+    preview/             # 无后端合成数据开发模式
     views/auth/          # 控制台登录
     views/admin/         # 数据源、任务、元数据、组织与ACL
     views/me/            # 字典/配置/PAT/授权族/历史/安全
-    styles/              # 主题变量与Element Plus统一适配
+    styles/              # 设计令牌与全局样式
+    App.tsx              # hash路由、会话门禁与视角落地
+    navigation.ts        # 导航分组、路由映射与权限过滤
+    permissionsContext.ts # 仅内存会话/权限上下文
   tests/                 # 已有传输与资源适配契约测试
   package.json
   pnpm-lock.yaml
 ```
 
-实际命令以package.json为准：`pnpm check`包含lint、格式、类型与构建，`pnpm test:contracts`单独执行脚本列出的契约回归。契约测试覆盖范围与页面浏览器验收分别报告；构建通过不能支持全部业务已验收的结论。
+实际命令以package.json为准：`pnpm check`包含lint、格式、类型与构建，`pnpm test`单独执行契约与纯函数回归。契约测试覆盖范围与页面浏览器验收分别报告；构建通过不能支持全部业务已验收的结论。
 
 ## 2. 命名、类型和模块规则
 
-采用[Vue 风格指南](https://cn.vuejs.org/style-guide/)，自动化配置及 plus-ui 的准确继承来源见[工程标准](../standards/quality-tooling.md)。自有组件文件/组件名使用多词 PascalCase（如 AccessMatrix.vue），App 例外；模板引用已注册组件采用 PascalCase，Props 在代码中 camelCase、模板传入 kebab-case，显式声明 emits。defineProps 使用具体 TS 类型或完整运行时类型，必填属性明确；可选属性定义适用默认值，对象/数组运行时默认值用工厂，禁止修改 Props，应通过事件通知父组件。
+遵循 React/JSX 约定与仓库 ESLint 配置（[工程标准](../standards/quality-tooling.md)）。组件文件与组件名使用多词 PascalCase（如 AccessMatrix.tsx），App 例外；Props 使用显式 TS 类型，必填属性明确；禁止修改 Props，应通过回调通知父组件；列表渲染提供稳定 key。
 
-ESLint 的 Vue/TS 规则负责上述行为，Prettier 负责排版；不让评审逐行判格式。上游历史配置中关闭的多词命名/Props 校验与 no-explicit-any 不继承为豁免；引入真实 UI 时修复自有模块的违规，不全局关闭规则。
+ESLint 的 TypeScript 规则负责上述行为，Prettier 负责排版；不让评审逐行判格式。上游历史配置中关闭的规则不继承为豁免；引入真实 UI 时修复自有模块的违规，不全局关闭规则。
 
-- 组件使用 PascalCase，组合函数 `useXxx`，API 函数使用业务动词，避免 `any` 与跨页面巨型 store。
+- 组件使用 PascalCase，自定义 Hook 使用 `useXxx`，API 函数使用业务动词，避免 `any` 与跨页面巨型全局状态。
 - REST DTO 使用 camelCase；MCP 原始 Tool 入参保持 snake_case。不要对任意响应递归转换大小写，以免破坏 SQL 列名、JSON 值与原始标识符。
 - ID 全部使用 string；BIGINT/DECIMAL 保持 string。不能通过 `Number(id)` 排序或拼装后再回传。
 - UTC ISO 8601 传输；页面按用户时区显示并标注；有效期限编辑同时显示时区。服务端确认时刻决定权限，浏览器时钟不决定权限。

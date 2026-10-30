@@ -1,6 +1,6 @@
 # 本机开发环境
 
-配置日期：2026-10-23。Windows工具与运行数据位于D:/config，新增环境集中于D:/config/ptmcp。正式框架已在本仓库根目录的[ptmcp-parent](../../ptmcp-parent/README.md)和[ptmcp-ui](../../ptmcp-ui/README.md)创建；D盘smoke仍只是环境探针，不是项目源码。
+配置日期：2026-10-23。Windows工具与运行数据位于D:/config，新增环境集中于D:/config/ptmcp。正式框架已在本仓库根目录的[ptmcp-parent](../../ptmcp-parent/README.md)和[ptmcp-ui-react](../../ptmcp-ui-react/README.md)创建；D盘smoke仍只是环境探针，不是项目源码。
 
 ## 已安装与复用
 

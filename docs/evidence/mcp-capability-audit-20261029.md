@@ -109,13 +109,13 @@ Vue `/as/...` 是开发预览，不签授权码或 token。React 迁移仍应保
 ## 3. 前端究竟接没接接口
 
 **现有 Vue 多数页面已接真实接口，文档中“全部禁用/仅预览”已过时。**
-[http.ts](../../ptmcp-ui/src/services/http.ts) 统一 `/backend/admin` 同源代理、Cookie、CSRF、错误和长整数。
-[frontendMode.ts](../../ptmcp-ui/src/services/frontendMode.ts) 的 delegation/effective/platform/scope/client/audit/password
+`http.ts` 统一 `/backend/admin` 同源代理、Cookie、CSRF、错误和长整数。
+`frontendMode.ts` 的 delegation/effective/platform/scope/client/audit/password
 均已开启真实模式；userDelete 仍只允许预览。业务调用位于
-[controlPlane.ts](../../ptmcp-ui/src/services/controlPlane.ts)、
-[orgPortalApi.ts](../../ptmcp-ui/src/services/orgPortalApi.ts)、
-[mePortalApi.ts](../../ptmcp-ui/src/services/mePortalApi.ts)、
-[data.ts](../../ptmcp-ui/src/services/data.ts) 与 [access.ts](../../ptmcp-ui/src/services/access.ts)。
+`controlPlane.ts`、
+`orgPortalApi.ts`、
+`mePortalApi.ts`、
+`data.ts` 与 `access.ts`（Vue 路径，工程已移除）。
 
 | 页面域 | 接线事实 | 仍需前端/后端协作 |
 | --- | --- | --- |

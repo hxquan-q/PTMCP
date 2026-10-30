@@ -6,7 +6,7 @@
 
 后端在根目录ptmcp-parent：Maven3.9.9 Wrapper（含发行包SHA-256）、Java21、Boot4.1.2，以及common/guard/admin/authz/gateway模块。只生成标准启动类、package说明、application配置和构建门禁；没有自定义控制器、认证、SQL算法或数据库访问代码。守门/授权能力未实现。
 
-前端在根目录ptmcp-ui：Vue3.5.42、Vite8.2.2、TS5.9.3、Element Plus2.14.5、unplugin-icons24.0.0、Tailwind4.3.3、Animate.css4.1.1、VueUse Motion3.0.3，Pinia/Router入口就绪。只保留最小启动壳，没有业务页面或API封装。确切依赖与来源见[前端README](../../ptmcp-ui/README.md)、[UPSTREAM](../../ptmcp-ui/UPSTREAM.md)。
+前端在根目录ptmcp-ui：Vue3.5.42、Vite8.2.2、TS5.9.3、Element Plus2.14.5、unplugin-icons24.0.0、Tailwind4.3.3、Animate.css4.1.1、VueUse Motion3.0.3，Pinia/Router入口就绪。只保留最小启动壳，没有业务页面或API封装。确切依赖与来源见 `ptmcp-ui/README.md`、`ptmcp-ui/UPSTREAM.md`（Vue 工程已于 2026-10-29 移除，React 工程见 ptmcp-ui-react）。
 
 ## 检查结果
 

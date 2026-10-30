@@ -7,10 +7,10 @@
 | 工程 | 入口 | 技术栈 |
 | --- | --- | --- |
 | 后端 ptmcp-parent | [POM](ptmcp-parent/pom.xml) / [启动说明](ptmcp-parent/README.md) | Java21、Spring Boot4.1.2、Maven Wrapper；common/guard/persistence/admin/authz/gateway |
-| 前端 ptmcp-ui | [package.json](ptmcp-ui/package.json) / [启动说明](ptmcp-ui/README.md) | Vue3、Element Plus、Iconify、Tailwind CSS、Animate.css、VueUse Motion |
+| 前端 ptmcp-ui-react | [package.json](ptmcp-ui-react/package.json) / [启动说明](ptmcp-ui-react/README.md) | React19、TypeScript、Vite、Tailwind CSS 4 |
 | 本机工具和基础服务 | [环境指南](docs/ops/development-environment.md) | D:/config；数据库/Redis与专用WSL环境 |
 
-前端在ptmcp-ui执行 `pnpm dev`，后端在ptmcp-parent按说明执行Wrapper。构建前先从根目录加载 `. .\scripts\Enter-Dev.ps1`。Reference为选型参考，不是本项目运行入口。
+前端在ptmcp-ui-react执行 `pnpm dev`，后端在ptmcp-parent按说明执行Wrapper。构建前先从根目录加载 `. .\scripts\Enter-Dev.ps1`。Reference为选型参考，不是本项目运行入口。
 
 - [文档导航](docs/README.md)
 - [项目总体方案](docs/总体方案.md)

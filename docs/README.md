@@ -10,7 +10,7 @@
 4. [研发路线](architecture/roadmap.md)：M0～M4顺序与退出条件。
 5. [当前测试报告](test/test-report.md)：历史组件证据与尚未执行的全系统测试。
 
-开发Agent从根[AGENTS.md](../AGENTS.md)进入，按[开发流程](standards/agent-workflow.md)完成任务；[决策笔记](standards/decision-notes.md)说明ADR/Note分工。[后端框架](../ptmcp-parent/README.md)、[前端框架](../ptmcp-ui/README.md)提供实际命令；业务任务按[任务入口](../tasks/README.md)后续推进。
+开发Agent从根[AGENTS.md](../AGENTS.md)进入，按[开发流程](standards/agent-workflow.md)完成任务；[决策笔记](standards/decision-notes.md)说明ADR/Note分工。[后端框架](../ptmcp-parent/README.md)、[前端框架](../ptmcp-ui-react/README.md)提供实际命令；业务任务按[任务入口](../tasks/README.md)后续推进。
 
 规范优先级：总体方案与已纳入基线的ADR定义跨域不变量；PRD定义产品行为；backend契约定义字段/接口和算法细节；其他文档引用这些规则。新变更须同步相关文档，不能靠后写的文件隐式覆盖既有契约。冲突应在同一次变更中修正。
 

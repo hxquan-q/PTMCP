@@ -29,7 +29,7 @@ CI、制品、部署/回滚和验收；脱离本项目的组织、仓库、服�
 
 ## 结果与证据
 
-交付 [Skill 入口](../../.agents/skills/yunxiao-cicd-sop/SKILL.md)、UI 元数据、平台命令/
+交付 Skill 入口（`yunxiao-cicd-sop/SKILL.md`）、UI 元数据、平台命令/
 制品部署/排障三份参考，以及质量 Flow、发布 manifest、验收记录三份脱敏模板，共 8 个文件。
 安装副本：`C:/Users/xquan/.codex/skills/yunxiao-cicd-sop/`。
 分享包：`.local/deliverables/yunxiao-cicd-sop-20261026.zip`，仅含 Skill 文件，没有日志或项目配置。
