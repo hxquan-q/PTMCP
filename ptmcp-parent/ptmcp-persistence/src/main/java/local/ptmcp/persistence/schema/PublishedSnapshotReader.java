@@ -110,6 +110,20 @@ public final class PublishedSnapshotReader {
             boolean primaryKey,
             String foreignKeyJson) {}
 
+    /**
+     * The identity of one usable datasource: an ACTIVE row pinned to a PUBLISHED, unexpired
+     * snapshot. Connection coordinates and credentials are deliberately absent; discovery callers
+     * never need them and must not receive them.
+     */
+    public record UsableDatasource(
+            long datasourceId, String code, String name, String engine, String databaseName) {
+        public UsableDatasource {
+            if (datasourceId <= 0) {
+                throw new DomainException(ErrorCode.INTERNAL_ERROR);
+            }
+        }
+    }
+
     /** Administrative text, never instructions. Ownership/audit identities are not exposed. */
     public record DictionaryEntry(
             String title, String description, long version, boolean descriptionTruncated) {}
@@ -204,6 +218,49 @@ public final class PublishedSnapshotReader {
             connection.setAutoCommit(false);
             try {
                 return load(connection, datasourceId);
+            } finally {
+                connection.rollback();
+            }
+        } catch (SQLException error) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+    }
+
+    /**
+     * Heads of every usable datasource in id order. Usability mirrors {@link #load(long)} exactly:
+     * an ACTIVE datasource whose active snapshot exists, matches the current config version, is
+     * PUBLISHED and has not expired. Anything else (drafts, retired pins, expired snapshots) is
+     * invisible to discovery.
+     */
+    public List<UsableDatasource> listUsable() {
+        try (Connection connection = primaryMetadata.getConnection()) {
+            connection.setReadOnly(true);
+            connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+            connection.setAutoCommit(false);
+            try (PreparedStatement statement =
+                            statement(
+                                    connection,
+                                    "SELECT ds.id, ds.code, ds.name, ds.engine, ds.database_name"
+                                            + " FROM datasource ds"
+                                            + " JOIN schema_snapshot ss ON ss.id = ds.active_snapshot_id"
+                                            + " WHERE ds.status = 'ACTIVE' AND ss.datasource_id = ds.id"
+                                            + " AND ss.config_version = ds.config_version"
+                                            + " AND ss.status = 'PUBLISHED'"
+                                            + " AND ss.expires_at IS NOT NULL"
+                                            + " AND ss.expires_at > UTC_TIMESTAMP(6)"
+                                            + " ORDER BY ds.id");
+                    ResultSet rows = statement.executeQuery()) {
+                List<UsableDatasource> usable = new ArrayList<>();
+                while (rows.next()) {
+                    usable.add(
+                            new UsableDatasource(
+                                    rows.getLong(1),
+                                    rows.getString(2),
+                                    rows.getString(3),
+                                    rows.getString(4),
+                                    rows.getString(5)));
+                }
+                return List.copyOf(usable);
             } finally {
                 connection.rollback();
             }

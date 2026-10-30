@@ -112,6 +112,8 @@ ADMIN Cookie每次请求均在会话索引/权威版本通过后，从主库当�
 | DelegationWrite | userId、departmentRootId、resourceType/resourceId、allowedActions[]、validFrom、validTo | id/version/status；只有平台管理员能创建/撤销；不允许目标本人操作 |
 | DictionaryWrite | title≤128、description≤8000、ownerUserId可空、columns:[{columnName,title,description}]≤500 | schemaComment/业务说明分开；未知列拒绝，富文本一期禁用 |
 
+PlatformWrite 的 `proofConfig` 仅写：MTLS 提供 `certificateFingerprint`（32 字节十六进制，可带冒号）；PROXY_SECRET 提供 `proxyNetwork`（单个 IPv4/IPv6 字面 CIDR，≤256 字符）和 `secret`（非空白 UTF-8 原文，1～256 字节，不 trim）。同模式已配置且全部留空可保留；部分材料、模式错配和切模式无完整新材料均返回 `INVALID_ARGUMENT`，NONE 清除且 Tier1 不可用。管理端 JSON 持久化映射、代理 Header 编码、旧错误格式重配及回滚限制见[认证设计](authentication.md#3-平台tier与每请求来源证明)。轮换请求失败后材料清空，明确拒绝须重填或显式取消替换；网络结果未知、无效响应或 412 须关闭并重新读取后核对，不盲重试。
+
 host/port先做DNS与网络目的地策略验证，拒绝云元数据/loopback等未授权地址；生产内网业务地址必须由运维CIDR白名单允许。不能提交任意JDBC URL、driverClass、SQL、连接属性或脚本；仅服务器模板形成连接串。连接错误转换稳定errorCode，真实host/驱动栈不回显用户。poolMax受所有副本预算约束，参数合法但容量不够返回422 CONNECTION_BUDGET_EXCEEDED。
 
 DatasourceDTO.health只取当前configVersion、当前host/port/database/username且未过期的ACTIVE_PROBE最新结果：VERIFIED→HEALTHY、FAILED→UNHEALTHY、其余或非ACTIVE→UNKNOWN。DRAFT_CANDIDATE、过期探针和旧配置版本的结果不参与，失败候选不污染active健康。
@@ -207,11 +209,18 @@ Cookie 管理写的 Origin/Referer 必须与请求的 scheme/host/port 一致；
 | GET /authorizations | cursor/pageSize | 本人授权族列表{id,clientName,platformId,issuedAt,lastUsedAt,status,absoluteExpiresAt}；无token |
 | DELETE /authorizations/{familyId} | 无body | 撤销整族及关联JWT；非本人404 |
 
-## 7. MCP 传输与三个工具的精确输入
+## 7. MCP 传输与四个工具的精确输入
 
-唯一传输 HTTPS Streamable HTTP /mcp，Spring候选使用 protocol=STATELESS，不建立跨请求 Mcp-Session-Id 授权缓存。每次HTTP请求完整校验Bearer与平台proof；未认证返回401并带协议要求的WWW-Authenticate/资源元数据发现位置。服务可执行 initialize/tools/list/tools/call 等必要协议方法，但业务Tool只能注册下列三个。协议版本由SDK与客户端M0矩阵实测锁定，不宣称未知版本已兼容；不开放旧SSE路径。
+唯一传输 HTTPS Streamable HTTP /mcp，Spring候选使用 protocol=STATELESS，不建立跨请求 Mcp-Session-Id 授权缓存。每次HTTP请求完整校验Bearer与平台proof；未认证返回401并带协议要求的WWW-Authenticate/资源元数据发现位置。服务可执行 initialize/tools/list/tools/call 等必要协议方法，但业务Tool只能注册下列四个。协议版本由SDK与客户端M0矩阵实测锁定，不宣称未知版本已兼容；不开放旧SSE路径。
 
-工具输入 JSON Schema（均 additionalProperties:false；string长度单位为字符，sql_query另按UTF-8字节上限64KiB）。datasource_id 非空十进制ID字符串，database_name/schema_name按目标快照原名精确绑定，不做模糊改库。
+工具输入 JSON Schema（均 additionalProperties:false；string长度单位为字符，sql_query另按UTF-8字节上限64KiB）。datasource_id 非空十进制ID字符串，database_name/schema_name按目标快照原名精确绑定，不做模糊改库。list_datasources 无输入参数，作为外部 Agent 的发现入口，只返回可见数据源标识与 queryable 标志，绝不包含主机、端口、账号或凭证。
+
+~~~json
+{
+  "name":"list_datasources",
+  "inputSchema":{"type":"object","additionalProperties":false,"required":[],"properties":{}}
+}
+~~~
 
 ~~~json
 {

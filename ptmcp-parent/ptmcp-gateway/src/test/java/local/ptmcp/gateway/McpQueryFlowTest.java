@@ -1143,15 +1143,33 @@ class McpQueryFlowTest {
     }
 
     @Test
-    void toolsListExposesExactlyTheThreeClosedTools() throws Exception {
+    void listDatasourcesReturnsTheSeededConnectionForThePatHolder() throws Exception {
+        HttpResponse<String> response = toolCall("list_datasources", Map.of(), PAT);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode result = JSON.readTree(response.body()).path("result");
+        assertFalse(result.path("isError").asBoolean(true), response.body());
+        JsonNode datasources = result.path("structuredContent").path("data").path("datasources");
+        assertEquals(1, datasources.size(), response.body());
+        JsonNode item = datasources.get(0);
+        assertEquals("1", item.path("datasourceId").asText());
+        assertEquals("MYSQL", item.path("engine").asText());
+        assertEquals(BUSINESS.container.getDatabaseName(), item.path("databaseName").asText());
+        assertTrue(item.path("queryable").asBoolean(false), response.body());
+        String requestId = result.path("structuredContent").path("requestId").asText();
+        assertTerminal(requestId, "SUCCESS", "ALLOW");
+    }
+
+    @Test
+    void toolsListMatchesThePublishedToolContract() throws Exception {
         HttpResponse<String> response =
                 rpc("{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/list\"}", PAT);
         assertEquals(200, response.statusCode(), response.body());
         JsonNode tools = JSON.readTree(response.body()).path("result").path("tools");
-        assertEquals(3, tools.size());
-        assertEquals("list_databases_and_tables", tools.get(0).path("name").asText());
-        assertEquals("get_table_schema", tools.get(1).path("name").asText());
-        assertEquals("execute_readonly_sql", tools.get(2).path("name").asText());
+        assertEquals(4, tools.size());
+        assertEquals("list_datasources", tools.get(0).path("name").asText());
+        assertEquals("list_databases_and_tables", tools.get(1).path("name").asText());
+        assertEquals("get_table_schema", tools.get(2).path("name").asText());
+        assertEquals("execute_readonly_sql", tools.get(3).path("name").asText());
         JsonNode contract =
                 JSON.readTree(
                                 Files.readString(

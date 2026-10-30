@@ -26,7 +26,11 @@ public record AuditStart(
     public static final int SQL_HASH_BYTES = 32;
     public static final int MAX_RAW_LENGTH = 1_048_576;
     public static final Set<String> SUPPORTED_TOOLS =
-            Set.of("list_databases_and_tables", "get_table_schema", "execute_readonly_sql");
+            Set.of(
+                    "list_datasources",
+                    "list_databases_and_tables",
+                    "get_table_schema",
+                    "execute_readonly_sql");
 
     public AuditStart {
         if (requestId == null || startedAt == null) {

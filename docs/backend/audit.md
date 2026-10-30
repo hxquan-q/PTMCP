@@ -6,7 +6,7 @@
 
 每次Tool调用服务端生成全局唯一request_id。业务result、策略verdict、error_code独立存储：result=RUNNING/SUCCESS/ERROR/UNKNOWN；verdict=ALLOW/DENY/ERROR/UNKNOWN；error_code描述原因。拒绝权限是ERROR+DENY，不计成网关系统故障；查询在DB成功但终结审计不能持久/响应丢失，不能对调用者宣称成功。
 
-START表示工具调用获准进入受控处理，包含requestId/tool/userId/platformId/datasourceId/startedAt/SQL哈希与长度（若有），不包含原始token或结果。入口先对请求做基本预算/认证，再持久化最小START；词法/语法/ACL拒绝也写终结。SQL guard通过后检查START已确认、完善执行上下文，最后安全核验才借业务连接；executionStartedAt与tool startedAt分开。此两层准入避免解析阶段崩溃漏调用，也确保“未获持久START不借业务连接”。
+START表示工具调用获准进入受控处理，包含requestId/tool/userId/platformId/datasourceId（list_datasources 为空）/startedAt/SQL哈希与长度（若有），不包含原始token或结果。入口先对请求做基本预算/认证，再持久化最小START；词法/语法/ACL拒绝也写终结。SQL guard通过后检查START已确认、完善执行上下文，最后安全核验才借业务连接；executionStartedAt与tool startedAt分开。此两层准入避免解析阶段崩溃漏调用，也确保“未获持久START不借业务连接”。
 
 TERMINAL包含result/verdict/errorCode、完成时间、命中规则、版本快照、物理对象ID、脱敏SQL/加密原SQL、阶段耗时、行/字节/截断信息；无结果数据。MCP对外成功必须在terminal获持久确认之后，故不能边fetch边将成功结果流给客户端后再尝试记审计。一期结果先在1MiB预算内完成封装，终结持久后才构造成功响应；JSON编码错误也要作为ERROR终结。
 

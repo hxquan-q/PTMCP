@@ -67,7 +67,7 @@
 | [权限设计](backend/authorization.md) | Allow/Deny、继承、委派、交集、缓存与时效 |
 | [数据源与执行器](backend/datasource.md) | 动态池、Schema、宽行输出、事务、取消/清理 |
 | [审计设计](backend/audit.md) | START准入、terminal、WAL恢复、加密/脱敏/解密 |
-| [MCP工具输入Schema](backend/mcp-tools.json) | 三个工具的可机器读取输入约束 |
+| [MCP工具输入Schema](backend/mcp-tools.json) | 四个工具的可机器读取输入约束 |
 
 ## 前端设计
 

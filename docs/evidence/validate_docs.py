@@ -136,16 +136,23 @@ def main() -> int:
         try:
             raw = json.loads(tool_path.read_text(encoding="utf-8-sig"))
             tools = raw["tools"] if isinstance(raw, dict) else raw
-            expected = {"list_databases_and_tables", "get_table_schema", "execute_readonly_sql"}
+            expected = {
+                "list_datasources",
+                "list_databases_and_tables",
+                "get_table_schema",
+                "execute_readonly_sql",
+            }
             names = {tool["name"] for tool in tools}
             tools_count = len(tools)
-            if names != expected or tools_count != 3:
-                errors.append("MCP tools must be exactly the three documented tools")
+            if names != expected or tools_count != 4:
+                errors.append("MCP tools must be exactly the four documented tools")
             for tool in tools:
                 schema = tool["inputSchema"]
                 if schema.get("additionalProperties") is not False:
                     errors.append(f"MCP schema must reject extra fields: {tool['name']}")
-                if "datasource_id" not in schema.get("required", []):
+                if tool["name"] != "list_datasources" and "datasource_id" not in schema.get(
+                    "required", []
+                ):
                     errors.append(f"MCP schema requires datasource_id: {tool['name']}")
         except (ValueError, KeyError, TypeError) as exc:
             errors.append(f"invalid MCP contract: {exc}")

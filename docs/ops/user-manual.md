@@ -65,7 +65,7 @@ Tier1仅用于能验证服务端凭证/网络或mTLS的后端平台；桌面配�
 1. 在门户“接入配置”选择客户端与批准的MCP地址，例如`https://mcp.example.com/mcp`；该地址仅是格式示例，实际地址由管理员提供。
 2. 按客户端支持的HTTP MCP配置添加服务器。填写门户生成的非敏感地址/资源信息；不要在URL中添加token、密码或共享client_secret。
 3. 客户端发起OAuth后在组织AS页面登录，检查授权平台和Scope后确认。公开客户端使用S256 PKCE；不要把浏览器授权码、回调参数或完整日志截图发给他人。
-4. 返回客户端后先查看有权目录/结构，再做一条小查询；保留requestId以便问题定位。网关只注册三个工具：`list_databases_and_tables`、`get_table_schema`、`execute_readonly_sql`。
+4. 返回客户端后先调用`list_datasources`查看有权连接，再查看目录/结构，最后做一条小查询；保留requestId以便问题定位。网关只注册四个工具：`list_datasources`、`list_databases_and_tables`、`get_table_schema`、`execute_readonly_sql`。
 5. Access Token有效期10分钟。通过验证的公开刷新扩展可在绝对30天/空闲7天内轮换续期；不兼容/未启用的客户端需要重新授权，也可使用组织允许的PAT路径。
 
 **WorkBuddy、Cursor、Claude Code、VS Code的具体版本与公网联调尚未完成。** 本手册不声称四者已经支持自动续期，也不提供未经验证的专有配置片段。正式交付时在门户按真实联调结果展示“已验证OAuth刷新/需重新授权/仅PAT”等状态。旧SSE端点与未验证会话模式不会自动开启。
