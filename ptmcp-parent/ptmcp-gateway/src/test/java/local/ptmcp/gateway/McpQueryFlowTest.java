@@ -23,6 +23,7 @@ import com.sun.net.httpserver.HttpServer;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
+import local.ptmcp.common.crypto.SealedEnvelope;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.datasource.DataSourcePoolRegistry;
@@ -379,6 +380,11 @@ class McpQueryFlowTest {
                         .asText();
 
         byte[] rawKey = Base64.getDecoder().decode(AUDIT_KEY);
+        String expectedKeyId =
+                "local:"
+                        + java.util.HexFormat.of()
+                                .formatHex(MessageDigest.getInstance("SHA-256").digest(rawKey))
+                                .substring(0, 16);
         byte[] sealed;
         byte[] sealedFinal;
         String keyId;
@@ -404,15 +410,7 @@ class McpQueryFlowTest {
         // The final form (post-rewrite SQL that actually reached JDBC) is sealed with the same
         // audit key; decrypting it must produce the executed statement.
         assertNotNull(sealedFinal, "final sql ciphertext missing");
-        javax.crypto.Cipher finalCipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
-        finalCipher.init(
-                javax.crypto.Cipher.DECRYPT_MODE,
-                new javax.crypto.spec.SecretKeySpec(rawKey, "AES"),
-                new javax.crypto.spec.GCMParameterSpec(128, sealedFinal, 0, 12));
-        String finalRevealed =
-                new String(
-                        finalCipher.doFinal(sealedFinal, 12, sealedFinal.length - 12),
-                        java.nio.charset.StandardCharsets.UTF_8);
+        String finalRevealed = openAuditCipher(rawKey, sealedFinal, expectedKeyId);
         // The final SQL is the guard-rewritten statement that actually reached JDBC — schema
         // qualified, alias renamed, safety LIMIT injected. Assert the rewrite fingerprints
         // instead of the raw text.
@@ -421,25 +419,10 @@ class McpQueryFlowTest {
         assertTrue(finalRevealed.toUpperCase().contains("LIMIT"), finalRevealed);
         assertFalse(finalRevealed.equals(sql), "final form must differ from the raw query");
         assertNotNull(sealed, "success terminal must carry the sealed raw SQL");
-        assertTrue(sealed.length > 12 + 16, "ciphertext shorter than iv + tag");
-        String expectedKeyId =
-                "local:"
-                        + java.util.HexFormat.of()
-                                .formatHex(MessageDigest.getInstance("SHA-256").digest(rawKey))
-                                .substring(0, 16);
+        assertTrue(sealed.length > 5 + 12 + 16, "ciphertext shorter than prefix + iv + tag");
         assertEquals(expectedKeyId, keyId, "terminal key id must derive from the audit key");
 
-        javax.crypto.spec.SecretKeySpec auditKey =
-                new javax.crypto.spec.SecretKeySpec(rawKey, "AES");
-        javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(
-                javax.crypto.Cipher.DECRYPT_MODE,
-                auditKey,
-                new javax.crypto.spec.GCMParameterSpec(128, sealed, 0, 12));
-        String revealed =
-                new String(
-                        cipher.doFinal(sealed, 12, sealed.length - 12),
-                        java.nio.charset.StandardCharsets.UTF_8);
+        String revealed = openAuditCipher(rawKey, sealed, expectedKeyId);
         assertEquals(sql, revealed, "decrypted plaintext must match the executed query");
     }
 
@@ -500,18 +483,18 @@ class McpQueryFlowTest {
                                 .formatHex(MessageDigest.getInstance("SHA-256").digest(rawKey))
                                 .substring(0, 16);
         assertEquals(expectedKeyId, keyId);
-        javax.crypto.spec.SecretKeySpec auditKey =
-                new javax.crypto.spec.SecretKeySpec(rawKey, "AES");
-        javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(
-                javax.crypto.Cipher.DECRYPT_MODE,
-                auditKey,
-                new javax.crypto.spec.GCMParameterSpec(128, sealed, 0, 12));
-        String revealed =
-                new String(
-                        cipher.doFinal(sealed, 12, sealed.length - 12),
-                        java.nio.charset.StandardCharsets.UTF_8);
+        String revealed = openAuditCipher(rawKey, sealed, expectedKeyId);
         assertEquals(attempted, revealed);
+    }
+
+    /** Opens an audit cipher the way the admin console does: same envelope, same purpose. */
+    private static String openAuditCipher(byte[] rawKey, byte[] sealed, String keyId) {
+        return new SealedEnvelope(Base64.getEncoder().encodeToString(rawKey), "test-key")
+                .decrypt(
+                        sealed,
+                        keyId,
+                        SealedEnvelope.PURPOSE_AUDIT_SQL,
+                        local.ptmcp.common.error.ErrorCode.AUDIT_UNAVAILABLE);
     }
 
     @Test

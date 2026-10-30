@@ -6,7 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import local.ptmcp.common.crypto.SealedEnvelope;
 import local.ptmcp.common.error.DomainException;
+import local.ptmcp.common.error.ErrorCode;
 
 import org.junit.jupiter.api.Test;
 
@@ -40,8 +42,8 @@ class AuditSealerTest {
         AuditSealer sealer = new AuditSealer(randomKey());
         assertTrue(sealer.enabled());
         byte[] sealed = sealer.seal("SELECT card_number FROM payment");
-        // 12-byte IV + at least the 16-byte tag + the plaintext length.
-        assertTrue(sealed.length > 12 + 16);
+        // 5-byte version prefix + 12-byte IV + at least the 16-byte tag + the plaintext length.
+        assertTrue(sealed.length > 5 + 12 + 16);
         assertTrue(sealer.keyId().startsWith("local:"));
         assertEquals(22, sealer.keyId().length());
         // Two seals of the same plaintext differ (random IV), like every AEAD usage.
@@ -63,10 +65,10 @@ class AuditSealerTest {
                                                 .digest(raw))
                                 .substring(0, 16);
         assertEquals(expected, sealer.keyId());
-        // The admin console reader (ptmcp-admin AuditCipher) uses the same derivation; verify the
-        // wire format round-trips through an inline same-format decryptor.
+        // The admin console reader (ptmcp-admin AuditCipher) shares this envelope and purpose.
         byte[] sealed = sealer.seal("SELECT id FROM orders WHERE id = 7");
-        assertEquals("SELECT id FROM orders WHERE id = 7", decryptSameFormat(base64, sealed));
+        assertEquals(
+                "SELECT id FROM orders WHERE id = 7", decryptSameFormat(base64, sealed, expected));
     }
 
     @Test
@@ -79,20 +81,37 @@ class AuditSealerTest {
         new java.security.SecureRandom().nextBytes(otherRaw);
         assertThrows(
                 Exception.class,
-                () -> decryptSameFormat(Base64.getEncoder().encodeToString(otherRaw), sealed));
+                () ->
+                        decryptSameFormat(
+                                Base64.getEncoder().encodeToString(otherRaw),
+                                sealed,
+                                sealer.keyId()));
     }
 
-    /** Same AES-GCM wire format and key-id derivation as the admin console's AuditCipher. */
-    private static String decryptSameFormat(String base64Key, byte[] sealed) throws Exception {
-        byte[] raw = Base64.getDecoder().decode(base64Key);
-        javax.crypto.spec.SecretKeySpec key = new javax.crypto.spec.SecretKeySpec(raw, "AES");
-        javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(
-                javax.crypto.Cipher.DECRYPT_MODE,
-                key,
-                new javax.crypto.spec.GCMParameterSpec(128, sealed, 0, 12));
-        return new String(
-                cipher.doFinal(sealed, 12, sealed.length - 12),
-                java.nio.charset.StandardCharsets.UTF_8);
+    /** A ciphertext re-sealed under a different purpose must not open. */
+    @Test
+    void otherPurposeCannotOpenAuditCipher() {
+        String key = randomKey();
+        AuditSealer sealer = new AuditSealer(key);
+        byte[] sealed = sealer.seal("SELECT 1");
+        SealedEnvelope management = new SealedEnvelope(key, "ptmcp.admin.credential-key");
+        assertThrows(
+                DomainException.class,
+                () ->
+                        management.decrypt(
+                                sealed,
+                                sealer.keyId(),
+                                SealedEnvelope.PURPOSE_MANAGEMENT_SECRET,
+                                ErrorCode.AUDIT_UNAVAILABLE));
+    }
+
+    /** Reads through the shared envelope, exactly as the admin console's AuditCipher does. */
+    private static String decryptSameFormat(String base64Key, byte[] sealed, String keyId) {
+        return new SealedEnvelope(base64Key, "test-key")
+                .decrypt(
+                        sealed,
+                        keyId,
+                        SealedEnvelope.PURPOSE_AUDIT_SQL,
+                        ErrorCode.AUDIT_UNAVAILABLE);
     }
 }

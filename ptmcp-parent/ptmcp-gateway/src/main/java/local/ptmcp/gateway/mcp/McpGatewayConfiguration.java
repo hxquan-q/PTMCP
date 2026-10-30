@@ -3,6 +3,7 @@ package local.ptmcp.gateway.mcp;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
+import local.ptmcp.common.crypto.SealedEnvelope;
 import local.ptmcp.datasource.ApprovedQueryAdapter;
 import local.ptmcp.datasource.DataSourcePoolRegistry;
 import local.ptmcp.datasource.ExecutorSettings;
@@ -34,11 +35,11 @@ import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 import java.net.InetAddress;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.Base64;
-import java.util.HexFormat;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import javax.sql.DataSource;
@@ -111,13 +112,7 @@ class McpGatewayConfiguration {
 
     @Bean
     WalKeyProvider walKeyProvider(GatewayProperties properties) {
-        byte[] raw = Base64.getDecoder().decode(properties.walKey());
-        if (raw.length != 32) {
-            throw new IllegalStateException("ptmcp.gateway.wal-key must decode to 32 bytes");
-        }
-        String keyId = "local:" + HexFormat.of().formatHex(sha256(raw)).substring(0, 16);
-        WalKey key = new WalKey(keyId, raw);
-        return () -> key;
+        return new WalKeyRing(properties.walKey());
     }
 
     @Bean
@@ -254,11 +249,53 @@ class McpGatewayConfiguration {
         }
     }
 
-    private static byte[] sha256(byte[] input) {
-        try {
-            return MessageDigest.getInstance("SHA-256").digest(input);
-        } catch (NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException("SHA-256 unavailable", impossible);
+    /**
+     * Comma-separated base64 AES-256 keys from {@code ptmcp.gateway.wal-key}: the first writes new
+     * frames, the rest stay readable so segments written before a rotation still replay. Key ids
+     * use the same derivation as {@link local.ptmcp.common.crypto.SealedEnvelope}.
+     */
+    static final class WalKeyRing implements WalKeyProvider {
+        private final WalKey current;
+        private final Map<String, WalKey> ring = new LinkedHashMap<>();
+
+        WalKeyRing(String configuredKeys) {
+            WalKey write = null;
+            for (String entry : configuredKeys.split(",")) {
+                String value = entry.trim();
+                if (value.isEmpty()) {
+                    continue;
+                }
+                byte[] raw;
+                try {
+                    raw = Base64.getDecoder().decode(value);
+                } catch (IllegalArgumentException error) {
+                    throw new IllegalStateException(
+                            "ptmcp.gateway.wal-key is not valid base64", error);
+                }
+                if (raw.length != 32) {
+                    throw new IllegalStateException(
+                            "ptmcp.gateway.wal-key must decode to 32 bytes");
+                }
+                WalKey key = new WalKey(SealedEnvelope.keyIdOf(raw), raw);
+                ring.putIfAbsent(key.keyId(), key);
+                if (write == null) {
+                    write = key;
+                }
+            }
+            if (write == null) {
+                throw new IllegalStateException("ptmcp.gateway.wal-key must hold at least one key");
+            }
+            this.current = write;
+        }
+
+        @Override
+        public WalKey current() {
+            return current;
+        }
+
+        @Override
+        public Optional<WalKey> byId(String keyId) {
+            return Optional.ofNullable(ring.get(keyId));
         }
     }
 }

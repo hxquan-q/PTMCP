@@ -62,8 +62,7 @@ public final class WalReplayer {
         Objects.requireNonNull(directory, "directory");
         Objects.requireNonNull(keys, "keys");
         Objects.requireNonNull(sink, "sink");
-        WalKey current = keys.current();
-        Function<String, WalKey> byId = keyId -> current.keyId().equals(keyId) ? current : null;
+        Function<String, WalKey> byId = keyId -> keys.byId(keyId).orElse(null);
         List<Path> segments = listSegments(directory);
         int replayed = 0;
         int skipped = 0;
