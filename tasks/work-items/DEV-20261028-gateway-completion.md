@@ -506,7 +506,7 @@ create/update在同连接读取并返回本事务不可变快照，保留CAS、�
 复用既有合成MySQL和JDBC故障代理，不碰共享数据库。先定向，再组织/事务/管理/会话等兼容组合，
 最后独立只读评审实际diff、有效RED/GREEN与源码哈希；未运行前不升级验证状态。
 只读设计评审无阻断；补充中途权限码batch故障回滚、软删角色拒绝及null/空集合兼容测试。
-RoleAdminController.create尚未接IdempotentWrites，不能从本片推断角色创建HTTP同key防重闭环。
+本存储事务片不覆盖角色创建HTTP同key防重闭环，接线和验证见下述HTTP幂等切片。
 
 有效RED：`role-transaction-red.log/.exit`（2026-10-30 08:04，exit1），37项/21 failures/0 errors/0 skipped。
 覆盖缺少epoch/事件、事件故障不回滚、提交确认丢失误报、二次借连接/后续快照、版本及epoch耗尽。
@@ -524,7 +524,7 @@ State13、Tx16、Org226、Admin111、Datasource9、IdentityPassword17、Session1
 前一幂等切片收尾后实际检查：`python scripts/check.py` exit0（145份Markdown/672项链接、62项检查器回归），
 Skill tree/format/archived均exit0（12篇活跃笔记、0篇归档），`git diff --check` exit0；不替代本片验证。
 
-### 角色创建HTTP幂等切片（2026-10-30，实施中）
+### 角色创建HTTP幂等切片（2026-10-30）
 
 关联FR-02/AC-02、TC-API-005及TC-ACL-002/007。范围仅POST /admin/roles接IdempotentWrites，
 先校验当前动作权限、平台资格、JSON与必填字段再占键；不改角色更新/删除、schema、OAuth或React。
@@ -532,9 +532,150 @@ Skill tree/format/archived均exit0（12篇活跃笔记、0篇归档），`git di
 不重读当前角色来恢复回放头，未知不释放键或自动重做。React的每次调用新UUID问题交给前端窗口。
 设计只读评审无阻断；实现前最低验证为真实MySQL/MVC RED，随后覆盖成功/改意图、非法键、前置拒绝、
 commit丢确认、成功标记前/后故障及撤动作码后的回放拒绝；比较完整角色/权限码/日志/epoch/事件快照。
-待实际实现、GREEN与兼容回归后独立终审；本节不作为通过证据。
+已接原始body、StrictJson和roles.create包装，回放从记录正数ID恢复Location，不重读业务行；
+内部记录解析失败统一UNKNOWN并保留原记录。
+有效RED：`role-http-red.log/.exit`（2026-10-30 08:31:16 +08，exit1），
+16项/14 failures/0 errors/0 skipped。旧controller保留于`role-http-before-RoleAdminController.java`，
+XML和358份Windows/native/清单哈希已保存并亲核差异0。
+初轮16项/4 failures/12 errors为完整快照夹具误用sys_role.id；已修为role_id后取得上述有效RED，
+初轮保存在`role-http-initial-red.*`，夹具错误不计为产品缺陷。
+定向GREEN：`role-http-green.log/.exit`（08:37:23 +08，BUILD SUCCESS/exit0），
+16项全部通过、零失败/错误/跳过，`role-http-green-AdminApiTest.xml`已保存；
+358份构建输入Windows/native/`role-http-green-source-hashes.json`一致。
+初轮兼容组合：`role-http-before-boundary-combined-green.log/.exit`（08:44:42 +08，BUILD SUCCESS/exit0），
+State13、Tx16、Org226、Admin127、Datasource9、IdentityPassword17、Session18，共426项零失败/错误/跳过。
+7份XML和358项输入清单均保留。该轮未含下述新增边界，不能作为修正后的最终组合。
+独立只读评审发现Medium：回放解析复用请求1MiB上限，合法满额请求生成稍大成功响应后，首次201而回放UNKNOWN。
+已补真实满额请求/数据库响应长度/逐字节回放，以及记录编码、重复键、未知字段、尾随JSON反例，取得下述边界RED。
+修正保持请求1MiB不动，记录响应按现有MEDIUMBLOB容量独立严格解析，修正后证据另记。
+
+边界有效RED：`role-http-response-boundary-red.log/.exit`（08:49:56 +08，exit1），
+23项/1 failure/0 errors/0 skipped。唯一失败是大响应的第二次POST返回409，首次201、SUCCEEDED及
+数据库OCTET_LENGTH已通过前置断言；XML亲核请求1,048,576字节/10180权限码，成功响应1,048,596字节。
+扩展损坏记录的null/重复/未知/尾随JSON和UTF-16LE/非法UTF-8反例均在该轮通过。
+XML、格式化测试及358项三方一致哈希保存在同前缀证据；修正前controller另存备份。
+候选仅在角色controller用独立mapper和REPORT UTF-8解码，记录正文上限16MiB-1；
+保留请求StrictJson、公共wrapper和schema。
+首轮14失败中有断言先停在缺少幂等行，不能描述成每一项均已动态证明二次业务执行。
+分层现为8项Spring上下文MockMvc与15项standalone MockMvc，均用真实隔离MySQL；未新增真实Cookie/CSRF链验证。
+
+修正定向GREEN：`role-http-green2.log/.exit`（08:53:56 +08，BUILD SUCCESS/exit0），
+23项全部通过、零失败/错误/跳过；XML及358项Windows/native一致的输入清单已保存。
+最终兼容组合：`role-http-combined2-green.log/.exit`（09:03:16 +08，BUILD SUCCESS/exit0），
+State13、Tx16、Org226、Admin134、Datasource9、IdentityPassword17、Session18，共433项零失败/错误/跳过。
+7份XML保存为`role-http-combined2-green-{Class}.xml`，最终358项输入清单差异0。
+两份本窗口Java格式化结果已回拷并核对，未整体同步或覆盖React文件。
+独立只读终审已亲核最终日志、exit0、7份XML头计数及实际testcase/失败/错误/跳过节点，
+独立重算全部358项Windows/native/最终清单三方哈希，差异0；当前源码与已审GREEN2一致。
+先前大响应回放Medium关闭，本片限定终审无新增阻断；评审未修改文件或重复动态测试。
+本片工程验证完成，不替代其它POST、提交前授权重验或整体人工接受，整体状态保持不变。
+收尾检查：`python scripts/check.py` exit0（145份Markdown/679项本地链接、62项检查器回归）；
+Skill tree/format/archived三项exit0，`git diff --check` exit0。安全关键变更未提交或推送。
+
+React协作：按用户说明定位到同仓库pi会话，已投递文件归属、精确暂存和重试合同（工具回执submitted=true）。
+本窗口持有后端、backend契约、ASVS、本工作项及网关Note；pi持有React，不能用git add -A夹带本片。
+已观察pi提交`cb72e63`，仅含4份React服务/页面/测试文件，未夹带本窗口后端；API支持显式稳定key，
+并修正了编辑中首次POST分支。源码复核仍发现对话框改字段可复用旧key、UNKNOWN原body未冻结，
+现有手工生成keyB的helper测试不能证明实际dialog状态；已投递这些问题和名称2～30合同。
+pi正在修改表单，后续又反馈enabled选项/提交中冻结、重复JSX及UNKNOWN不能保证自动确认成功的提示问题。
+尚无这些修改的最终测试回执或真实浏览器/后端联调证据，不能标成前端验收通过；本窗口未改React文件。
+
+### 角色三写事务内当前资格重验（2026-10-30）
+
+承接FR-02/AC-02、TC-ACL-002/007及authorization §6。范围仅角色三写，回调开头持global后同连接
+重验actor权威READY/活动profile、有效角色并集含平台码及命令固定精确动作，再锁/读目标。
+不增加trusted/unchecked生产入口，测试以专用高ID管理员JDBC夹具自举，保留旧拒绝断言。
+缺失动作或平台码MANAGEMENT_SCOPE_DENIED、非READY/非活动TOKEN_REVOKED，
+缺失/损坏权威行SECURITY_STATE_UNAVAILABLE，SQL故障沿事务映射DEPENDENCY_UNAVAILABLE。
+不绑定入场authVersion或会话，注销/过期/改密完成或停用再启用的旧在途请求仍待；
+委派、整子树、最后管理员、间接自扩权及成员/ACL引用竞争不在本片。
+最低验证先取三命令的有效RED，再测当前状态拒绝、取锁前真实撤角色动作/平台码、反向锁序、
+分角色组合权限、依赖故障及完整写快照；创建进入action后被拒时仍保留UNKNOWN幂等占位。
+只读设计及实际diff评审已核global/READ_COMMITTED和现有写方锁序，无新增阻断；最终GREEN证据终审结论见下文。
+
+有效RED：`role-qualification-red2.log/.exit`（09:35:50 +08，BUILD FAILURE/exit1），
+69 tests/66 failures/0 errors/skipped；`role-qualification-http-red2.log/.exit`（09:39:57 +08，
+BUILD FAILURE/exit1），2 tests/2 failures/0 errors/skipped，旧产品在真实撤码后返回201并记录SUCCEEDED。
+69项覆盖42个资格/状态拒绝、3个actor1无旁路、3个目标读取前拒绝、3个同连接分角色并集、
+6个取锁前撤码竞态、3个先持锁反向顺序、9个SQL故障；HTTP另2项在action已分派且RUNNING后撤码。
+最初store/HTTP轮次含夹具编译错误，保留原日志，不算有效RED。HTTP用standalone MockMvc与真实隔离MySQL，
+未新增Cookie/CSRF链；反向顺序用闸门及150ms有界等待，没有直接查询数据库锁等待。
+独立只读评审亲核两份RED2 XML的实际节点、日志与退出码，确认没有以编译/环境失败冒充行为RED。
+定向GREEN：`role-qualification-green.log/.exit`（09:45:25 +08，BUILD SUCCESS/exit0），
+store69项与HTTP2项共71项零失败/错误/跳过；两份XML及358份输入清单已保留。
+首轮兼容组合`role-qualification-combined-green.log/.exit`（09:54:47 +08，exit1）为
+504项/1 failure/0 errors/skipped：专用管理员夹具部门先于业务部门出现在旧列表，未放宽生产资格检查。
+修复仅将该测试身份所属部门设为软删，保留ACTIVE profile、READY及原CRUD断言；平台角色管理
+按既有合同不要求业务部门授权。失败日志、7份XML及当轮358份输入清单完整保留。
+最终兼容组合`role-qualification-combined2-green.log/.exit`（10:04:51 +08，BUILD SUCCESS/exit0），
+Org295、Tx16、State13、Admin136、Datasource9、IdentityPassword17、Session18，共504项零失败/错误/跳过。
+7份XML保存为`role-qualification-combined2-green-{Class}.xml`，亲核头计数与实际testcase及失败节点一致；
+全部358份输入的运行前清单、最终native与Windows三方SHA-256一致，无格式化源码需要回拷。
+最终清单为`role-qualification-combined2-green-source-hashes.json`；本片日志/exit/XML均在
+专属WSL `/tmp/ptmcp-root-backend-workspace/`。独立只读终审已亲核71项定向、504项最终组合的
+日志/退出码/实际XML节点，并逐项重算全部358份Windows/native/清单三方哈希，差异0。
+评审确认夹具仅改变专用管理员部门的del_flag，原CRUD断言逐字未变，未掩盖本片产品回归；无新增阻断。
+评审未修改文件、重复动态测试或连接数据库；不外推至会话版本、委派、最后管理员、真实Cookie/CSRF或生产验收。
+本片未提交、推送或部署，整体Verification仍为NOT_RUN，局部GREEN不替代完整授权及人工接受。
+
+### 2026-10-30 核查收尾门禁
+
+隔离完整 parent `verify` 首轮于10:28:07～10:33:27 +08执行，exit 1；本轮实际新生成的
+common/persistence XML共621项，1 failure、0 errors/skipped，头计数与实际节点一致。
+失败为`SnapshotPublicationMigrationTest.upgradesV7WithoutTrustingPollutedResources:108`：
+测试断言只执行一次V8迁移，但第二段Flyway未限定target，实际从V7执行到当前V13，共6次。
+所有358份运行前/native/Windows输入SHA-256一致；原始log/exit、XML副本、计数与哈希在
+专属WSL证据目录的`gateway-audit-parent-verify*`中，未将旧admin/authz/gateway XML计入本轮。
+最小修正仅把第二段目标固定到V8，保留1次迁移、重复0次、污染快照退役、ACL撤销及epoch/event等全部原断言；
+没有修改生产迁移、阈值或跳过测试。其他真实MySQL迁移测试仍加载当前全部迁移，V12→V13另有明确升级反例。
+本轮自有文件范围因此新增该测试；接下来重跑不带测试过滤的完整parent，并在其中复核本测试，结果待补。
+独立只读追加复核已亲核该行diff、首轮23份XML及358项哈希，无新增阻断：
+V8正是原测试安全升级边界，V13仍由独立V12→V13迁移测试和其他全量迁移用例覆盖；
+未改变原断言或生产迁移，不能据此宣称已覆盖全部V7→V13历史数据组合。
+
+第二轮完整parent verify于10:38:09～10:53:31 +08结束，exit1；1258项有32 failures、
+4 errors、0 skipped，79份本轮XML头计数与实际节点一致，358份Windows/native前后输入哈希一致。
+common225、persistence396、guard216、datasource56、admin211、authz58均通过；
+gateway96项的失败集中McpQueryFlowTest、McpPgQueryFlowTest、McpAuditResilienceTest、McpTier1ProofTest。
+大量响应为401 TOKEN_REVOKED，衍生NPE/未执行断言来自入口拒绝；原始证据保存为
+`gateway-audit-parent2-verify*`，未覆盖或改记通过。
+独立只读复核确认四份夹具在全量迁移后创建档案/版本1凭证，没有sys_user_security权威行；
+读取器只返回READY身份版本，缺行返回0，PAT/JWT版本校验因此拒绝。V11不会回填迁移后创建的档案，
+V13的UNBOUND默认值也不授予身份资格。当前最小修正仅归本窗口的上述四份gateway测试：
+显式插入合成READY/版本1身份，保留原断言和生产鉴权；补PAT与真实签名JWT各自的缺行、UNBOUND、
+版本不符HTTP反例，要求401 TOKEN_REVOKED且业务连接/执行计数不变，finally恢复共享夹具。
+修后先跑四类定向，再跑gateway全量；结果待记录，不预判全部失败已消除。
+
+React续接窗口确认源码冻结后，本窗口于10:45:26～10:45:59 +08独立运行
+`pnpm.cmd --dir ptmcp-ui-react test`与`pnpm.cmd --dir ptmcp-ui-react check`，原始退出码均为0。
+151项测试全部通过，0失败/取消/跳过；ESLint、Prettier、TypeScript与Vite生产构建全部通过。
+Node v24.22.1、pnpm 11.9.0，104份前端输入运行前后SHA-256一致；原始日志/exit/时间/哈希
+为专属WSL证据目录内`gateway-audit-react-final-*`。新增测试包含fetch正文契约和preview反例，
+不能外推真实后端逐页联调、浏览器或MCP/OAuth客户端验收。
+CI、check.py --all、Linux入口和种子扫描已由前端窗口改为React路径；本窗口重扫.github/scripts/config，
+未命中旧ptmcp-ui目录或test:contracts。该窗口36份自有文件已精确暂存，未包含后端或10/30报告，
+本窗口没有操作其暂存区；README/AGENTS等混合文档修改仍保留工作树状态。
+
+10:49:12～10:51:12 +08运行`python -B scripts/check_backend_quality.py --timeout 900
+--seed-repository D:/config/ptmcp/cache/maven`，exit 0。实际父/子模块validate及格式正确夹具通过；
+Spotless分别拒绝main/test坏格式、Checkstyle拒绝已格式化的星号导入、Enforcer拒绝common引入Spring，
+各负例同时核退出码与对应诊断，非依赖/环境失败冒充；共7个正反探针通过。
+探针仅修改临时副本、复制缓存，不运行格式修复、不连接数据库；不覆盖parser唯一性/Sa-Token负例。
+原始日志/exit/时间为`gateway-audit-quality-probes*`。
+本轮Skill tree/format/archived三脚本均exit 0，核验13/13/0篇笔记、0项归档封印；
+原始日志/exit为`gateway-audit-final-verify-*`，不继承上一轮12篇笔记的结果。
+
+独立终审记录更新后，`python scripts/check.py` 实际 exit 0：143 份 Markdown、678 项本地链接，
+62 项检查器回归全部通过。日志/退出码为专属 WSL 证据目录内
+`role-qualification-final-root-check.log/.exit`。
+Skill tree/format/archived 三脚本均 exit 0，核验 12/12/0 篇笔记、0 项归档封印；
+对应 `role-qualification-final-verify-agent-note-tree`、`role-qualification-final-verify-agent-note-format`、
+`role-qualification-final-verify-archived-agent-notes` 的 `.log/.exit` 均保留。
+这轮未执行全仓 `--all`；前端与迁移文档仍在变化，最终门禁结果须绑定稳定输入后另记，不能继承这轮通过。
 
 ## 交接
+
+### 2026-10-29 核查历史
 
 2026-10-29 续接核查范围：按用户要求复核全部后端、前端真实接口、OAuth首次连接和页面，
 参考本地DBX并为另一窗口React迁移提供框架无关交接；本轮不修改业务或前端源码，不迁移账号/数据，不发布。
@@ -564,10 +705,27 @@ commit丢确认、成功标记前/后故障及撤动作码后的回放拒绝；�
 React交接另确认：权限树为fixture，部分写/预览操作未接；接入页“测试连接”仅定时置success，
 未实际请求MCP，真实模式也未隔离该回调。应由前端窗口在接管前限制为明确预览或接入真实验证，不能以UI成功宣称连通。
 
-当前实施焦点为角色创建HTTP幂等；角色定义三写事务片已完成独立证据终审，
-显式委派create/revoke事务片已独立终审，G1/OAuth资源及G2的局部完成证据见上文，
-G3～G5及G7完整验收仍待完成，G6局部验证已通过、人工接受待定。
+### 2026-10-30 当前交接
+
+09:08后观察到共享工作区的本片7份WIP退回HEAD，随后出现`backend-wip-2`和旧`backend-wip-stash`；
+在逐文件调查期间工作区重新恢复，前者从stash列表移除。尚未取得pi对具体Git命令的回复，不推断执行者或命令。
+09:14重算全部358项Windows/native/最终433项测试输入清单，差异0；7份自有文件另存于
+专属WSL的`role-http-restored-20261030-091437/`，附逐文件SHA-256清单。没有整包apply/pop旧stash，
+没有回退React提交。已再次向pi投递禁止全仓stash/reset/restore、仅精确暂存/清理自有React路径的边界；
+工具submitted=true仅表示投递，尚不能当作对方确认。恢复是逐字节相同输入核验，不冒充新一轮动态测试。
+
+角色创建HTTP幂等片已完成23项定向、433项最终组合与独立证据终审；
+角色定义三写事务片、显式委派create/revoke事务片也已独立终审，G1/OAuth资源及G2的局部完成证据见上文。
+后续优先补安全写入的actor/委派提交前重验、整子树授权、最后有效管理员和间接自扩权，
+再处理成员/ACL引用竞争、可信UNBOUND供应、共享登录限流/seed保护与G3～G5/G7；
+G6局部验证已通过、人工接受待定。
 React窗口可直接按报告的真实接口和安全行为迁移，不能继承Vue的测试通过状态。
 整体保持 in_progress，不把立项、计划或局部测试通过报告为完整交付。
 本窗口未执行提交、推送、部署或发布；共享历史已有另一窗口的提交，不回退或重写。
 React/Vue及其测试修改归另一窗口，后端证据和本轮授权边界按各切片记录。
+角色当前资格片的 71 项定向、504 项最终组合及独立只读终审已完成，范围和局限见上文。
+当前核查收尾转向 React 接口正文、真实模式边界和迁移入口：已向续接窗口投递 MCP 样例回退、
+用户 DELETE 缺路由、OAuth client 必需字段、角色未知结果分类/编辑交互，以及 ACL 预览 subjectUserId、
+资源编码与 100 项上限问题。原 pi pane 已关闭，投递成功不等于修复或测试完成。
+React 源码由该窗口所有，本窗口待稳定后只读复核并运行适用 test/check，结果写回
+[增量能力核查](../../docs/evidence/mcp-capability-audit-20261030.md)。

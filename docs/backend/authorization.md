@@ -84,14 +84,22 @@ gateway进入请求读取/核验安全快照；排队出队时和JDBC执行提�
 
 外部脚本直接写若依表会跳过闭环，一期只允许经PTMCP管理域写入；数据库凭证禁止通用后台直接写组织表。已有若依接口必须包装/禁用，不能保留旁路。紧急运维SQL需同事务更新版本/outbox并有审核日志及恢复校验。
 
-角色create/update/delete复用SecurityChangeTransaction，先取得全局安全锁，再锁角色并校验实际版本；
+角色create/update/delete复用SecurityChangeTransaction，先取得全局安全锁，再在同一连接锁actor权威行，
+要求合法正版本、READY与ACTIVE档案，并从当前启用且未删除角色的权限并集中读取平台码
+`ptmcp:platform:scope`及方法固定的精确create/update/delete动作；两码可来自不同有效角色。
+缺码返回MANAGEMENT_SCOPE_DENIED，非就绪/非活动返回TOKEN_REVOKED，缺失或损坏权威行返回
+SECURITY_STATE_UNAVAILABLE；SQL故障沿事务映射DEPENDENCY_UNAVAILABLE。资格检查先于目标读取，
+之后才锁角色并校验实际版本；
 角色行/version、权限码、操作日志、epoch与ROLE_CHANGED同事务。事件固定aggregate_type=ROLE，
 payload仅schemaVersion=1、实际数值角色ID和本次version，软删使用递增后的version。
 create/update在同连接读取行与权限码并返回不可变快照；权限码null保持、空集合清空，enabled=null保持。
 版本不匹配先拒绝VERSION_CONFLICT，实际版本耗尽拒绝SECURITY_STATE_UNAVAILABLE；commit丢确认返回
-OPERATION_UNKNOWN且单次调用不重放。角色创建HTTP同key防重须由控制器另行接线，不能由store推断。
+OPERATION_UNKNOWN且单次调用不重放。角色创建HTTP另接`roles.create`幂等包装，先做当前权限和输入校验，
+成功同键回放原正文/Location，未知结局保留占位；存储事务与HTTP验证分开记录，见[API幂等合同](api-spec.md#1-通用约定)。
 当前删除保留成员/活动授权引用检查，但成员/ACL写方尚未统一围栏，不能据此承诺并发引用完整性；
-事务内actor授权重验、最后管理员、间接自扩权及事件广播仍未覆盖。实际验证见[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
+这只重验当前账号与功能资格，没有绑定入场会话或authVersion，不能识别注销、过期、改密完成或停用后再启用的
+旧在途请求。其余写路径的事务内actor/委派重验、最后管理员、间接自扩权及事件广播仍未覆盖。
+实际验证见[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
 
 ## 7. 管理范围委派
 

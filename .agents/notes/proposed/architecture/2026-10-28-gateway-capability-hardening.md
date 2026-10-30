@@ -33,8 +33,8 @@ Status: proposed
 | 请求身份 | PAT/JWT、平台绑定、权威安全状态复核，Tier1 每请求 proof | [PatJwtAuthentication](../../../../ptmcp-parent/ptmcp-gateway/src/main/java/local/ptmcp/gateway/mcp/PatJwtAuthentication.java)、[T19-c](../../../../tasks/work-items/T19-c.md)；真实直连 mTLS/代理部署仍需联调 |
 | 对象授权与执行隔离 | 平台 scope 与用户权限交集、Deny 优先；guard 后才激活业务池；出队及执行前复核身份、配置/快照、资源版本和 READ | `McpToolService.revalidateExecution`、[T15-c](../../../../tasks/work-items/T15-c.md)；不是依靠提示词或只读标签授权 |
 | 连接安全 | TEST/SYNC/QUERY 共用物理连接策略，TLS 主机名验证、DNS 固定、部署级 CIDR/端口限制、精确池代与排空 | [T15-c S1～S3](../../../../tasks/work-items/T15-c.md)；PG 已补生产 `verify-full` 路径，不能继续报为未接 TLS |
-| 审计准入与降级 | START 主库持久准入，terminal 主库失败回退加密且 fsync 的 WAL | [McpGatewayConfiguration](../../../../ptmcp-parent/ptmcp-gateway/src/main/java/local/ptmcp/gateway/mcp/McpGatewayConfiguration.java)、[T09-b](../../../../tasks/work-items/T09-b.md)；不等于已装配恢复调度 |
-| OAuth 公开客户端 | code + PKCE、refresh 原子轮换、重放族撤销和 refresh revoke | [T13-b](../../../../tasks/work-items/T13-b.md)；access token 的 revoke 按 sid 仍未实现，不能把接口 200 当作已撤销 |
+| 审计准入与恢复 | START 主库持久准入，terminal 失败回退加密且 fsync 的 WAL；恢复 worker、目录 owner、封段回放与退休 START 收敛已接 | [McpGatewayConfiguration](../../../../ptmcp-parent/ptmcp-gateway/src/main/java/local/ptmcp/gateway/mcp/McpGatewayConfiguration.java)、[网关收尾 G2](../../../../tasks/work-items/DEV-20261028-gateway-completion.md)；不自动收敛无归属历史 START，不等于密钥轮换或生产部署验收 |
+| OAuth 公开客户端 | code + PKCE、canonical resource 绑定、refresh 原子轮换与重放族撤销；refresh/access 撤销核验客户端和授权族归属 | [T13-b](../../../../tasks/work-items/T13-b.md)、[网关收尾](../../../../tasks/work-items/DEV-20261028-gateway-completion.md)真实 HTTP/MySQL 局部回归；真实外部客户端、可信域名及证书部署仍未验收 |
 | 容量保护 | 用户/源/网关/队列有界，当前装配 `InMemoryQuotaLimiter` | [T19-d](../../../../tasks/work-items/T19-d.md)；用户与源配额未跨副本共享，网关额度本身按每副本定义 |
 | 接入与发布 | 本地 HTTP/隔离双引擎已有测试，四个真实客户端与部署矩阵未完成 | [T19-e](../../../../tasks/work-items/T19-e.md) 为 blocked；不据框架构建判为可上线 |
 
@@ -45,14 +45,17 @@ Status: proposed
 
 ### 需要收尾的具体接线
 
-1. **资源发现端点已实现，OAuth 组合仍有断点。** [McpAuthenticationFilter](../../../../ptmcp-parent/ptmcp-gateway/src/main/java/local/ptmcp/gateway/mcp/McpAuthenticationFilter.java)
+1. **资源绑定局部回归已通过，真实客户端接入仍未验收。** [McpAuthenticationFilter](../../../../ptmcp-parent/ptmcp-gateway/src/main/java/local/ptmcp/gateway/mcp/McpAuthenticationFilter.java)
    与 [McpResourceMetadata](../../../../ptmcp-parent/ptmcp-gateway/src/main/java/local/ptmcp/gateway/mcp/McpResourceMetadata.java)
    共享受信固定配置，已提供 401 challenge 和 `/.well-known/oauth-protected-resource`，见收尾工作项 G1。
    2026-10-29 复核确认：[Dev-Linux](../../../../scripts/Dev-Linux.sh) 的 canonical MCP URL 与 OAuth audience
    `ptmcp-mcp` 不一致，而 authorize policy 要求 resource 等于 audience，标准客户端按发现 URL 请求会被拒。
-   当前修复候选统一 canonical URI，并在 code/refresh 表单、授权持久化及 JWT 签发处绑定资源；
+   当前实现统一 canonical URI，并在 code/refresh 表单、授权持久化及 JWT 签发处绑定资源；
    旧缺失资源的授权需重新授权，不能根据部署配置补写。保留该兼容代价以阻止旧授权扩展到新资源。
    canonical资源与换码/刷新/撤销的真实HTTP/MySQL回归现已通过；真实客户端实际接入仍待版本化证据。
+   首次无令牌 `/mcp` 返回 401 challenge，由支持 OAuth 的客户端发现 AS 并打开浏览器；
+   AS 无登录会话时跳转真实服务端 HTML `/login`，授权同意页为 `/oauth2/consent`，
+   由 [OAuthPageController](../../../../ptmcp-parent/ptmcp-authz/src/main/java/local/ptmcp/authz/oauth/OAuthPageController.java) 提供，不依赖 React 管理会话。
    [API 合同](../../../../docs/backend/api-spec.md) 与当前声明的
    [MCP 2025-06-18 授权规范](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization)
    将 Protected Resource Metadata 列为 MUST，DCR 则为 SHOULD，不应混为同一缺口。
@@ -65,7 +68,7 @@ Status: proposed
 3. **WAL 持久化不等于恢复闭环。**
    [WalReplayer](../../../../ptmcp-parent/ptmcp-persistence/src/main/java/local/ptmcp/persistence/audit/wal/WalReplayer.java)
    已补OS目录独占owner、`.open`活动段/`.wal`封段、在线回放共享owner和真正halt的故障测试，
-   底层14例通过。网关启动/调度回放及过期START收敛仍在实施。
+   底层14例为历史证据；网关启动/调度回放及有据退休START收敛已接入，G2最终39例通过，详见收尾工作项。
    本片采用持久目录内fsync的boot标记证明旧owner已退出；取得同一目录OS锁的新进程才能得到退休boot证明。
    START与租约同事务，恢复先回放所有封段，再在同一主库事务锁定退休boot的过期租约及RUNNING行并写UNKNOWN。
    当前boot、其他卷/实例、无归属的历史START、仅租约超时都不能自动判UNKNOWN；不重放SQL。
@@ -121,6 +124,13 @@ ADMIN与AS继续独立Cookie/CSRF域，AS会话增加主库索引、绝对8小�
 [ADR-0011](../../../../docs/architecture/adr/0011-跨库身份变更与权威版本.md)，真实双 MySQL 故障测试正在实施。
 共享主库限流作为Redis不可用时的持久依据，避免本地Map被多副本绕过；账号与IP均计数，成功只清账号。
 本段为当前实施方向，尚未作为完整身份闭环通过。
+
+集成测试在全量迁移后创建合成用户时，显式供应READY及与凭证匹配的权威版本；
+档案、PAT或family的存在不能替代这一步。迁移回填只处理迁移当时的主体，
+不能通过运行时自动补行或把UNBOUND默认为READY修复旧夹具。
+PAT与真实签名JWT各自保留缺权威行、UNBOUND、版本不符的HTTP拒绝反例；
+其余档案/平台/凭证保持有效，拒绝前后业务连接与执行计数不增加，finally恢复隔离身份状态。
+这样保留原流程的成功断言，同时证明显式测试供应没有放宽生产身份入口；运行证据见关联工作项。
 
 ### 组合编辑的权限边界
 
@@ -343,7 +353,7 @@ FAILED的显式安全重试和SUCCEEDED重放保留，不扩schema、不改OAuth
 易于接线，却留下角色变化已生效而缓存失效记录未提交的窗口。因此采用统一事务，接受角色定义写入
 与其他安全写串行的成本。此围栏只覆盖采用它的写方，不承诺成员/ACL引用竞争或旧直写版本共存；
 也不替代actor/角色/委派提交前授权重验、最后管理员、自扩权保护、正式publisher或多副本消费。
-现有角色创建HTTP handler尚未使用IdempotentWrites，store级未知提交处理不能代表HTTP同key防重完成。
+本存储事务片不验证角色HTTP同key防重；该行为由下述角色创建HTTP幂等片单独接线和验证。
 最低验证先取三命令真实MySQL有效RED，再测完整写快照、日志/事件回滚、真实commit丢确认、单连接结果、
 提交后竞争更新仍返回自身快照、权限码保留/清空、并发CAS及版本/epoch耗尽零写入。
 旧产品有效RED为37项/21 failures/0 errors/0 skipped（exit1）；初轮另2个触发器权限错误已通过
@@ -355,7 +365,7 @@ FAILED的显式安全重试和SUCCEEDED重放保留，不扩schema、不改OAuth
 ### 角色创建HTTP幂等接线
 
 角色创建原来注入IdempotencyRecorder却直接调用store；数据库role_key唯一约束不能恢复首次响应，
-也不能把真实commit丢确认与未执行区分。下一片仅接POST /admin/roles，不改PUT/DELETE、React或共用包装器。
+也不能把真实commit丢确认与未执行区分。本片仅接POST /admin/roles，不改PUT/DELETE、React或共用包装器。
 动作拦截器和平台管理员门禁、StrictJson及必填字段检查先于占键；沿用roles.create及原始请求字节摘要。
 相同actor/route/key/body成功回放原201与DTO；不同摘要422 IDEMPOTENCY_KEY_REUSED；
 未知结局409 OPERATION_UNKNOWN且retryable=false，不换键自动重做。
@@ -369,7 +379,63 @@ FAILED的显式安全重试和SUCCEEDED重放保留，不扩schema、不改OAuth
 最低验证先用实际MySQL/MVC取得未接线RED，再验证成功回放及Location、改意图拒绝、缺失/空白/超长键、
 JSON/必填前置拒绝、非平台管理员零占键、真实commit丢确认、成功记录故障及撤动作权限后拒绝回放。
 未知与回放均比较角色/权限码/日志/epoch/事件完整快照，防止唯一键冲突掩盖重复执行。
-React创建调用仍每次生成UUID；重试同一意图须保留原键，不能把新键重试当作未知结局已解除。
+React旧创建调用每次生成UUID，pi窗口正接入稳定键；前端完成情况另行验证。
+重试同一意图须保留原键，不能把新键重试当作未知结局已解除。
+
+有效RED为16项/14 failures/0 errors/0 skipped（08:31:16 +08，exit1），
+首轮12个errors来自快照夹具误用sys_role.id，改为role_id后消除，不计为产品缺陷。
+最小接线后定向16项全部通过（08:37:23 +08，exit0），XML已保存，358份构建输入Windows/native哈希一致。
+原始日志、退出码和清单位于既有隔离证据根，前缀`role-http-red`/`role-http-green`；
+初轮兼容426项通过，但独立评审发现成功响应可比合法满额请求稍大，复用请求1MiB解析上限会使回放UNKNOWN。
+该轮保留为修正前证据，新增满额响应与编码/尾随反例后重验，不以原GREEN关闭此缺口。
+统一提高请求解析上限改动较少，却放大客户端请求预算；本片保留StrictJson的请求1MiB上限，
+记录正文另按既有MEDIUMBLOB容量16MiB-1做UTF-8严格解析，拒绝重复键、未知字段和尾随JSON。
+这样增加局部解析器与边界验证成本，但不修改schema或通用包装器；若持久字段类型或响应DTO变化，应复核该上限。
+本节分别保留修正前与修正后的证据，不升级总体提案或全功能验收。
+
+边界有效RED为23项/1 failure/0 errors/0 skipped（08:49:56 +08，exit1），
+请求恰为1,048,576字节，数据库已存的成功响应为1,048,596字节；首次201，回放409。
+其余22项含新增编码/尾随等反例通过；角色controller已分离记录解析。
+证据前缀为`role-http-response-boundary-red`，含XML与358项三方一致清单，未升级整体状态。
+
+修正后定向`role-http-green2.log/.exit`为23/23通过（08:53:56 +08，BUILD SUCCESS/exit0）；
+最终组合`role-http-combined2-green.log/.exit`为433/433通过（09:03:16 +08，BUILD SUCCESS/exit0）：
+State13、Tx16、Org226、Admin134、Datasource9、IdentityPassword17、Session18，均零失败/错误/跳过。
+两轮XML和358项Windows/native输入清单分别保留，最终清单差异0；旧426组合不是修正后证据。
+独立只读终审已亲核日志、exit与7份XML的实际节点，并重算358项Windows/native/清单三方哈希，差异0；
+当前源码与已审GREEN2一致，先前Medium关闭，限定角色创建HTTP幂等切片无新增阻断，评审未重复动态测试。
+HTTP新增23实例分为8项Spring上下文MockMvc与15项standalone MockMvc，均用真实隔离MySQL；
+本片未新增真实Cookie/CSRF链验证，不替代actor提交前重验、成员引用竞争或一次性secret策略。
+
+### 角色三写的事务内当前资格重验
+
+入口功能码与platformAdmin只代表请求入场时的结果；等待全局锁期间若成员、角色或账号状态被撤销，
+旧三写仍能凭正数actorId提交。当前候选直接收紧现有createRole/updateRole/deleteRole，不保留公开unchecked入口。
+SecurityChangeTransaction回调开头在同一连接按global→actor security→目标角色的顺序读取：
+权威行必须存在且版本合法、identityState=READY、profile=ACTIVE；有效角色并集必须同时含
+ptmcp:platform:scope和各方法固定的精确动作码。两个码可来自不同有效角色，不能误套单条委派规则。
+动作码或平台码缺失均沿用MANAGEMENT_SCOPE_DENIED，身份未就绪/非活动返回TOKEN_REVOKED；
+缺失或损坏权威状态默认拒绝，不自动修复。查询错误沿现有事务映射DEPENDENCY_UNAVAILABLE。
+
+复用请求门禁最省查询，但无法覆盖排队期间的撤销；新增trusted参数/旧公开旁路能兼容测试建数，
+却把可信边界交给调用者。因此只保留严格生产入口，src/test以JDBC自举专用高ID活动管理员，
+不把actor1普遍提升为管理员，不改既有拒绝断言。权限读取不复用另借连接的permissionsOf。
+现有受控成员/用户状态/角色写方共用global围栏，锁内读取可与这些撤销串行；不支持旧直写版本混跑。
+最低验证包含三命令的当前拒绝、入场后取锁前撤权、命令先持锁时撤权等待、分角色组合权限、
+依赖失败及完整角色/权限/日志/epoch/event零写入；HTTP创建被锁内拒绝后仍保留原幂等墓碑。
+这只是当前账号/功能资格，不绑定入场时authVersion或会话证明，不能识别注销、会话过期、
+改密已完成或停用再启用后的旧在途请求；这些和委派、最后管理员、自扩权保护继续留后。
+设计与实际diff的只读评审已核锁序及范围，无新增阻断。旧实现有效RED：store69项/66 failures、
+HTTP2项/2 failures，均0 errors/skipped、exit1；HTTP实际201且留下SUCCEEDED，明确未通过入口前置拒绝遮挡。
+两项HTTP用例为standalone MockMvc与真实隔离MySQL，不覆盖Cookie/CSRF链。反向顺序以闸门和有界等待验证，
+未直接观测数据库锁等待。定向GREEN为store69+HTTP2共71项，零失败/错误/跳过、exit0。
+首轮七类兼容组合504项有1项失败：新增管理员夹具部门进入旧CRUD列表；仅将夹具部门设为软删，
+保留ACTIVE/READY与原断言，生产平台角色管理合同不依赖业务部门授权。
+最终组合504项零失败/错误/跳过、BUILD SUCCESS/exit0；358份运行前/最终native/Windows输入哈希一致。
+失败和最终成功的日志、exit及7份XML分别留存于关联工作项所述路径，不以定向通过替代组合结果。
+独立只读终审已亲核71项定向和504项最终组合的日志/退出码/XML节点，逐项重算358份三方哈希，差异0。
+夹具仅隔离专用管理员部门，原CRUD断言逐字未变；评审无本片新增阻断，未重复动态测试或连接数据库。
+会话版本、委派、最后管理员、间接自扩权与真实Cookie/CSRF等边界仍待，整体提案继续保持proposed。
 
 ### 业务授权的部门主体读取
 

@@ -1,6 +1,6 @@
 # REST、OAuth 与 MCP 接口契约
 
-版本：1.0-design · 2026-10-23 · 状态：待实现。下列路径、DTO 和权限是开发目标，仓库参考源码不代表这些端点已存在。跨协议不混用响应封装。安全规则见 [authentication](authentication.md)、[authorization](authorization.md)。
+版本：1.0-design · 2026-10-23 · 状态：目标契约，部分接口已有实现，但完整契约尚未验证。路径、DTO 和权限不能单凭本文推断当前运行行为；实现与验证以源码、工作项及证据为准。跨协议不混用响应封装。安全规则见 [authentication](authentication.md)、[authorization](authorization.md)；接口变更按[接口变更合同模板](../standards/api-change-template.md)记录并同步本文。
 
 ## 1. 通用约定
 
@@ -25,6 +25,22 @@ requestId 由服务端每次实际调用生成，不接受外部覆盖；REST �
 管理写与个人写均要求有效 ADMIN Cookie、Origin/Referer同源约束、X-CSRF-Token。登录前先获取CSRF bootstrap。修改/删除版本化资源携带 If-Match: "version"；漏传400 PRECONDITION_REQUIRED，版本不符409。GET 返回 ETag，敏感响应 Cache-Control:no-store。状态动作返回最新DTO/version，删除返回200 data={deleted:true,id,version}；逻辑删除可重复，已删除资源仍鉴权后返回deleted:true。
 
 POST 创建/启动任务/撤销/解密动作使用 Idempotency-Key（客户端随机UUID，同一意图重试复用），24小时窗口，服务端原子记录(actor,route,keyHash,payloadHash)。相同key/不同body为422 IDEMPOTENCY_KEY_REUSED；处理中重复409 OPERATION_IN_PROGRESS；已成功返回原资源结果并标 Idempotent-Replay:true；未知结局409 OPERATION_UNKNOWN，不重做。重放只恢复状态码与响应体，不重放首次响应的ETag头（`api_idempotency`未存响应头，为已知限制）；调用方以返回体内的version作为后续If-Match依据。外部副作用“连接测试/同步”用job状态消除重试歧义。PAT/客户端secret只展示一次，重复key仅返回resource元数据和TOKEN_ALREADY_CREATED，不重放secret；请求丢失需撤销旧资源后重新创建新意图。普通PUT/DELETE本身幂等仍需If-Match；OAuth code/refresh严格一次消费，完全不采用此REST幂等机制；MCP SQL无自动幂等重放保证。
+
+角色创建`POST /api/v1/admin/roles`现接入该包装：当前动作权限、平台资格、严格JSON与必填字段先于占键，
+键为1～128字符且不能全空白，意图取原始body字节SHA-256，route固定`roles.create`。
+首次与成功回放均返回201、原RoleRead正文及`Location: /api/v1/admin/roles/{id}`；
+回放仅从记录的正数ID恢复Location，保留原状态/正文和回放标记，不查当前角色。
+已成功记录的响应正文为空、不可解析或ID非正数时返回409 OPERATION_UNKNOWN、retryable=false，不重做或改写记录。
+请求仍限制1MiB；记录响应使用独立UTF-8严格解析，按`response_cipher`的MEDIUMBLOB容量限制为16MiB-1，
+拒绝重复字段、未知字段和尾随JSON，不能因响应新增id/version而误套请求上限。
+本片沿用当前裸DTO；不代表R<T>与所有管理POST的幂等接线均已完成。
+
+角色三写在安全事务持有全局锁后，以同连接重验当前actor的READY/ACTIVE身份和平台码、精确动作码，
+再读取目标；不是只依赖请求入场时的权限。缺码403 MANAGEMENT_SCOPE_DENIED，当前身份未就绪或
+非活动401 TOKEN_REVOKED，权威行缺失/版本损坏503 SECURITY_STATE_UNAVAILABLE，依赖SQL故障
+503 DEPENDENCY_UNAVAILABLE。创建action已分派后发生上述拒绝，首响保留该错误，幂等占位仍为UNKNOWN；
+恢复资格后同key/body重试也返回409 OPERATION_UNKNOWN、retryable=false，不重新执行。
+该检查没有入场会话版本证明，不覆盖注销或改密完成后的旧在途请求。
 
 当前管理幂等包装一旦分派业务action，任何运行时异常都保留请求占位并尽力标记UNKNOWN；
 不能用领域错误码证明无副作用。领域拒绝首响沿用原有码，未分类异常及成功后的序列化/响应记录故障
