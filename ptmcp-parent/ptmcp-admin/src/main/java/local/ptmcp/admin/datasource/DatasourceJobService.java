@@ -71,9 +71,11 @@ public final class DatasourceJobService implements AutoCloseable {
             Instant startedAt,
             Instant finishedAt,
             String errorCode,
-            String snapshotId) {}
+            String snapshotId,
+            String candidateId) {}
 
-    public JobView test(long datasourceId, DatasourceAdminService.Write draft, long actorId) {
+    public JobView test(
+            long datasourceId, DatasourceAdminService.Write draft, long actorId, String requestId) {
         DatasourceAdminService.DraftTarget target = admin.resolveTarget(datasourceId, draft);
         boolean succeeded;
         try (Connection connection = connections.open(target.spec())) {
@@ -83,7 +85,9 @@ public final class DatasourceJobService implements AutoCloseable {
             // Probe failures are recorded as job state only; driver stacks never reach the caller.
             succeeded = false;
         }
-        return toView(jobs.recordTest(datasourceId, actorId, target.configVersion(), succeeded));
+        DatasourceStore.RecordedTest recorded =
+                store.recordTest(target, succeeded, actorId, requestId);
+        return toView(jobs.get(recorded.jobId()));
     }
 
     public JobView sync(long datasourceId, long actorId) {
@@ -134,7 +138,8 @@ public final class DatasourceJobService implements AutoCloseable {
                 toInstant(job.startedAt()),
                 toInstant(job.finishedAt()),
                 job.errorCode(),
-                job.snapshotId() == null ? null : Long.toString(job.snapshotId()));
+                job.snapshotId() == null ? null : Long.toString(job.snapshotId()),
+                job.candidateId() == null ? null : Long.toString(job.candidateId()));
     }
 
     private static Instant toInstant(LocalDateTime value) {

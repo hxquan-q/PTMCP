@@ -32,7 +32,8 @@ public final class DatasourceJobStore {
             LocalDateTime finishedAt,
             String errorCode,
             Long snapshotId,
-            int processed) {}
+            int processed,
+            Long candidateId) {}
 
     public Job enqueueSync(long datasourceId, long actorId, long configVersion) {
         AdminSql.requireActor(actorId);
@@ -111,42 +112,6 @@ public final class DatasourceJobStore {
         }
     }
 
-    public Job recordTest(long datasourceId, long actorId, long configVersion, boolean succeeded) {
-        AdminSql.requireActor(actorId);
-        if (datasourceId <= 0 || configVersion <= 0) {
-            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
-        }
-        LocalDateTime now = AdminSql.nowUtc();
-        try (Connection connection = AdminSql.configure(primary);
-                PreparedStatement statement =
-                        AdminSql.generatedKeys(
-                                connection,
-                                "INSERT INTO metadata_sync_job (datasource_id, job_type, requested_by, "
-                                        + "config_version, state, started_at, finished_at, error_code, "
-                                        + "create_time, update_time) "
-                                        + "VALUES (?, 'TEST', ?, ?, ?, ?, ?, ?, ?, ?)")) {
-            statement.setLong(1, datasourceId);
-            statement.setLong(2, actorId);
-            statement.setLong(3, configVersion);
-            statement.setString(4, succeeded ? "SUCCEEDED" : "FAILED");
-            statement.setObject(5, now);
-            statement.setObject(6, now);
-            if (succeeded) {
-                statement.setNull(7, java.sql.Types.VARCHAR);
-            } else {
-                statement.setString(7, ErrorCode.DRIVER_ERROR.name());
-            }
-            statement.setObject(8, now);
-            statement.setObject(9, now);
-            if (statement.executeUpdate() != 1) {
-                throw new DomainException(ErrorCode.INTERNAL_ERROR);
-            }
-            return get(AdminSql.lastId(connection, statement));
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
-        }
-    }
-
     public Job get(long jobId) {
         if (jobId <= 0) {
             throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
@@ -157,6 +122,7 @@ public final class DatasourceJobStore {
                                 connection,
                                 "SELECT j.id, j.job_type, j.datasource_id, j.state, j.config_version, "
                                         + "j.started_at, j.finished_at, j.error_code, j.snapshot_id, "
+                                        + "j.candidate_id, "
                                         + "CASE WHEN j.state = 'SUCCEEDED' AND j.job_type = 'TEST' THEN 1 "
                                         + "WHEN j.state = 'SUCCEEDED' THEN COALESCE(ss.object_count, 0) "
                                         + "ELSE 0 END AS processed "
@@ -171,6 +137,8 @@ public final class DatasourceJobStore {
                 }
                 long snapshot = result.getLong(9);
                 Long snapshotId = result.wasNull() ? null : snapshot;
+                long candidate = result.getLong(10);
+                Long candidateId = result.wasNull() ? null : candidate;
                 return new Job(
                         result.getLong(1),
                         result.getString(2),
@@ -181,7 +149,8 @@ public final class DatasourceJobStore {
                         result.getObject(7, LocalDateTime.class),
                         result.getString(8),
                         snapshotId,
-                        result.getInt(10));
+                        result.getInt(11),
+                        candidateId);
             }
         } catch (SQLException error) {
             throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);

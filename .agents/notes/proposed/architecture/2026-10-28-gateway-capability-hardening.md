@@ -96,7 +96,7 @@ Status: proposed
 | --- | --- | --- |
 | 1：T19/T13/T14 | 受信固定配置的 Protected Resource Metadata + 预注册 OAuth 客户端真实闭环；检查 401、issuer/resource/audience、PKCE、refresh、过期和撤销语义 | DCR 可继续关闭；先明确目标客户端及版本，不为追新直接升级声明协议 |
 | 2：T09/T20、T15-c S6 | 装配有 owner/互斥的 WAL 恢复、过期 START 收敛、磁盘告警与可重复演练；新旧 key 可读，轮换后再退役旧 key | 不让 replayer 扫描正在追加的段；凭据/审计引入 AAD 时版本化，禁止换钥后直接丢弃旧密文 |
-| 3：T15-c S4 | 候选配置验证后 CAS 发布；健康结果绑定 configVersion/目标与时间；继续沿用现有目标隔离 | 错凭据不覆盖当前可用配置；不恢复已退役目标的旧授权 |
+| 3：T15-c S4 | 候选配置验证后 CAS 发布；健康结果绑定 configVersion/目标与时间；继续沿用现有目标隔离（后端已移植，见[候选发布决策](../../implemented/architecture/2026-10-28-datasource-candidate-publication.md)；UI 与完整验收未完成） | 错凭据不覆盖当前可用配置；不恢复已退役目标的旧授权 |
 | 4：T15-c S5、T19-d | 请求主体+平台+执行 owner 关联取消；执行结束或连接淘汰后释放额度；明确单副本上线限制或落实共享用户/源预算 | 每副本网关限额不误改为集群全局常量；不因取消 HTTP handler 就提前释放 DB 资源 |
 | 5：T15-c S7 | 先补三工具准确 description/参数说明与一致性测试，再在既有 schema 返回中加入有预算、带来源的业务词义/单位/外键 | 不必先加新工具或 MCP resources；注释是数据，不是指令；关系两端都授权后才能披露 |
 | 6：后续需求 | 只有真实客户需要时再扩引擎，每个新增方言补 guard、元数据、只读执行、TLS、取消与隔离测试 | 不以注册 adapter 数量代表数据库支持完成 |

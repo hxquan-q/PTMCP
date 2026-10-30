@@ -126,6 +126,7 @@ public final class DatasourceAdminService {
         if (draft == null) {
             destinationPolicy.validate(row.host(), row.port());
             return new DraftTarget(
+                    row.id(),
                     row.configVersion(),
                     new DatasourceConnectionFactory.Spec(
                             row.engine(),
@@ -134,7 +135,11 @@ public final class DatasourceAdminService {
                             row.databaseName(),
                             row.username(),
                             row.credentialCipher(),
-                            row.keyId()));
+                            row.keyId()),
+                    fields(row),
+                    row.credentialCipher(),
+                    row.keyId(),
+                    false);
         }
         if (draft.engine() != null
                 && !draft.engine().isBlank()
@@ -154,32 +159,82 @@ public final class DatasourceAdminService {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
         destinationPolicy.validate(host, port);
+        String normalizedHost = host.trim().toLowerCase(Locale.ROOT);
+        DatasourceStore.Fields fields =
+                new DatasourceStore.Fields(
+                        row.code(),
+                        draft.name() == null || draft.name().isBlank() ? row.name() : draft.name(),
+                        row.engine(),
+                        normalizedHost,
+                        port,
+                        databaseName,
+                        username,
+                        "VERIFY_FULL",
+                        draft.poolMax() == null ? row.poolMax() : draft.poolMax(),
+                        row.status());
+        DatasourceStore.validate(fields);
         if (draft.credential() == null || draft.credential().isBlank()) {
             return new DraftTarget(
+                    row.id(),
                     row.configVersion(),
                     new DatasourceConnectionFactory.Spec(
                             row.engine(),
-                            host.trim().toLowerCase(Locale.ROOT),
+                            normalizedHost,
                             port,
                             databaseName,
                             username,
                             row.credentialCipher(),
-                            row.keyId()));
+                            row.keyId()),
+                    fields,
+                    row.credentialCipher(),
+                    row.keyId(),
+                    true);
         }
         CredentialCipher.Sealed sealed = cipher.encrypt(requireCredential(draft.credential()));
         return new DraftTarget(
+                row.id(),
                 row.configVersion(),
                 new DatasourceConnectionFactory.Spec(
                         row.engine(),
-                        host.trim().toLowerCase(Locale.ROOT),
+                        normalizedHost,
                         port,
                         databaseName,
                         username,
                         sealed.ciphertext(),
-                        sealed.keyId()));
+                        sealed.keyId()),
+                fields,
+                sealed.ciphertext(),
+                sealed.keyId(),
+                true);
     }
 
-    public record DraftTarget(long configVersion, DatasourceConnectionFactory.Spec spec) {}
+    public record DraftTarget(
+            long datasourceId,
+            long configVersion,
+            DatasourceConnectionFactory.Spec spec,
+            DatasourceStore.Fields fields,
+            byte[] sealed,
+            String keyId,
+            boolean draft) {}
+
+    public Read publish(
+            long id, long candidateId, long expectedVersion, long actorId, String requestId) {
+        return toRead(store.publishCandidate(id, candidateId, expectedVersion, actorId, requestId));
+    }
+
+    private static DatasourceStore.Fields fields(DatasourceStore.Row row) {
+        return new DatasourceStore.Fields(
+                row.code(),
+                row.name(),
+                row.engine(),
+                row.host(),
+                row.port(),
+                row.databaseName(),
+                row.username(),
+                row.tlsMode(),
+                row.poolMax(),
+                row.status());
+    }
 
     private static DatasourceStore.Fields requireFields(Write write) {
         if (write == null) {
@@ -241,8 +296,8 @@ public final class DatasourceAdminService {
                 Long.toString(row.resourceVersion()),
                 row.activeSnapshotId() == null ? null : Long.toString(row.activeSnapshotId()),
                 toInstant(row.lastSyncAt()),
-                true,
-                "UNKNOWN",
+                row.credentialCipher() != null,
+                row.health(),
                 toInstant(row.createdAt()),
                 toInstant(row.updatedAt()));
     }

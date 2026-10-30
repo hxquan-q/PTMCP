@@ -105,7 +105,7 @@ class SnapshotPublicationMigrationTest {
                             .locations("classpath:db/ptmcp-migration")
                             .cleanDisabled(true)
                             .load();
-            assertEquals(1, upgraded.migrate().migrationsExecuted);
+            assertEquals(7, upgraded.migrate().migrationsExecuted);
             assertEquals(0, upgraded.migrate().migrationsExecuted);
             try (Connection connection =
                             DriverManager.getConnection(
@@ -175,6 +175,21 @@ class SnapshotPublicationMigrationTest {
                                         + "AND table_name='snapshot_object' AND column_name IN ('definition_hash','physical_identity')")) {
                     assertTrue(result.next());
                     assertEquals(2, result.getInt(1));
+                }
+                try (ResultSet result =
+                        statement.executeQuery(
+                                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() "
+                                        + "AND table_name='datasource_candidate' AND column_name IN "
+                                        + "('datasource_id','base_config_version','state','valid_until','credential_cipher','key_id','probe_scope')")) {
+                    assertTrue(result.next());
+                    assertEquals(7, result.getInt(1));
+                }
+                try (ResultSet result =
+                        statement.executeQuery(
+                                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() "
+                                        + "AND table_name='metadata_sync_job' AND column_name='candidate_id'")) {
+                    assertTrue(result.next());
+                    assertEquals(1, result.getInt(1));
                 }
             }
         }

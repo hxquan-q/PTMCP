@@ -24,7 +24,7 @@ requestId 由服务端每次实际调用生成，不接受外部覆盖；REST �
 
 管理写与个人写均要求有效 ADMIN Cookie、Origin/Referer同源约束、X-CSRF-Token。登录前先获取CSRF bootstrap。修改/删除版本化资源携带 If-Match: "version"；漏传400 PRECONDITION_REQUIRED，版本不符409。GET 返回 ETag，敏感响应 Cache-Control:no-store。状态动作返回最新DTO/version，删除返回200 data={deleted:true,id,version}；逻辑删除可重复，已删除资源仍鉴权后返回deleted:true。
 
-POST 创建/启动任务/撤销/解密动作使用 Idempotency-Key（客户端随机UUID，同一意图重试复用），24小时窗口，服务端原子记录(actor,route,keyHash,payloadHash)。相同key/不同body为422 IDEMPOTENCY_KEY_REUSED；处理中重复409 OPERATION_IN_PROGRESS；已成功返回原资源结果并标 Idempotent-Replay:true；未知结局409 OPERATION_UNKNOWN，不重做。外部副作用“连接测试/同步”用job状态消除重试歧义。PAT/客户端secret只展示一次，重复key仅返回resource元数据和TOKEN_ALREADY_CREATED，不重放secret；请求丢失需撤销旧资源后重新创建新意图。普通PUT/DELETE本身幂等仍需If-Match；OAuth code/refresh严格一次消费，完全不采用此REST幂等机制；MCP SQL无自动幂等重放保证。
+POST 创建/启动任务/撤销/解密动作使用 Idempotency-Key（客户端随机UUID，同一意图重试复用），24小时窗口，服务端原子记录(actor,route,keyHash,payloadHash)。相同key/不同body为422 IDEMPOTENCY_KEY_REUSED；处理中重复409 OPERATION_IN_PROGRESS；已成功返回原资源结果并标 Idempotent-Replay:true；未知结局409 OPERATION_UNKNOWN，不重做。重放只恢复状态码与响应体，不重放首次响应的ETag头（`api_idempotency`未存响应头，为已知限制）；调用方以返回体内的version作为后续If-Match依据。外部副作用“连接测试/同步”用job状态消除重试歧义。PAT/客户端secret只展示一次，重复key仅返回resource元数据和TOKEN_ALREADY_CREATED，不重放secret；请求丢失需撤销旧资源后重新创建新意图。普通PUT/DELETE本身幂等仍需If-Match；OAuth code/refresh严格一次消费，完全不采用此REST幂等机制；MCP SQL无自动幂等重放保证。
 
 当前管理幂等包装一旦分派业务action，任何运行时异常都保留请求占位并尽力标记UNKNOWN；
 不能用领域错误码证明无副作用。领域拒绝首响沿用原有码，未分类异常及成功后的序列化/响应记录故障
@@ -98,6 +98,8 @@ ADMIN Cookie每次请求均在会话索引/权威版本通过后，从主库当�
 
 host/port先做DNS与网络目的地策略验证，拒绝云元数据/loopback等未授权地址；生产内网业务地址必须由运维CIDR白名单允许。不能提交任意JDBC URL、driverClass、SQL、连接属性或脚本；仅服务器模板形成连接串。连接错误转换稳定errorCode，真实host/驱动栈不回显用户。poolMax受所有副本预算约束，参数合法但容量不够返回422 CONNECTION_BUDGET_EXCEEDED。
 
+DatasourceDTO.health只取当前configVersion、当前host/port/database/username且未过期的ACTIVE_PROBE最新结果：VERIFIED→HEALTHY、FAILED→UNHEALTHY、其余或非ACTIVE→UNKNOWN。DRAFT_CANDIDATE、过期探针和旧配置版本的结果不参与，失败候选不污染active健康。
+
 ## 5. 管理 API 完整清单
 
 下表路径都位于 /api/v1/admin。表内“CRUD”明确展开为：GET /resource(list权限，分页)、POST /resource(create权限，Write DTO→Read DTO，201)、GET /resource/{id}(read→Read DTO)、PUT /resource/{id}(update，完整Write DTO，If-Match→Read DTO)、DELETE /resource/{id}(delete，If-Match→删除结果)。禁止把一个CRUD权限自动映射全部动作。
@@ -105,9 +107,10 @@ host/port先做DNS与网络目的地策略验证，拒绝云元数据/loopback�
 | 路径/方法 | 权限 | 输入→data与行为 |
 | --- | --- | --- |
 | /datasources CRUD | datasource对应动作 | DatasourceWrite→DatasourceDTO；列表筛选keyword/engine/status；停用/删除立即增安全版本，池DRAIN；仍有关联活动授权时删除409 REFERENCES_EXIST，先停用并处理依赖 |
-| POST /datasources/{id}/test | datasource:test，平台管理员 | {draft?:DatasourceWrite}→202 JobDTO；draft不能改变id/engine/code，临时凭证不保存；无测试SQL入参，只运行内建健康探针 |
+| POST /datasources/{id}/test | datasource:test，平台管理员 | {draft?:DatasourceWrite}→202 JobDTO（含candidateId）；draft不能改变id/engine/code；无测试SQL入参，只运行内建健康探针。无draft记录ACTIVE_PROBE，仅参与当前配置版本的诊断；有draft记录DRAFT_CANDIDATE，成功候选加密保存供发布，失败候选不保存凭据且不影响active健康 |
 | POST /datasources/{id}/sync | datasource:sync | {mode:FULL}→202 JobDTO；每源串行，不变更配置；重复运行409 SYNC_IN_PROGRESS |
-| GET /jobs/{id} | job:read且任务源管理范围 | JobDTO={id,type,datasourceId,state,progress:{processed,total:null},startedAt,finishedAt,errorCode,snapshotId}；total未知不伪造百分比 |
+| POST /datasources/{id}/candidates/{candidateId}/publish | datasource:update，平台管理员 | 空body（非空400 INVALID_ARGUMENT）+If-Match及Idempotency-Key→DatasourceDTO+ETag；仅未过期VERIFIED DRAFT_CANDIDATE且baseConfigVersion=If-Match可发布。错误顺序：当前版本不符409 VERSION_CONFLICT→候选失败/过期/已发布/无凭据400 INVALID_ARGUMENT→候选基准陈旧409 VERSION_CONFLICT；目标host/port/database变化或停用时升resourceVersion、清快照并退役旧资源/撤grant/委派/平台范围，同事务发布；目标不变（凭据/名称轮换）时保留资源身份、授权与快照指针，但快照按旧configVersion绑定即刻不可用，须重新同步后才可查询（保守拒绝，见datasource.md一致性合同）；成功后候选PUBLISHED，幂等键重放首次响应 |
+| GET /jobs/{id} | job:read且任务源管理范围 | JobDTO={id,type,datasourceId,state,progress:{processed,total:null},startedAt,finishedAt,errorCode,snapshotId,candidateId}；total未知不伪造百分比 |
 | GET /metadata/objects | metadata:list | datasourceId必填、namespaceId/keyword/kind/cursor/pageSize→ObjectSummary[]；仅管理范围，不绕过用户门户READ |
 | GET /metadata/objects/{id} | metadata:read | →ObjectDetail（物理键、generation、快照version、列定义、字典）；含业务结构需显式管理元数据权限，菜单列举不自动授权查询 |
 | PUT /metadata/objects/{id}/dictionary | metadata:dictionary | DictionaryWrite+If-Match→ObjectDetail；不能修改真实数据库DDL |

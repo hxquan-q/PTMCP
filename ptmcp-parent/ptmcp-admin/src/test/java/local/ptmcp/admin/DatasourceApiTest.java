@@ -76,6 +76,10 @@ class DatasourceApiTest {
     private static final String CREDENTIAL = syntheticSecret();
     private static final String DRAFT_CREDENTIAL = CREDENTIAL + "-draft";
     private static final String ADMIN = "9001";
+
+    /** Platform-scoped identity that holds no datasource capability code at all. */
+    private static final String NO_CODE_ADMIN = "9002";
+
     private static final Set<String> TERMINAL = Set.of("SUCCEEDED", "FAILED", "CANCELLED");
 
     private static String syntheticSecret() {
@@ -190,6 +194,7 @@ class DatasourceApiTest {
                     List.of(
                             "api_idempotency",
                             "metadata_sync_job",
+                            "datasource_candidate",
                             "business_dictionary",
                             "resource_column",
                             "snapshot_object",
@@ -214,6 +219,34 @@ class DatasourceApiTest {
                                                     || code.startsWith("ptmcp:metadata:")
                                                     || code.equals("ptmcp:job:read"))
                             .toArray(String[]::new));
+        }
+        seedDatasourceCapabilityCodes();
+    }
+
+    /**
+     * The acting admin must hold the action's capability code, so the fixture grants every
+     * datasource code to {@code ADMIN}. Idempotent: the role tables survive between tests.
+     */
+    private void seedDatasourceCapabilityCodes() throws Exception {
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            statement.execute(
+                    "INSERT IGNORE INTO sys_role (role_id, role_key, role_name, status, del_flag,"
+                            + " create_time, update_time) VALUES (9001, 'datasource-api-admin',"
+                            + " '数据源接口测试角色', '0', '0', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))");
+            for (String action :
+                    List.of("list", "read", "create", "update", "delete", "test", "sync")) {
+                statement.execute(
+                        "INSERT IGNORE INTO sys_role_permission (role_id, permission_code,"
+                                + " create_time, update_time) VALUES (9001, 'ptmcp:datasource:"
+                                + action
+                                + "', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))");
+            }
+            statement.execute(
+                    "INSERT IGNORE INTO sys_user_role (user_id, role_id, create_time, update_time)"
+                            + " VALUES ("
+                            + ADMIN
+                            + ", 9001, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))");
         }
     }
 
@@ -492,6 +525,7 @@ class DatasourceApiTest {
                         .andExpect(jsonPath("$.id").isString())
                         .andExpect(jsonPath("$.type").value("TEST"))
                         .andExpect(jsonPath("$.datasourceId").value(Long.toString(id)))
+                        .andExpect(jsonPath("$.candidateId").isString())
                         .andExpect(jsonPath("$.state").value("FAILED"))
                         .andExpect(jsonPath("$.errorCode").value("DRIVER_ERROR"))
                         .andExpect(jsonPath("$.progress.processed").value(0))
@@ -502,6 +536,8 @@ class DatasourceApiTest {
         String jobId = json(probe).get("id").asString();
         mockMvc.perform(admin(get("/api/v1/admin/jobs/" + jobId)))
                 .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$.candidateId").value(json(probe).get("candidateId").asString()))
                 .andExpect(jsonPath("$.state").value("FAILED"));
 
         assertTrue(Arrays.equals(before, credentialCipher(id)), "draft credential persisted");
@@ -536,6 +572,142 @@ class DatasourceApiTest {
                                 .content(JSON.writeValueAsString(Map.of("draft", wrongEngine))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_ARGUMENT"));
+    }
+
+    @Test
+    void publishRequiresIfMatchReplaysIdempotentlyAndRejectsStaleCandidates() throws Exception {
+        MvcResult created =
+                mockMvc.perform(
+                                admin(post("/api/v1/admin/datasources"))
+                                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(body("orders", "127.0.0.1")))
+                        .andExpect(status().isCreated())
+                        .andReturn();
+        long id = Long.parseLong(json(created).get("id").asString());
+        long candidateId = insertCandidate(id, "VERIFIED", true);
+        String path = "/api/v1/admin/datasources/" + id + "/candidates/" + candidateId + "/publish";
+
+        mockMvc.perform(admin(post(path)).header("Idempotency-Key", UUID.randomUUID().toString()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("PRECONDITION_REQUIRED"));
+        mockMvc.perform(
+                        admin(post(path))
+                                .header("Idempotency-Key", UUID.randomUUID().toString())
+                                .header("If-Match", "\"99\""))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
+
+        String key = UUID.randomUUID().toString();
+        MvcResult published =
+                mockMvc.perform(
+                                admin(post(path))
+                                        .header("Idempotency-Key", key)
+                                        .header("If-Match", "\"1\""))
+                        .andExpect(status().isOk())
+                        .andExpect(header().string("ETag", "\"2\""))
+                        .andExpect(jsonPath("$.version").value("2"))
+                        .andExpect(jsonPath("$.credentialConfigured").value(true))
+                        .andExpect(jsonPath("$.health").value("UNKNOWN"))
+                        .andReturn();
+        String raw = published.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertFalse(raw.contains(CREDENTIAL), "credential leaked into publish response");
+        assertFalse(raw.contains("credentialCipher"));
+        assertEquals("PUBLISHED", candidateState(candidateId));
+
+        mockMvc.perform(
+                        admin(post(path))
+                                .header("Idempotency-Key", key)
+                                .header("If-Match", "\"2\""))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Idempotent-Replay", "true"));
+        mockMvc.perform(
+                        admin(post(path))
+                                .header("Idempotency-Key", UUID.randomUUID().toString())
+                                .header("If-Match", "\"2\""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ARGUMENT"));
+    }
+
+    @Test
+    void publishRejectsNonEmptyBodyBeforeAnyStateChange() throws Exception {
+        MvcResult created =
+                mockMvc.perform(
+                                admin(post("/api/v1/admin/datasources"))
+                                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(body("orders", "127.0.0.1")))
+                        .andExpect(status().isCreated())
+                        .andReturn();
+        long id = Long.parseLong(json(created).get("id").asString());
+        long candidateId = insertCandidate(id, "VERIFIED", true);
+
+        mockMvc.perform(
+                        admin(
+                                        post(
+                                                "/api/v1/admin/datasources/"
+                                                        + id
+                                                        + "/candidates/"
+                                                        + candidateId
+                                                        + "/publish"))
+                                .header("Idempotency-Key", UUID.randomUUID().toString())
+                                .header("If-Match", "\"1\"")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"status\":\"ACTIVE\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ARGUMENT"));
+
+        assertEquals("VERIFIED", candidateState(candidateId));
+        mockMvc.perform(admin(get("/api/v1/admin/datasources/" + id)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("ETag", "\"1\""));
+    }
+
+    @Test
+    void platformAdminWithoutCapabilityCodeIsRejectedOnEveryAction() throws Exception {
+        // A platform-scoped identity that holds no datasource capability code must not reach any
+        // datasource action; the code check applies to platform admins too.
+        mockMvc.perform(
+                        noCode(post("/api/v1/admin/datasources"))
+                                .header("Idempotency-Key", UUID.randomUUID().toString())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body("orders", "127.0.0.1")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+        mockMvc.perform(noCode(get("/api/v1/admin/datasources")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+        mockMvc.perform(noCode(get("/api/v1/admin/datasources/1")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+        mockMvc.perform(
+                        noCode(put("/api/v1/admin/datasources/1"))
+                                .header("If-Match", "\"1\"")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body("orders", "127.0.0.1")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+        mockMvc.perform(noCode(delete("/api/v1/admin/datasources/1")).header("If-Match", "\"1\""))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+        mockMvc.perform(
+                        noCode(post("/api/v1/admin/datasources/1/test"))
+                                .header("Idempotency-Key", UUID.randomUUID().toString()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+        mockMvc.perform(
+                        noCode(post("/api/v1/admin/datasources/1/sync"))
+                                .header("Idempotency-Key", UUID.randomUUID().toString())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"mode\":\"FULL\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+        mockMvc.perform(
+                        noCode(post("/api/v1/admin/datasources/1/candidates/1/publish"))
+                                .header("Idempotency-Key", UUID.randomUUID().toString())
+                                .header("If-Match", "\"1\""))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
     }
 
     @Test
@@ -804,6 +976,12 @@ class DatasourceApiTest {
         return builder.header("X-Test-User-Id", ADMIN).header("X-Test-Platform-Admin", "true");
     }
 
+    /** Platform admin without any datasource capability code. */
+    private MockHttpServletRequestBuilder noCode(MockHttpServletRequestBuilder builder) {
+        return builder.header("X-Test-User-Id", NO_CODE_ADMIN)
+                .header("X-Test-Platform-Admin", "true");
+    }
+
     private static Map<String, Object> write(String code, String host) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("code", code);
@@ -866,6 +1044,72 @@ class DatasourceApiTest {
             try (ResultSet result = statement.executeQuery()) {
                 assertTrue(result.next());
                 return result.getBytes(1);
+            }
+        }
+    }
+
+    private long insertCandidate(long datasourceId, String state, boolean withCredential)
+            throws Exception {
+        try (Connection connection = connect();
+                PreparedStatement source =
+                        connection.prepareStatement(
+                                "SELECT code, name, engine, host, port, database_name, username, "
+                                        + "credential_cipher, key_id, tls_mode, pool_max, status, "
+                                        + "config_version FROM datasource WHERE id = ?")) {
+            source.setLong(1, datasourceId);
+            try (ResultSet row = source.executeQuery()) {
+                assertTrue(row.next());
+                try (PreparedStatement insert =
+                        connection.prepareStatement(
+                                "INSERT INTO datasource_candidate (datasource_id, base_config_version, "
+                                        + "code, name, engine, host, port, database_name, username, "
+                                        + "credential_cipher, key_id, tls_mode, pool_max, "
+                                        + "datasource_status, probe_scope, state, checked_at, "
+                                        + "valid_until, requested_by, create_time, update_time) "
+                                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                                        + "'DRAFT_CANDIDATE', ?, UTC_TIMESTAMP(6), "
+                                        + "DATE_ADD(UTC_TIMESTAMP(6), INTERVAL 5 MINUTE), 9001, "
+                                        + "UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))",
+                                Statement.RETURN_GENERATED_KEYS)) {
+                    insert.setLong(1, datasourceId);
+                    insert.setLong(2, row.getLong(13));
+                    insert.setString(3, row.getString(1));
+                    insert.setString(4, row.getString(2));
+                    insert.setString(5, row.getString(3));
+                    insert.setString(6, row.getString(4));
+                    insert.setInt(7, row.getInt(5));
+                    insert.setString(8, row.getString(6));
+                    insert.setString(9, row.getString(7));
+                    if (withCredential) {
+                        insert.setBytes(10, row.getBytes(8));
+                        insert.setString(11, row.getString(9));
+                    } else {
+                        insert.setNull(10, java.sql.Types.BLOB);
+                        insert.setNull(11, java.sql.Types.VARCHAR);
+                    }
+                    insert.setString(12, row.getString(10));
+                    insert.setInt(13, row.getInt(11));
+                    insert.setString(14, row.getString(12));
+                    insert.setString(15, state);
+                    insert.executeUpdate();
+                    try (ResultSet keys = insert.getGeneratedKeys()) {
+                        assertTrue(keys.next());
+                        return keys.getLong(1);
+                    }
+                }
+            }
+        }
+    }
+
+    private String candidateState(long candidateId) throws Exception {
+        try (Connection connection = connect();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "SELECT state FROM datasource_candidate WHERE id = ?")) {
+            statement.setLong(1, candidateId);
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                return result.getString(1);
             }
         }
     }

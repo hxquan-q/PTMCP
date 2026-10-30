@@ -1,6 +1,7 @@
 package local.ptmcp.admin.datasource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -33,6 +34,11 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import javax.sql.DataSource;
 
@@ -88,6 +94,8 @@ class DatasourceTargetIsolationTest {
                 var statement = connection.createStatement()) {
             for (String table :
                     List.of(
+                            "metadata_sync_job",
+                            "datasource_candidate",
                             "acl_grant",
                             "platform_scope",
                             "admin_delegation",
@@ -161,6 +169,32 @@ class DatasourceTargetIsolationTest {
                 "VERIFY_FULL",
                 1,
                 "ACTIVE");
+    }
+
+    private DatasourceAdminService.DraftTarget candidate(
+            String host, String database, boolean draft, byte[] sealed) {
+        DatasourceStore.Row current = store.get(source.id());
+        DatasourceStore.Fields fields =
+                new DatasourceStore.Fields(
+                        "synthetic",
+                        "Synthetic",
+                        "MYSQL",
+                        host,
+                        3306,
+                        database,
+                        "reader",
+                        "VERIFY_FULL",
+                        1,
+                        "ACTIVE");
+        return new DatasourceAdminService.DraftTarget(
+                current.id(),
+                current.configVersion(),
+                new DatasourceConnectionFactory.Spec(
+                        "MYSQL", host, 3306, database, "reader", sealed, "synthetic"),
+                fields,
+                sealed,
+                "synthetic",
+                draft);
     }
 
     private static SnapshotModel model() {
@@ -256,6 +290,340 @@ class DatasourceTargetIsolationTest {
         assertEquals(3, scalar("SELECT COUNT(*) FROM platform_scope"));
         assertEquals(3, scalar("SELECT COUNT(*) FROM admin_delegation WHERE status='ACTIVE'"));
         assertEquals(epoch + 1, scalar("SELECT policy_epoch FROM sys_security_state"));
+    }
+
+    @Test
+    void sameTargetPublishInvalidatesTheOldConfigVersionSnapshotUntilResync() throws Exception {
+        DatasourceStore.RecordedTest tested =
+                store.recordTest(
+                        candidate(source.host(), source.databaseName(), true, new byte[] {2}),
+                        true,
+                        1,
+                        UUID.randomUUID().toString());
+        DatasourceStore.Row published =
+                store.publishCandidate(
+                        source.id(),
+                        tested.candidateId(),
+                        source.configVersion(),
+                        1,
+                        UUID.randomUUID().toString());
+
+        assertEquals(source.resourceVersion(), published.resourceVersion());
+        assertEquals(source.activeSnapshotId(), published.activeSnapshotId());
+        assertEquals(3, scalar("SELECT COUNT(*) FROM acl_grant WHERE status='ACTIVE'"));
+        assertFalse(new PublishedSnapshotReader(metadata).load(source.id()).usable());
+
+        SchemaSnapshotStore snapshots = new SchemaSnapshotStore(metadata);
+        long resync = snapshots.stage(source.id(), model(), LocalDateTime.now(ZoneOffset.UTC));
+        snapshots.publish(resync, published.configVersion());
+        var restored = new PublishedSnapshotReader(metadata).load(source.id());
+        assertTrue(restored.usable());
+        assertEquals(resync, restored.snapshotId());
+    }
+
+    @Test
+    void publishFailureRollsBackWithoutTouchingActiveConfiguration() throws Exception {
+        DatasourceStore.RecordedTest tested =
+                store.recordTest(
+                        candidate("127.0.0.2", "catalog", true, new byte[] {2}),
+                        true,
+                        1,
+                        UUID.randomUUID().toString());
+        DatasourceStore failing = new DatasourceStore(faultSource(false));
+        DomainException error =
+                assertThrows(
+                        DomainException.class,
+                        () ->
+                                failing.publishCandidate(
+                                        source.id(),
+                                        tested.candidateId(),
+                                        source.configVersion(),
+                                        1,
+                                        UUID.randomUUID().toString()));
+        assertEquals(ErrorCode.DEPENDENCY_UNAVAILABLE, error.errorCode());
+
+        DatasourceStore.Row current = store.get(source.id());
+        assertEquals(source.host(), current.host());
+        assertEquals(source.configVersion(), current.configVersion());
+        assertEquals(source.activeSnapshotId(), current.activeSnapshotId());
+        assertEquals(
+                "VERIFIED",
+                text("SELECT state FROM datasource_candidate WHERE id=?", tested.candidateId()));
+        assertEquals("ACTIVE", text("SELECT status FROM resource_object WHERE id=?", objectId));
+        assertEquals(3, scalar("SELECT COUNT(*) FROM acl_grant WHERE status='ACTIVE'"));
+        assertEquals(3, scalar("SELECT COUNT(*) FROM platform_scope"));
+        assertEquals(3, scalar("SELECT COUNT(*) FROM admin_delegation WHERE status='ACTIVE'"));
+        assertEquals(2, scalar("SELECT policy_epoch FROM sys_security_state"));
+        assertEquals(1, scalar("SELECT COUNT(*) FROM sys_security_event"));
+        assertEquals(
+                0,
+                scalar(
+                        "SELECT COUNT(*) FROM admin_operation_log"
+                                + " WHERE action='DATASOURCE_CANDIDATE_PUBLISH'"));
+    }
+
+    @Test
+    void healthUsesOnlyTheLatestLiveActiveProbeForTheCurrentTarget() throws Exception {
+        String requestId = UUID.randomUUID().toString();
+        DatasourceStore.RecordedTest failed =
+                store.recordTest(
+                        candidate("127.0.0.1", "catalog", false, new byte[] {1}),
+                        false,
+                        1,
+                        requestId);
+        assertEquals("UNHEALTHY", store.get(source.id()).health());
+        assertEquals(
+                requestId,
+                text(
+                        "SELECT request_id FROM admin_operation_log WHERE action='DATASOURCE_CANDIDATE_TEST' AND aggregate_id=?",
+                        Long.toString(source.id())));
+
+        DatasourceStore.RecordedTest verified =
+                store.recordTest(
+                        candidate("127.0.0.1", "catalog", false, new byte[] {1}),
+                        true,
+                        1,
+                        UUID.randomUUID().toString());
+        assertEquals("HEALTHY", store.get(source.id()).health());
+
+        store.recordTest(
+                candidate("127.0.0.1", "catalog", true, new byte[] {2}),
+                false,
+                1,
+                UUID.randomUUID().toString());
+        assertEquals("HEALTHY", store.get(source.id()).health());
+
+        execute(
+                metadata.getConnection(),
+                "UPDATE datasource_candidate SET checked_at=DATE_SUB(UTC_TIMESTAMP(6),INTERVAL 10 MINUTE),"
+                        + " valid_until=DATE_SUB(UTC_TIMESTAMP(6),INTERVAL 5 MINUTE) WHERE id=?",
+                verified.candidateId());
+        assertEquals("UNHEALTHY", store.get(source.id()).health());
+
+        execute(
+                metadata.getConnection(),
+                "UPDATE datasource_candidate SET checked_at=DATE_SUB(UTC_TIMESTAMP(6),INTERVAL 10 MINUTE),"
+                        + " valid_until=DATE_SUB(UTC_TIMESTAMP(6),INTERVAL 5 MINUTE) WHERE id=?",
+                failed.candidateId());
+        assertEquals("UNKNOWN", store.get(source.id()).health());
+    }
+
+    @Test
+    void publishingAVerifiedCandidateIsAtomicAndRetiresTheOldTargetAuthority() throws Exception {
+        String requestId = UUID.randomUUID().toString();
+        DatasourceStore.RecordedTest tested =
+                store.recordTest(
+                        candidate("127.0.0.2", "catalog", true, new byte[] {2}),
+                        true,
+                        1,
+                        requestId);
+
+        DatasourceStore.Row published =
+                store.publishCandidate(
+                        source.id(),
+                        tested.candidateId(),
+                        source.configVersion(),
+                        1,
+                        UUID.randomUUID().toString());
+
+        assertEquals(source.configVersion() + 1, published.configVersion());
+        assertEquals(source.resourceVersion() + 1, published.resourceVersion());
+        assertEquals("127.0.0.2", published.host());
+        assertEquals(null, published.activeSnapshotId());
+        assertEquals("UNKNOWN", published.health());
+        assertEquals(
+                "PUBLISHED",
+                text("SELECT state FROM datasource_candidate WHERE id=?", tested.candidateId()));
+        assertEquals("RETIRED", text("SELECT status FROM resource_object WHERE id=?", objectId));
+        assertEquals(0, scalar("SELECT COUNT(*) FROM acl_grant WHERE status='ACTIVE'"));
+        assertEquals(0, scalar("SELECT COUNT(*) FROM platform_scope"));
+        assertEquals(0, scalar("SELECT COUNT(*) FROM admin_delegation WHERE status='ACTIVE'"));
+        assertEquals(
+                1,
+                scalar(
+                        "SELECT COUNT(*) FROM metadata_sync_job WHERE candidate_id=?",
+                        tested.candidateId()));
+        assertEquals(
+                1,
+                scalar(
+                        "SELECT COUNT(*) FROM admin_operation_log WHERE action='DATASOURCE_CANDIDATE_PUBLISH'"));
+        assertEquals(
+                0,
+                scalar(
+                        "SELECT COUNT(*) FROM admin_operation_log WHERE JSON_CONTAINS_PATH(before_masked,'one','$.credential','$.keyId')"
+                                + " OR JSON_CONTAINS_PATH(after_masked,'one','$.credential','$.keyId')"));
+    }
+
+    @Test
+    void publishRejectsFailedExpiredObsoleteAndAlreadyPublishedCandidates() throws Exception {
+        DatasourceStore.RecordedTest failed =
+                store.recordTest(
+                        candidate("127.0.0.1", "catalog", true, new byte[] {2}),
+                        false,
+                        1,
+                        UUID.randomUUID().toString());
+        assertEquals(
+                ErrorCode.INVALID_ARGUMENT,
+                assertThrows(
+                                DomainException.class,
+                                () ->
+                                        store.publishCandidate(
+                                                source.id(),
+                                                failed.candidateId(),
+                                                source.configVersion(),
+                                                1,
+                                                UUID.randomUUID().toString()))
+                        .errorCode());
+
+        DatasourceStore.RecordedTest expired =
+                store.recordTest(
+                        candidate("127.0.0.1", "catalog", true, new byte[] {2}),
+                        true,
+                        1,
+                        UUID.randomUUID().toString());
+        execute(
+                metadata.getConnection(),
+                "UPDATE datasource_candidate SET checked_at=DATE_SUB(UTC_TIMESTAMP(6),INTERVAL 10 MINUTE),"
+                        + " valid_until=DATE_SUB(UTC_TIMESTAMP(6),INTERVAL 5 MINUTE) WHERE id=?",
+                expired.candidateId());
+        assertEquals(
+                ErrorCode.INVALID_ARGUMENT,
+                assertThrows(
+                                DomainException.class,
+                                () ->
+                                        store.publishCandidate(
+                                                source.id(),
+                                                expired.candidateId(),
+                                                source.configVersion(),
+                                                1,
+                                                UUID.randomUUID().toString()))
+                        .errorCode());
+
+        DatasourceStore.RecordedTest obsolete =
+                store.recordTest(
+                        candidate("127.0.0.1", "catalog", true, new byte[] {2}),
+                        true,
+                        1,
+                        UUID.randomUUID().toString());
+        store.update(
+                source.id(),
+                source.configVersion(),
+                fields(source.host(), source.port(), source.databaseName()),
+                new byte[] {3},
+                "rotated",
+                1);
+        assertEquals(
+                ErrorCode.VERSION_CONFLICT,
+                assertThrows(
+                                DomainException.class,
+                                () ->
+                                        store.publishCandidate(
+                                                source.id(),
+                                                obsolete.candidateId(),
+                                                source.configVersion() + 1,
+                                                1,
+                                                UUID.randomUUID().toString()))
+                        .errorCode());
+
+        DatasourceStore.Row current = store.get(source.id());
+        DatasourceStore.RecordedTest verified =
+                store.recordTest(
+                        candidate("127.0.0.1", "catalog", true, new byte[] {2}),
+                        true,
+                        1,
+                        UUID.randomUUID().toString());
+        store.publishCandidate(
+                source.id(),
+                verified.candidateId(),
+                current.configVersion(),
+                1,
+                UUID.randomUUID().toString());
+        assertEquals(
+                "PUBLISHED",
+                text("SELECT state FROM datasource_candidate WHERE id=?", verified.candidateId()));
+        assertEquals(current.configVersion() + 1, store.get(source.id()).configVersion());
+        assertEquals(
+                ErrorCode.INVALID_ARGUMENT,
+                assertThrows(
+                                DomainException.class,
+                                () ->
+                                        store.publishCandidate(
+                                                source.id(),
+                                                verified.candidateId(),
+                                                current.configVersion() + 1,
+                                                1,
+                                                UUID.randomUUID().toString()))
+                        .errorCode());
+
+        assertEquals(
+                ErrorCode.VERSION_CONFLICT,
+                assertThrows(
+                                DomainException.class,
+                                () ->
+                                        store.publishCandidate(
+                                                source.id(),
+                                                verified.candidateId(),
+                                                99,
+                                                1,
+                                                UUID.randomUUID().toString()))
+                        .errorCode());
+        assertEquals(
+                ErrorCode.VERSION_CONFLICT,
+                assertThrows(
+                                DomainException.class,
+                                () ->
+                                        store.publishCandidate(
+                                                source.id(),
+                                                999_999,
+                                                99,
+                                                1,
+                                                UUID.randomUUID().toString()))
+                        .errorCode());
+    }
+
+    @Test
+    void concurrentPublishAllowsExactlyOneWinner() throws Exception {
+        DatasourceStore.RecordedTest tested =
+                store.recordTest(
+                        candidate("127.0.0.2", "catalog", true, new byte[] {2}),
+                        true,
+                        1,
+                        UUID.randomUUID().toString());
+        long expectedVersion = source.configVersion();
+        CountDownLatch start = new CountDownLatch(1);
+        try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
+            Future<String> first =
+                    pool.submit(() -> publishOutcome(tested, expectedVersion, start));
+            Future<String> second =
+                    pool.submit(() -> publishOutcome(tested, expectedVersion, start));
+            start.countDown();
+            List<String> outcomes = List.of(first.get(), second.get());
+            assertEquals(1, outcomes.stream().filter("OK"::equals).count());
+            assertEquals(1, outcomes.stream().filter("VERSION_CONFLICT"::equals).count());
+        }
+        assertEquals(
+                "PUBLISHED",
+                text("SELECT state FROM datasource_candidate WHERE id=?", tested.candidateId()));
+        assertEquals(source.configVersion() + 1, store.get(source.id()).configVersion());
+    }
+
+    private String publishOutcome(
+            DatasourceStore.RecordedTest tested, long expectedVersion, CountDownLatch start) {
+        try {
+            start.await();
+            store.publishCandidate(
+                    source.id(),
+                    tested.candidateId(),
+                    expectedVersion,
+                    1,
+                    UUID.randomUUID().toString());
+            return "OK";
+        } catch (DomainException error) {
+            return error.errorCode().name();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return "INTERRUPTED";
+        }
     }
 
     @Test
@@ -416,12 +784,14 @@ class DatasourceTargetIsolationTest {
         }
     }
 
-    private static long scalar(String sql) throws SQLException {
+    private static long scalar(String sql, Object... args) throws SQLException {
         try (Connection connection = metadata.getConnection();
-                var statement = connection.createStatement();
-                ResultSet result = statement.executeQuery(sql)) {
-            assertTrue(result.next());
-            return result.getLong(1);
+                var statement = connection.prepareStatement(sql)) {
+            for (int i = 0; i < args.length; i++) statement.setObject(i + 1, args[i]);
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                return result.getLong(1);
+            }
         }
     }
 

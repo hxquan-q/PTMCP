@@ -57,6 +57,7 @@ final class AdminActionTestSupport {
             DELETE /datasources/{id} ptmcp:datasource:delete
             POST /datasources/{id}/test ptmcp:datasource:test
             POST /datasources/{id}/sync ptmcp:datasource:sync
+            POST /datasources/{id}/candidates/{candidateId}/publish ptmcp:datasource:update
             GET /jobs/{id} ptmcp:job:read
             GET /metadata/objects ptmcp:metadata:list
             GET /metadata/objects/{id} ptmcp:metadata:read
