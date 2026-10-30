@@ -197,9 +197,9 @@ class McpQueryFlowTest {
             sql.execute(
                     "INSERT INTO sys_user_profile (user_id,dept_id,display_name,password_hash,status,create_time,update_time) VALUES (1,1,'test','unused','ACTIVE',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
             sql.execute(
-                    "INSERT INTO platform_registry (id,code,name,tier,status,catalog_mode,proof_mode,create_time,update_time,created_by,updated_by) VALUES (1,'test','test',3,'ACTIVE','DISCOVER','NONE',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),1,1)");
-            sql.execute(
                     "INSERT INTO sys_user_security (user_id,auth_version,identity_version,identity_state,version,create_time,update_time) VALUES (1,1,1,'READY',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
+            sql.execute(
+                    "INSERT INTO platform_registry (id,code,name,tier,status,catalog_mode,proof_mode,create_time,update_time,created_by,updated_by) VALUES (1,'test','test',3,'ACTIVE','DISCOVER','NONE',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),1,1)");
         }
         CredentialCipher.Sealed credential = new CredentialCipher(KEY).encrypt(BUSINESS.password);
         try (Connection meta = PRIMARY.getConnection();
@@ -971,6 +971,73 @@ class McpQueryFlowTest {
         HttpResponse<String> consistent =
                 rawCall(request(1, "SELECT 1", PAT), Map.of("X-Platform-ID", "1"));
         assertEquals(200, consistent.statusCode(), consistent.body());
+    }
+
+    @Test
+    void patWithoutAuthoritativeIdentityIsRejectedBeforeCheckout() throws Exception {
+        assertUnusableIdentityRejected(PAT, null, 1);
+    }
+
+    @Test
+    void patWithUnboundIdentityIsRejectedBeforeCheckout() throws Exception {
+        assertUnusableIdentityRejected(PAT, "UNBOUND", 1);
+    }
+
+    @Test
+    void patWithStaleAuthVersionIsRejectedBeforeCheckout() throws Exception {
+        assertUnusableIdentityRejected(PAT, "READY", 2);
+    }
+
+    @Test
+    void jwtWithoutAuthoritativeIdentityIsRejectedBeforeCheckout() throws Exception {
+        assertUnusableIdentityRejected(jwt(FAMILY, 1), null, 1);
+    }
+
+    @Test
+    void jwtWithUnboundIdentityIsRejectedBeforeCheckout() throws Exception {
+        assertUnusableIdentityRejected(jwt(FAMILY, 1), "UNBOUND", 1);
+    }
+
+    @Test
+    void jwtWithStaleAuthVersionIsRejectedBeforeCheckout() throws Exception {
+        assertUnusableIdentityRejected(jwt(FAMILY, 1), "READY", 2);
+    }
+
+    private void assertUnusableIdentityRejected(String token, String state, long authVersion)
+            throws Exception {
+        long connectionsBefore = businessConnections();
+        long executionsBefore = businessExecutionCount();
+        try {
+            try (Connection meta = PRIMARY.getConnection();
+                    PreparedStatement sql =
+                            meta.prepareStatement(
+                                    state == null
+                                            ? "DELETE FROM sys_user_security WHERE user_id = 1"
+                                            : "UPDATE sys_user_security SET identity_state = ?,"
+                                                    + " auth_version = ? WHERE user_id = 1")) {
+                if (state != null) {
+                    sql.setString(1, state);
+                    sql.setLong(2, authVersion);
+                }
+                assertEquals(1, sql.executeUpdate());
+            }
+            HttpResponse<String> response = call("SELECT id FROM orders", token);
+            assertEquals(401, response.statusCode(), response.body());
+            assertEquals(
+                    "TOKEN_REVOKED",
+                    JSON.readTree(response.body()).path("error").path("code").asText());
+            assertEquals(connectionsBefore, businessConnections());
+            assertEquals(executionsBefore, businessExecutionCount());
+        } finally {
+            try (Connection meta = PRIMARY.getConnection();
+                    Statement sql = meta.createStatement()) {
+                sql.executeUpdate(
+                        "INSERT INTO sys_user_security (user_id,auth_version,identity_version,"
+                                + " identity_state,version,create_time,update_time) VALUES"
+                                + " (1,1,1,'READY',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))"
+                                + " ON DUPLICATE KEY UPDATE auth_version = 1, identity_state = 'READY'");
+            }
+        }
     }
 
     @Test
