@@ -60,6 +60,9 @@ select {
   --ptmcp-bg-warning: #fff3df;
   --ptmcp-bg-neutral: #f0f3f5;
   --ptmcp-bg-accent: #e6f1ff;
+  --ptmcp-code-bg: #0d1526;
+  --ptmcp-code-fg: #c8dcf5;
+  --ptmcp-code-gutter: #7f93b5;
   --ptmcp-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.07);
   --ptmcp-shadow-pop: 0 2px 8px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.12);
   --ptmcp-radius-control: 8px;
@@ -746,6 +749,164 @@ textarea:focus-visible,
 .perm-resizer:hover > span,
 .perm-resizer:focus-visible > span {
   background: var(--ptmcp-blue);
+}
+
+/* ─── 通用：仅供读屏使用的文本 ─── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 可滚动区域可被键盘聚焦（WCAG 2.1 SC 2.1.1） */
+.table-scroll:focus-visible {
+  outline: 2px solid var(--ptmcp-blue);
+  outline-offset: -2px;
+}
+
+/* ─── 接入向导：选项网格、能力/摘要字段、代码块、格式分段控件 ─── */
+.wizard-card {
+  padding: 22px 24px;
+  outline-offset: 2px;
+}
+.option-grid {
+  display: grid;
+  gap: 14px;
+}
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+}
+.server-capabilities {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--ptmcp-border);
+  border-radius: var(--ptmcp-radius-panel);
+  background: var(--ptmcp-band);
+}
+.summary-item {
+  min-width: 0;
+}
+.summary-item .k {
+  font-size: 12px;
+  color: var(--ptmcp-text-muted);
+}
+.summary-item .v {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ptmcp-heading);
+  overflow-wrap: anywhere;
+}
+.summary-item .v code,
+.server-capabilities .v code {
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.done-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 12px;
+  border-radius: 50%;
+  background: var(--ptmcp-bg-success);
+  color: var(--ptmcp-green);
+  font-size: 30px;
+}
+.next-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  font-size: 13px;
+}
+.step-dot {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--ptmcp-blue-bg);
+  color: var(--ptmcp-blue-text);
+  font-size: 11px;
+  font-weight: 700;
+}
+.code-block {
+  margin: 0;
+  padding: 16px 18px;
+  border-radius: 10px;
+  background: var(--ptmcp-code-bg);
+  color: var(--ptmcp-code-fg);
+  font-size: 12.5px;
+  line-height: 1.65;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.code-line {
+  display: flex;
+}
+.code-gutter {
+  width: 28px;
+  flex: none;
+  color: var(--ptmcp-code-gutter);
+  user-select: none;
+}
+.code-text {
+  white-space: pre;
+}
+/* 模板格式：原生 radio group 提供左右方向键切换，无需自写键盘逻辑 */
+.seg-group {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--ptmcp-border);
+  border-radius: var(--ptmcp-radius-control);
+  background: var(--ptmcp-canvas);
+}
+.seg-item {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 14px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ptmcp-text-muted);
+  cursor: pointer;
+}
+.seg-item:hover {
+  color: var(--ptmcp-text-strong);
+}
+.seg-item.is-active {
+  background: var(--ptmcp-surface);
+  color: var(--ptmcp-heading);
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+.seg-item:focus-within {
+  outline: 2px solid var(--ptmcp-blue);
+  outline-offset: 1px;
+}
+.seg-item input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* ─── 权限矩阵窄屏：三栏改纵向堆叠，隐藏拖拽分隔线 ─── */

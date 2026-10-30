@@ -128,6 +128,11 @@ export function AppShell({
             <div
               role="tablist"
               aria-label="视角切换"
+              onKeyDown={(e) => {
+                if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+                e.preventDefault();
+                if (adminHomePath) onSwitchRealm(realm === 'admin' ? 'me' : 'admin');
+              }}
               style={{
                 display: 'flex',
                 gap: 4,
@@ -142,6 +147,7 @@ export function AppShell({
               <button
                 role="tab"
                 aria-selected={realm === 'admin'}
+                tabIndex={realm === 'admin' ? 0 : -1}
                 disabled={!adminHomePath}
                 title={adminHomePath ? '进入管理工作区' : '当前账号没有管理权限'}
                 onClick={() => onSwitchRealm('admin')}
@@ -152,7 +158,7 @@ export function AppShell({
                   borderRadius: 7,
                   fontSize: 12.5,
                   fontWeight: realm === 'admin' ? 700 : 500,
-                  color: realm === 'admin' ? 'var(--ptmcp-blue)' : 'var(--ptmcp-text-muted)',
+                  color: realm === 'admin' ? 'var(--ptmcp-blue-text)' : 'var(--ptmcp-text-muted)',
                   background: realm === 'admin' ? 'var(--ptmcp-surface)' : 'transparent',
                   cursor: adminHomePath ? 'pointer' : 'not-allowed',
                   opacity: adminHomePath ? 1 : 0.45,
@@ -163,6 +169,7 @@ export function AppShell({
               <button
                 role="tab"
                 aria-selected={realm === 'me'}
+                tabIndex={realm === 'me' ? 0 : -1}
                 onClick={() => onSwitchRealm('me')}
                 style={{
                   flex: 1,
@@ -171,7 +178,7 @@ export function AppShell({
                   borderRadius: 7,
                   fontSize: 12.5,
                   fontWeight: realm === 'me' ? 700 : 500,
-                  color: realm === 'me' ? 'var(--ptmcp-blue)' : 'var(--ptmcp-text-muted)',
+                  color: realm === 'me' ? 'var(--ptmcp-blue-text)' : 'var(--ptmcp-text-muted)',
                   background: realm === 'me' ? 'var(--ptmcp-surface)' : 'transparent',
                   cursor: 'pointer',
                 }}

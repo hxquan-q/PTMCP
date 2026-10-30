@@ -57,14 +57,34 @@ Updated: 2026-10-31
 
 实际检查：`node --experimental-strip-types --test tests/*.test.ts` 退出 0（164/164）；`tsc --noEmit` 通过；`pnpm exec eslint src/views/admin/PermissionsPage.tsx --max-warnings 0` 无输出；`pnpm exec prettier --write` 已跑；`pnpm build` 通过（CSS 21.17 kB / gzip 5.17 kB，JS 451.37 kB / gzip 123.99 kB）。
 
+### 切片 U3：P-13 我的 MCP 接入配置逐页细节
+
+`src/views/me/IntegrationsPage.tsx`（本人可写路径）连同列表页与 4 步向导一起审，发现的核心问题不是配色，而是**页面在说它做不到的事**：
+
+- 列表页在非预览模式下把 `PREVIEW_INTEGRATIONS` 合成样例当真实登记渲染（含统计卡、状态页签、筛选与「重置」）。现改为普通模式取空集合，合成数据、统计、页签、筛选行只在预览模式出现，并在筛选行标注「演示数据：合成预览模式下的样例接入，不代表真实登记」；普通模式空态说明控制台不代替客户端登记接入，并给出「前往创建个人令牌」出口。个人门户侧没有可核验的接入列表端点（已查 `services/`），因此不猜接口、不伪造列表。
+- 每行与完成页都有「测试连接」，实际调的是 `testDatasource`（数据源连通性），与「客户端 MCP 接入」语义完全不同，且网关握手不可能由控制台代替。按钮、`testing/testResult/runTest` 状态与 `testDatasource` 引用同批删除；完成页状态固定为「待验证（模板已生成）」，后续步骤明写「连接结果以客户端为准，控制台不代替握手也不显示『连接成功』」。向导标题同样去掉可被误读的“接入名称”推断字段。
+- 步骤 3 丢弃了服务端 `configTemplate` 返回的能力信息。补「服务端能力」区块逐项回显 transport / 服务端地址 / authentication / 兼容性，缺失时分别显示「待配置（未返回部署地址）」「未返回（按不支持处理）」「尚未验证」；`url` 缺失时追加警示，且未取得合法模板时「复制」「完成并查看后续步骤」保持禁用并给 `title` 说明原因——不再允许“看着配好了”。
+- 失败被伪装成空的三处（平台列表、模板获取、模板 JSON 解析）改为可辨识错误态：`describeFailure` 保留 message 与 `requestId`，`RequestIdText` 明示可凭此请求 ID 找管理员排查；获取失败提示返回上一步重试，解析失败说明不生成任何示例配置。
+- 复制反馈原本无论如何都显示成功。改为 `ok | fail | null`，配 `aria-live="polite"` 播报、2 秒复位，完成页失败时给 warning Alert 而不是静默。
+- 键盘与读屏：列表容器 `role="region"` + `aria-label="接入列表"` + `tabIndex=0`（可滚动区域须可获得焦点，SC 2.1.1）；状态页签从自建 tablist 换成共享 `Tabs`（roving tabindex + ←→），与 Audit/Datasources/Permissions/Platforms 一致；JSON/YAML 切换从伪 tablist 换成原生 `radiogroup` + 28px `seg-item`（`:focus-within` 描边，交给原生方向键语义）；步骤变更由 `aria-live` 播报「第 N 步，共 4 步」并把焦点移到向导卡片（`tabIndex=-1`），`Stepper` 补 `aria-current="step"` 与 `sr-only` 状态后缀，编号不再只靠颜色。
+- 完成页「前往创建 PAT」是个没有 `onClick` 的死链接，现指向 `#/me/tokens`；后续步骤补上真实站内跳转 `#/me/history`、`#/me/authorizations`；新增 `summary-grid` 如实汇总平台 / 平台 ID / 客户端 / 传输方式 / 服务端地址 / 认证方式 / 状态 / 兼容性。
+- 设计债：内联的 `#0d1526`/`#c8dcf5`/`#4c6184` 代码配色与散落内联样式移入 token 与类（`--ptmcp-code-bg/fg/gutter`、`.wizard-card`、`.option-grid`、`.summary-grid`、`.server-capabilities`、`.next-steps`、`.done-badge`、`.code-block/.code-line/.code-gutter/.code-text`、`.seg-group/.seg-item`、`.sr-only`）；行号色 `#4c6184` 在白底外实测仅 4.1:1 且属小字号，加深为 `#7f93b5`（6:1），代码正文 12.57:1。
+- 附带修正复核暴露的共享层回归：`AppShell.tsx` 视角切换选中态用 `--ptmcp-blue` 写在 `--ptmcp-surface` 上，实测 4.30:1 未达 AA，改 `--ptmcp-blue-text`；该 tablist 此前只有点击、没有键盘操作，补 roving tabindex 与 ←→（无管理权限时不响应）。
+
+浏览器实测（隔离合成预览，1440×900 与 720×900）：列表 6 行、页签 4 个 `tabindex` 恰 1 个为 0 且最低对比度 4.9:1、区域 `role/aria-label/tabindex` 齐备、`hasTestButton:false`；向导逐步走完后步骤条依次标出「选择平台（当前步骤）→ 选择客户端 → 连接方式与认证 → 获取配置模板」，`aria-live` 与焦点落卡生效；步骤 4 服务端能力为 `streamable-http` / `https://mcp.example.test/mcp` / `OAuth / PAT` / 尚未验证，代码块 10 行，正文 12.57:1、行号 6:1；真实 `ArrowRight`（`press_key`）把模板切到 YAML 且焦点环可见，`radiogroup` 内两个选项热区 28px；完成页 8 项汇总、状态「待验证（模板已生成）」、`next-steps` 链接为 `#/me/history`、`#/me/authorizations`、徽标底色 `rgb(237,246,238)`、测试按钮 0 个、复制播报文案「已复制到剪贴板」；视角切换 ←→ 实测双向可跳转（`#/me/*` ↔ `#/admin/datasources`），选中态 5.91:1、未选中 5.09:1；720px 下文档横向溢出 0px、表格 `scrollWidth == clientWidth`（603px）无需横向滚动。产物 `C:\Users\xquan\AppData\Local\Temp\ptmcp-shots\p13-list-1440.png`、`p13-step4-template-1440.png`、`p13-step4-full.png`、`p13-done-full.png`、`p13-list-720.png`（本宿主无图像通道，仅作为交付给用户查看的证据，未做像素比对）。
+
+实际检查：`pnpm exec prettier --write`（4 文件 unchanged）；`pnpm exec eslint --max-warnings 0` 覆盖 `IntegrationsPage.tsx`、`common.tsx`、`AppShell.tsx` 无输出；`pnpm exec tsc --noEmit` 通过；`node --experimental-strip-types --test tests/*.test.ts` 退出 0（164 tests / 164 pass / 0 fail）；`pnpm build` 通过（CSS 23.92 kB / gzip 5.71 kB，JS 451.65 kB / gzip 124.30 kB）。
+
+未验证：普通模式（非预览）空态无法在浏览器走通——未登录时应用渲染 `LoginPage`，该分支只有代码级依据；真实后端联调、人工体验接受未做。
+
 ### 尚未做
 
-数据源/平台/接入配置等其余页面逐页细节（死控件接线或移除、16px 复选框命中区、空/加载/错误/409 态、窄屏），以及 DESIGN.md 记录的 SAP 调色板（`#0057d2`）与实现所用 Apple 调色板（`#0071e3`）之间的契约偏差处置——后者需用户确认以哪一侧为准，未擅自动手。P-10 的自增权防护与 NAMESPACE/DATASOURCE 级授权按上文理由保留未实现。
+P-04 元数据、P-05/P-06/P-07 组织页的逐页细节。P-02 数据源页的死控件与复选区仍待处理，但该文件与 `DatasourcesPage.tsx`、`services/*`、`dsForm.ts`、`platformForm.ts` 等正被 DEV-20261031-audit-fixes 的未提交改动占用，接管前须先确认对方落地状态，避免同文件互踩。DESIGN.md 记录的 SAP 调色板（`#0057d2`）与实现所用 Apple 调色板（`#0071e3`）之间的契约偏差处置——需用户确认以哪一侧为准，未擅自动手。P-10 的自增权防护与 NAMESPACE/DATASOURCE 级授权按上文理由保留未实现。
 
 ## 结果与证据
 
-设计层：本切片修复的是可度量的可达性与控件缺陷，不等于按设计图完成视觉还原（图像通道不可用）。验证层：自动化与浏览器交互已跑，人工体验接受与真实后端联调未做。本项不改后端，也不把框架构建当作业务验收。
+设计层：本切片修复的是可度量的可达性与控件缺陷，不等于按设计图完成视觉还原（图像通道不可用）。除配色与热区外，U1–U3 的实际改动集中在“页面声称却做不到的能力”：假数据列表、语义错误的测试连接、无处理器的死链接、把失败显示成空、无脑报成功的复制，均已按可核验来源收紧或移除。验证层：自动化与浏览器交互已跑，人工体验接受与真实后端联调未做。本项不改后端，也不把框架构建当作业务验收。
 
 ## 交接
 
-焦点在切片 U3：P-13 我的 MCP 接入配置（`src/views/me/IntegrationsPage.tsx`，本人可写路径，且有对应设计图），随后 P-04 元数据、P-05/P-06/P-07 组织页。P-02 数据源页的死控件与复选区仍待处理，但该文件与 `DatasourcesPage.tsx`、`services/*`、`dsForm.ts`、`platformForm.ts` 等正被 DEV-20261031-audit-fixes 的未提交改动占用，接管前须先确认对方落地状态，避免同文件互踩。每个切片只暂存自己改过的路径。预览端口 25175 用完须停止并确认无监听。
+切片 U3（P-13 MCP 接入配置）已完成并随本项提交；已提交路径为 `src/views/me/IntegrationsPage.tsx`、`src/components/common.tsx`、`src/layouts/AppShell.tsx`、`src/styles/index.css` 与本工作项，其余 DIRTY 路径属 DEV-20261031-audit-fixes，未暂存、未改动。下一个焦点：P-04 元数据页（`src/views/admin/MetadataPage.tsx`，若不在他人占用清单内），随后 P-05/P-06/P-07 组织页。P-02 数据源页须等对方未提交改动落地后再接管，避免同文件互踩。每个切片只暂存自己改过的路径。预览端口 25175 用完须停止并确认无监听。两项待用户决断：DESIGN.md 与实现的调色板偏差以哪侧为准；P-13 普通模式是否需要后端提供“本人接入列表”端点（当前按契约缺失处理，只显示空态与出口，不伪造）。

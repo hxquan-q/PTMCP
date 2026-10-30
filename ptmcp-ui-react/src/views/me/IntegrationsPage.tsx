@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   CellIcon,
@@ -13,6 +13,7 @@ import {
   StatCard,
   StatusDot,
   Stepper,
+  Tabs,
   useDebounced,
 } from '../../components/common';
 import {
@@ -29,7 +30,6 @@ import {
   MonitorIcon,
   PlusIcon,
   PuzzleIcon,
-  RefreshIcon,
   ShieldIcon,
   StreamIcon,
   WarningIcon,
@@ -38,7 +38,6 @@ import {
 import { mePortalApi, type McpConfig, type PlatformItem } from '../../services/mePortalApi';
 import { frontendPreview } from '../../services/frontendMode';
 import { authAvailability, templatesFromConfig } from './mcpTemplate';
-import { testDatasource } from '../../services/access';
 
 /* ─── 视图模型 ─── */
 interface IntegrationRow {
@@ -172,6 +171,16 @@ const STATUS_FILTER_OPTIONS = [
 
 const STEPS = ['选择平台', '选择客户端', '连接方式与认证', '获取配置模板'];
 
+/** 完成页只给出与服务端版本对应、需要人工在客户端执行的步骤，不声称已连通。 */
+const DONE_STEPS: { title: string; desc: string; linkLabel?: string; linkHash?: string }[] = [
+  { title: '在客户端配置文件中粘贴模板', desc: 'PAT 只替换占位符；OAuth 由客户端完成首次登录与受控重新授权' },
+  { title: '重启客户端并发起 MCP 握手', desc: '连接结果以客户端为准，控制台不代替握手也不显示“连接成功”' },
+  { title: '在问数客户端发起一次查询验证访问', desc: '本人查询记录可在', linkLabel: '查询历史', linkHash: '/me/history' },
+  { title: '核对授权范围并按需调整', desc: '个人可见授权族可在', linkLabel: '我的授权', linkHash: '/me/authorizations' },
+];
+
+const EMPTY_INTEGRATIONS: IntegrationRow[] = [];
+
 export function IntegrationsPage() {
   const [mode, setMode] = useState<'list' | 'wizard'>('list');
   return mode === 'list' ? <IntegrationList onCreate={() => setMode('wizard')} /> : <Wizard onExit={() => setMode('list')} />;
@@ -179,8 +188,8 @@ export function IntegrationsPage() {
 
 /* ═══════════ 列表视图 ═══════════ */
 function IntegrationList({ onCreate }: { onCreate: () => void }) {
-  /* 正常模式没有服务端「我的接入」列表接口：不得展示样例数据，只保留空态与新建入口。 */
-  const integrations = frontendPreview ? PREVIEW_INTEGRATIONS : [];
+  /* 正常模式没有服务端「我的接入」列表接口：不展示样例数据，也不给出只能作用于合成数据的统计与筛选。 */
+  const integrations = frontendPreview ? PREVIEW_INTEGRATIONS : EMPTY_INTEGRATIONS;
   const [tab, setTab] = useState('all');
   const [keyword, setKeyword] = useState('');
   const [platformFilter, setPlatformFilter] = useState('');
@@ -214,7 +223,7 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
         tone: 'danger' as const,
       },
     ],
-    [],
+    [integrations],
   );
   const tabs = [
     { key: 'all', label: `全部 (${integrations.length})` },
@@ -233,7 +242,7 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
     const kw = debounced.trim();
     if (kw) list = list.filter((r) => `${r.name}${r.code}${r.client}${r.platform}`.toLowerCase().includes(kw.toLowerCase()));
     return list;
-  }, [tab, debounced, platformFilter, statusFilter]);
+  }, [integrations, tab, debounced, platformFilter, statusFilter]);
   const pageSize = 20;
   const pageRows = rows.slice((page - 1) * pageSize, page * pageSize);
 
@@ -241,114 +250,83 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
     <>
       <PageHeader
         title="MCP 接入配置"
-        description="配置并管理本人的 MCP 客户端接入，快速获取配置模板并完成接入。"
+        description="按平台与客户端生成本人的 MCP 配置模板；实际连通由客户端完成 MCP 握手后验证。"
         actions={
           <button className="btn btn--primary" onClick={onCreate}>
             <PlusIcon /> 新建接入
           </button>
         }
       />
-      {/* 统计卡 */}
-      <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 14 }}>
-        {stats.map((s) => (
-          <StatCard key={s.label} icon={s.icon} value={s.value} label={s.label} hint={s.hint} tone={s.tone} />
-        ))}
-      </div>
+      {frontendPreview ? (
+        /* 统计卡 */
+        <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 14 }}>
+          {stats.map((s) => (
+            <StatCard key={s.label} icon={s.icon} value={s.value} label={s.label} hint={s.hint} tone={s.tone} />
+          ))}
+        </div>
+      ) : null}
 
       <div className="table-card" style={{ flex: 1, minHeight: 0 }}>
-        {/* pill tabs */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '12px 14px',
-            borderBottom: '1px solid var(--ptmcp-border)',
-            flexWrap: 'wrap',
-          }}
-        >
-          <div
-            role="tablist"
-            className="pill-tabs"
-            style={{
-              display: 'inline-flex',
-              gap: 6,
-              padding: 3,
-              borderRadius: 999,
-              background: 'var(--ptmcp-canvas)',
-              border: '1px solid var(--ptmcp-border)',
-            }}
-          >
-            {tabs.map((t) => {
-              const active = tab === t.key;
-              return (
-                <button
-                  key={t.key}
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => {
-                    setTab(t.key);
-                    setPage(1);
-                  }}
-                  style={{
-                    appearance: 'none',
-                    border: 'none',
-                    padding: '6px 14px',
-                    borderRadius: 999,
-                    fontSize: 13,
-                    fontWeight: active ? 700 : 500,
-                    color: active ? '#fff' : 'var(--ptmcp-text-muted)',
-                    background: active ? 'var(--ptmcp-blue)' : 'transparent',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {t.label}
-                </button>
-              );
-            })}
-          </div>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
-            <SearchInput
-              value={keyword}
-              onChange={(v) => {
-                setKeyword(v);
-                setPage(1);
-              }}
-              placeholder="搜索接入名称或客户端类型…"
-              width={220}
-            />
-            <Select
-              value={platformFilter}
-              onChange={(v) => {
-                setPlatformFilter(v);
-                setPage(1);
-              }}
-              width={130}
-              options={PLATFORM_FILTER_OPTIONS}
-            />
-            <Select
-              value={statusFilter}
-              onChange={(v) => {
-                setStatusFilter(v);
-                setPage(1);
-              }}
-              width={120}
-              options={STATUS_FILTER_OPTIONS}
-            />
-            <button
-              className="btn btn--secondary"
-              onClick={() => {
-                setKeyword('');
-                setPlatformFilter('');
-                setStatusFilter('');
-              }}
-            >
-              重置
-            </button>
-          </div>
-        </div>
+        {frontendPreview ? (
+          <>
+            <div style={{ padding: '2px 14px 0' }}>
+              <Tabs
+                tabs={tabs}
+                active={tab}
+                onChange={(key) => {
+                  setTab(key);
+                  setPage(1);
+                }}
+              />
+            </div>
+            <div className="toolbar-row" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '0 14px 12px' }}>
+              <SearchInput
+                value={keyword}
+                onChange={(v) => {
+                  setKeyword(v);
+                  setPage(1);
+                }}
+                placeholder="搜索接入名称或客户端类型…"
+                width={220}
+              />
+              <Select
+                value={platformFilter}
+                onChange={(v) => {
+                  setPlatformFilter(v);
+                  setPage(1);
+                }}
+                width={130}
+                options={PLATFORM_FILTER_OPTIONS}
+              />
+              <Select
+                value={statusFilter}
+                onChange={(v) => {
+                  setStatusFilter(v);
+                  setPage(1);
+                }}
+                width={120}
+                options={STATUS_FILTER_OPTIONS}
+              />
+              <button
+                className="btn btn--secondary"
+                onClick={() => {
+                  setTab('all');
+                  setKeyword('');
+                  setPlatformFilter('');
+                  setStatusFilter('');
+                  setPage(1);
+                }}
+              >
+                重置
+              </button>
+              <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
+                演示数据：合成预览模式下的样例接入，不代表真实登记。
+              </span>
+            </div>
+          </>
+        ) : null}
 
-        <div className="table-scroll">
+        <div className="table-scroll" role="region" aria-label="接入列表" tabIndex={0}>
           <table className="data-table">
             <thead>
               <tr>
@@ -397,8 +375,15 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
                       title="暂无接入配置"
                       description={
                         frontendPreview
-                          ? '点击右上角「新建接入」开始配置'
-                          : '当前没有服务端登记的接入记录。点击「新建接入」，按平台目录生成真实客户端配置模板。'
+                          ? '当前筛选条件下没有样例接入记录。点击右上角「新建接入」开始配置。'
+                          : '控制台不登记客户端接入状态：服务端只提供按平台与客户端生成的配置模板，是否接入成功由客户端 MCP 握手结果决定。点击「新建接入」生成模板，并在「个人令牌」创建 PAT 后替换占位符。'
+                      }
+                      action={
+                        frontendPreview ? undefined : (
+                          <button className="btn btn--secondary" onClick={() => (window.location.hash = '/me/tokens')}>
+                            前往创建个人令牌
+                          </button>
+                        )
                       }
                     />
                   </td>
@@ -434,37 +419,41 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
 }
 
 /* ═══════════ 向导视图（4 步 + 完成页） ═══════════ */
+
+/** 失败信息 + 服务端 requestId：P-13 要求失败时保留已选项并给出可排查的 requestId。 */
+function describeFailure(error: unknown, fallback: string): { message: string; requestId: string } {
+  const err = error as { message?: string; requestId?: string | null };
+  return { message: err?.message || fallback, requestId: err?.requestId ?? '' };
+}
+
 function Wizard({ onExit }: { onExit: () => void }) {
   const [step, setStep] = useState(0);
   const [platform, setPlatform] = useState('');
   const [client, setClient] = useState('GENERIC');
   const [transport, setTransport] = useState('streamable-http');
   const [auth, setAuth] = useState('oauth-pat');
-  const [name, setName] = useState('');
   const [format, setFormat] = useState<'json' | 'yaml'>('json');
-  const [copied, setCopied] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<'demo-ok' | 'fail' | null>(null);
+  const [copied, setCopied] = useState<'ok' | 'fail' | null>(null);
   const [done, setDone] = useState(false);
   const [platformItems, setPlatformItems] = useState<PlatformItem[]>([]);
   const [platformCursor, setPlatformCursor] = useState<string | null>(null);
   const [platformLoading, setPlatformLoading] = useState(true);
-  const [platformError, setPlatformError] = useState('');
+  const [platformError, setPlatformError] = useState<{ message: string; requestId: string } | null>(null);
   const [mcpCfg, setMcpCfg] = useState<McpConfig | null>(null);
   const [cfgLoading, setCfgLoading] = useState(false);
-  const [cfgError, setCfgError] = useState('');
+  const [cfgError, setCfgError] = useState<{ message: string; requestId: string } | null>(null);
   const [cfgRetry, setCfgRetry] = useState(0);
+  const stepRef = useRef<HTMLDivElement>(null);
 
   const platformMeta = platformItems.find((p) => p.id === platform) ?? null;
   const clientMeta = CLIENT_TYPES.find((c) => c.value === client)!;
   const authMeta = AUTHS.find((a) => a.value === auth)!;
-  const inferredName = name || `${clientMeta.label}接入`;
 
   /* 平台目录来自 me/access-context?level=PLATFORM：只用真实 platformId，不按 tier 猜或回退。 */
   useEffect(() => {
     let cancelled = false;
     setPlatformLoading(true);
-    setPlatformError('');
+    setPlatformError(null);
     mePortalApi.accessContext
       .platforms()
       .then((ctx) => {
@@ -472,7 +461,7 @@ function Wizard({ onExit }: { onExit: () => void }) {
         setPlatformItems(ctx.items);
         setPlatformCursor(ctx.nextCursor);
       })
-      .catch((error: unknown) => !cancelled && setPlatformError((error as Error).message || '平台目录加载失败'))
+      .catch((error: unknown) => !cancelled && setPlatformError(describeFailure(error, '平台目录加载失败')))
       .finally(() => !cancelled && setPlatformLoading(false));
     return () => {
       cancelled = true;
@@ -482,14 +471,14 @@ function Wizard({ onExit }: { onExit: () => void }) {
   const loadMorePlatforms = () => {
     if (!platformCursor || platformLoading) return;
     setPlatformLoading(true);
-    setPlatformError('');
+    setPlatformError(null);
     mePortalApi.accessContext
       .platforms(platformCursor)
       .then((ctx) => {
         setPlatformItems((prev) => [...prev, ...ctx.items]);
         setPlatformCursor(ctx.nextCursor);
       })
-      .catch((error: unknown) => setPlatformError((error as Error).message || '平台目录加载失败'))
+      .catch((error: unknown) => setPlatformError(describeFailure(error, '平台目录加载失败')))
       .finally(() => setPlatformLoading(false));
   };
 
@@ -498,27 +487,27 @@ function Wizard({ onExit }: { onExit: () => void }) {
     if (step < 2 || !platform || mcpCfg) return;
     let cancelled = false;
     setCfgLoading(true);
-    setCfgError('');
+    setCfgError(null);
     mePortalApi
       .mcpConfig(platform, client)
       .then((cfg) => !cancelled && setMcpCfg(cfg))
-      .catch((error: unknown) => !cancelled && setCfgError((error as Error).message || '服务端模板获取失败'))
+      .catch((error: unknown) => !cancelled && setCfgError(describeFailure(error, '服务端模板获取失败')))
       .finally(() => !cancelled && setCfgLoading(false));
     return () => {
       cancelled = true;
     };
   }, [step, platform, client, mcpCfg, cfgRetry]);
 
-  /* 换平台/客户端后旧配置作废，重新拉取 */
+  /* 换平台/客户端后旧配置作废并重新拉取；已选平台与客户端本身保留，便于按 requestId 排查后原地重试。 */
   const choosePlatform = (id: string) => {
     setPlatform(id);
     setMcpCfg(null);
-    setCfgError('');
+    setCfgError(null);
   };
   const chooseClient = (id: string) => {
     setClient(id);
     setMcpCfg(null);
-    setCfgError('');
+    setCfgError(null);
   };
 
   /* 只用服务端模板；解析失败视为错误，不回退示例模板。 */
@@ -528,6 +517,8 @@ function Wizard({ onExit }: { onExit: () => void }) {
   const authAllowed = authAvailability(mcpCfg?.authentication);
   // 只有服务端能力已成功返回时才展示“不支持”；加载/失败期间保持不可选，避免把未知当成不支持或支持。
   const authKnown = !!mcpCfg && !cfgError;
+  /* 服务端未返回部署地址时按“待配置”呈现，不伪造可连通的 URL。 */
+  const serverUrl = mcpCfg?.url?.trim() ?? '';
 
   const canNext =
     (step === 0 && !!platform) ||
@@ -536,142 +527,109 @@ function Wizard({ onExit }: { onExit: () => void }) {
     (step === 2 && transport === 'streamable-http' && auth === 'oauth-pat' && authAllowed['oauth-pat']) ||
     (step === 3 && templateReady);
 
-  const isPreview = frontendPreview;
-
-  const runTest = async () => {
-    if (!isPreview) return;
-    setTesting(true);
-    setTestResult(null);
-    try {
-      await testDatasource('preview');
-      setTestResult('demo-ok');
-    } catch {
-      setTestResult('fail');
-    } finally {
-      setTesting(false);
-    }
-  };
+  /* 步骤切换后把焦点交给该步标题，键盘与读屏用户才知道内容已换。 */
+  useEffect(() => {
+    stepRef.current?.focus();
+  }, [step, done]);
 
   const copy = () => {
     if (!template) return;
-    navigator.clipboard?.writeText(template).catch(() => undefined);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    const write = navigator.clipboard?.writeText(template);
+    if (!write) {
+      setCopied('fail');
+      return;
+    }
+    write.then(
+      () => setCopied('ok'),
+      () => setCopied('fail'),
+    );
+    setTimeout(() => setCopied(null), 2000);
   };
 
   if (done) {
     return (
       <>
         <PageHeader title="新建 MCP 接入" description="已按所选平台与客户端生成配置模板；实际接入由客户端握手验证。" />
-        <div className="table-card" style={{ maxWidth: 860, margin: '0 auto', padding: '32px 36px' }}>
+        <div className="table-card" style={{ maxWidth: 900, margin: '0 auto', padding: '32px 36px' }}>
           <div style={{ textAlign: 'center', marginBottom: 22 }}>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 56,
-                height: 56,
-                borderRadius: '50%',
-                background: 'var(--ptmcp-green-bg, #e7f6ec)',
-                color: 'var(--ptmcp-green)',
-                fontSize: 30,
-                marginBottom: 12,
-              }}
-            >
+            <span className="done-badge">
               <CheckIcon />
             </span>
             <h2 style={{ margin: 0, fontSize: 20, color: 'var(--ptmcp-heading)' }}>配置模板已生成</h2>
-            <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>
-              配置来自服务端按平台与客户端生成的模板；是否真正连通需由客户端完成 MCP 握手后验证。
+            <p style={{ margin: '8px auto 0', fontSize: 13, color: 'var(--ptmcp-text-muted)', maxWidth: 520 }}>
+              模板来自服务端按平台与客户端生成的配置；本页面不代表已接入，是否连通需由客户端完成 MCP 握手后验证。
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 22 }}>
-            <button
-              className="btn btn--primary"
-              onClick={runTest}
-              disabled={testing || !isPreview}
-              title={isPreview ? undefined : 'MCP 连接由客户端完成握手，此处不可代替客户端验证'}
-            >
-              <RefreshIcon /> {testing ? '测试中…' : '测试连接'}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 22, flexWrap: 'wrap' }}>
+            <button className="btn btn--primary" onClick={copy} disabled={!template}>
+              <CopyIcon /> {copied === 'ok' ? '已复制到剪贴板' : '复制配置'}
             </button>
-            <button className="btn btn--secondary" onClick={copy} disabled={!template}>
-              <CopyIcon /> 复制配置
+            <button className="btn btn--secondary" onClick={() => (window.location.hash = '/me/tokens')}>
+              <ArrowRightIcon /> 前往创建个人令牌
             </button>
           </div>
-          {testResult === 'demo-ok' ? (
-            <Alert kind="info" title="演示：连接测试（仅 preview 模式）">
-              当前为合成后端演示，此测试仅演示 UI 流程，不代表真实 MCP 连接。实际 MCP 连接由客户端完成握手。
+          {copied === 'fail' ? (
+            <Alert kind="warning" title="复制失败">
+              当前浏览器不允许访问剪贴板。请选中下方模板文本后手动复制（Ctrl/⌘ + C）。
             </Alert>
           ) : null}
-          {testResult === 'fail' ? (
-            <Alert kind="danger" title="测试失败">
-              连接测试失败，请检查配置后重试。
+          {!serverUrl ? (
+            <Alert kind="warning" title="服务端地址待配置">
+              该平台的 mcp-config 未返回部署地址（url 为空）。模板中的连接地址可能不完整，请先与管理员确认网关地址后再在客户端使用。
             </Alert>
           ) : null}
 
           <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: 14,
-              marginTop: 18,
-              padding: '16px 0',
-              borderTop: '1px solid var(--ptmcp-border)',
-              borderBottom: '1px solid var(--ptmcp-border)',
-            }}
+            className="summary-grid"
+            style={{ padding: '16px 0', borderTop: '1px solid var(--ptmcp-border)', borderBottom: '1px solid var(--ptmcp-border)' }}
           >
             {[
-              ['接入名称', inferredName],
               ['平台', platformMeta ? `${platformMeta.name} · Tier ${platformMeta.tier}` : '—'],
               ['平台 ID', platform || '—'],
               ['客户端', clientMeta.label],
               ['传输方式', transport],
+              ['服务端地址', serverUrl || '待配置'],
               ['认证方式', authMeta.label],
-              ['状态', '模板已生成（待客户端验证）'],
-              ['兼容性', mcpCfg?.compatibilityStatus === 'UNVERIFIED' ? '尚未验证' : (mcpCfg?.validatedVersion ?? '—')],
+              ['状态', '待验证（模板已生成）'],
+              [
+                '兼容性',
+                mcpCfg?.compatibilityStatus === 'UNVERIFIED'
+                  ? '尚未验证'
+                  : mcpCfg?.validatedVersion
+                    ? `已验证 ${mcpCfg.validatedVersion}`
+                    : '未知版本',
+              ],
             ].map(([k, v]) => (
-              <div key={k}>
-                <div style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>{k}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ptmcp-heading)', marginTop: 4 }}>{v}</div>
+              <div className="summary-item" key={k}>
+                <div className="k">{k}</div>
+                <div className="v">{v}</div>
               </div>
             ))}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginTop: 18, fontSize: 13 }}>
-            {[
-              ['1', '在客户端中使用配置模板', '已提供 JSON 格式的客户端配置模板'],
-              ['2', '测试连接是否成功', '重启客户端后即生效，必要时再配置 PAT'],
-              ['3', '查看查询历史验证访问', '必要时再查询'],
-              ['4', '根据需要调整权限配置', '后续可在授权矩阵中调整'],
-            ].map(([n, t, d]) => (
-              <div key={n} style={{ display: 'flex', gap: 8 }}>
-                <span
-                  style={{
-                    flex: 'none',
-                    display: 'inline-flex',
-                    width: 20,
-                    height: 20,
-                    borderRadius: '50%',
-                    background: 'var(--ptmcp-blue-bg)',
-                    color: 'var(--ptmcp-blue)',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  {n}
-                </span>
-                <div>
-                  <div style={{ fontWeight: 600, color: 'var(--ptmcp-heading)' }}>{t}</div>
-                  <div style={{ color: 'var(--ptmcp-text-muted)', fontSize: 12, marginTop: 3 }}>{d}</div>
+          <div className="next-steps" style={{ marginTop: 18 }}>
+            {DONE_STEPS.map((s, i) => (
+              <div key={s.title} style={{ display: 'flex', gap: 8 }}>
+                <span className="step-dot">{i + 1}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, color: 'var(--ptmcp-heading)' }}>{s.title}</div>
+                  <div style={{ color: 'var(--ptmcp-text-muted)', fontSize: 12, marginTop: 3 }}>
+                    {s.desc}
+                    {s.linkLabel ? (
+                      <>
+                        {'：'}
+                        <a className="link" href={`#${s.linkHash}`}>
+                          {s.linkLabel}
+                        </a>
+                      </>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             ))}
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24, flexWrap: 'wrap' }}>
             <button className="btn btn--secondary" onClick={onExit}>
               查看我的接入
             </button>
@@ -680,7 +638,6 @@ function Wizard({ onExit }: { onExit: () => void }) {
               onClick={() => {
                 setDone(false);
                 setStep(0);
-                setName('');
               }}
             >
               配置另一个接入
@@ -693,10 +650,13 @@ function Wizard({ onExit }: { onExit: () => void }) {
 
   return (
     <>
-      <PageHeader title="新建 MCP 接入" description="通过以下步骤完成配置，预计 3–5 分钟即可接入。" />
+      <PageHeader title="新建 MCP 接入" description="按 4 步生成客户端配置模板；实际接入由客户端完成 MCP 握手后验证。" />
       <Stepper steps={STEPS} current={step} />
+      <p className="sr-only" aria-live="polite">
+        第 {step + 1} 步，共 {STEPS.length} 步：{STEPS[step]}
+      </p>
 
-      <div className="table-card" style={{ padding: '22px 24px' }}>
+      <div className="table-card wizard-card" ref={stepRef} tabIndex={-1}>
         {step === 0 && (
           <>
             <StepHeading n={1} title="选择平台" desc="平台目录来自当前账号可见的授权范围（me/access-context）" />
@@ -705,7 +665,8 @@ function Wizard({ onExit }: { onExit: () => void }) {
             ) : null}
             {platformError ? (
               <Alert kind="danger" title="平台目录加载失败">
-                {platformError}
+                {platformError.message}
+                {platformError.requestId ? <RequestIdText requestId={platformError.requestId} /> : null}
               </Alert>
             ) : null}
             {!platformLoading && !platformError && platformItems.length === 0 ? (
@@ -713,7 +674,7 @@ function Wizard({ onExit }: { onExit: () => void }) {
                 当前账号没有可见的平台，无法生成 MCP 接入配置。请联系管理员开通平台授权后重试。
               </Alert>
             ) : null}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
+            <div className="option-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
               {platformItems.map((p) => (
                 <OptionCard
                   key={p.id}
@@ -738,8 +699,8 @@ function Wizard({ onExit }: { onExit: () => void }) {
 
         {step === 1 && (
           <>
-            <StepHeading n={2} title="选择客户端" desc="选择要使用的 MCP 客户端工具，按场景分类展示" />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+            <StepHeading n={2} title="选择客户端" desc="选择要使用的 MCP 客户端工具，模板按客户端类型生成" />
+            <div className="option-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
               {CLIENT_TYPES.map((c) => (
                 <OptionCard
                   key={c.value}
@@ -756,8 +717,8 @@ function Wizard({ onExit }: { onExit: () => void }) {
 
         {step === 2 && (
           <>
-            <StepHeading n={3} title="连接方式与认证" desc="配置 MCP 服务的传输方式和认证方式" />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+            <StepHeading n={3} title="连接方式与认证" desc="传输与认证能力取自服务端 mcp-config，不由界面假设" />
+            <div className="option-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24 }}>
               <div>
                 <h4 style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>传输方式</h4>
                 <div style={{ display: 'grid', gap: 12 }}>
@@ -790,13 +751,42 @@ function Wizard({ onExit }: { onExit: () => void }) {
                 </div>
               </div>
             </div>
+            {mcpCfg ? (
+              <div className="server-capabilities">
+                <div className="summary-item">
+                  <div className="k">服务端 transport</div>
+                  <div className="v">
+                    <code>{mcpCfg.transport || '未返回'}</code>
+                  </div>
+                </div>
+                <div className="summary-item">
+                  <div className="k">服务端地址</div>
+                  <div className="v">{serverUrl ? <code>{serverUrl}</code> : '待配置（未返回部署地址）'}</div>
+                </div>
+                <div className="summary-item">
+                  <div className="k">服务端 authentication</div>
+                  <div className="v">{mcpCfg.authentication?.length ? mcpCfg.authentication.join(' / ') : '未返回（按不支持处理）'}</div>
+                </div>
+                <div className="summary-item">
+                  <div className="k">兼容性</div>
+                  <div className="v">
+                    {mcpCfg.compatibilityStatus === 'UNVERIFIED'
+                      ? '尚未验证'
+                      : mcpCfg.validatedVersion
+                        ? `已验证 ${mcpCfg.validatedVersion}`
+                        : '未知版本'}
+                  </div>
+                </div>
+              </div>
+            ) : null}
             {cfgLoading ? <Alert kind="info">正在读取该平台的 MCP 能力与配置模板…</Alert> : null}
             {cfgError ? (
               <Alert kind="danger" title="MCP 能力获取失败">
-                {cfgError}。未取得服务端能力时不能继续（fail-closed）。
+                {cfgError.message}。未取得服务端能力时不能继续（fail-closed）；已选平台与客户端保持不变。
                 <button className="link" style={{ marginLeft: 8 }} onClick={() => setCfgRetry((n) => n + 1)}>
                   重试
                 </button>
+                {cfgError.requestId ? <RequestIdText requestId={cfgError.requestId} /> : null}
               </Alert>
             ) : null}
             {!cfgLoading && !cfgError && mcpCfg && !authAllowed['oauth-pat'] ? (
@@ -809,13 +799,14 @@ function Wizard({ onExit }: { onExit: () => void }) {
 
         {step === 3 && (
           <>
-            <StepHeading n={4} title="获取配置模板" desc="复制下方配置模板到您的客户端配置文件中，并替换相应的访问令牌" />
+            <StepHeading n={4} title="获取配置模板" desc="复制下方模板到客户端配置文件，并替换访问令牌占位符" />
             {cfgLoading ? (
               <p style={{ margin: '0 0 8px', fontSize: 12.5, color: 'var(--ptmcp-text-muted)' }}>正在从服务端获取当前平台/客户端的配置模板…</p>
             ) : null}
             {cfgError ? (
               <Alert kind="danger" title="模板获取失败">
-                {cfgError}。未取得服务端模板时不能复制或完成配置，请返回连接方式步骤点击重试。
+                {cfgError.message}。未取得服务端模板时不能复制或完成配置，请返回连接方式步骤点击重试。
+                {cfgError.requestId ? <RequestIdText requestId={cfgError.requestId} /> : null}
               </Alert>
             ) : null}
             {!cfgLoading && !cfgError && mcpCfg && !templates ? (
@@ -829,71 +820,43 @@ function Wizard({ onExit }: { onExit: () => void }) {
                 {mcpCfg.compatibilityStatus === 'UNVERIFIED' ? '尚未验证（PAT 仅作为占位符使用）' : (mcpCfg.validatedVersion ?? '未知')}。
               </p>
             ) : null}
+            {!serverUrl && mcpCfg ? (
+              <Alert kind="warning" title="服务端地址待配置">
+                该平台的 mcp-config 未返回部署地址，模板中的连接地址可能不完整，请先与管理员确认网关地址。
+              </Alert>
+            ) : null}
             <Alert kind="warning" title="模板包含凭证占位符">
-              使用 PAT 时，先创建 PAT，再在客户端配置中替换凭证占位符；使用 OAuth 时由客户端完成授权。
-              <button className="link" style={{ marginLeft: 6 }}>
+              使用 PAT 时，先创建 PAT，再在客户端配置中替换凭证占位符；使用 OAuth 时由客户端完成授权。完整 PAT 只在创建响应中出现一次，不会写入模板。
+              <button className="link" style={{ marginLeft: 6 }} onClick={() => (window.location.hash = '/me/tokens')}>
                 前往创建 PAT →
               </button>
             </Alert>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '14px 0 8px' }}>
-              <div
-                role="tablist"
-                style={{
-                  display: 'inline-flex',
-                  gap: 6,
-                  padding: 3,
-                  borderRadius: 8,
-                  background: 'var(--ptmcp-canvas)',
-                  border: '1px solid var(--ptmcp-border)',
-                }}
-              >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', margin: '14px 0 8px' }}>
+              <div className="seg-group" role="radiogroup" aria-label="模板格式">
                 {(['json', 'yaml'] as const).map((f) => (
-                  <button
-                    key={f}
-                    role="tab"
-                    aria-selected={format === f}
-                    onClick={() => setFormat(f)}
-                    style={{
-                      appearance: 'none',
-                      border: 'none',
-                      padding: '5px 14px',
-                      borderRadius: 6,
-                      fontSize: 12.5,
-                      fontWeight: format === f ? 700 : 500,
-                      color: format === f ? 'var(--ptmcp-heading)' : 'var(--ptmcp-text-muted)',
-                      background: format === f ? 'var(--ptmcp-surface)' : 'transparent',
-                      cursor: 'pointer',
-                      boxShadow: format === f ? '0 1px 2px rgba(15,23,42,.08)' : 'none',
-                    }}
-                  >
+                  <label key={f} className={`seg-item${format === f ? ' is-active' : ''}`}>
+                    <input type="radio" name="mcp-template-format" value={f} checked={format === f} onChange={() => setFormat(f)} />
                     {f.toUpperCase()}
                     {f === 'json' ? '（推荐）' : ''}
-                  </button>
+                  </label>
                 ))}
               </div>
-              <button className="btn btn--secondary" onClick={copy} disabled={!template}>
-                <CopyIcon /> {copied ? '已复制' : '复制模板'}
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span aria-live="polite" style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
+                  {copied === 'ok' ? '已复制到剪贴板' : copied === 'fail' ? '复制失败，请手动选中复制' : ''}
+                </span>
+                <button className="btn btn--secondary" onClick={copy} disabled={!template}>
+                  <CopyIcon /> 复制模板
+                </button>
+              </div>
             </div>
             {template ? (
-              <pre
-                style={{
-                  margin: 0,
-                  padding: '16px 18px',
-                  background: '#0d1526',
-                  color: '#c8dcf5',
-                  borderRadius: 10,
-                  fontSize: 12.5,
-                  lineHeight: 1.65,
-                  overflowX: 'auto',
-                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-                }}
-              >
+              <pre className="code-block">
                 {template.split('\n').map((line, i) => (
-                  <div key={i} style={{ display: 'flex' }}>
-                    <span style={{ width: 28, flex: 'none', color: '#4c6184', userSelect: 'none' }}>{i + 1}</span>
-                    <span>{line}</span>
-                  </div>
+                  <span className="code-line" key={i}>
+                    <span className="code-gutter">{i + 1}</span>
+                    <span className="code-text">{line}</span>
+                  </span>
                 ))}
               </pre>
             ) : (
@@ -905,7 +868,16 @@ function Wizard({ onExit }: { onExit: () => void }) {
         )}
 
         {/* footer buttons */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 22, paddingTop: 16, borderTop: '1px solid var(--ptmcp-border)' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 10,
+            marginTop: 22,
+            paddingTop: 16,
+            borderTop: '1px solid var(--ptmcp-border)',
+          }}
+        >
           <button className="btn btn--secondary" onClick={() => (step === 0 ? onExit() : setStep(step - 1))}>
             <ArrowLeftIcon /> 上一步
           </button>
@@ -920,12 +892,21 @@ function Wizard({ onExit }: { onExit: () => void }) {
               title={templateReady ? undefined : '未取得服务端模板，不能完成配置'}
               onClick={() => setDone(true)}
             >
-              完成并验证 <ArrowRightIcon />
+              完成并查看后续步骤 <ArrowRightIcon />
             </button>
           )}
         </div>
       </div>
     </>
+  );
+}
+
+/** 失败时给出可排查的服务端 requestId（P-13），只读展示，不复制凭证。 */
+function RequestIdText({ requestId }: { requestId: string }) {
+  return (
+    <span style={{ display: 'block', marginTop: 6, fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
+      requestId：<code>{requestId}</code>（可凭此向管理员排查该次请求）
+    </span>
   );
 }
 

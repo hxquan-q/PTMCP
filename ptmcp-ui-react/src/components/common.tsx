@@ -295,12 +295,15 @@ export function Tabs({ tabs, active, onChange }: { tabs: { key: string; label: R
 /** 步骤指示条:已完成✓ / 当前蓝点编号 / 后续灰 */
 export function Stepper({ steps, current }: { steps: string[]; current: number }) {
   return (
-    <ol style={{ display: 'flex', alignItems: 'center', gap: 0, listStyle: 'none', margin: '0 0 20px', padding: 0, flexWrap: 'wrap' }}>
+    <ol
+      aria-label="配置步骤"
+      style={{ display: 'flex', alignItems: 'center', gap: 0, listStyle: 'none', margin: '0 0 20px', padding: 0, flexWrap: 'wrap' }}
+    >
       {steps.map((label, i) => {
         const done = i < current;
         const active = i === current;
         return (
-          <li key={label} style={{ display: 'flex', alignItems: 'center' }}>
+          <li key={label} aria-current={active ? 'step' : undefined} style={{ display: 'flex', alignItems: 'center' }}>
             <span
               style={{
                 display: 'inline-flex',
@@ -327,6 +330,7 @@ export function Stepper({ steps, current }: { steps: string[]; current: number }
               }}
             >
               {label}
+              <span className="sr-only">{done ? '（已完成）' : active ? '（当前步骤）' : '（未完成）'}</span>
             </span>
             {i < steps.length - 1 ? <span style={{ width: 42, height: 1, margin: '0 12px', background: 'var(--ptmcp-border-strong)' }} /> : null}
           </li>
