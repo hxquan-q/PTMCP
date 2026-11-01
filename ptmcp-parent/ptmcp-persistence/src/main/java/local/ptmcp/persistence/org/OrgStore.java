@@ -770,6 +770,9 @@ public final class OrgStore {
                                 if (!captured.equals(current)) {
                                     throw new DomainException(ErrorCode.VERSION_CONFLICT);
                                 }
+                                if (Boolean.FALSE.equals(enabled)) {
+                                    requireNotLastPlatformAdmin(connection, id);
+                                }
                                 UserRow written =
                                         applyUserUpdate(
                                                 connection,
@@ -832,6 +835,44 @@ public final class OrgStore {
             }
         } catch (SQLException error) {
             throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+    }
+
+    /**
+     * The last usable platform administrator cannot be disabled or deleted: the console itself must
+     * stay reachable. Runs inside the global security transaction, so concurrent removals serialize
+     * on the policy epoch.
+     */
+    private static void requireNotLastPlatformAdmin(Connection connection, long userId)
+            throws SQLException {
+        if (activePlatformAdmins(connection, null) == 1
+                && activePlatformAdmins(connection, userId) == 0) {
+            throw new DomainException(ErrorCode.LAST_PLATFORM_ADMIN);
+        }
+    }
+
+    private static long activePlatformAdmins(Connection connection, Long excluded)
+            throws SQLException {
+        String sql =
+                "SELECT COUNT(DISTINCT ur.user_id) FROM sys_user_role ur"
+                        + " JOIN sys_role r ON r.role_id = ur.role_id"
+                        + " AND r.status = '0' AND r.del_flag = '0'"
+                        + " JOIN sys_role_permission rp ON rp.role_id = r.role_id"
+                        + " JOIN sys_user_profile p ON p.user_id = ur.user_id AND p.status = 'ACTIVE'"
+                        + " JOIN sys_user_security s ON s.user_id = ur.user_id"
+                        + " AND s.identity_state = 'READY'"
+                        + " WHERE rp.permission_code = 'ptmcp:platform:scope'";
+        if (excluded != null) {
+            sql += " AND ur.user_id <> ?";
+        }
+        try (PreparedStatement statement = OrgSql.statement(connection, sql)) {
+            if (excluded != null) {
+                statement.setLong(1, excluded);
+            }
+            try (ResultSet result = statement.executeQuery()) {
+                result.next();
+                return result.getLong(1);
+            }
         }
     }
 
@@ -977,6 +1018,7 @@ public final class OrgStore {
                             if (!captured.equals(current)) {
                                 throw new DomainException(ErrorCode.VERSION_CONFLICT);
                             }
+                            requireNotLastPlatformAdmin(connection, id);
                             try (PreparedStatement statement =
                                     OrgSql.statement(
                                             connection,

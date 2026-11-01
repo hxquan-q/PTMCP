@@ -5876,6 +5876,84 @@ class AdminApiTest {
                 .andExpect(status().isConflict());
     }
 
+    @Test
+    void lastPlatformAdminCannotBeDisabledOrDeleted() throws Exception {
+        // ADMIN_ID is the only ACTIVE+READY holder of ptmcp:platform:scope in this fixture.
+        try (Connection connection = connect();
+                PreparedStatement name =
+                        connection.prepareStatement(
+                                "INSERT INTO sys_user_login_name (user_id,normalized_name,create_time,update_time)"
+                                        + " VALUES (?,'last_admin_fixture',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))")) {
+            name.setLong(1, ADMIN_ID);
+            name.executeUpdate();
+        }
+        mockMvc.perform(
+                        put("/api/v1/admin/users/" + ADMIN_ID + "/status")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .contentType("application/json")
+                                .content("{\"status\":\"DISABLED\"}")
+                                .header("If-Match", currentVersion(ADMIN_ID)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("LAST_PLATFORM_ADMIN"));
+        mockMvc.perform(
+                        delete("/api/v1/admin/users/" + ADMIN_ID)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", currentVersion(ADMIN_ID)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("LAST_PLATFORM_ADMIN"));
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            assertEquals(
+                    "ACTIVE",
+                    scalar(
+                            statement,
+                            "SELECT status FROM sys_user_profile WHERE user_id=" + ADMIN_ID));
+        }
+
+        // A second usable platform admin unlocks both operations.
+        long deptId = createDepartment("末位管理员部");
+        long second = createUser("second-admin", "第二管理员", deptId);
+        try (Connection connection = connect();
+                PreparedStatement ready =
+                        connection.prepareStatement(
+                                "UPDATE sys_user_security SET identity_state='READY' WHERE user_id=?")) {
+            ready.setLong(1, second);
+            ready.executeUpdate();
+        }
+        try (Connection connection = connect()) {
+            AdminActionTestSupport.grant(connection, second, "ptmcp:platform:scope");
+        }
+        mockMvc.perform(
+                        delete("/api/v1/admin/users/" + ADMIN_ID)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", currentVersion(ADMIN_ID)))
+                .andExpect(status().isOk());
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            assertEquals(
+                    "DELETED",
+                    scalar(
+                            statement,
+                            "SELECT status FROM sys_user_profile WHERE user_id=" + ADMIN_ID));
+        }
+    }
+
+    private String currentVersion(long userId) throws SQLException {
+        try (Connection connection = connect();
+                PreparedStatement query =
+                        connection.prepareStatement(
+                                "SELECT version FROM sys_user_profile WHERE user_id = ?")) {
+            query.setLong(1, userId);
+            try (ResultSet result = query.executeQuery()) {
+                assertTrue(result.next());
+                return Long.toString(result.getLong(1));
+            }
+        }
+    }
+
     private long createUser(String username, String displayName, long deptId) throws Exception {
         return readLong(
                 mockMvc.perform(

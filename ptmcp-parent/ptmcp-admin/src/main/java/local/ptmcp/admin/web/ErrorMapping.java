@@ -55,6 +55,7 @@ public final class ErrorMapping {
         put(map, ErrorCode.VERSION_CONFLICT, HttpStatus.CONFLICT, false);
         put(map, ErrorCode.CURSOR_STALE, HttpStatus.CONFLICT, false);
         put(map, ErrorCode.REFERENCES_EXIST, HttpStatus.CONFLICT, false);
+        put(map, ErrorCode.LAST_PLATFORM_ADMIN, HttpStatus.CONFLICT, false);
         put(map, ErrorCode.SYNC_IN_PROGRESS, HttpStatus.CONFLICT, false);
         put(map, ErrorCode.OPERATION_IN_PROGRESS, HttpStatus.CONFLICT, false);
         put(map, ErrorCode.OPERATION_UNKNOWN, HttpStatus.CONFLICT, false);
