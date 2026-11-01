@@ -23,6 +23,7 @@ final class AdminActionTestSupport {
             GET /users/{id} ptmcp:user:read
             PUT /users/{id} ptmcp:user:update
             PUT /users/{id}/status ptmcp:user:status
+            DELETE /users/{id} ptmcp:user:delete
             PUT /users/{id}/roles ptmcp:user:assign-role
             PUT /users/{id}/department ptmcp:user:move
             GET /users/{id}/identity ptmcp:user:read

@@ -919,6 +919,7 @@ public final class OrgStore {
                                             + " p.phone_number, p.remark, p.status, p.version"
                                             + " FROM sys_user_profile p"
                                             + " JOIN sys_user_login_name l ON l.user_id = p.user_id"
+                                            + " WHERE p.status <> 'DELETED'"
                                             + " ORDER BY p.user_id");
                     ResultSet result = statement.executeQuery()) {
                 while (result.next()) {
@@ -943,6 +944,90 @@ public final class OrgStore {
         } catch (SQLException error) {
             throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
+    }
+
+    /**
+     * Logical delete per the /users CRUD contract: the row is kept for audit and hidden from lists,
+     * and every credential surface (sessions, PATs, refresh families, authorizations) is revoked in
+     * the same security transaction that bumps the authoritative versions.
+     */
+    public UserRow deleteUser(long id, long expectedVersion, long actorId) {
+        OrgSql.requireActor(actorId);
+        requireVersion(expectedVersion);
+        UserRow before = getUser(id);
+        UserSecurityStore.State captured = new UserSecurityStore(primary).read(id);
+        requireEditableIdentity(captured);
+        if (captured.authVersion() == Long.MAX_VALUE
+                || captured.identityVersion() == Long.MAX_VALUE) {
+            throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+        }
+        long nextAuthVersion = captured.authVersion() + 1;
+        AtomicReference<UserRow> deleted = new AtomicReference<>();
+        new SecurityChangeTransaction(primary)
+                .execute(
+                        new SecurityEvent(
+                                UUID.randomUUID(),
+                                SecurityEvent.Kind.USER_SECURITY_CHANGED,
+                                new SecurityEvent.NumericId(id),
+                                nextAuthVersion),
+                        connection -> {
+                            UserSecurityStore.State current =
+                                    UserSecurityStore.read(connection, id, true);
+                            requireEditableIdentity(current);
+                            if (!captured.equals(current)) {
+                                throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                            }
+                            try (PreparedStatement statement =
+                                    OrgSql.statement(
+                                            connection,
+                                            "UPDATE sys_user_profile SET status = 'DELETED',"
+                                                    + " version = version + 1, update_time = UTC_TIMESTAMP(6)"
+                                                    + " WHERE user_id = ? AND version = ? AND status <> 'DELETED'")) {
+                                statement.setLong(1, id);
+                                statement.setLong(2, expectedVersion);
+                                if (statement.executeUpdate() != 1) {
+                                    throw conflictOrMissingUser(connection, id);
+                                }
+                            }
+                            try (PreparedStatement statement =
+                                    OrgSql.statement(
+                                            connection,
+                                            "UPDATE sys_user_security SET auth_version=auth_version+1,"
+                                                    + " identity_version=identity_version+1,version=version+1,"
+                                                    + " update_time=UTC_TIMESTAMP(6) WHERE user_id=?"
+                                                    + " AND auth_version=? AND identity_version=? AND identity_state=?")) {
+                                statement.setLong(1, id);
+                                statement.setLong(2, captured.authVersion());
+                                statement.setLong(3, captured.identityVersion());
+                                statement.setString(4, captured.identityState());
+                                if (statement.executeUpdate() != 1) {
+                                    throw new DomainException(ErrorCode.VERSION_CONFLICT);
+                                }
+                            }
+                            UserSecurityStore.revokeCredentials(connection, id);
+                            writeOperationLog(
+                                    connection,
+                                    actorId,
+                                    "USER_DELETE",
+                                    "USER",
+                                    id,
+                                    "{\"username\":\""
+                                            + before.username()
+                                            + "\",\"status\":\"DELETED\"}");
+                            deleted.set(
+                                    new UserRow(
+                                            before.id(),
+                                            before.username(),
+                                            before.displayName(),
+                                            before.deptId(),
+                                            before.email(),
+                                            before.phoneNumber(),
+                                            before.remark(),
+                                            false,
+                                            before.roleIds(),
+                                            expectedVersion + 1));
+                        });
+        return deleted.get();
     }
 
     public UserRow getUser(long id) {

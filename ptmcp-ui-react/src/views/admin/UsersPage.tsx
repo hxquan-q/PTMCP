@@ -32,14 +32,13 @@ import {
 import { departmentDepth, validateUserForm, type UserFormValues } from './orgForms';
 import { passwordError } from '../me/passwordForm';
 import { useSensitivePermissions } from '../../permissionsContext';
-import { frontendPreview } from '../../services/frontendMode';
 import { readFailure, type Failure } from '../../services/http';
 import { showToast } from '../../toast';
 
 export function UsersPage() {
   const { can } = useSensitivePermissions();
-  /* 后端 UserAdminController 未提供 DELETE /admin/users/{id}；仅合成预览后端支持删除。 */
-  const canDeleteUsers = frontendPreview && can('userDelete');
+  /* 后端 DELETE /admin/users/{id} 为逻辑删除：撤销全部令牌/会话后从列表隐藏。 */
+  const canDeleteUsers = can('userDelete');
   const [rows, setRows] = useState<UserRow[]>([]);
   const [roles, setRoles] = useState<RoleRow[]>([]);
   const [depts, setDepts] = useState<DepartmentRow[]>([]);
@@ -271,7 +270,7 @@ export function UsersPage() {
                       <button
                         className="link link--danger"
                         disabled={!canDeleteUsers}
-                        title={canDeleteUsers ? undefined : '当前后端未提供删除用户接口（仅合成预览模式可用）'}
+                        title={canDeleteUsers ? undefined : '缺少删除用户权限（ptmcp:user:delete）'}
                         onClick={() => {
                           setDeleteFailure(null);
                           setDeleting(r);

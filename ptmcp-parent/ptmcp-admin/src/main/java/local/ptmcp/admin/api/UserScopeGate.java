@@ -66,6 +66,11 @@ public final class UserScopeGate {
                 request, before.deptId(), before.deptId(), Set.of("ptmcp:user:status"), null);
     }
 
+    public void requireUserDelete(HttpServletRequest request, OrgStore.UserRow before) {
+        requireCommand(
+                request, before.deptId(), before.deptId(), Set.of("ptmcp:user:delete"), null);
+    }
+
     public void requireRoleAssignment(
             HttpServletRequest request, OrgStore.UserRow before, List<Long> roleIds) {
         if (roleIds == null) {

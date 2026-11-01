@@ -135,6 +135,7 @@ DatasourceDTO.health只取当前configVersion、当前host/port/database/usernam
 | /users CRUD | user对应动作 | UserWrite→UserDTO；筛选keyword/departmentId/status；不接受外部org树替换；删除逻辑删除并撤销令牌 |
 | PUT /users/{id} | user:update，加实际变更的status/assign-role/move | 完整 UserWrite+If-Match→UserDTO；授权分类快照版本必须等于If-Match，落库保留同版本CAS，冲突不自动重试；roleIds缺省保留、按集合比较；委派管理员须自身具备所需功能码，且同一有效委派覆盖全部动作与新旧部门；角色变化时最终整组功能码不得超过该委派，不能跨委派拼接 |
 | PUT /users/{id}/status | user:status | {status:ACTIVE/DISABLED}+If-Match→UserDTO；保留其他资料与角色；不能停用最后一个有效平台管理员 |
+| DELETE /users/{id} | user:delete | If-Match→UserDTO；逻辑删除（status=DELETED，列表隐藏，行留审计）；同一安全事务撤销全部会话/PAT/刷新族/授权并递增权威版本；重复删除按版本冲突拒绝 |
 | GET /users/{id}/identity | user:read，平台管理员 | →IdentityState={userId,version,identityState:UNBOUND/READY/CHANGE_PENDING,recoveryRequired}；不返回摘要、目标或操作材料 |
 | PUT /users/{id}/password | user:reset-password，平台管理员 | {newPassword,reason}+If-Match+Idempotency-Key→200 IdentityState；先提权威版本并撤销全部认证，跨库异常保持 Pending，由管理员恢复 |
 | POST /users/{id}/password/retry | user:reset-password，平台管理员 | {}+If-Match+Idempotency-Key→200 IdentityState；只重试持久目标；完成重试不写宿主、不提版本/epoch；不接受新密码；版本与 body 一起绑定幂等摘要 |

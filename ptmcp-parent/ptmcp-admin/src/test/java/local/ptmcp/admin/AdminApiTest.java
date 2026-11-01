@@ -4058,6 +4058,13 @@ class AdminApiTest {
         }
     }
 
+    private String scalar(Statement statement, String sql) throws SQLException {
+        try (ResultSet rows = statement.executeQuery(sql)) {
+            assertTrue(rows.next());
+            return rows.getString(1);
+        }
+    }
+
     private String roleCreateWriteEffects() throws SQLException {
         StringBuilder snapshot = new StringBuilder();
         try (Connection connection = connect();
@@ -5703,6 +5710,170 @@ class AdminApiTest {
                         .getResponse()
                         .getContentAsString(),
                 "id");
+    }
+
+    @Test
+    void userDeleteIsLogicalAndRevokesEveryCredential() throws Exception {
+        long deptId = createDepartment("删除用户部");
+        long target = createUser("del-target", "待删用户", deptId);
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            statement.execute(
+                    "INSERT INTO oauth2_registered_client (id, client_id, client_name,"
+                            + " client_authentication_methods, authorization_grant_types, scopes,"
+                            + " client_settings, token_settings, platform_id, client_type, status,"
+                            + " registration_source, create_time, update_time, created_by, updated_by)"
+                            + " VALUES ('client-del', 'client-del', 'del fixture', 'none',"
+                            + " 'authorization_code,refresh_token', '[\"mcp:catalog\"]', '{}', '{}', NULL,"
+                            + " 'PUBLIC', 'ACTIVE', 'ADMIN', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), 1, 1)");
+            statement.execute(
+                    "INSERT INTO oauth2_authorization (id, registered_client_id, principal_name,"
+                            + " user_id, authorization_grant_type, status, create_time, update_time,"
+                            + " created_by, updated_by) VALUES ('auth-del', 'client-del', 'del-target', "
+                            + target
+                            + ", 'authorization_code', 'ACTIVE', UTC_TIMESTAMP(6),"
+                            + " UTC_TIMESTAMP(6), 1, 1)");
+            statement.execute(
+                    "INSERT INTO web_session_index (session_hash, kind, user_id, auth_version,"
+                            + " issued_at, expires_at, version, create_time, update_time)"
+                            + " VALUES (X'33', 'ADMIN', "
+                            + target
+                            + ", 1, UTC_TIMESTAMP(6),"
+                            + " UTC_TIMESTAMP(6) + INTERVAL 1 DAY, 1, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))");
+            statement.execute(
+                    "INSERT INTO personal_token (user_id, token_prefix, token_hash, name, scopes,"
+                            + " auth_version, expires_at, status, version, create_time, update_time,"
+                            + " created_by, updated_by) VALUES ("
+                            + target
+                            + ", 'del', X'44', 'del-token', '[\"mcp:catalog\"]', 1,"
+                            + " UTC_TIMESTAMP(6) + INTERVAL 7 DAY, 'ACTIVE', 1, UTC_TIMESTAMP(6),"
+                            + " UTC_TIMESTAMP(6), 1, 1)");
+            statement.execute(
+                    "INSERT INTO oauth_refresh_family (id, authorization_id, user_id,"
+                            + " registered_client_id, platform_id, status, auth_version,"
+                            + " absolute_expires_at, idle_expires_at, last_rotated_at, version,"
+                            + " create_time, update_time) VALUES ('fam-del', 'auth-del', "
+                            + target
+                            + ", 'client-del', NULL, 'ACTIVE', 1,"
+                            + " UTC_TIMESTAMP(6) + INTERVAL 7 DAY, UTC_TIMESTAMP(6) + INTERVAL 1 DAY,"
+                            + " UTC_TIMESTAMP(6), 1, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))");
+        }
+        mockMvc.perform(
+                        delete("/api/v1/admin/users/" + target)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "\"1\""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(false))
+                .andExpect(header().string("ETag", "\"2\""));
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            assertAll(
+                    () ->
+                            assertEquals(
+                                    "DELETED",
+                                    scalar(
+                                            statement,
+                                            "SELECT status FROM sys_user_profile WHERE user_id="
+                                                    + target)),
+                    () ->
+                            assertEquals(
+                                    "2",
+                                    scalar(
+                                            statement,
+                                            "SELECT auth_version FROM sys_user_security WHERE user_id="
+                                                    + target)),
+                    () ->
+                            assertEquals(
+                                    "REVOKED",
+                                    scalar(
+                                            statement,
+                                            "SELECT status FROM personal_token WHERE user_id="
+                                                    + target)),
+                    () ->
+                            assertEquals(
+                                    "REVOKED",
+                                    scalar(
+                                            statement,
+                                            "SELECT status FROM oauth_refresh_family WHERE id='fam-del'")),
+                    () ->
+                            assertEquals(
+                                    "1",
+                                    scalar(
+                                            statement,
+                                            "SELECT revoked_at IS NOT NULL FROM web_session_index"
+                                                    + " WHERE user_id="
+                                                    + target)),
+                    () ->
+                            assertEquals(
+                                    "REVOKED",
+                                    scalar(
+                                            statement,
+                                            "SELECT status FROM oauth2_authorization WHERE id='auth-del'")),
+                    () ->
+                            assertEquals(
+                                    "1",
+                                    scalar(
+                                            statement,
+                                            "SELECT COUNT(*) FROM admin_operation_log"
+                                                    + " WHERE action='USER_DELETE' AND aggregate_id="
+                                                    + target)),
+                    () ->
+                            assertEquals(
+                                    "0",
+                                    scalar(
+                                            statement,
+                                            "SELECT COUNT(*) FROM sys_user_profile p"
+                                                    + " JOIN sys_user_login_name l ON l.user_id=p.user_id"
+                                                    + " WHERE p.status <> 'DELETED' AND l.normalized_name='del-target'")));
+        }
+        mockMvc.perform(
+                        get("/api/v1/admin/users")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
+                .andExpect(status().isOk())
+                .andExpect(
+                        result -> {
+                            if (result.getResponse().getContentAsString().contains("del-target")) {
+                                throw new AssertionError(
+                                        "deleted user must be hidden from the list");
+                            }
+                        });
+    }
+
+    @Test
+    void userDeleteRequiresFreshVersionAndIsNotRepeatable() throws Exception {
+        long deptId = createDepartment("删除用户冲突部");
+        long target = createUser("del-conflict", "冲突用户", deptId);
+        mockMvc.perform(
+                        delete("/api/v1/admin/users/" + target)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "\"7\""))
+                .andExpect(status().isConflict());
+        try (Connection connection = connect();
+                PreparedStatement query =
+                        connection.prepareStatement(
+                                "SELECT status FROM sys_user_profile WHERE user_id = ?")) {
+            query.setLong(1, target);
+            try (ResultSet result = query.executeQuery()) {
+                assertTrue(result.next());
+                assertEquals(
+                        "ACTIVE", result.getString(1), "a rejected delete must not change status");
+            }
+        }
+        mockMvc.perform(
+                        delete("/api/v1/admin/users/" + target)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "\"1\""))
+                .andExpect(status().isOk());
+        mockMvc.perform(
+                        delete("/api/v1/admin/users/" + target)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "\"2\""))
+                .andExpect(status().isConflict());
     }
 
     private long createUser(String username, String displayName, long deptId) throws Exception {

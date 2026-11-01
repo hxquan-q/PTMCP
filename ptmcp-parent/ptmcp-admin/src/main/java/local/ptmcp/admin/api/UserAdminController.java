@@ -9,6 +9,7 @@ import local.ptmcp.persistence.org.OrgStore;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -220,6 +221,17 @@ public class UserAdminController {
                                 expectedVersion,
                                 actorId(request)));
         return ResponseEntity.ok().eTag(IfMatch.etag(updated.version())).body(updated);
+    }
+
+    /** DELETE /{id}: logical delete per the /users CRUD contract; revokes every credential. */
+    @AdminAction("ptmcp:user:delete")
+    @DeleteMapping("/{id}")
+    public ResponseEntity<UserRead> delete(@PathVariable long id, HttpServletRequest request) {
+        long expectedVersion = IfMatch.requireVersion(request);
+        OrgStore.UserRow before = currentUser(id, expectedVersion);
+        scopeGate.requireUserDelete(request, before);
+        UserRead deleted = toRead(orgStore.deleteUser(id, expectedVersion, actorId(request)));
+        return ResponseEntity.ok().eTag(IfMatch.etag(deleted.version())).body(deleted);
     }
 
     private OrgStore.UserRow currentUser(long id, long expectedVersion) {
