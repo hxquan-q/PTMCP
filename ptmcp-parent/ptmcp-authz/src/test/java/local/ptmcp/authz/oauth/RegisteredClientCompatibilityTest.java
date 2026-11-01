@@ -35,6 +35,17 @@ class RegisteredClientCompatibilityTest {
     }
 
     @Test
+    void legacyCommaInsideNewlineSeparatedUriIsNotASeparator() throws Exception {
+        ResultSet row = row("PUBLIC", "none", null);
+        when(row.getString("redirect_uris"))
+                .thenReturn("https://review.example/one?allow=a,b\nhttps://review.example/two");
+        RegisteredClient client = assertDoesNotThrow(() -> map(row));
+        assertEquals(
+                Set.of("https://review.example/one?allow=a,b", "https://review.example/two"),
+                client.getRedirectUris());
+    }
+
+    @Test
     void legacyUnsupportedPrivateKeyJwtClientRemainsRejected() throws Exception {
         ResultSet row = row("CONFIDENTIAL", "private_key_jwt", null);
         assertNull(map(row), "unsupported legacy clients must not acquire a secret-auth fallback");

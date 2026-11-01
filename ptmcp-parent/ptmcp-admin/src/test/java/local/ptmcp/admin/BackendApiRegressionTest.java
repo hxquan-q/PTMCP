@@ -250,6 +250,93 @@ class BackendApiRegressionTest {
                                 "the remaining client must have a usable continuation"));
     }
 
+    @Test
+    void publicClientReplayMustNotFabricateSecretMarker() throws Exception {
+        long platform = platform("review-platform");
+        String key = UUID.randomUUID().toString();
+        String body =
+                "{\"name\":\"review public\",\"type\":\"PUBLIC\","
+                        + "\"authMethods\":[\"none\"],"
+                        + "\"redirectUris\":[\"https://review.example/callback\"],"
+                        + "\"allowedScopes\":[\"mcp:catalog\"],\"status\":\"ACTIVE\"}";
+        String route = "/api/v1/admin/platforms/" + platform + "/clients";
+        MvcResult first =
+                mvc.perform(
+                                post(route)
+                                        .header("X-Test-User-Id", ADMIN)
+                                        .header("X-Test-Platform-Admin", "true")
+                                        .header("Idempotency-Key", key)
+                                        .contentType("application/json")
+                                        .content(body))
+                        .andReturn();
+        MvcResult replay =
+                mvc.perform(
+                                post(route)
+                                        .header("X-Test-User-Id", ADMIN)
+                                        .header("X-Test-Platform-Admin", "true")
+                                        .header("Idempotency-Key", key)
+                                        .contentType("application/json")
+                                        .content(body))
+                        .andReturn();
+        assertAll(
+                () -> assertEquals(201, first.getResponse().getStatus()),
+                () -> assertEquals(201, replay.getResponse().getStatus()),
+                () ->
+                        assertTrue(
+                                tree(first).path("clientSecret").isNull()
+                                        || tree(first).path("clientSecret").isMissingNode(),
+                                "public clients must not present a secret value"),
+                () ->
+                        assertTrue(
+                                tree(replay).path("clientSecret").isNull()
+                                        || tree(replay).path("clientSecret").isMissingNode(),
+                                "public replays must not present a secret value"),
+                () ->
+                        assertFalse(
+                                replay.getResponse()
+                                        .getContentAsString()
+                                        .contains(ClientAdminService.SECRET_ALREADY_CREATED),
+                                "replay must not fabricate a secret marker for public clients"));
+    }
+
+    @Test
+    void clientColumnsPersistCanonicalJsonArrays() throws Exception {
+        long platform = platform("review-platform");
+        mvc.perform(
+                        post("/api/v1/admin/platforms/" + platform + "/clients")
+                                .header("X-Test-User-Id", ADMIN)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", UUID.randomUUID().toString())
+                                .contentType("application/json")
+                                .content(
+                                        "{\"name\":\"review client\",\"type\":\"CONFIDENTIAL\","
+                                                + "\"authMethods\":[\"client_secret_basic\"],"
+                                                + "\"redirectUris\":[\"https://review.example/cb?allow=a,b\"],"
+                                                + "\"allowedScopes\":[\"mcp:catalog\",\"mcp:query\"],"
+                                                + "\"status\":\"ACTIVE\"}"))
+                .andReturn();
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement query =
+                        connection.prepareStatement(
+                                "SELECT redirect_uris, scopes FROM oauth2_registered_client"
+                                        + " WHERE platform_id = ?")) {
+            query.setLong(1, platform);
+            try (var row = query.executeQuery()) {
+                assertTrue(row.next());
+                String uris = row.getString(1);
+                String scopes = row.getString(2);
+                assertAll(
+                        () -> assertTrue(uris.startsWith("["), "uris persist as a JSON array"),
+                        () -> assertTrue(scopes.startsWith("["), "scopes persist as a JSON array"),
+                        () ->
+                                assertTrue(
+                                        uris.contains("https://review.example/cb?allow=a,b"),
+                                        "commas inside a redirect URI survive storage"),
+                        () -> assertTrue(scopes.contains("mcp:query")));
+            }
+        }
+    }
+
     private static final String MYSQL_IMAGE =
             System.getProperty(
                     "ptmcp.test.mysqlImage",

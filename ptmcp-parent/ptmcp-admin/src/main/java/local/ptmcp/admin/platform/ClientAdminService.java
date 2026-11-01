@@ -687,9 +687,10 @@ public final class ClientAdminService {
     }
 
     /**
-     * Canonical storage is a JSON array (commas and spaces survive inside values); legacy admin
-     * rows joined with newlines, spaces or commas stay readable. Malformed canonical values fail
-     * closed as an empty list instead of guessing a split.
+     * Canonical storage is a JSON array (commas and spaces survive inside values). Legacy admin
+     * rows are split by their historical writer format only — newline-joined URIs, space-joined
+     * scopes, comma CSV otherwise — a comma inside a legacy URI must never be a separator.
+     * Malformed canonical values fail closed as an empty list instead of guessing a split.
      */
     private static List<String> storedList(String value) {
         if (value == null || value.isBlank()) {
@@ -707,10 +708,13 @@ public final class ClientAdminService {
                 return List.of();
             }
         }
+        String legacySeparator =
+                trimmed.indexOf('\n') >= 0 ? "\n" : trimmed.indexOf(' ') >= 0 ? " " : ",";
         List<String> parts = new ArrayList<>();
-        for (String part : trimmed.split("[,\\s]+")) {
-            if (!part.isEmpty()) {
-                parts.add(part);
+        for (String part : trimmed.split(legacySeparator)) {
+            String piece = part.trim();
+            if (!piece.isEmpty()) {
+                parts.add(piece);
             }
         }
         return List.copyOf(parts);

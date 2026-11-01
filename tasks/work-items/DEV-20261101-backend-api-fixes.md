@@ -4,7 +4,7 @@ ID: DEV-20261101-backend-api-fixes
 Status: in_progress
 Owner: current-agent
 Acceptance: pending
-Verification: PARTIAL
+Verification: FAIL
 Updated: 2026-11-02
 
 ## 目标与边界
@@ -78,10 +78,23 @@ OrgManagementStoreTest 295、SelfEscalationTimeTest 5、AdminApiTest 136、A 专
 独立 test scope HikariCP 依赖。网关 122 项全部通过。
 
 全量组合验证（隔离副本 ~/ptmcp-api-ws，增量同步自共享树）：
-common 234 + persistence 403 + guard 216 + datasource 58 + admin 230 + authz 63 + gateway 122 = 1326 项，
+common 234 + persistence 403 + guard 216 + datasource 58 + admin 232 + authz 64 + gateway 122 = 1329 项，
 0 失败/错误/跳过，BUILD SUCCESS；React 契约 168 项通过；eslint/prettier/tsc/vite build 与
 python scripts/check.py（74 项）通过。
-已依高风险规则委派只读独立安全评审，尚未回收最终结论；组合验收与人工接受仍待完成。
+
+独立只读安全评审（2026-11-02 回收，后台子代理，glm-5.3，只读命令）：
+- 无 High；五项核心语义（secret 回放消毒、畸形 fail-closed、键集分页、pk_jwt 拒绝+存量
+  fail-closed、ACL 围栏/重验/自增权）均未发现提权或泄露路径。
+- Medium（提交一致性，已修复）：edefd05 漏交 authz 两主文件，HEAD 单独部署会使新建客户端
+  在 AS 全部不可用且自带兼容测试必红——已随本批补交（splitCompat + pk_jwt fail-closed）。
+- Low（已修复）：legacy 逗号 URI 被 [,\\s]+ 静默拆分——读端 legacy 分支改为仅按历史写入
+  格式切分（含换行→换行；含空格→空格；否则 CSV），并补兼容测试。
+- Low（运维移交，不在本切片执行）：修复前版本写入 api_idempotency.response_cipher 的
+  明文 secret 存量行无清理任务，需一次性清洗 clients.create:% 或轮换相关 secret；
+  response_cipher 列为明文 JSON，仅允许存无凭证体（schema 注释建议）。
+- Info（移交）：cursor 长度上限 36 与 id 列宽 VARCHAR(100) 不匹配；围栏内权限码与
+  HTTP 会话 platformAdmin 真值源不一致（执法更严，方向安全）。
+评审未独立复跑测试；运行证据由本会话在隔离副本执行。
 产品体验及真实客户端人工接受待用户确认；生产发布不在授权范围内。
 
 ## 交接

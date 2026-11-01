@@ -82,16 +82,21 @@ public final class PtmcpRegisteredClientRepository implements RegisteredClientRe
         Set<ClientAuthenticationMethod> methods = new LinkedHashSet<>();
         OAuthStoreSupport.splitCsv(rs.getString("client_authentication_methods"))
                 .forEach(method -> methods.add(new ClientAuthenticationMethod(method)));
+        if (methods.contains(ClientAuthenticationMethod.PRIVATE_KEY_JWT)) {
+            // No AS-side key wiring exists: legacy registrations stay fail-closed, including rows
+            // that would otherwise fall back to a stored secret.
+            return null;
+        }
         Set<AuthorizationGrantType> grants = new LinkedHashSet<>();
         OAuthStoreSupport.splitCsv(rs.getString("authorization_grant_types"))
                 .forEach(grant -> grants.add(new AuthorizationGrantType(grant)));
         Set<String> redirectUris =
-                new LinkedHashSet<>(OAuthStoreSupport.splitCsv(rs.getString("redirect_uris")));
+                new LinkedHashSet<>(OAuthStoreSupport.splitCompat(rs.getString("redirect_uris")));
         Set<String> postLogoutUris =
                 new LinkedHashSet<>(
-                        OAuthStoreSupport.splitCsv(rs.getString("post_logout_redirect_uris")));
+                        OAuthStoreSupport.splitCompat(rs.getString("post_logout_redirect_uris")));
         Set<String> scopes =
-                new LinkedHashSet<>(OAuthStoreSupport.splitCsv(rs.getString("scopes")));
+                new LinkedHashSet<>(OAuthStoreSupport.splitCompat(rs.getString("scopes")));
 
         // Only the code and refresh grants are supported. Refresh remains gated by the client's
         // recorded grant list; password/implicit/client_credentials rows never become active.

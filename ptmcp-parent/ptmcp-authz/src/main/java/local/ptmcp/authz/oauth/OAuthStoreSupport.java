@@ -39,6 +39,38 @@ final class OAuthStoreSupport {
         return values;
     }
 
+    /**
+     * Canonical rows persist JSON arrays so commas and spaces survive inside values. Legacy rows
+     * are split by their historical writer format only — newline-joined URIs, space-joined scopes,
+     * comma CSV otherwise — a comma inside a legacy URI must never be a separator. Malformed
+     * canonical values fail closed as empty, which the caller turns into an unusable client.
+     */
+    static List<String> splitCompat(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        String trimmed = value.trim();
+        if (trimmed.charAt(0) == '[') {
+            try {
+                List<String> parsed = new ArrayList<>();
+                for (Object entry : (List<?>) JSON.readValue(trimmed, List.class)) {
+                    parsed.add(String.valueOf(entry));
+                }
+                return List.copyOf(parsed);
+            } catch (RuntimeException failure) {
+                return List.of();
+            }
+        }
+        String legacySeparator =
+                trimmed.indexOf('\n') >= 0 ? "\n" : trimmed.indexOf(' ') >= 0 ? " " : ",";
+        List<String> values = new ArrayList<>();
+        Arrays.stream(trimmed.split(legacySeparator))
+                .map(String::trim)
+                .filter(part -> !part.isEmpty())
+                .forEach(values::add);
+        return List.copyOf(values);
+    }
+
     static Instant toInstant(LocalDateTime value) {
         return value == null ? null : value.toInstant(ZoneOffset.UTC);
     }
