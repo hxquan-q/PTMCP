@@ -171,7 +171,7 @@ ACL 三写在全局安全锁之后，以同一主库连接重验当前 actor 的
 换行/空格及 CSV 表示，legacy 行仅按其历史写入格式切分，畸形数组值 fail-closed 为空。
 部署顺序：先部署兼容读端（AS/管理端读），再部署管理写端；回滚旧管理写端会重新
 引入旧格式写入。修复前写入的 clients.create 幂等回放体可能含明文 secret，需一次性
-清理存量 SUCCEEDED 行（迁移脚本待并行迁移线落地后补入，见工作项）。
+清理存量 SUCCEEDED 行（V15__idempotency_secret_scrub 一次性清理，仅隔离验证不涉生产）。
 | POST /acl/preview | acl:preview | {subjectUserId,platformId,resourceIds:[1..100],at?:UTC}→{decisions:[{resourceId,meta,read,reasonCodes,sourceGrantIds}],versions,evaluatedAt,nextBoundaryAt}；仅判定，不接受SQL/不借业务连接；未来时间只作模拟，不可执行 |
 | GET /acl/effective | acl:effective | userId/platformId必填、datasourceId/cursor/pageSize→有效资源与来源；管理范围外404；不能以此向普通用户泄露全部组织权限 |
 | GET /delegations | delegation:list，平台管理员 | userId/cursor/pageSize→委派列表 |
