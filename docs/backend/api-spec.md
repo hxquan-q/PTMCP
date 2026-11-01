@@ -145,16 +145,33 @@ DatasourceDTO.health只取当前configVersion、当前host/port/database/usernam
 | /platforms CRUD | platform对应动作，平台管理员 | PlatformWrite→PlatformDTO；删除前须停用/处理客户端及族；变更信任方式增securityVersion |
 | GET /platforms/{id}/scopes | platform:read | →ScopeRead={items,scopeVersion,version} |
 | PUT /platforms/{id}/scopes | platform:scope | ScopeWrite+If-Match→ScopeRead；主库事务+安全事件 |
-| GET /platforms/{id}/clients | client:list | status/type/cursor/pageSize→ClientDTO列表 |
-| POST /platforms/{id}/clients | client:create | ClientWrite→201 {client,clientSecret?}；一次secret；公开客户端无secret |
+| GET /platforms/{id}/clients | client:list | status/type/cursor/pageSize→{items:[ClientDTO],nextCursor?}；pageSize≤100，续页键为唯一稳定行 id（非version） |
+| POST /platforms/{id}/clients | client:create | ClientWrite+Idempotency-Key→201 {client,clientSecret?}；一次secret；公开客户端无secret；幂等持久体只存元数据，回放信clientSecret=TOKEN_ALREADY_CREATED且无明文；authMethods拒绝private_key_jwt（无密钥接线，存量行AS侧fail-closed） |
 | GET /clients/{id} | client:read | →ClientDTO |
-| PUT /clients/{id} | client:update | ClientWrite+If-Match→ClientDTO；redirect/authMethod变化撤销关联授权族 |
-| DELETE /clients/{id} | client:delete | If-Match→删除结果；撤销所有关联族 |
+| PUT /clients/{id} | client:update | ClientWrite+If-Match→ClientDTO；redirect/authMethod变化撤销关联授权族；authMethods拒绝private_key_jwt |
+| DELETE /clients/{id} | client:delete | If-Match→删除结果；撤销所有族；private_key_jwt存量行可禁用但不可再启用（重建为唯一出口） |
 | GET /acl/grants | acl:list | subjectType/subjectId/resourceType/resourceId/status/cursor/pageSize→GrantDTO列表 |
 | POST /acl/grants | acl:create | GrantWrite→201 GrantDTO；授予不能超委派，重复逻辑授权返回409 DUPLICATE_GRANT（数据库唯一键需按规范化内容实现） |
 | GET /acl/grants/{id} | acl:read | →GrantDTO及来源信息 |
-| PUT /acl/grants/{id} | acl:update | GrantWrite+If-Match→GrantDTO；保留操作审计，不能改历史创建人 |
+| PUT /acl/grants/{id} | acl:update | GrantWrite+If-Match→同一id的GrantDTO及递增version/ETag；一笔安全事务完整替换，保留创建人/创建时间及操作审计，失败不撤销旧行 |
 | DELETE /acl/grants/{id} | acl:delete | If-Match→撤销结果；记录REVOKED，不物理删除 |
+
+ACL 三写在全局安全锁之后，以同一主库连接重验当前 actor 的 READY/ACTIVE、
+合法权威版本与精确动作码；真实 ADMIN 请求另匹配入场会话 authVersion，不接受请求字段覆盖。
+平台资格从当前有效角色计算，组织管理员的整条更新必须由同一委派覆盖新旧主体部门、资源 type/id/generation，
+新授权有效期不超委派。检查与实际写集一致，仅移除当前被替换/撤销的 grant，而非同动作的其他规则。
+本人 META/READ 比较覆盖现在与前后规则的全部未来生效/到期边界，包含移除 DENY 和 DENY 自然到期；
+增权统一403 SELF_PRIVILEGE_ESCALATION。行、操作日志、epoch 与 ACL_CHANGED 事件原子提交，
+事务/提交未知错误沿既有稳定码且不重做。重复已撤销在全局读围栏内验证身份/范围，返回原版本，不产生新 epoch。
+授权列表也由同一个委派同时覆盖主体与资源，不能只按部门过滤。
+本片不声称注销后的旧在途请求或所有成员/部门变更的间接自增权已完整闭环；实际证据见
+[九项修复工作项](../../tasks/work-items/DEV-20261101-backend-api-fixes.md)。
+
+客户端 redirect_uris/scopes 落盘为 JSON 数组（值内逗号/空格可存活）；读端兼容旧管理端
+换行/空格及 CSV 表示，legacy 行仅按其历史写入格式切分，畸形数组值 fail-closed 为空。
+部署顺序：先部署兼容读端（AS/管理端读），再部署管理写端；回滚旧管理写端会重新
+引入旧格式写入。修复前写入的 clients.create 幂等回放体可能含明文 secret，需一次性
+清理存量 SUCCEEDED 行（迁移脚本待并行迁移线落地后补入，见工作项）。
 | POST /acl/preview | acl:preview | {subjectUserId,platformId,resourceIds:[1..100],at?:UTC}→{decisions:[{resourceId,meta,read,reasonCodes,sourceGrantIds}],versions,evaluatedAt,nextBoundaryAt}；仅判定，不接受SQL/不借业务连接；未来时间只作模拟，不可执行 |
 | GET /acl/effective | acl:effective | userId/platformId必填、datasourceId/cursor/pageSize→有效资源与来源；管理范围外404；不能以此向普通用户泄露全部组织权限 |
 | GET /delegations | delegation:list，平台管理员 | userId/cursor/pageSize→委派列表 |

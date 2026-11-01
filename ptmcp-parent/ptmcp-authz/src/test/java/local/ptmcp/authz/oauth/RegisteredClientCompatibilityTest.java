@@ -78,6 +78,14 @@ class RegisteredClientCompatibilityTest {
         assertEquals(Set.of("mcp:catalog", "mcp:schema", "mcp:query"), client.getScopes());
     }
 
+    @Test
+    void malformedCanonicalArrayFailsClosedAsUnusable() throws Exception {
+        ResultSet row = row("PUBLIC", "none", null);
+        when(row.getString("redirect_uris")).thenReturn("[\"https://review.example/cb");
+        when(row.getString("scopes")).thenReturn("[\"mcp:catalog\",");
+        assertNull(map(row), "a corrupted canonical row must not fall back to a legacy split");
+    }
+
     private static ResultSet row(String type, String method, String secret) throws Exception {
         ResultSet row = mock(ResultSet.class);
         when(row.getObject("platform_id", Long.class)).thenReturn(1L);
