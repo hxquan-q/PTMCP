@@ -5954,6 +5954,139 @@ class AdminApiTest {
         }
     }
 
+    @Test
+    void delegatedUserDeleteStaysInsideDelegationScope() throws Exception {
+        seedAdminDelegationCodes();
+        long datasourceId = insertActiveDatasource();
+        long rootId = createDepartment("用户删除作用域根");
+        long insideId = createDepartment("用户删除作用域内");
+        long outsideId = createDepartment("用户删除作用域外");
+        long insideVersion =
+                readLong(
+                        mockMvc.perform(
+                                        get("/api/v1/admin/departments/" + insideId)
+                                                .header("X-Test-User-Id", ADMIN_ID)
+                                                .header("X-Test-Platform-Admin", "true"))
+                                .andExpect(status().isOk())
+                                .andReturn()
+                                .getResponse()
+                                .getContentAsString(),
+                        "version");
+        mockMvc.perform(
+                        put("/api/v1/admin/departments/" + insideId)
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", String.valueOf(insideVersion))
+                                .contentType("application/json")
+                                .content(
+                                        "{\"parentId\":"
+                                                + rootId
+                                                + ",\"name\":\"用户删除作用域内\",\"enabled\":true}"))
+                .andExpect(status().isOk());
+        long insideUser = createUser("del-inside-user", "委派内用户", insideId);
+        long outsideUser = createUser("del-outside-user", "委派外用户", outsideId);
+        createUser("del-scope-throwaway", "占位三", insideId);
+        long delegate = createUser("del-scope-admin", "受控删除管理员", insideId);
+        long delegateRole =
+                orgStore.createRole(
+                                "user_delete_delegate",
+                                "受控用户删除",
+                                true,
+                                List.of("ptmcp:user:list", "ptmcp:user:read", "ptmcp:user:delete"),
+                                ADMIN_ID)
+                        .id();
+        OrgStore.UserRow delegateProfile = orgStore.getUser(delegate);
+        orgStore.updateUser(
+                delegate,
+                delegateProfile.displayName(),
+                delegateProfile.deptId(),
+                null,
+                null,
+                null,
+                null,
+                List.of(delegateRole),
+                delegateProfile.version(),
+                ADMIN_ID);
+        mockMvc.perform(
+                        post("/api/v1/admin/delegations")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", "del-scope-delegation-1")
+                                .contentType("application/json")
+                                .content(
+                                        "{\"userId\":"
+                                                + delegate
+                                                + ",\"departmentRootId\":"
+                                                + rootId
+                                                + ",\"resourceType\":\"DATASOURCE\",\"resourceId\":"
+                                                + datasourceId
+                                                + ",\"allowedActions\":[\"ptmcp:user:delete\"]"
+                                                + ",\"validFrom\":\"2020-01-01T00:00:00Z\""
+                                                + ",\"validTo\":\"2030-01-01T00:00:00Z\"}"))
+                .andExpect(status().isCreated());
+
+        // Inside the subtree: the delegated delete succeeds and revokes credentials.
+        mockMvc.perform(
+                        delete("/api/v1/admin/users/" + insideUser)
+                                .header("X-Test-User-Id", delegate)
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("If-Match", "\"1\""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(false));
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            assertEquals(
+                    "DELETED",
+                    scalar(
+                            statement,
+                            "SELECT status FROM sys_user_profile WHERE user_id=" + insideUser));
+        }
+
+        // Outside the subtree: denied even with the code and delegation.
+        mockMvc.perform(
+                        delete("/api/v1/admin/users/" + outsideUser)
+                                .header("X-Test-User-Id", delegate)
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("If-Match", "\"1\""))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+
+        // Delegation without the capability code on the actor is still denied.
+        long uncoded = createUser("del-uncoded-admin", "无码受控员", insideId);
+        mockMvc.perform(
+                        post("/api/v1/admin/delegations")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("Idempotency-Key", "del-scope-delegation-2")
+                                .contentType("application/json")
+                                .content(
+                                        "{\"userId\":"
+                                                + uncoded
+                                                + ",\"departmentRootId\":"
+                                                + rootId
+                                                + ",\"resourceType\":\"DATASOURCE\",\"resourceId\":"
+                                                + datasourceId
+                                                + ",\"allowedActions\":[\"ptmcp:user:delete\"]"
+                                                + ",\"validFrom\":\"2020-01-01T00:00:00Z\""
+                                                + ",\"validTo\":\"2030-01-01T00:00:00Z\"}"))
+                .andExpect(status().isCreated());
+        mockMvc.perform(
+                        delete("/api/v1/admin/users/" + outsideUser)
+                                .header("X-Test-User-Id", uncoded)
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("If-Match", "\"1\""))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            assertEquals(
+                    "ACTIVE",
+                    scalar(
+                            statement,
+                            "SELECT status FROM sys_user_profile WHERE user_id=" + outsideUser));
+        }
+    }
+
     private long createUser(String username, String displayName, long deptId) throws Exception {
         return readLong(
                 mockMvc.perform(
