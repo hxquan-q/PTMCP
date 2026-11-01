@@ -33,6 +33,21 @@ final class IdempotentWrites {
             String idempotencyKey,
             byte[] requestBody,
             Supplier<ResponseEntity<T>> action) {
+        return execute(recorder, actorId, routeKey, idempotencyKey, requestBody, action, null);
+    }
+
+    /**
+     * Variant with a replay-body view: credential-bearing responses deliver the raw value exactly
+     * once, while the persisted body (and any replay) carries the sanitized view instead.
+     */
+    static <T> ResponseEntity<byte[]> execute(
+            IdempotencyRecorder recorder,
+            long actorId,
+            String routeKey,
+            String idempotencyKey,
+            byte[] requestBody,
+            Supplier<ResponseEntity<T>> action,
+            java.util.function.UnaryOperator<T> replayBody) {
         if (idempotencyKey == null
                 || idempotencyKey.isBlank()
                 || idempotencyKey.length() > MAX_KEY) {
@@ -63,8 +78,14 @@ final class IdempotentWrites {
                             ? new byte[0]
                             : JSON.writeValueAsString(response.getBody())
                                     .getBytes(StandardCharsets.UTF_8);
+            byte[] persisted = body;
+            if (replayBody != null && response.getBody() != null) {
+                persisted =
+                        JSON.writeValueAsString(replayBody.apply(response.getBody()))
+                                .getBytes(StandardCharsets.UTF_8);
+            }
             recorder.completeSucceeded(
-                    actorId, routeKey, idempotencyKey, body, response.getStatusCode().value());
+                    actorId, routeKey, idempotencyKey, persisted, response.getStatusCode().value());
             HttpHeaders headers = new HttpHeaders();
             headers.putAll(response.getHeaders());
             headers.remove(HttpHeaders.CONTENT_LENGTH);

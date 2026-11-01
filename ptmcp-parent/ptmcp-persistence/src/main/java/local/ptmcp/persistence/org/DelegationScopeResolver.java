@@ -77,6 +77,15 @@ public final class DelegationScopeResolver {
 
     /** Effective (ACTIVE, in-window) delegations of one user, newest first. */
     public List<EffectiveDelegation> effectiveDelegations(long userId, Instant now) {
+        try (Connection connection = OrgSql.configure(primary)) {
+            return effectiveDelegations(connection, userId, now);
+        } catch (SQLException failure) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+    }
+
+    public List<EffectiveDelegation> effectiveDelegations(
+            Connection connection, long userId, Instant now) throws SQLException {
         if (userId <= 0 || now == null) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
@@ -88,8 +97,7 @@ public final class DelegationScopeResolver {
                         + " AND (valid_to IS NULL OR valid_to > UTC_TIMESTAMP(6))"
                         + " ORDER BY id DESC";
         List<EffectiveDelegation> rows = new ArrayList<>();
-        try (Connection connection = OrgSql.configure(primary);
-                PreparedStatement statement = OrgSql.statement(connection, sql)) {
+        try (PreparedStatement statement = OrgSql.statement(connection, sql)) {
             statement.setLong(1, userId);
             try (ResultSet result = statement.executeQuery()) {
                 while (result.next()) {
@@ -108,8 +116,6 @@ public final class DelegationScopeResolver {
                                             result.getObject(8, java.time.LocalDateTime.class))));
                 }
             }
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
         return List.copyOf(rows);
     }
@@ -121,6 +127,20 @@ public final class DelegationScopeResolver {
      */
     public boolean covers(
             EffectiveDelegation delegation, Target target, String action, Instant now) {
+        try (Connection connection = OrgSql.configure(primary)) {
+            return covers(connection, delegation, target, action, now);
+        } catch (SQLException failure) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+    }
+
+    public boolean covers(
+            Connection connection,
+            EffectiveDelegation delegation,
+            Target target,
+            String action,
+            Instant now)
+            throws SQLException {
         Objects.requireNonNull(delegation, "delegation");
         if (target == null) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
@@ -133,31 +153,34 @@ public final class DelegationScopeResolver {
         }
         return switch (target.kind()) {
             case DEPARTMENT ->
-                    departmentWithin(delegation.departmentRootId(), target.departmentId());
-            case SUBJECT -> coversSubject(delegation, target);
+                    departmentWithin(
+                            connection, delegation.departmentRootId(), target.departmentId());
+            case SUBJECT -> coversSubject(connection, delegation, target);
             case RESOURCE ->
                     resourceMatches(delegation, target.resourceType(), target.resourceId());
         };
     }
 
     /** A subject sits in scope when their own department (or an ancestor of it) is the root. */
-    private boolean coversSubject(EffectiveDelegation delegation, Target target) {
+    private boolean coversSubject(
+            Connection connection, EffectiveDelegation delegation, Target target)
+            throws SQLException {
         if (target.departmentId() == null) {
             return false;
         }
-        return departmentWithin(delegation.departmentRootId(), target.departmentId());
+        return departmentWithin(connection, delegation.departmentRootId(), target.departmentId());
     }
 
     /**
      * Validates the entire parent chain, even when the target equals the delegation root. Disabled
      * departments remain manageable; only deleted targets or roots lose scope membership.
      */
-    private boolean departmentWithin(long rootId, Long departmentId) {
+    private boolean departmentWithin(Connection connection, long rootId, Long departmentId)
+            throws SQLException {
         if (departmentId == null || departmentId <= 0) {
             return false;
         }
-        try (Connection connection = OrgSql.configure(primary);
-                PreparedStatement statement = OrgSql.statement(connection, DEPARTMENT_PATH_SQL)) {
+        try (PreparedStatement statement = OrgSql.statement(connection, DEPARTMENT_PATH_SQL)) {
             statement.setLong(1, departmentId);
             statement.setInt(2, MAX_DEPARTMENT_NODES);
             try (ResultSet result = statement.executeQuery()) {
@@ -193,8 +216,6 @@ public final class DelegationScopeResolver {
                 }
                 return targetNotDeleted && rootMatchedNotDeleted;
             }
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
     }
 

@@ -202,12 +202,20 @@ public class PlatformAdminController {
                     return ResponseEntity.status(201)
                             .location(URI.create("/api/v1/admin/clients/" + created.client().id()))
                             .body(created);
-                });
+                },
+                created ->
+                        created.clientSecret() == null
+                                ? created
+                                : new ClientAdminService.CreatedClient(
+                                        created.client(),
+                                        ClientAdminService.SECRET_ALREADY_CREATED));
     }
+
+    public record ClientPageView(List<ClientAdminService.ClientView> items, String nextCursor) {}
 
     @AdminAction("ptmcp:client:list")
     @GetMapping("/{id}/clients")
-    public java.util.Map<String, Object> listClients(
+    public ClientPageView listClients(
             @PathVariable long id,
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String status,
@@ -215,9 +223,8 @@ public class PlatformAdminController {
             @RequestParam(required = false) Integer pageSize,
             HttpServletRequest request) {
         ManagementScope.requirePlatformAdmin(request);
-        List<ClientAdminService.ClientView> items =
-                clients.list(id, type, status, cursor, pageSize);
-        return java.util.Map.of("items", List.copyOf(items));
+        ClientAdminService.ClientPage page = clients.list(id, type, status, cursor, pageSize);
+        return new ClientPageView(page.items(), page.nextCursor());
     }
 
     private static ClientAdminService.ClientWrite toClientWrite(ClientWritePayload payload) {

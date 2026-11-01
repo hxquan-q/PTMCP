@@ -6,6 +6,8 @@ import local.ptmcp.common.error.ErrorCode;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import tools.jackson.databind.json.JsonMapper;
+
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.security.MessageDigest;
@@ -40,14 +42,19 @@ public final class ClientAdminService {
             Set.of("mcp:catalog", "mcp:schema", "mcp:query");
 
     private static final Set<String> AUTH_METHODS =
-            Set.of("none", "client_secret_basic", "client_secret_post", "private_key_jwt");
+            Set.of("none", "client_secret_basic", "client_secret_post");
     private static final Set<String> SECRET_METHODS =
             Set.of("client_secret_basic", "client_secret_post");
     private static final int MAX_REDIRECT_URIS = 10;
     private static final int MAX_SCOPES = 8;
     private static final Pattern CLIENT_NAME = Pattern.compile("^.{1,200}$");
+
+    /** Replaces the raw secret in the idempotent replay body: the value is shown once only. */
+    public static final String SECRET_ALREADY_CREATED = "TOKEN_ALREADY_CREATED";
+
     private static final PasswordEncoder PASSWORDS =
             PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final String GRANT_TYPES = "authorization_code,refresh_token";
     private static final String CLIENT_SETTINGS = "{}";
     private static final String TOKEN_SETTINGS = "{}";
@@ -108,13 +115,9 @@ public final class ClientAdminService {
             rawSecret = generateSecret();
             storedSecret = PASSWORDS.encode(rawSecret);
             secretHash = sha256(rawSecret);
-        } else if (confidential) {
-            // private_key_jwt clients prove via JWKS; jwksUri is mandatory.
-            if (normalized.jwksUri() == null || normalized.jwksUri().isBlank()) {
-                throw new DomainException(ErrorCode.INVALID_ARGUMENT);
-            }
-            requireHttps(normalized.jwksUri());
         }
+        // private_key_jwt has no key wiring yet: normalize rejects it on create and update, and
+        // legacy registrations stay fail-closed on the AS read side.
         String id = UUID.randomUUID().toString();
         String clientId = "mcp-" + token(8).toLowerCase(Locale.ROOT);
         try (Connection connection = tx()) {
@@ -142,12 +145,8 @@ public final class ClientAdminService {
                     statement.setString(4, normalized.name());
                     statement.setString(5, String.join(",", normalized.authMethods()));
                     statement.setString(6, GRANT_TYPES);
-                    statement.setString(
-                            7,
-                            normalized.redirectUris().isEmpty()
-                                    ? null
-                                    : String.join("\n", normalized.redirectUris()));
-                    statement.setString(8, String.join(" ", normalized.allowedScopes()));
+                    statement.setString(7, listJson(normalized.redirectUris()));
+                    statement.setString(8, listJson(normalized.allowedScopes()));
                     statement.setString(9, CLIENT_SETTINGS);
                     statement.setString(10, TOKEN_SETTINGS);
                     statement.setLong(11, platformId);
@@ -183,19 +182,20 @@ public final class ClientAdminService {
         return new CreatedClient(view, rawSecret);
     }
 
-    public List<ClientView> list(
+    public record ClientPage(List<ClientView> items, String nextCursor) {}
+
+    public ClientPage list(
             long platformId, String type, String status, String cursor, Integer pageSize) {
         int limit = pageSize == null ? 20 : pageSize;
         if (limit < 1 || limit > 100) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
-        long afterVersion = 0;
+        String afterId = "";
         if (cursor != null && !cursor.isBlank()) {
-            try {
-                afterVersion = Long.parseLong(cursor);
-            } catch (NumberFormatException failure) {
+            if (cursor.length() > 36) {
                 throw new DomainException(ErrorCode.INVALID_ARGUMENT);
             }
+            afterId = cursor;
         }
         StringBuilder sql =
                 new StringBuilder(
@@ -219,10 +219,10 @@ public final class ClientAdminService {
             sql.append(" AND status = ?");
             parameters.add(status);
         }
-        sql.append(" AND version > ? ORDER BY version LIMIT ?");
-        parameters.add(afterVersion);
+        sql.append(" AND id > ? ORDER BY id LIMIT ?");
+        parameters.add(afterId);
         parameters.add(limit + 1);
-        // Returns up to limit+1 rows; the caller derives the cursor when the page overflows.
+        // Continuation keys on the unique row id; version is not stable enough to page on.
         List<ClientView> items = new ArrayList<>();
         try (Connection connection = tx()) {
             connection.rollback();
@@ -241,8 +241,8 @@ public final class ClientAdminService {
                                         result.getString(4),
                                         result.getString(5),
                                         List.of(result.getString(6).split(",")),
-                                        splitLines(result.getString(7)),
-                                        List.of(result.getString(8).split(" ")),
+                                        storedList(result.getString(7)),
+                                        storedList(result.getString(8)),
                                         result.getString(9),
                                         result.getString(10),
                                         result.getBoolean(11),
@@ -253,7 +253,12 @@ public final class ClientAdminService {
         } catch (SQLException error) {
             throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
-        return items;
+        boolean overflow = items.size() > limit;
+        if (overflow) {
+            items.remove(items.size() - 1);
+        }
+        return new ClientPage(
+                List.copyOf(items), overflow && !items.isEmpty() ? items.getLast().id() : null);
     }
 
     public ClientView get(String id) {
@@ -289,12 +294,8 @@ public final class ClientAdminService {
                                         + " update_time = UTC_TIMESTAMP(6), updated_by = ?"
                                         + " WHERE id = ? AND version = ?")) {
                     statement.setString(1, normalized.name());
-                    statement.setString(
-                            2,
-                            normalized.redirectUris().isEmpty()
-                                    ? null
-                                    : String.join("\n", normalized.redirectUris()));
-                    statement.setString(3, String.join(" ", normalized.allowedScopes()));
+                    statement.setString(2, listJson(normalized.redirectUris()));
+                    statement.setString(3, listJson(normalized.allowedScopes()));
                     statement.setString(4, normalized.jwksUri());
                     statement.setString(5, write.status());
                     statement.setLong(6, actorId);
@@ -416,8 +417,8 @@ public final class ClientAdminService {
                         row.name(),
                         row.type(),
                         authMethods,
-                        splitLines(row.redirectUris()),
-                        List.of(row.scopes().split(" ")),
+                        storedList(row.redirectUris()),
+                        storedList(row.scopes()),
                         row.jwksUri());
         return new Current(
                 row.platformId(),
@@ -469,8 +470,8 @@ public final class ClientAdminService {
                     row.name(),
                     row.type(),
                     List.of(row.authMethods().split(",")),
-                    splitLines(row.redirectUris()),
-                    List.of(row.scopes().split(" ")),
+                    storedList(row.redirectUris()),
+                    storedList(row.scopes()),
                     row.jwksUri(),
                     row.status(),
                     row.secretConfigured(),
@@ -592,17 +593,6 @@ public final class ClientAdminService {
         }
     }
 
-    private static void requireHttps(String value) {
-        try {
-            URI uri = new URI(value);
-            if (!"https".equals(uri.getScheme()) || uri.getHost() == null) {
-                throw new DomainException(ErrorCode.INVALID_ARGUMENT);
-            }
-        } catch (URISyntaxException failure) {
-            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
-        }
-    }
-
     private void requirePlatformLive(Connection connection, long platformId) throws SQLException {
         try (PreparedStatement statement =
                 connection.prepareStatement(
@@ -696,11 +686,38 @@ public final class ClientAdminService {
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
-    private static List<String> splitLines(String value) {
+    /**
+     * Canonical storage is a JSON array (commas and spaces survive inside values); legacy admin
+     * rows joined with newlines, spaces or commas stay readable. Malformed canonical values fail
+     * closed as an empty list instead of guessing a split.
+     */
+    private static List<String> storedList(String value) {
         if (value == null || value.isBlank()) {
             return List.of();
         }
-        return List.of(value.split("\n"));
+        String trimmed = value.trim();
+        if (trimmed.charAt(0) == '[') {
+            try {
+                List<String> parsed = new ArrayList<>();
+                for (Object entry : (List<?>) JSON.readValue(trimmed, List.class)) {
+                    parsed.add(String.valueOf(entry));
+                }
+                return List.copyOf(parsed);
+            } catch (RuntimeException failure) {
+                return List.of();
+            }
+        }
+        List<String> parts = new ArrayList<>();
+        for (String part : trimmed.split("[,\\s]+")) {
+            if (!part.isEmpty()) {
+                parts.add(part);
+            }
+        }
+        return List.copyOf(parts);
+    }
+
+    private static String listJson(List<String> values) {
+        return values.isEmpty() ? null : JSON.writeValueAsString(values);
     }
 
     private String generateSecret() {

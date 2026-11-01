@@ -12,6 +12,8 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 /**
  * Self-privilege-escalation guard for admin mutations. Before a change is admitted, the caller's
@@ -36,21 +38,30 @@ public final class SelfEscalationGuard {
         Objects.requireNonNull(grantsAfter, "grantsAfter");
         Objects.requireNonNull(resourceTree, "resourceTree");
         Objects.requireNonNull(now, "now");
+        SortedSet<Instant> checkpoints = new TreeSet<>();
+        checkpoints.add(now);
+        for (List<GrantRow> grants : List.of(grantsBefore, grantsAfter)) {
+            for (GrantRow grant : grants) {
+                if (grant.validFrom().isAfter(now)) checkpoints.add(grant.validFrom());
+                if (grant.validTo() != null && grant.validTo().isAfter(now)) {
+                    checkpoints.add(grant.validTo());
+                }
+            }
+        }
         for (ResourceNode node : resourceTree) {
-            PermissionEvaluator.Decision before =
-                    PermissionEvaluator.evaluate(
-                            GrantExpander.expand(grantsBefore, caller, resourceTree, node.id()),
-                            platformMeta,
-                            platformRead,
-                            now);
-            PermissionEvaluator.Decision after =
-                    PermissionEvaluator.evaluate(
-                            GrantExpander.expand(grantsAfter, caller, resourceTree, node.id()),
-                            platformMeta,
-                            platformRead,
-                            now);
-            if ((after.meta() && !before.meta()) || (after.read() && !before.read())) {
-                throw new DomainException(ErrorCode.SELF_PRIVILEGE_ESCALATION);
+            var beforeGrants = GrantExpander.expand(grantsBefore, caller, resourceTree, node.id());
+            var afterGrants = GrantExpander.expand(grantsAfter, caller, resourceTree, node.id());
+            // Decisions are constant between half-open grant boundaries, including Deny expiry.
+            for (Instant checkpoint : checkpoints) {
+                PermissionEvaluator.Decision before =
+                        PermissionEvaluator.evaluate(
+                                beforeGrants, platformMeta, platformRead, checkpoint);
+                PermissionEvaluator.Decision after =
+                        PermissionEvaluator.evaluate(
+                                afterGrants, platformMeta, platformRead, checkpoint);
+                if ((after.meta() && !before.meta()) || (after.read() && !before.read())) {
+                    throw new DomainException(ErrorCode.SELF_PRIVILEGE_ESCALATION);
+                }
             }
         }
     }

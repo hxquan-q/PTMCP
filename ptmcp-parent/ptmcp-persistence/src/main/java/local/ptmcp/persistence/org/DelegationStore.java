@@ -258,6 +258,15 @@ public final class DelegationStore {
 
     /** Distinct org/ACL capability codes of one user; mirrors the session permission query. */
     public List<String> permissionsOf(long userId) {
+        try (Connection connection = OrgSql.configure(primary)) {
+            return permissionsOf(connection, userId);
+        } catch (SQLException failure) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+    }
+
+    public static List<String> permissionsOf(Connection connection, long userId)
+            throws SQLException {
         OrgSql.requireActor(userId);
         String sql =
                 "SELECT DISTINCT rp.permission_code FROM sys_user_role ur"
@@ -265,8 +274,7 @@ public final class DelegationStore {
                         + " JOIN sys_role_permission rp ON rp.role_id = r.role_id"
                         + " WHERE ur.user_id = ? AND r.status = '0' AND r.del_flag = '0'"
                         + " ORDER BY rp.permission_code";
-        try (Connection connection = OrgSql.configure(primary);
-                PreparedStatement statement = OrgSql.statement(connection, sql)) {
+        try (PreparedStatement statement = OrgSql.statement(connection, sql)) {
             statement.setLong(1, userId);
             List<String> permissions = new ArrayList<>();
             try (ResultSet result = statement.executeQuery()) {
@@ -275,8 +283,6 @@ public final class DelegationStore {
                 }
             }
             return List.copyOf(permissions);
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
     }
 

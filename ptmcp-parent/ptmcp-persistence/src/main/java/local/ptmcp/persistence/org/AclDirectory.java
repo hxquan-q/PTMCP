@@ -59,37 +59,45 @@ public final class AclDirectory {
 
     public SubjectScope subjectScope(long userId) {
         try (Connection connection = OrgSql.configure(primary)) {
-            DepartmentSubjectReader.Departments departments =
-                    DepartmentSubjectReader.read(
-                            connection,
-                            userId,
-                            departmentInheritance,
-                            ErrorCode.RESOURCE_NOT_FOUND);
-            Set<Long> roleIds = new HashSet<>();
-            try (PreparedStatement statement =
-                    OrgSql.statement(
-                            connection,
-                            "SELECT r.role_id FROM sys_user_role ur"
-                                    + " JOIN sys_role r ON r.role_id = ur.role_id"
-                                    + " WHERE ur.user_id = ? AND r.status = '0' AND r.del_flag = '0'")) {
-                statement.setLong(1, userId);
-                try (ResultSet result = statement.executeQuery()) {
-                    while (result.next()) {
-                        roleIds.add(result.getLong(1));
-                    }
-                }
-            }
-            return new SubjectScope(
-                    userId, Set.copyOf(roleIds), departments.deptId(), departments.ancestorIds());
-        } catch (SQLException error) {
+            return subjectScope(connection, userId);
+        } catch (SQLException failure) {
             throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
     }
 
+    public SubjectScope subjectScope(Connection connection, long userId) throws SQLException {
+        DepartmentSubjectReader.Departments departments =
+                DepartmentSubjectReader.read(
+                        connection, userId, departmentInheritance, ErrorCode.RESOURCE_NOT_FOUND);
+        Set<Long> roleIds = new HashSet<>();
+        try (PreparedStatement statement =
+                OrgSql.statement(
+                        connection,
+                        "SELECT r.role_id FROM sys_user_role ur"
+                                + " JOIN sys_role r ON r.role_id = ur.role_id"
+                                + " WHERE ur.user_id = ? AND r.status = '0' AND r.del_flag = '0'")) {
+            statement.setLong(1, userId);
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    roleIds.add(result.getLong(1));
+                }
+            }
+        }
+        return new SubjectScope(
+                userId, Set.copyOf(roleIds), departments.deptId(), departments.ancestorIds());
+    }
+
     public List<GrantRow> activeGrants(long userId) {
-        SubjectScope scope = subjectScope(userId);
-        try (Connection connection = OrgSql.configure(primary);
-                PreparedStatement statement =
+        try (Connection connection = OrgSql.configure(primary)) {
+            return activeGrants(connection, userId);
+        } catch (SQLException failure) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+    }
+
+    public List<GrantRow> activeGrants(Connection connection, long userId) throws SQLException {
+        SubjectScope scope = subjectScope(connection, userId);
+        try (PreparedStatement statement =
                         OrgSql.statement(
                                 connection,
                                 "SELECT id, subject_type, subject_id, resource_type, resource_id,"
@@ -128,21 +136,23 @@ public final class AclDirectory {
                                 result.getLong(1)));
             }
             return grants;
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
     }
 
     public List<ResourceNode> resourceTree() {
         try (Connection connection = OrgSql.configure(primary)) {
-            List<ResourceNode> nodes = new ArrayList<>();
-            appendDatasources(connection, nodes);
-            appendNamespaces(connection, nodes);
-            appendObjects(connection, nodes);
-            return nodes;
-        } catch (SQLException error) {
+            return resourceTree(connection);
+        } catch (SQLException failure) {
             throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
+    }
+
+    public List<ResourceNode> resourceTree(Connection connection) throws SQLException {
+        List<ResourceNode> nodes = new ArrayList<>();
+        appendDatasources(connection, nodes);
+        appendNamespaces(connection, nodes);
+        appendObjects(connection, nodes);
+        return List.copyOf(nodes);
     }
 
     /**

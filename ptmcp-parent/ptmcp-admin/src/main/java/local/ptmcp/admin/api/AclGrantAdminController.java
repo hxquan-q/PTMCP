@@ -2,11 +2,9 @@ package local.ptmcp.admin.api;
 
 import jakarta.servlet.http.HttpServletRequest;
 
-import local.ptmcp.common.authz.GrantRow;
-import local.ptmcp.common.authz.PermissionGrant;
+import local.ptmcp.admin.session.AdminSessionService;
+import local.ptmcp.admin.web.RequestIdFilter;
 import local.ptmcp.common.authz.ResourceNode;
-import local.ptmcp.common.authz.SubjectScope;
-import local.ptmcp.common.authz.SubjectType;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.persistence.org.AclDirectory;
@@ -14,7 +12,6 @@ import local.ptmcp.persistence.org.AclGrantStore;
 import local.ptmcp.persistence.org.DelegationScopeResolver;
 import local.ptmcp.persistence.org.OrgStore;
 import local.ptmcp.persistence.org.ResourceIds;
-import local.ptmcp.persistence.org.SelfEscalationGuard;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
@@ -29,13 +26,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
  * /api/v1/admin/acl/grants CRUD and /acl/preview. Every mutating grant operation first proves it
- * does not raise the caller's own effective META/READ over any tree node (self-privilege-
- * escalation, 403). The preview judges only — it never borrows a business connection.
+ * does not raise the caller's own effective META/READ at current or future grant boundaries
+ * (self-privilege-escalation, 403), on the same connection as its atomic write. The preview judges
+ * only — it never borrows a business connection.
  */
 @RestController
 @ConditionalOnProperty("ptmcp.admin.datasource.url")
@@ -44,15 +41,20 @@ public class AclGrantAdminController {
     private final AclGrantStore grantStore;
     private final AclDirectory directory;
     private final AclScopeGate scopeGate;
+    private final AclMutationGuard mutations;
+    private final AdminSessionService sessions;
 
     public AclGrantAdminController(
             AclGrantStore grantStore,
             AclDirectory directory,
             DelegationScopeResolver scopeResolver,
-            OrgStore orgStore) {
+            OrgStore orgStore,
+            AdminSessionService sessions) {
         this.grantStore = grantStore;
         this.directory = directory;
         this.scopeGate = new AclScopeGate(scopeResolver, orgStore);
+        this.mutations = new AclMutationGuard(directory, scopeGate);
+        this.sessions = sessions;
     }
 
     public record GrantWrite(
@@ -237,24 +239,15 @@ public class AclGrantAdminController {
             @RequestBody GrantWrite write, HttpServletRequest request) {
         AdminPrincipal principal = AdminPrincipal.require(request);
         AclGrantStore.AclGrantRecord draft = toDraft(write);
-        if (!principal.platformAdmin()) {
-            scopeGate.requireGrantAllowed(
-                    request,
-                    draft.subjectType(),
-                    draft.subjectId(),
-                    draft.resourceType(),
-                    draft.resourceId(),
-                    "ptmcp:acl:" + draft.action().toLowerCase(java.util.Locale.ROOT),
-                    draft.validFrom(),
-                    draft.validTo());
-        }
-        List<GrantRow> before = callerGrantsOrNull(directory, principal);
-        if (before != null) {
-            List<GrantRow> after = new ArrayList<>(before);
-            after.add(toGrantRow(draft, Long.MAX_VALUE));
-            assertNoEscalation(directory, principal, before, after);
-        }
-        AclGrantStore.AclGrantRecord created = grantStore.create(draft, principal.userId());
+        AclGrantStore.AclGrantRecord created =
+                grantStore.create(
+                        draft,
+                        principal.userId(),
+                        RequestIdFilter.requestId(request),
+                        mutations.policy(
+                                principal.userId(),
+                                expectedAuthVersion(request),
+                                "ptmcp:acl:create"));
         return ResponseEntity.created(
                         java.net.URI.create("/api/v1/admin/acl/grants/" + created.id()))
                 .body(toRead(created));
@@ -273,54 +266,18 @@ public class AclGrantAdminController {
             @PathVariable long id, @RequestBody GrantWrite write, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
         AdminPrincipal principal = AdminPrincipal.require(request);
-        AclGrantStore.AclGrantRecord current = grantStore.get(id);
-        if ("REVOKED".equals(current.status())) {
-            throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
-        }
-        if (!principal.platformAdmin()) {
-            scopeGate.requireRevokeAllowed(
-                    request,
-                    current.subjectType(),
-                    current.subjectId(),
-                    current.resourceType(),
-                    current.resourceId());
-        }
-        AclGrantStore.AclGrantRecord replacement = toDraft(write);
-        if (!principal.platformAdmin()) {
-            scopeGate.requireGrantAllowed(
-                    request,
-                    replacement.subjectType(),
-                    replacement.subjectId(),
-                    replacement.resourceType(),
-                    replacement.resourceId(),
-                    "ptmcp:acl:" + replacement.action().toLowerCase(java.util.Locale.ROOT),
-                    replacement.validFrom(),
-                    replacement.validTo());
-        }
-        List<GrantRow> before = callerGrantsOrNull(directory, principal);
-        if (before != null) {
-            long encodedResource =
-                    ResourceIds.encode(
-                            ResourceIds.Type.valueOf(replacement.resourceType()),
-                            replacement.resourceId());
-            List<GrantRow> after = new ArrayList<>(before);
-            after.removeIf(
-                    grant ->
-                            grant.grantId() == current.id()
-                                    || (grant.subjectType()
-                                                    == SubjectType.valueOf(
-                                                            replacement.subjectType())
-                                            && grant.subjectId() == replacement.subjectId()
-                                            && grant.resourceId() == encodedResource
-                                            && grant.action()
-                                                    == PermissionGrant.Action.valueOf(
-                                                            replacement.action())));
-            after.add(toGrantRow(replacement, Long.MAX_VALUE));
-            assertNoEscalation(directory, principal, before, after);
-        }
-        grantStore.revoke(id, expectedVersion, "replaced", principal.userId());
-        AclGrantStore.AclGrantRecord created = grantStore.create(replacement, principal.userId());
-        return ResponseEntity.ok().eTag(IfMatch.etag(created.version())).body(toRead(created));
+        AclGrantStore.AclGrantRecord updated =
+                grantStore.update(
+                        id,
+                        expectedVersion,
+                        toDraft(write),
+                        principal.userId(),
+                        RequestIdFilter.requestId(request),
+                        mutations.policy(
+                                principal.userId(),
+                                expectedAuthVersion(request),
+                                "ptmcp:acl:update"));
+        return ResponseEntity.ok().eTag(IfMatch.etag(updated.version())).body(toRead(updated));
     }
 
     @AdminAction("ptmcp:acl:delete")
@@ -328,17 +285,17 @@ public class AclGrantAdminController {
     public ResponseEntity<GrantRead> revoke(@PathVariable long id, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
         AdminPrincipal principal = AdminPrincipal.require(request);
-        AclGrantStore.AclGrantRecord existing = grantStore.get(id);
-        if (!principal.platformAdmin()) {
-            scopeGate.requireRevokeAllowed(
-                    request,
-                    existing.subjectType(),
-                    existing.subjectId(),
-                    existing.resourceType(),
-                    existing.resourceId());
-        }
         AclGrantStore.AclGrantRecord revoked =
-                grantStore.revoke(id, expectedVersion, "revoked via API", principal.userId());
+                grantStore.revoke(
+                        id,
+                        expectedVersion,
+                        "revoked via API",
+                        principal.userId(),
+                        RequestIdFilter.requestId(request),
+                        mutations.policy(
+                                principal.userId(),
+                                expectedAuthVersion(request),
+                                "ptmcp:acl:delete"));
         return ResponseEntity.ok().body(toRead(revoked));
     }
 
@@ -379,28 +336,11 @@ public class AclGrantAdminController {
                 nextBoundary);
     }
 
-    private static List<GrantRow> callerGrantsOrNull(
-            AclDirectory directory, AdminPrincipal principal) {
-        SubjectScope scope = ManagementScope.callerScopeOrNull(directory, principal);
-        if (scope == null) {
-            return null;
-        }
-        return directory.activeGrants(principal.userId());
-    }
-
-    private static void assertNoEscalation(
-            AclDirectory directory,
-            AdminPrincipal principal,
-            List<GrantRow> before,
-            List<GrantRow> after) {
-        SubjectScope scope = ManagementScope.callerScopeOrNull(directory, principal);
-        if (scope == null) {
-            return;
-        }
-        List<ResourceNode> tree = directory.resourceTree();
-        // Platform admins sit above the whole ceiling; delegation-less admin scope is binary.
-        SelfEscalationGuard.assertNoEscalation(
-                scope, before, after, tree, true, true, Instant.now());
+    private Long expectedAuthVersion(HttpServletRequest request) {
+        return Boolean.TRUE.equals(
+                        request.getAttribute(AdminSessionService.SESSION_AUTHENTICATED_ATTRIBUTE))
+                ? sessions.requireSessionAuthVersion(request)
+                : null;
     }
 
     private static AclGrantStore.AclGrantRecord toDraft(GrantWrite write) {
@@ -430,20 +370,6 @@ public class AclGrantAdminController {
                 "ACTIVE",
                 write.reason() == null ? "" : write.reason(),
                 1);
-    }
-
-    private static GrantRow toGrantRow(AclGrantStore.AclGrantRecord record, long grantId) {
-        return new GrantRow(
-                SubjectType.valueOf(record.subjectType()),
-                record.subjectId(),
-                ResourceIds.encode(
-                        ResourceIds.Type.valueOf(record.resourceType()), record.resourceId()),
-                PermissionGrant.Action.valueOf(record.action()),
-                PermissionGrant.Effect.valueOf(record.effect()),
-                record.includeDescendants(),
-                record.validFrom(),
-                record.validTo(),
-                grantId);
     }
 
     private static GrantRead toRead(AclGrantStore.AclGrantRecord record) {

@@ -7,6 +7,10 @@ import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.persistence.org.DelegationScopeResolver;
 import local.ptmcp.persistence.org.OrgStore;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 
@@ -44,6 +48,7 @@ public final class AclScopeGate {
         if (principal.platformAdmin()) {
             return all;
         }
+        Instant now = Instant.now();
         List<DelegationScopeResolver.EffectiveDelegation> delegations = effective(principal);
         return all.stream()
                 .filter(
@@ -56,14 +61,94 @@ public final class AclScopeGate {
                             return delegations.stream()
                                     .anyMatch(
                                             delegation ->
-                                                    resolver.covers(
-                                                            delegation,
-                                                            DelegationScopeResolver.Target
-                                                                    .department(deptId),
-                                                            null,
-                                                            Instant.now()));
+                                                    delegation.resourceGeneration()
+                                                                    == grant.resourceGeneration()
+                                                            && resolver.covers(
+                                                                    delegation,
+                                                                    DelegationScopeResolver.Target
+                                                                            .department(deptId),
+                                                                    null,
+                                                                    now)
+                                                            && resolver.covers(
+                                                                    delegation,
+                                                                    DelegationScopeResolver.Target
+                                                                            .resource(
+                                                                                    grant
+                                                                                            .resourceType(),
+                                                                                    grant
+                                                                                            .resourceId()),
+                                                                    null,
+                                                                    now));
                         })
                 .toList();
+    }
+
+    /** One complete delegation must cover both sides of an update under the write fence. */
+    public void requireMutationAllowed(
+            Connection connection,
+            long actorId,
+            local.ptmcp.persistence.org.AclGrantStore.AclGrantRecord before,
+            local.ptmcp.persistence.org.AclGrantStore.AclGrantRecord after)
+            throws SQLException {
+        Instant now = Instant.now();
+        for (DelegationScopeResolver.EffectiveDelegation delegation :
+                resolver.effectiveDelegations(connection, actorId, now)) {
+            if ((before == null || coversRecord(connection, delegation, before, null, now))
+                    && (after == null
+                            || (coversRecord(
+                                            connection,
+                                            delegation,
+                                            after,
+                                            "ptmcp:acl:"
+                                                    + after.action()
+                                                            .toLowerCase(java.util.Locale.ROOT),
+                                            now)
+                                    && windowCovers(
+                                            delegation, after.validFrom(), after.validTo())))) {
+                return;
+            }
+        }
+        throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
+    }
+
+    private boolean coversRecord(
+            Connection connection,
+            DelegationScopeResolver.EffectiveDelegation delegation,
+            local.ptmcp.persistence.org.AclGrantStore.AclGrantRecord row,
+            String action,
+            Instant now)
+            throws SQLException {
+        Long department = subjectDepartment(connection, row.subjectType(), row.subjectId());
+        return department != null
+                && row.resourceGeneration() == delegation.resourceGeneration()
+                && resolver.covers(
+                        connection,
+                        delegation,
+                        DelegationScopeResolver.Target.department(department),
+                        action,
+                        now)
+                && resolver.covers(
+                        connection,
+                        delegation,
+                        DelegationScopeResolver.Target.resource(
+                                row.resourceType(), row.resourceId()),
+                        null,
+                        now);
+    }
+
+    private static Long subjectDepartment(Connection connection, String type, long id)
+            throws SQLException {
+        if ("DEPT".equals(type)) return id;
+        if (!"USER".equals(type)) return null;
+        try (PreparedStatement query =
+                connection.prepareStatement(
+                        "SELECT dept_id FROM sys_user_profile WHERE user_id=?")) {
+            query.setQueryTimeout(5);
+            query.setLong(1, id);
+            try (ResultSet result = query.executeQuery()) {
+                return result.next() ? result.getObject(1, Long.class) : null;
+            }
+        }
     }
 
     /**
@@ -193,5 +278,7 @@ public final class AclScopeGate {
         String resourceType();
 
         long resourceId();
+
+        long resourceGeneration();
     }
 }

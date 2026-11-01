@@ -1112,6 +1112,12 @@ class AdminApiTest {
         long deptId = createDepartment("自增部");
         long selfActor = createUser("esc-admin", "自增管理员", deptId);
         try (Connection connection = connect()) {
+            try (PreparedStatement ready =
+                    connection.prepareStatement(
+                            "UPDATE sys_user_security SET identity_state='READY' WHERE user_id=?")) {
+                ready.setLong(1, selfActor);
+                ready.executeUpdate();
+            }
             AdminActionTestSupport.grant(
                     connection,
                     selfActor,
@@ -2707,6 +2713,13 @@ class AdminApiTest {
         long outsideId = createDepartment("ACL作用域外");
         createUser("acl-throwaway", "占位用户", rootId);
         long delegate = createUser("acl-delegate", "ACL受控员", rootId);
+        try (Connection connection = connect();
+                PreparedStatement ready =
+                        connection.prepareStatement(
+                                "UPDATE sys_user_security SET identity_state='READY' WHERE user_id=?")) {
+            ready.setLong(1, delegate);
+            ready.executeUpdate();
+        }
         try (Connection connection = connect()) {
             AdminActionTestSupport.grant(
                     connection,
