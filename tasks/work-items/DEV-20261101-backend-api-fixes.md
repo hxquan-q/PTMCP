@@ -99,11 +99,15 @@ python scripts/check.py（74 项）通过。
 
 ## 交接
 
-当前分支 dev；切片 A+B+C 本任务路径已提交（ACL 管理端/持久化六文件+AclMutationGuard、
-客户端三文件、authz 两文件、AdminApiTest、三个新回归测试、本工作项），
-提交见 git log feat(backend)/test(backend)。未提交保留：gateway/admin POM 与
-PlatformAdminService/PlatformProofRoundTripTest/authentication.md 属并行审计修复会话，
-其提交需该会话按 hunk 复核后在安全关键授权下集成；本任务对 gateway POM 的测试依赖
-隔离改动已在共享树就位，随该会话 POM 一并提交。
-下一步：回收独立安全评审结论、按接口合同核对部署顺序（先部署兼容 AS 读端，再部署管理写端），
-等待人工接受。已有用户修改保持原状。
+当前分支 dev；本任务全部代码已提交（edefd05 切片A+B、045e48f 评审修复、621109f 契约记录、
+e02d9d7 V15清理+冒烟），共四笔。纯 HEAD 定向套件全绿（可部署）；真机 HTTP 冒烟全过
+（.auto/smoke-clients.sh：disposable MySQL + 纯 HEAD admin jar + Tomcat 18080，
+secret 一次展示/回放 TOKEN_ALREADY_CREATED/分页续页/幂等存体无明文/JSON 数组落盘）。
+未提交保留：gateway/admin POM 与 PlatformAdminService/PlatformProofRoundTripTest/
+authentication.md 属并行审计修复会话，其提交需该会话按 hunk 复核后在安全关键授权下
+集成；本任务对 gateway POM 的测试依赖隔离改动已在共享树就位，随该会话 POM 一并提交。
+推送：github（死代理 127.0.0.1:7897）与 codeup（ssh 超时）均不可达，四笔本地提交待
+网络恢复后补推（git push origin dev && git push codeup dev）。
+下一步：①人工接受（用户）；②审计会话 4 后端文件集成时连带 gateway POM 提交；
+③部署顺序核对（先 AS 兼容读端，再管理写端）；④生产环境存量行清理按需执行 V15
+（仅隔离验证过，不涉生产）。已有用户修改保持原状。
