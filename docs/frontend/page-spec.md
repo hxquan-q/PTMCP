@@ -8,6 +8,8 @@
 
 所有受保护页面先获取会话和权限。管理 API 前缀为 `/api/v1/admin`，个人 API 为 `/api/v1/me`，会话为 `/api/v1/session`。下文接口省略这些前缀时会明确标注。个人页强制本人，无 userId 选择器；所有管理接口由服务端再校验委派范围。
 
+使用边界见 [PRD](../product/PRD.md)：管理员负责 MCP 服务／工具配置、管理侧调试、发布、停启用、回滚及在获准范围内维护授权；员工仅接入和使用已获授权的 MCP，不参与服务创建、工具编辑、发布或再授权。个人页可以完成本人 OAuth 同意、本人授权族撤销和本人 PAT，这些动作不是面向其他主体的再授权。管理路由仍按功能码和委派逐项校验。可发布 MCP 服务（草稿、发布、停用、回滚）是目标模型，当前规格没有该对象的独立页面；落地前不得把个人路由做成服务生命周期入口。
+
 共用状态：首次请求显示结构化 skeleton；刷新保留已有非敏感内容并标记刷新；空状态解释“没有记录/没有可见资源/筛选无匹配”的区别；错误内联给出原因、requestId 和允许动作。401清空敏感内容后登录；403说明权限不足；404对象已删除或不可访问；409重新读取差异，不能静默覆盖；429/503不自动重放写操作。加载中不允许重复提交。
 
 所有列表使用 cursor，每页默认20、最大100，默认不显示总数或总页数。权限或筛选变化导致 CURSOR_STALE 时回到首批。日期筛选请求区间≤31天；时间显示用户时区。所有修改/删除版本化资源带 If-Match；写操作遵守 CSRF、幂等键和服务端校验。
@@ -148,7 +150,7 @@ GET me/dictionary/{objectId}?platformId=...详情由服务端READ检查；展示
 
 ## 14. P-13 MCP 接入配置
 
-**路由**：`/me/integrations`。**角色**：全部已登录用户。**关联**：FR-09、10、18。
+**路由**：`/me/integrations`。**角色**：全部已登录用户；只接入已获授权的 MCP，不提供服务创建、工具编辑、发布、停启用、回滚或再授权。**关联**：FR-09、10、18。
 
 先GET me/access-context?level=PLATFORM，以items/nextCursor分页读取可选平台；选择platformId与GENERIC/WORKBUDDY/CURSOR/CLAUDE_CODE/VSCODE，GET me/mcp-config。显示transport、url、authentication、configTemplate、compatibilityStatus、validatedVersion。配置块为纯文本，有复制按钮和反馈；无部署地址/未验证版本时显示待配置/待验证，不给虚假“连接成功”。
 
@@ -164,7 +166,7 @@ DELETE me/tokens/{id}撤销，确认说明客户端需更换凭证。无“查�
 
 ## 16. P-15 我的授权
 
-**路由**：`/me/authorizations`。**角色**：全部已登录用户。**关联**：FR-10。
+**路由**：`/me/authorizations`。**角色**：全部已登录用户；只撤销本人授权族，不把 MCP 服务或数据权限再授给其他主体。**关联**：FR-10。
 
 GET me/authorizations：clientName、platformId、issuedAt、lastUsedAt、status、absoluteExpiresAt。DELETE me/authorizations/{familyId}撤销整族及关联JWT。页面不出现Access/Refresh Token，不提供手动刷新按钮。
 
