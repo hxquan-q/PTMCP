@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
+import { registerHooks } from 'node:module';
 import test from 'node:test';
-import { fmtTime, healthOf, statusOf, syncResultOf } from '../src/views/admin/datasourceStatus.ts';
+
+const sourceImports = registerHooks({
+  resolve(specifier: string, context: { parentURL?: string }, nextResolve: (s: string, c: unknown) => unknown) {
+    const extensionlessSource = context.parentURL?.includes('/src/') && specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier);
+    return nextResolve(extensionlessSource ? `${specifier}.ts` : specifier, context);
+  },
+});
+const { fmtTime, healthOf, statusOf, syncResultOf } = await import('../src/views/admin/datasourceStatus.ts');
+sourceImports.deregister();
 
 test('statusOf maps every backend status to a stable label and tone', () => {
   assert.deepEqual(statusOf('ACTIVE'), { label: '启用', tone: 'success' });
@@ -34,9 +43,11 @@ test('syncResultOf keeps null for never-synced rows and distinguishes failure', 
   assert.deepEqual(syncResultOf('ERROR'), { label: '失败', tone: 'danger' });
 });
 
-test('fmtTime renders local YYYY-MM-DD HH:mm and degrades unknown input to —', () => {
-  assert.equal(fmtTime('2026-10-29T16:09:00Z'), '2026-10-29 16:09');
-  assert.equal(fmtTime('2026-10-29T16:09:00'), '2026-10-29 16:09');
+test('fmtTime converts explicit instants to Asia/Taipei, including the next day', () => {
+  assert.equal(fmtTime('2026-10-29T16:09:00Z'), '2026-10-30 00:09');
+  assert.equal(fmtTime('2026-10-30T00:09:00+08:00'), '2026-10-30 00:09');
+  assert.equal(fmtTime('2026-10-29T11:09:00-05:00'), '2026-10-30 00:09');
+  assert.equal(fmtTime('2026-10-29T16:09:00'), '—');
   assert.equal(fmtTime(null), '—');
   assert.equal(fmtTime(undefined), '—');
   assert.equal(fmtTime(''), '—');

@@ -18,11 +18,12 @@ test('preview is isolated, versioned and never returns a persisted secret', asyn
     const response = await server(path, { method, body, headers: version ? { 'If-Match': `"${version}"` } : {} });
     return { status: response.status, data: await response.json() };
   };
-  const created = await read('/api/v1/admin/platforms', 'POST', { code: 'preview', name: '合成平台', tier: 3, status: 'DISABLED' });
+  const platform = { code: 'preview', name: '合成平台', tier: 3, catalogMode: 'DISCOVER', proofMode: 'NONE', status: 'DISABLED' };
+  const created = await read('/api/v1/admin/platforms', 'POST', platform);
   assert.equal(created.status, 201);
   const id = created.data.id;
-  assert.equal((await read(`/api/v1/admin/platforms/${id}`, 'PUT', { name: 'changed' }, '0')).status, 412);
-  const updated = await read(`/api/v1/admin/platforms/${id}`, 'PUT', { name: 'changed' }, created.data.version);
+  assert.equal((await read(`/api/v1/admin/platforms/${id}`, 'PUT', { ...platform, name: 'changed' }, '0')).status, 412);
+  const updated = await read(`/api/v1/admin/platforms/${id}`, 'PUT', { ...platform, name: 'changed' }, created.data.version);
   assert.equal(updated.data.name, 'changed');
   const client = await read(`/api/v1/admin/platforms/${id}/clients`, 'POST', {
     name: '演示客户端',
@@ -54,7 +55,7 @@ test('datasource catalogue covers engines, statuses, sync outcomes and timestamp
   const rows = page.items as Array<Record<string, unknown>>;
   assert.ok(rows.length >= 6, 'catalogue must keep its demo variety');
   const engines = new Set(rows.map((row) => row.engine));
-  for (const engine of ['MYSQL', 'POSTGRESQL', 'CLICKHOUSE', 'SQLITE']) assert.ok(engines.has(engine), `${engine} seed missing`);
+  assert.deepEqual([...engines].sort(), ['MYSQL', 'POSTGRESQL'], 'preview must represent exactly the supported engines');
   const statuses = new Set(rows.map((row) => row.status));
   for (const status of ['ACTIVE', 'DRAFT', 'DISABLED']) assert.ok(statuses.has(status), `${status} seed missing`);
   const healths = new Set(rows.map((row) => row.health));

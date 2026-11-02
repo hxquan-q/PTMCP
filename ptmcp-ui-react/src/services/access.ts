@@ -210,6 +210,7 @@ export interface PlatformWrite {
   tier: number;
   catalogMode: string;
   proofMode: string;
+  proofConfig?: { certificateFingerprint: string } | { proxyNetwork: string; secret: string };
   status: string;
 }
 

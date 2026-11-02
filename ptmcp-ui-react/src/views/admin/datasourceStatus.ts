@@ -1,3 +1,5 @@
+import { formatTaipeiTime } from '../../services/dateTime';
+
 /** 数据源状态/健康/时间的展示映射 — 纯函数，供 DatasourcesPage 与测试共用。 */
 export type Tone = 'success' | 'warning' | 'danger' | 'neutral';
 
@@ -29,9 +31,7 @@ export function syncResultOf(result: string | null | undefined): StatusTone | nu
   return { label: '成功', tone: 'success' };
 }
 
-/** ISO 时间 → 本地展示格式 YYYY-MM-DD HH:mm；空值与无效值返回 —。 */
+/** ISO 时间 → Asia/Taipei YYYY-MM-DD HH:mm；空值与无效值返回 —。 */
 export function fmtTime(at: string | null | undefined): string {
-  if (!at) return '—';
-  const sliced = at.slice(0, 16).replace('T', ' ');
-  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(sliced) ? sliced : '—';
+  return formatTaipeiTime(at, 'minute');
 }

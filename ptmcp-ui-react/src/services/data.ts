@@ -65,7 +65,7 @@ export interface DatasourceRead {
   version?: string;
   code: string;
   name: string;
-  engine: 'MYSQL' | 'POSTGRESQL' | 'SQLSERVER' | 'ORACLE' | 'MONGODB' | 'CLICKHOUSE' | 'SQLITE' | string;
+  engine: string;
   host: string;
   port: number;
   databaseName: string;

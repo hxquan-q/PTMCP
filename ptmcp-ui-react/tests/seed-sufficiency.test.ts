@@ -28,11 +28,11 @@ test('preview seeds: every downstream test domain has sufficient data diversity'
       signal: init?.signal,
     })) as typeof fetch;
   try {
-    // 数据源：≥6（4 引擎 × 3 状态 × 降级健康 × 失败同步——datasourceStatus/ds-create/list-filters/preview-server 依赖）
+    // 数据源：≥6（当前双引擎、3 状态、降级健康与失败同步——datasourceStatus/ds-create/list-filters/preview-server 依赖）
     const ds = await data.listDatasources({ pageSize: 100 });
     assert.ok(ds.data.items.length >= 6, `datasource seeds: need ≥6, got ${ds.data.items.length}`);
     const engines = new Set(ds.data.items.map((d) => d.engine));
-    assert.ok(engines.size >= 4, `engine diversity: need ≥4, got ${[...engines].join(',')}`);
+    assert.deepEqual([...engines].sort(), ['MYSQL', 'POSTGRESQL'], 'preview must cover both supported engines without advertising unsupported ones');
     const statuses = new Set(ds.data.items.map((d) => d.status));
     assert.ok(statuses.size >= 3, `status diversity: need ≥3, got ${[...statuses].join(',')}`);
     assert.ok(

@@ -19,27 +19,14 @@ import {
 } from '../../components/common';
 import { CheckboxIcon, DatabaseIcon, DotsIcon, EditIcon, FilterIcon, PlusIcon } from '../../components/Icons';
 import { fmtTime as fmt, healthOf, statusOf } from './datasourceStatus';
-import { dsCreateValidate, emptyDsForm, type DsForm } from './dsForm';
+import { DATASOURCE_ENGINES, DATASOURCE_STATUSES, dsCreateValidate, emptyDsForm, type DsForm } from './dsForm';
 import { createDatasource } from '../../services/data';
 import { useSensitivePermissions } from '../../permissionsContext';
 import { showToast } from '../../toast';
 import { listDatasources, type DatasourceRead } from '../../services/data';
 
-const ENGINE_OPTIONS = [
-  { value: '', label: '全部引擎' },
-  { value: 'MYSQL', label: 'MySQL' },
-  { value: 'POSTGRESQL', label: 'PostgreSQL' },
-  { value: 'CLICKHOUSE', label: 'ClickHouse' },
-  { value: 'SQLITE', label: 'SQLite' },
-  { value: 'ORACLE', label: 'Oracle' },
-  { value: 'MONGODB', label: 'MongoDB' },
-];
-const STATUS_OPTIONS = [
-  { value: '', label: '全部状态' },
-  { value: 'ENABLED', label: '启用' },
-  { value: 'DRAFT', label: '草稿' },
-  { value: 'DISABLED', label: '禁用' },
-];
+const ENGINE_OPTIONS = [{ value: '', label: '全部引擎' }, ...DATASOURCE_ENGINES];
+const STATUS_OPTIONS = [{ value: '', label: '全部状态' }, ...DATASOURCE_STATUSES];
 
 export function DatasourcesPage() {
   const { can } = useSensitivePermissions();

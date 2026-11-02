@@ -8,8 +8,10 @@ import { validateDelegationForm, type DelegationFormValues } from './delegationF
 import { useSensitivePermissions } from '../../permissionsContext';
 import { showToast } from '../../toast';
 
+import { formatTaipeiTime } from '../../services/dateTime';
+
 function fmt(at: string | null): string {
-  return at ? at.slice(0, 16).replace('T', ' ') : '—';
+  return formatTaipeiTime(at, 'minute');
 }
 
 export function DelegationsPage() {

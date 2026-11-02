@@ -26,6 +26,38 @@ function invalidClientWrite(body: Row): boolean {
   );
 }
 
+/** Mirror the platform service's write contract; proof material is never stored in preview rows. */
+function invalidPlatformWrite(body: Row, current?: Row): boolean {
+  if (typeof body.code !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(body.code.trim())) return true;
+  if (typeof body.name !== 'string' || !body.name.trim() || body.name.trim().length > 128) return true;
+  if (![1, 2, 3].includes(body.tier as number)) return true;
+  if (!['DISCOVER', 'HIDE'].includes(body.catalogMode as string)) return true;
+  if (!['NONE', 'MTLS', 'PROXY_SECRET'].includes(body.proofMode as string)) return true;
+  if (!['ACTIVE', 'DISABLED'].includes(body.status as string)) return true;
+  if (body.tier === 1 && body.proofMode === 'NONE') return true;
+  if (body.proofConfig != null && (typeof body.proofConfig !== 'object' || Array.isArray(body.proofConfig))) return true;
+  const config = body.proofConfig as Row | undefined | null;
+  const fingerprint = config?.certificateFingerprint;
+  const secret = config?.secret;
+  const hasMaterial = (typeof fingerprint === 'string' && !!fingerprint.trim()) || (typeof secret === 'string' && !!secret.trim());
+  if (body.proofMode === 'NONE') return hasMaterial;
+  if (!hasMaterial) return current?.proofMode !== body.proofMode || !current?.proofConfigured;
+  if (body.proofMode === 'MTLS') return typeof fingerprint !== 'string' || !/^(?:[a-fA-F0-9]{2}:?){32}$/.test(fingerprint.trim());
+  return (
+    typeof config?.proxyNetwork !== 'string' ||
+    !config.proxyNetwork.trim() ||
+    config.proxyNetwork.length > 256 ||
+    typeof secret !== 'string' ||
+    !secret.trim()
+  );
+}
+
+function withoutWriteOnlyInputs(body: Row): Row {
+  const safe = { ...body };
+  for (const key of ['credential', 'initialPassword', 'newPassword', 'proofConfig']) delete safe[key];
+  return safe;
+}
+
 interface PreviewOptions {
   method?: string;
   body?: unknown;
@@ -178,7 +210,7 @@ export function createPreviewServer() {
         databaseName: 'production',
         username: 'prod_reader',
         tlsMode: 'VERIFY_FULL',
-        poolMax: 10,
+        poolMax: 8,
         status: 'ACTIVE',
         configVersion: '3',
         resourceVersion: '7',
@@ -191,17 +223,17 @@ export function createPreviewServer() {
       {
         id: '4',
         version: '2',
-        code: 'dwh-clickhouse',
+        code: 'dwh-pg',
         createdAt: '2026-10-15T14:00:00Z',
         updatedAt: new Date(Date.now() - 7200_000).toISOString(),
         name: '数据仓库',
-        engine: 'CLICKHOUSE',
+        engine: 'POSTGRESQL',
         host: 'dwh.example.test',
-        port: 8123,
+        port: 5432,
         databaseName: 'analytics',
         username: 'dwh_reader',
         tlsMode: 'VERIFY_FULL',
-        poolMax: 20,
+        poolMax: 8,
         status: 'ACTIVE',
         configVersion: '2',
         resourceVersion: '4',
@@ -223,7 +255,7 @@ export function createPreviewServer() {
         port: 3306,
         databaseName: 'test',
         username: 'test_reader',
-        tlsMode: 'PREFERRED',
+        tlsMode: 'VERIFY_FULL',
         poolMax: 5,
         status: 'DISABLED',
         configVersion: '1',
@@ -237,16 +269,16 @@ export function createPreviewServer() {
       {
         id: '6',
         version: '1',
-        code: 'example-sqlite',
+        code: 'example-pg',
         createdAt: '2026-10-10T11:00:00Z',
         updatedAt: new Date(Date.now() - 172800_000).toISOString(),
         name: '示例数据源',
-        engine: 'SQLITE',
-        host: 'localhost',
-        port: null,
+        engine: 'POSTGRESQL',
+        host: 'example-db.example.test',
+        port: 5432,
         databaseName: 'demo',
         username: 'demo',
-        tlsMode: 'NONE',
+        tlsMode: 'VERIFY_FULL',
         poolMax: 1,
         status: 'ACTIVE',
         configVersion: '1',
@@ -852,9 +884,8 @@ export function createPreviewServer() {
     }
     if (method === 'POST') {
       if (table === 'clients' && invalidClientWrite(body)) return fail(400, 'INVALID_ARGUMENT');
-      const created: Row = { ...body, id: String(++serial), version: '1', status: body.status ?? 'ACTIVE', createdAt: now };
-      // Write-only inputs are never retained in fixtures or included in list/detail DTOs.
-      for (const key of ['credential', 'initialPassword', 'newPassword', 'proofConfig']) delete created[key];
+      if (table === 'platforms' && invalidPlatformWrite(body)) return fail(400, 'INVALID_ARGUMENT');
+      const created: Row = { ...withoutWriteOnlyInputs(body), id: String(++serial), version: '1', status: body.status ?? 'ACTIVE', createdAt: now };
       if (table === 'datasources')
         Object.assign(created, {
           credentialConfigured: true,
@@ -898,6 +929,7 @@ export function createPreviewServer() {
     }
     if (method === 'PUT' || method === 'PATCH') {
       if (table === 'clients' && invalidClientWrite(body)) return fail(400, 'INVALID_ARGUMENT');
+      if (table === 'platforms' && invalidPlatformWrite(body, row)) return fail(400, 'INVALID_ARGUMENT');
       if (subAction === 'dictionary') {
         row.dictionary = { ...body, version: String(Number((row.dictionary as Row).version) + 1) };
         row.dictionaryTitle = body.title;
@@ -906,9 +938,7 @@ export function createPreviewServer() {
       else if (subAction === 'roles') row.roleIds = body.roleIds;
       else if (subAction === 'department') row.deptId = body.departmentId;
       else if (subAction !== 'password') {
-        const safe = { ...body };
-        for (const key of ['credential', 'initialPassword', 'newPassword', 'proofConfig']) delete safe[key];
-        Object.assign(row, safe);
+        Object.assign(row, withoutWriteOnlyInputs(body));
         if (table === 'platforms') {
           row.proofConfigured = body.proofMode === 'NONE' ? false : !!body.proofConfig || row.proofConfigured;
           row.securityVersion = String(Number(row.securityVersion ?? 0) + 1);
@@ -916,7 +946,7 @@ export function createPreviewServer() {
       }
       if (table !== 'objects') row.version = typeof row.version === 'number' ? row.version + 1 : String(Number(row.version ?? 0) + 1);
       const updOpMeta = OP_MAP[table];
-      if (updOpMeta?.update && !subAction) recordOperation(updOpMeta.update, updOpMeta.type, String(row.id), null, body);
+      if (updOpMeta?.update && !subAction) recordOperation(updOpMeta.update, updOpMeta.type, String(row.id), null, withoutWriteOnlyInputs(body));
       return response(row);
     }
     return fail(501, 'PREVIEW_NOT_IMPLEMENTED');

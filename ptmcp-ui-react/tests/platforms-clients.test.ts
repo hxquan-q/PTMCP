@@ -48,8 +48,8 @@ const platformBody = {
   code: `p${Date.now() % 100000}`,
   name: '联测平台',
   tier: 2,
-  catalogMode: 'BLACKLIST',
-  proofMode: 'PKCE_S256',
+  catalogMode: 'DISCOVER',
+  proofMode: 'NONE',
   status: 'ACTIVE',
 };
 
@@ -86,6 +86,71 @@ test('platform CRUD keeps versioning and never resurrects deleted rows', async (
     await access.deletePlatform(updated.id, updated.version);
     const after = await access.listPlatforms({ pageSize: 100 });
     assert.ok(!after.items.some((p) => p.id === created.id));
+  });
+});
+
+test('platform preview rejects legacy enum writes and incomplete Tier1 proof', async () => {
+  await withPreviewServer(async () => {
+    const invalid = (error: unknown) => (error as { status?: number }).status === 400;
+    await assert.rejects(() => access.createPlatform({ ...platformBody, catalogMode: 'BLACKLIST' }), invalid);
+    await assert.rejects(() => access.createPlatform({ ...platformBody, proofMode: 'PKCE_S256' }), invalid);
+    await assert.rejects(() => access.createPlatform({ ...platformBody, tier: 1 }), invalid);
+    await assert.rejects(() => access.createPlatform({ ...platformBody, tier: 1, proofMode: 'MTLS' }), invalid);
+  });
+});
+
+test('platform proof writes keep configured material only within the same mode and never expose it', async () => {
+  await withPreviewServer(async (requests) => {
+    const invalid = (error: unknown) => (error as { status?: number }).status === 400;
+    const body = { ...platformBody, tier: 1, proofMode: 'MTLS' };
+    const proofConfig = { certificateFingerprint: 'ab'.repeat(32) };
+    const created = await access.createPlatform({ ...body, proofConfig });
+    assert.equal(created.proofConfigured, true);
+    assert.ok(!Object.hasOwn(created, 'proofConfig'));
+    const kept = await access.updatePlatform(created.id, body, created.version);
+    assert.equal(kept.proofConfigured, true);
+    await assert.rejects(() => access.updatePlatform(created.id, { ...body, proofMode: 'PROXY_SECRET' }, kept.version), invalid);
+    await assert.rejects(
+      () =>
+        access.updatePlatform(
+          created.id,
+          { ...body, proofMode: 'PROXY_SECRET', proofConfig: { proxyNetwork: '192.0.2.0/24', secret: '' } },
+          kept.version,
+        ),
+      invalid,
+    );
+    const proxyBody = {
+      ...body,
+      proofMode: 'PROXY_SECRET',
+      proofConfig: { proxyNetwork: '192.0.2.0/24', secret: 'synthetic-platform-proof-not-a-credential' },
+    };
+    const replaced = await access.updatePlatform(created.id, proxyBody, kept.version);
+    assert.equal(replaced.proofConfigured, true);
+    assert.ok(!Object.hasOwn(replaced, 'proofConfig'));
+    const detail = await access.getPlatform(created.id);
+    const list = await access.listPlatforms();
+    const operations = await access.listOperations();
+    for (const value of [detail, list, operations]) {
+      const serialized = JSON.stringify(value);
+      assert.ok(!serialized.includes(proxyBody.proofConfig.secret), 'proof secrets must never be returned, including operation logs');
+      assert.ok(!serialized.includes(proofConfig.certificateFingerprint), 'proof fingerprints must not be returned');
+      assert.ok(!serialized.includes('"proofConfig"'));
+    }
+    const post = requests.find((r) => r.path === '/api/v1/admin/platforms' && r.method === 'POST');
+    assert.deepEqual(post?.body, { ...body, proofConfig });
+    assert.ok(post?.headers.get('Idempotency-Key'));
+    assert.equal(post?.headers.get('X-CSRF-Token'), 'test-csrf');
+    const put = requests.find(
+      (r) =>
+        r.method === 'PUT' &&
+        (r.body as { proofMode?: string }).proofMode === 'PROXY_SECRET' &&
+        (r.body as { proofConfig?: { secret?: string } }).proofConfig?.secret,
+    );
+    assert.equal(put?.headers.get('If-Match'), `"${kept.version}"`);
+    const cleared = await access.updatePlatform(created.id, { ...platformBody, tier: 2 }, replaced.version);
+    assert.equal(cleared.proofConfigured, false);
+    await assert.rejects(() => access.updatePlatform(created.id, body, cleared.version), invalid);
+    await assert.rejects(() => access.createPlatform({ ...platformBody, proofConfig }), invalid);
   });
 });
 

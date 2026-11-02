@@ -1,5 +1,15 @@
 import type { DatasourceRead } from '../../services/data';
 
+export const DATASOURCE_ENGINES = [
+  { value: 'MYSQL', label: 'MySQL' },
+  { value: 'POSTGRESQL', label: 'PostgreSQL' },
+];
+export const DATASOURCE_STATUSES = [
+  { value: 'ACTIVE', label: '启用' },
+  { value: 'DRAFT', label: '草稿' },
+  { value: 'DISABLED', label: '禁用' },
+];
+
 /** 数据源表单模型与校验 — DetailPages（编辑）与 DatasourcesPage（新建）共用。 */
 export interface DsForm {
   code: string;
@@ -49,6 +59,8 @@ export function dsForm(value: DatasourceRead): DsForm {
 
 export function dsValidate(form: DsForm): Record<string, string> {
   const errs: Record<string, string> = {};
+  if (!DATASOURCE_ENGINES.some((option) => option.value === form.engine)) errs.engine = '仅支持 MySQL 或 PostgreSQL';
+  if (!DATASOURCE_STATUSES.some((option) => option.value === form.status)) errs.status = '请选择有效状态';
   if (!form.name.trim()) errs.name = '请输入名称';
   else if (form.name.length > 128) errs.name = '名称最多128字符';
   if (!form.host.trim()) errs.host = '请输入主机';

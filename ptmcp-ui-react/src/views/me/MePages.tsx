@@ -34,9 +34,7 @@ import { validatePasswordForm } from './passwordForm';
 import { showToast } from '../../toast';
 import { BackBar } from '../admin/DetailPages';
 
-function fmt(at: string | null | undefined): string {
-  return at ? at.slice(0, 19).replace('T', ' ') : '—';
-}
+import { formatTaipeiTime as fmt } from '../../services/dateTime';
 
 export function DictionaryPage() {
   const [platforms, setPlatforms] = useState<PlatformItem[]>([]);

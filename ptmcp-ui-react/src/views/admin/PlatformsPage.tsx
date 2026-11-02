@@ -21,21 +21,12 @@ import { scopeChangeText, scopeChanges, scopeKey, scopeRuleText } from './scopeD
 import { CLIENT_AUTH_METHODS, CLIENT_SCOPES, parseRedirectUris, toClientWrite, validateClientForm } from './clientForm';
 import { useSensitivePermissions } from '../../permissionsContext';
 import { showToast } from '../../toast';
+import { CATALOG_MODES, PROOF_MODES, platformForm, toPlatformWrite, validatePlatformForm } from './platformForm';
+import { ApiError } from '../../services/http';
 
 const TIER_LABEL: Record<number, string> = { 1: '一级', 2: '二级', 3: '三级' };
-const CATALOG_MODES = ['BLACKLIST', 'WHITELIST', 'FULL'];
-const PROOF_MODES = ['NONE', 'PKCE_S256'];
 const CLIENT_TYPES = ['PUBLIC', 'CONFIDENTIAL'];
 const CLIENT_STATUSES = ['ACTIVE', 'DISABLED'];
-
-interface PlatformForm {
-  code: string;
-  name: string;
-  tier: string;
-  catalogMode: string;
-  proofMode: string;
-  status: string;
-}
 
 interface ClientForm {
   platformId: string;
@@ -65,6 +56,7 @@ export function PlatformsPage() {
   const reload = useCallback(() => {
     let cancelled = false;
     setLoading(true);
+    setPlatforms([]);
     listPlatforms({ pageSize: 100 })
       .then(async (page) => {
         if (cancelled) return;
@@ -176,7 +168,12 @@ export function PlatformsPage() {
                       >
                         Scope
                       </button>
-                      <button className="link" style={{ marginLeft: 10 }} onClick={() => setPlatformDialog({ mode: 'edit', row: p })}>
+                      <button
+                        className="link"
+                        style={{ marginLeft: 10 }}
+                        disabled={loading}
+                        onClick={() => setPlatformDialog({ mode: 'edit', row: p })}
+                      >
                         <EditIcon /> 编辑
                       </button>
                       <button
@@ -251,7 +248,10 @@ export function PlatformsPage() {
       {platformDialog ? (
         <PlatformDialog
           state={platformDialog}
-          onClose={() => setPlatformDialog(null)}
+          onClose={() => {
+            setPlatformDialog(null);
+            setReloadTick((t) => t + 1);
+          }}
           onSaved={() => {
             setPlatformDialog(null);
             setReloadTick((t) => t + 1);
@@ -369,14 +369,9 @@ function PlatformDialog({
   onSaved: () => void;
 }) {
   const editing = state.mode === 'edit' ? state.row : null;
-  const [values, setValues] = useState<PlatformForm>(() => ({
-    code: editing?.code ?? '',
-    name: editing?.name ?? '',
-    tier: String(editing?.tier ?? '3'),
-    catalogMode: editing?.catalogMode ?? 'BLACKLIST',
-    proofMode: editing?.proofMode ?? 'PKCE_S256',
-    status: editing?.status ?? 'ACTIVE',
-  }));
+  const [values, setValues] = useState(() => platformForm(editing));
+  const [replacementRequired, setReplacementRequired] = useState(false);
+  const [requiresReload, setRequiresReload] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [conflict, setConflict] = useState('');
@@ -384,24 +379,14 @@ function PlatformDialog({
   const submit = async () => {
     setFormError('');
     setConflict('');
-    const code = values.code.trim();
-    const name = values.name.trim();
-    if (!editing && !/^[a-z][a-z0-9-]{1,63}$/.test(code)) {
-      setFormError('平台编码须以小写字母开头，仅含小写字母、数字与短横线，长度 2–64');
+    if (saving) return;
+    if (requiresReload) return;
+    const error = validatePlatformForm(values, editing, replacementRequired);
+    if (error) {
+      setFormError(error);
       return;
     }
-    if (name.length < 2 || name.length > 128) {
-      setFormError('平台名称长度须为 2–128 个字符');
-      return;
-    }
-    const body = {
-      code,
-      name,
-      tier: Number(values.tier),
-      catalogMode: values.catalogMode,
-      proofMode: values.proofMode,
-      status: values.status,
-    };
+    const body = toPlatformWrite(values);
     setSaving(true);
     try {
       if (editing) await updatePlatform(editing.id, body, editing.version);
@@ -409,11 +394,18 @@ function PlatformDialog({
       onSaved();
       showToast('平台已保存');
     } catch (e) {
-      const status = (e as { status?: number }).status;
-      if (status === 412) setConflict('该平台已被他人修改，请关闭后重试。');
-      else if (status === 409) setConflict('平台编码已存在。');
-      else setFormError((e as Error).message || '保存失败，请稍后重试。');
+      if (body.proofConfig) setReplacementRequired(true);
+      const definiteRejection = e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 408 && e.code !== 'INVALID_RESPONSE';
+      if (!definiteRejection) {
+        setRequiresReload(true);
+        setFormError('保存结果无法确认，请关闭并重新读取平台后核对；不要直接重试。');
+      } else if (e.status === 412) {
+        setRequiresReload(true);
+        setConflict('该平台已被他人修改，请关闭并重新读取后核对。');
+      } else if (e.status === 409) setConflict('平台编码已存在。');
+      else setFormError(e.message || '保存失败，请重新填写证明材料后重试。');
     } finally {
+      setValues((s) => ({ ...s, certificateFingerprint: '', proxyNetwork: '', secret: '' }));
       setSaving(false);
     }
   };
@@ -425,7 +417,7 @@ function PlatformDialog({
           {conflict}
         </Alert>
       ) : null}
-      <Field label="平台编码" hint={editing ? '编码创建后不可修改' : '小写字母开头，可含数字与短横线'}>
+      <Field label="平台编码" hint={editing ? '编码创建后不可修改' : '字母开头，可含数字、下划线与短横线，1–64 字符'}>
         <TextInput value={values.code} onChange={(v) => setValues((s) => ({ ...s, code: v }))} disabled={!!editing} placeholder="prod-desktop" />
       </Field>
       <Field label="平台名称">
@@ -456,20 +448,64 @@ function PlatformDialog({
             options={CATALOG_MODES.map((m) => ({ value: m, label: m }))}
           />
         </Field>
-        <Field label="凭证模式" hint="留空 NONE 表示不要求 proof">
+        <Field label="平台证明模式" hint="Tier1 必须配置 MTLS 或代理密钥；OAuth PKCE 不是平台证明">
           <Select
             value={values.proofMode}
-            onChange={(v) => setValues((s) => ({ ...s, proofMode: v }))}
+            onChange={(v) => setValues((s) => ({ ...s, proofMode: v, certificateFingerprint: '', proxyNetwork: '', secret: '' }))}
             options={PROOF_MODES.map((m) => ({ value: m, label: m }))}
           />
         </Field>
       </div>
+      {values.proofMode !== 'NONE' && editing?.proofConfigured && editing.proofMode === values.proofMode ? (
+        <Alert kind="info">证明已配置。全部留空保留当前配置；填写新材料将替换，旧材料不会回显。</Alert>
+      ) : null}
+      {values.proofMode === 'MTLS' ? (
+        <Field label="SHA-256 证书指纹" hint="32 字节十六进制，可用冒号分隔">
+          <TextInput
+            value={values.certificateFingerprint}
+            onChange={(v) => setValues((s) => ({ ...s, certificateFingerprint: v }))}
+            autoComplete="off"
+          />
+        </Field>
+      ) : null}
+      {values.proofMode === 'PROXY_SECRET' ? (
+        <>
+          <Field label="代理源网络 CIDR" hint="同时替换源网络和密钥；仅受信代理可发送 X-PTMCP-Proxy-Secret">
+            <TextInput
+              value={values.proxyNetwork}
+              onChange={(v) => setValues((s) => ({ ...s, proxyNetwork: v }))}
+              placeholder="192.0.2.0/24"
+              maxLength={256}
+              autoComplete="off"
+            />
+          </Field>
+          <Field label="代理证明密钥" hint="仅用于本次写入，不回显、不保存到浏览器存储">
+            <TextInput type="password" value={values.secret} onChange={(v) => setValues((s) => ({ ...s, secret: v }))} autoComplete="new-password" />
+          </Field>
+        </>
+      ) : null}
+      {replacementRequired && !requiresReload ? (
+        <Alert kind="warning" title="证明替换尚未完成">
+          新材料已清空，请重新填写；留空不会被视为保留旧证明。
+          <button
+            className="btn btn--secondary"
+            disabled={saving}
+            onClick={() => {
+              setReplacementRequired(false);
+              setValues((s) => ({ ...s, proofMode: editing?.proofMode ?? 'NONE', certificateFingerprint: '', proxyNetwork: '', secret: '' }));
+              setFormError('');
+            }}
+          >
+            取消本次证明替换
+          </button>
+        </Alert>
+      ) : null}
       {formError ? <Alert kind="danger">{formError}</Alert> : null}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
         <button className="btn btn--secondary" onClick={onClose} disabled={saving}>
           取消
         </button>
-        <button className="btn btn--primary" onClick={submit} disabled={saving}>
+        <button className="btn btn--primary" onClick={submit} disabled={saving || requiresReload}>
           {saving ? '保存中…' : editing ? '保存修改' : '创建平台'}
         </button>
       </div>

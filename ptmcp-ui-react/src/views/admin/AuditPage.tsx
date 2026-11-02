@@ -6,9 +6,7 @@ import { forgetAuditQuery, recallAuditQuery, rememberAuditQuery } from './auditQ
 import { listDatasources, type DatasourceRead } from '../../services/data';
 import { mePortalApi, type PlatformItem } from '../../services/mePortalApi';
 
-function fmt(at: string | null | undefined): string {
-  return at ? at.slice(0, 19).replace('T', ' ') : '—';
-}
+import { formatTaipeiTime as fmt } from '../../services/dateTime';
 
 export function AuditPage({
   initialTab = 'audit',

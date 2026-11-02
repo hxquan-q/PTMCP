@@ -35,6 +35,20 @@ async function withPreviewServer(fn: () => Promise<void>): Promise<void> {
   }
 }
 
+test('preview datasource fixtures use only supported engines, TLS and pool limits', async () => {
+  await withPreviewServer(async () => {
+    const { data: page } = await data.listDatasources({ pageSize: 100 });
+    assert.ok(page.items.length > 0);
+    for (const row of page.items) {
+      assert.ok(dsFormModule.DATASOURCE_ENGINES.some((option) => option.value === row.engine));
+      assert.ok(dsFormModule.DATASOURCE_STATUSES.some((option) => option.value === row.status));
+      assert.equal(row.tlsMode, 'VERIFY_FULL');
+      assert.ok(Number.isInteger(row.poolMax) && row.poolMax >= 1 && row.poolMax <= 8);
+      assert.ok(Number.isInteger(row.port) && row.port >= 1 && row.port <= 65535);
+    }
+  });
+});
+
 test('createDatasource persists with derived state and never echoes the credential', async () => {
   await withPreviewServer(async () => {
     const body = {
@@ -79,4 +93,26 @@ test('dsValidate keeps edit semantics; dsCreateValidate adds code and credential
   assert.match(dsCreateValidate({ ...okForm, code: 'Bad_Code' }).code!, /小写字母/);
   assert.match(dsCreateValidate({ ...okForm, port: 70000 }).port!, /1～65535/);
   assert.match(dsCreateValidate({ ...okForm, poolMax: 9 }).poolMax!, /1～8/);
+});
+
+test('datasource create and edit reject engines and statuses outside the current contract', () => {
+  const base: DsForm = {
+    ...emptyDsForm(),
+    code: 'test-db',
+    name: '测试库',
+    host: 'db',
+    databaseName: 'orders',
+    username: 'reader',
+    credential: 'synthetic-only',
+  };
+  for (const engine of ['MYSQL', 'POSTGRESQL']) {
+    for (const status of ['DRAFT', 'ACTIVE', 'DISABLED']) {
+      assert.deepEqual(dsCreateValidate({ ...base, engine, status }), {});
+    }
+  }
+  for (const engine of ['', 'CLICKHOUSE', 'SQLITE', 'ORACLE', 'MONGODB', 'SQLSERVER']) {
+    assert.match(dsCreateValidate({ ...base, engine }).engine!, /MySQL.*PostgreSQL/);
+    assert.match(dsValidate({ ...base, engine }).engine!, /MySQL.*PostgreSQL/);
+  }
+  assert.match(dsValidate({ ...base, status: 'ENABLED' }).status!, /状态/);
 });

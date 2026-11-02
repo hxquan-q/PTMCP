@@ -48,8 +48,8 @@ test('operations are recorded on CRUD and filterable by aggregate type', async (
     const created = await access.createPlatform({
       code: 'ops-test',
       name: '操作联测平台',
-      tier: 1,
-      catalogMode: 'BLACKLIST',
+      tier: 3,
+      catalogMode: 'DISCOVER',
       proofMode: 'NONE',
       status: 'ACTIVE',
     });
@@ -62,7 +62,7 @@ test('operations are recorded on CRUD and filterable by aggregate type', async (
     // update records too
     await access.updatePlatform(
       created.id,
-      { code: 'ops-test', name: '改名后', tier: 1, catalogMode: 'BLACKLIST', proofMode: 'NONE', status: 'ACTIVE' },
+      { code: 'ops-test', name: '改名后', tier: 3, catalogMode: 'DISCOVER', proofMode: 'NONE', status: 'ACTIVE' },
       created.version,
     );
     const afterUpdate = await access.listOperations({ aggregateType: 'PLATFORM', pageSize: 20 });

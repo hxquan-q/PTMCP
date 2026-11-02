@@ -37,16 +37,14 @@ import {
 } from '../../adapters/edit-conflict';
 import type { ConflictDifference } from '../../adapters/edit-conflict';
 import { updateDictionary, type DictionaryWrite } from '../../services/data';
-import { dsForm, dsValidate, type DsForm } from './dsForm';
+import { DATASOURCE_STATUSES, dsForm, dsValidate, type DsForm } from './dsForm';
 import { EditIcon, LockIcon } from '../../components/Icons';
 import { useSensitivePermissions } from '../../permissionsContext';
 import { showToast } from '../../toast';
 import { ApiError } from '../../services/http';
 import { newUuid } from '../../services/uuid';
 
-function fmt(at: string | null | undefined): string {
-  return at ? at.slice(0, 19).replace('T', ' ') : '—';
-}
+import { formatTaipeiTime as fmt } from '../../services/dateTime';
 
 function useDatasources(): [DatasourceRead[], (id: string | null | undefined) => string] {
   const [datasources, setDatasources] = useState<DatasourceRead[]>([]);
@@ -944,15 +942,7 @@ export function DatasourceDetailPage({ id }: { id: string }) {
                 <input className="input" style={{ width: '100%' }} value={form.engine} disabled />
               </Field>
               <Field label="状态" hint={fieldErrors.status}>
-                <Select
-                  value={form.status}
-                  onChange={(v) => !formDisabled && update({ status: v })}
-                  options={[
-                    { value: 'DRAFT', label: '草稿' },
-                    { value: 'ACTIVE', label: '运行中' },
-                    { value: 'DISABLED', label: '已停用' },
-                  ]}
-                />
+                <Select value={form.status} onChange={(v) => !formDisabled && update({ status: v })} options={DATASOURCE_STATUSES} />
               </Field>
               <Field label="主机" hint={fieldErrors.host}>
                 <TextInput value={form.host} onChange={(v) => !formDisabled && update({ host: v })} />
