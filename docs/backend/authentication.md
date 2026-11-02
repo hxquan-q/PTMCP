@@ -61,6 +61,12 @@ private_key_jwt证明token端点的一次客户端认证，后续普通Bearer若
 - PROXY_SECRET：`{"mode":"PROXY_SECRET","secret":"<base64>","proxyCidrs":["<CIDR>"]}`。仅在`proxyCidrs`内读取`X-PTMCP-Proxy-Secret`（base64），恒时比较。
 - 入口必须删除外部入站的同名证明Header；missing/格式不符按`PLATFORM_PROOF_REQUIRED`，不匹配/不受信来源按`PLATFORM_MISMATCH`，策略不可解密按`SECURITY_STATE_UNAVAILABLE`。证明值不进入日志或审计payload。
 
+管理端写入映射（2026-10-31）：`proofConfig` 仅写，读模型只返回 `proofConfigured`，不返回密文、指纹、源网络或密钥。MTLS 的 `certificateFingerprint` 接受 32 字节十六进制（可带冒号），保存前去冒号并转小写；当前管理表单没有 MTLS 受信代理网络字段，因此写入 `proxyCidrs:[]`，只接受 TLS 容器验证后的直连 Servlet 证书，不因请求携带指纹 Header 就信任。代理转发 MTLS 的部署配置须另按受控配置流程联调，不能在此表单隐式开放。
+
+PROXY_SECRET 的 `proxyNetwork` 为一个 IPv4/IPv6 字面地址 CIDR（最多 256 字符，使用与网关相同的 CIDR 解析器，不解析主机名）。`secret` 为非空白 UTF-8 原文，编码后 1～256 字节；不 trim 原文，先 Base64 再写入上述 JSON。代理必须将同一原文字节的 Base64 放入证明 Header，不可把表单原文直接当 Header。切换模式必须完整提供新材料；同模式已配置且全部留空可保留，提供部分材料不得静默保留；NONE 清除旧材料且 Tier1 不得使用。模式不对应的材料拒绝。
+
+兼容与部署：有效的现有 JSON 不变，网关不增加旧 `fingerprint:` / `proxy:` 前缀格式的宽松回退。旧管理端写入的该类错误格式继续失败关闭，须由管理员在新写入端重新配置；仅打开并空保存不会修复。先部署新管理端写入器并在隔离环境验证写入→加密持久化→网关验证，再轮换受影响平台；不需要 schema 或自动生产迁移。回滚旧管理端会重新产生不兼容写入，必须暂停证明新增/轮换，保留兼容网关与现有有效 JSON，不能用降 Tier/NONE 恢复调用。表单轮换失败后清空材料但保留替换意图，只有重新填写或显式取消替换才可继续；网络结果未知、无效响应或 412 冲突须关闭并重新读取后核对，不盲重试。
+
 ## 4. Authorization Code + PKCE 完整流程
 
 ~~~mermaid

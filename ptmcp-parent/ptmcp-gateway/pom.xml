@@ -10,6 +10,21 @@
   <dependencies>
     <dependency>
       <groupId>local.ptmcp</groupId>
+      <artifactId>ptmcp-admin</artifactId>
+      <version>${project.version}</version>
+      <classifier>plain</classifier>
+      <scope>test</scope>
+      <exclusions>
+        <!-- The admin fixture must not drag JDBC autoconfiguration into gateway contexts; the -->
+        <!-- proof round-trip test wires its own Hikari pool below. -->
+        <exclusion>
+          <groupId>org.springframework.boot</groupId>
+          <artifactId>spring-boot-starter-jdbc</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>local.ptmcp</groupId>
       <artifactId>ptmcp-common</artifactId>
       <version>${project.version}</version>
     </dependency>

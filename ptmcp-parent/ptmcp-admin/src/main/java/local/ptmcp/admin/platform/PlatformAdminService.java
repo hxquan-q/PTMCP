@@ -3,14 +3,20 @@ package local.ptmcp.admin.platform;
 import local.ptmcp.admin.datasource.CredentialCipher;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
+import local.ptmcp.common.platform.CidrRange;
 
+import tools.jackson.databind.json.JsonMapper;
+
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -29,6 +35,8 @@ public final class PlatformAdminService {
     private static final Pattern FINGERPRINT = Pattern.compile("^(?:[a-fA-F0-9]{2}:?){32}$");
     private static final Set<String> CATALOG_MODES = Set.of("DISCOVER", "HIDE");
     private static final Set<String> STATUSES = Set.of("ACTIVE", "DISABLED");
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+    private static final int MAX_SECRET_BYTES = 256;
 
     private final DataSource primary;
     private final CredentialCipher cipher;
@@ -549,15 +557,25 @@ public final class PlatformAdminService {
         if ("MTLS".equals(proofMode)) {
             if (config == null
                     || config.certificateFingerprint() == null
-                    || !FINGERPRINT.matcher(config.certificateFingerprint().trim()).matches()) {
+                    || !FINGERPRINT.matcher(config.certificateFingerprint().trim()).matches()
+                    || supplied(config.proxyNetwork())
+                    || supplied(config.secret())) {
                 throw new DomainException(ErrorCode.INVALID_ARGUMENT);
             }
+            String fingerprint =
+                    config.certificateFingerprint()
+                            .trim()
+                            .replace(":", "")
+                            .toLowerCase(Locale.ROOT);
+            // No trusted proxy is supplied by this API; only direct Servlet certificates count.
             CredentialCipher.Sealed sealed =
-                    cipher.encrypt("fingerprint:" + config.certificateFingerprint().trim());
+                    cipher.encrypt(
+                            JSON.writeValueAsString(
+                                    new MtlsPolicy("MTLS", List.of(fingerprint), List.of())));
             return new SealedConfig(sealed.ciphertext(), sealed.keyId());
         }
-        // PROXY_SECRET requires both the network constraint and a replaceable secret.
         if (config == null
+                || supplied(config.certificateFingerprint())
                 || config.proxyNetwork() == null
                 || config.proxyNetwork().isBlank()
                 || config.proxyNetwork().length() > 256
@@ -565,17 +583,35 @@ public final class PlatformAdminService {
                 || config.secret().isBlank()) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
+        String network = config.proxyNetwork().trim();
+        CidrRange.parse(network);
+        byte[] secret = config.secret().getBytes(StandardCharsets.UTF_8);
+        if (secret.length == 0 || secret.length > MAX_SECRET_BYTES) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
         CredentialCipher.Sealed sealed =
                 cipher.encrypt(
-                        "proxy:" + config.proxyNetwork().trim() + "\u0000" + config.secret());
+                        JSON.writeValueAsString(
+                                new ProxySecretPolicy(
+                                        "PROXY_SECRET",
+                                        Base64.getEncoder().encodeToString(secret),
+                                        List.of(network))));
         return new SealedConfig(sealed.ciphertext(), sealed.keyId());
+    }
+
+    private record MtlsPolicy(String mode, List<String> fingerprints, List<String> proxyCidrs) {}
+
+    private record ProxySecretPolicy(String mode, String secret, List<String> proxyCidrs) {}
+
+    private static boolean supplied(String value) {
+        return value != null && !value.isEmpty();
     }
 
     private static boolean hasMaterial(ProofConfig config) {
         return config != null
-                && ((config.certificateFingerprint() != null
-                                && !config.certificateFingerprint().isBlank())
-                        || (config.secret() != null && !config.secret().isBlank()));
+                && (supplied(config.certificateFingerprint())
+                        || supplied(config.proxyNetwork())
+                        || supplied(config.secret()));
     }
 
     /**
