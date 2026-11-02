@@ -401,6 +401,38 @@ class OAuthAuthorizationCodeFlowTest {
     }
 
     @Test
+    void adminWrittenJsonArrayClientRowsCompleteTheCodeFlow() throws Exception {
+        // ClientAdminService persists canonical JSON arrays (commas survive inside values);
+        // a row exactly as a fresh admin create writes it must complete the full flow.
+        String redirect = "https://app.example/callback?allow=a,b";
+        try (Connection connection = db()) {
+            insertClient(
+                    connection,
+                    "rc-json",
+                    "json-array-client",
+                    "{bcrypt}" + new BCryptPasswordEncoder().encode(CLIENT_SECRET),
+                    "JSON array client",
+                    "client_secret_basic",
+                    "[\"" + redirect + "\"]",
+                    "[\"mcp:query\",\"mcp:catalog\"]",
+                    "CONFIDENTIAL",
+                    java.time.LocalDateTime.now(java.time.ZoneOffset.UTC));
+        }
+        HttpSession session = login();
+        String verifier = verifier();
+        String code =
+                issueCode(session, "json-array-client", redirect, SCOPES, state(), verifier, true);
+        Response token = exchange(code, verifier, redirect, "json-array-client", CLIENT_SECRET);
+        assertEquals(200, token.status());
+        JsonNode body = JSON.readTree(token.body());
+        assertEquals(Set.of("mcp:query", "mcp:catalog"), csv(body.get("scope").asString()));
+        JWTClaimsSet claims =
+                SignedJWT.parse(body.get("access_token").asString()).getJWTClaimsSet();
+        assertEquals(ISSUER, claims.getIssuer());
+        assertEquals(List.of(AUDIENCE), claims.getAudience());
+    }
+
+    @Test
     void fullCodeFlowIssuesVerifiableJwtAndConsumesCodeOnce() throws Exception {
         HttpSession session = login();
         String verifier = verifier();
