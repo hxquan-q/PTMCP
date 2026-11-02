@@ -21,8 +21,8 @@ Updated: 2026-10-30
 - 新增 `docs/standards/agent-assets.md`：规则优先级与冲突处理、五类资产的唯一职责/读取时机/维护方式、DESIGN 变更合同、技能与宿主配置变更步骤，以及门禁能证明与不能证明的范围。`AGENTS.md` 前端路由显式链接 `DESIGN.md`，规则/技能/配置路由指向该规范；`agent-workflow.md`、`docs/README.md`、`validate_docs.py` 必需清单和既有研发流程 Note 同批同步。
 - `scripts/verify_agent_workflow.py` 新增 `check_asset_contract`：`CLAUDE.md` 须链接 `AGENTS.md`，`AGENTS.md` 须链接 `DESIGN.md` 与 `agent-assets.md`，两者非空；仅对被 Git 跟踪的 `.agents/skills/*/SKILL.md` 校验 frontmatter 的 `name`（须等于目录名）与非空 `description`，被忽略的本机技能显式不在共享门禁范围。技能文件无法读取或 `git ls-files` 失败时报告错误。
 - RED/GREEN：先加入入口路由反例，实现前 `test_entry_links_and_design_are_required` FAIL；实现后新增四类反例（缺链接、缺文件、空描述、名目录不一致）与“未跟踪本机技能不应失败”均通过。
-- `python scripts/check.py` 退出 0（74 项检查器测试通过）；`git diff --check` 对本片已跟踪文件退出 0；外部笔记校验 13 篇通过、0 篇归档。仅作者自审，未运行 `--all`、浏览器视觉、宿主实际加载、独立评审或远端 CI；内部治理任务无需产品人工验收。
+- `python scripts/check.py` 退出 0（文档检查 156 篇 Markdown PASS、74 项检查器测试通过）；`git diff --check` 对本片已跟踪文件退出 0；外部笔记校验 13 篇通过、0 篇归档。仅作者自审，未运行 `--all`、浏览器视觉、宿主实际加载、独立评审或远端 CI；内部治理任务无需产品人工验收。
 
 ## 交接
 
-已建立的强制部分为入口/文件存在与链接、已跟踪技能基础元数据；不强制视觉一致性、配置权限安全、技能来源与依赖安全、规则语义或长期遵守。`.agents/skills/` 仍被 `.gitignore` 排除，若未来要共享某个技能，须按规范显式纳入并对该技能单独评审。`.claude/settings.local.json` 未读取、未修改。共享工作树原有修改保留，未提交、推送或发布。
+已建立的强制部分为入口/文件存在与链接、已跟踪技能基础元数据；不强制视觉一致性、配置权限安全、技能来源与依赖安全、规则语义或长期遵守。`.agents/skills/` 仍被 `.gitignore` 排除，若未来要共享某个技能，须按规范显式纳入并对该技能单独评审。`.claude/settings.local.json` 未读取、未修改。共享工作树原有修改保留；本片改动在基于 `codeup/dev` 的隔离工作树提交并推送为独立分支，现已合并入 `dev`，不发布。
