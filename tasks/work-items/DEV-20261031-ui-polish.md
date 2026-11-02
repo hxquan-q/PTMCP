@@ -5,7 +5,7 @@ Status: in_progress
 Owner: current-agent
 Acceptance: pending
 Verification: PASS
-Updated: 2026-10-31
+Updated: 2026-11-02
 
 ## 目标与边界
 
@@ -204,6 +204,22 @@ U8 交接点名的余量项，涉及当时仍 CLEAN 的三个文件：`src/App.t
 
 实际检查：`pnpm exec prettier --check src/App.tsx src/layouts/AppShell.tsx src/styles/index.css` 得「All matched files use Prettier code style!」；`pnpm exec eslint --max-warnings 0` 覆盖 `App.tsx`、`AppShell.tsx` 退出 0（CSS 不交给 eslint，同 U9 记录的原因）；`pnpm exec tsc --noEmit` 通过；`node --experimental-strip-types --test tests/*.test.ts` 167/167；`pnpm build` 通过（CSS 30.25 kB / gzip 6.83 kB，较 U9 +0.52 kB / +0.10 kB；JS 464.43 kB / gzip 128.68 kB）；仓库根 `python scripts/check.py` 74 测试 OK。预览服务已停止并确认 127.0.0.1:25175 无监听（停止前按命令行核对 PID 19196 确为本仓 `--mode frontend-preview --strictPort` 实例）。
 
+### 切片 U11：详情抽屉与对话框的名字、焦点和背景锁
+
+页面路由仍被 DEV-20261031-audit-fixes 占用，本切片只改 CLEAN 的共享层：`src/components/common.tsx` 与 `src/styles/index.css`。U8 登记过「Drawer 圈禁只做了代码核对、未实测」，这一轮补上，并修掉实测才露出的三处：
+
+- 对话框和抽屉的标题都是 `<strong>`，`role="dialog"` 没有 `aria-labelledby`。抽屉因此没有可访问名。现改为 `<h2 class="overlay-title" tabindex="-1">`，对话框用 `aria-labelledby` 指向它。
+- `useFocusTrap` 打开时聚焦第一个按钮，抽屉里那就是「关闭」，只读详情还没读到标题就被要求关掉。现先聚焦标题；标题不进 Tab 序列。
+- `aria-modal` 挡不住背后的页面。Chrome 里打开抽屉后，`#root` 内仍有 34 个可 Tab 元素。现用 `useOverlayLock` 给 `.app-shell` 加 `inert` 并锁 `body` 滚动，计数归还，避免两层叠着时内层关闭把外层一起解开。第一次把 `inert` 加在 `#root` 上，结果抽屉自己也被锁死、标题无法聚焦；浮层改 `createPortal` 挂到 `document.body` 后才分开。
+- 关闭时归还焦点必须晚于解开 `inert`。外壳还带着 `inert` 时调用 `focus()`，浏览器直接丢掉，焦点落到 `body`。现把归还函数放进解锁清理里，实测关闭后回到打开它的「查看」。
+- 遮罩、标题、正文和页脚的内联定位收进 `.overlay-scrim`、`.overlay-dialog`、`.overlay-drawer`、`.overlay-header`、`.overlay-body`、`.overlay-footer`。抽屉窄屏上限是 `calc(100vw - 24px)`，不再用固定像素把 460px 的数据源抽屉裁掉。
+
+浏览器实测（隔离合成预览 `http://127.0.0.1:25175/#/me/integrations`，无头 Chrome）：点「查看」后焦点落在 `h2.overlay-title`「个人开发环境」，`aria-labelledby` 指向同一节点；`.app-shell` 带 `inert`，`body` overflow 为 hidden。抽屉内 Tab / Shift+Tab 都 `preventDefault` 并停在层内。关闭后 `document.activeElement` 与打开前的「查看」是同一节点，外壳 `inert` 已解除。390×700 下抽屉宽 366、文档横向溢出 0；1424 宽下抽屉 420、遮罩铺满视口（`rgba(11,27,40,.28)`，z-index 40）。标题 `rgb(27,39,51)` 15px、字段标签 `rgb(85,107,126)` 13px，都在白底上。
+
+实际检查：`eslint src/components/common.tsx --max-warnings 0` 退出 0；`prettier --check` 覆盖 `common.tsx` 与 `index.css` 通过；`tsc --noEmit` 通过。未跑全量 `pnpm test` / `pnpm build` / 仓库根 `python scripts/check.py`：工作树里 DEV-20261031-audit-fixes 的未提交文件会让仓库级检查失败，本项不代为修正。预览服务用完即停。
+
+未验证：读屏对 `aria-labelledby` 的实际播报；数据源页 460px 抽屉（该文件仍被对方占用，只核对了调用点 `width={460}` 与 CSS 上限）；两层浮层叠加的计数归还只走了代码，没有页面能同时打开 Dialog 和 Drawer。
+
 ### 尚未做
 
 共享工作树里未被 DEV-20261031-audit-fixes 占用的页面已逐页走完（P-01/P-03/P-04/P-05/P-06/P-07/P-10/P-13），跨页的应用层反馈面（通知栈、probing/重定向等待帧、403·404 整页）也已在 U7 处理，外壳键盘链路已在 U8 处理。仍在待接清单：P-02 数据源页、P-08/P-09 平台与客户端页、`DetailPages`、`DelegationsPage`、`AuditPage`、`MePages`（个人门户其余页）——这些文件当前均被对方未提交改动占用，接管前须先确认其落地状态，避免同文件互踩。`table-scroll` 可聚焦区域在 21 处出现中已合规 3 处，其余同样落在上述占用文件内。U8 新登记两项未做，其一已在 U10 了结（面包屑改 `<ol>` + `aria-current="page"` + 中间层可返回，提交 `eb82e07`）；其二仍余一半：Chrome 报出的「form field 缺 `id`/`name`」既存 issue——U9 已把共享控件侧的 `id` 与 `<label htmlFor>` 补齐（6 条降为 1 条），余下那 1 条来自 `AuditPage.tsx:213,215` 不传 `label` 的两个日期框，落在对方占用文件里，只能随页面切片接管。`Drawer` 的圈禁在 U8 只做了代码路径核对，未实测，U9、U10 也未补。U9 另登记两项可独立推进的共享面余量：`common.tsx` 剩余 47 处内联 `style` 的 token 化（`EmptyState`/`Stepper`/`PageHeader`/`StatCard`），以及 `index.css` 两处重叠 `:focus-visible` offset（1px vs 2px）的合并——后者要先定一个全站值，属需用户或设计契约决断的取舍，未擅自统一。U10 之后 `src/App.tsx` 与 `src/layouts/AppShell.tsx` 这两块 CLEAN 外壳面已无登记余项，只剩 U10 自己新记的两条小口子：面包屑 hover 态只写了 CSS 未实测计算色，以及 `.crumb-list` 的 `flex-wrap` 兜底分支在现有 25 条短 label 路由下走不到（两者都不构成缺陷，记为证据缺口）。DESIGN.md 记录的 SAP 调色板（`#0057d2`）与实现所用 Apple 调色板（`#0071e3`）之间的契约偏差处置——需用户确认以哪一侧为准，未擅自动手。P-10 的自增权防护与 NAMESPACE/DATASOURCE 级授权按上文理由保留未实现；组织部门写操作缺权限码，未擅自新增。DESIGN.md 记录的 SAP 调色板（`#0057d2`）与实现所用 Apple 调色板（`#0071e3`）之间的契约偏差处置——需用户确认以哪一侧为准，未擅自动手。P-10 的自增权防护与 NAMESPACE/DATASOURCE 级授权按上文理由保留未实现；组织部门写操作缺权限码，未擅自新增。
@@ -220,4 +236,37 @@ U8 交接点名的余量项，涉及当时仍 CLEAN 的三个文件：`src/App.t
 
 下一个焦点：本项在共享工作树里能独立接管的路由、跨页应用层外壳（通知栈、等待帧、403/404）、外壳键盘链路（U8）、共享控件层语义/焦点环（U9）与面包屑语义（U10）已全部走完，余下 P-02 数据源页、平台与客户端页、`DetailPages`、`DelegationsPage`、`AuditPage`、`MePages` 均处于对方未提交改动中，须待 DEV-20261031-audit-fixes 落地（提交或明确放弃）后再接管，避免同文件互踩；在此之后本项还能独立推进的只剩 `src/components/common.tsx` 剩余 47 处内联 `style` 的 token 化一项——它只动表现形式、不动语义，而本宿主没有图像通道，改完只能靠计算样式与几何逐项对照，风险是 16 个路由的观感变化无人可验收，故建议排在页面接管之后由用户定夺是否值得做。Chrome 报的 form field 命名问题已由 U9 在共享侧解决（只剩对方文件里的两个日期框）。若在这之外还要推进，只剩需要用户先给结论的项（配色契约、焦点环 offset 全站取值、真实后端下的 danger/失败态复核）。
 
+### 切片 U11-a：按接入/数据源/权限矩阵设计稿收视觉（已提交 7907ec3）
+
+用户给出五张控制台设计稿（接入列表与四步向导、数据源列表+右侧详情、权限矩阵三栏+有效权限预览）。本片只改共享视觉，不改接口、不把预览样例接到真实模式，也不把「模板已生成」改成「连接成功」。
+
+- 页头改为 `.page-header`（22px 标题）。统计卡改为色块图标 + 深色数字 + 标签/说明分行，接入列表文案对齐稿面「我的接入 / 新建接入配置」。
+- 侧栏底部补「PTMCP 管理工作区 / 个人门户」说明卡；窄于 900px 随图标栏隐藏。顶栏搜索加宽到最多 420px。
+- 选项卡说明允许换行，选中态加一圈蓝边；步骤条已完成连接线改蓝。表格行距加大。
+- 权限矩阵主体行改成带边框的卡片；分栏把手默认藏起，悬停或键盘聚焦才出现；有效权限预览默认展开。
+
+未做：不把向导平台步改成写死的 Tier 1/2/3 卡片（仍读 `me/access-context`）；不新增无后端的通知铃铛；浏览器像素比对未做。检查：对改动的 tsx 跑 eslint 与 prettier，`tsc --noEmit` 通过；`tests/navigation.test.ts` 与 `tests/mcp-template.test.ts` 9/9。全量 `pnpm check` 与提交未做——工作树仍混有 DEV-20261031-audit-fixes 的未提交改动。
+
+### 切片 U12：按五张界面稿做像素级收敛与统一风格（已提交 7907ec3）
+
+用户给出五张控制台界面稿（`PTMCP接入配置界面总览.png`、`MCP接入配置流程界面合集-3.png`、`PTMCP数据接入配置流程概览-2.png`、`数据源管理控制台界面.png`、`PTMCP权限矩阵管理控制台.png`）后，本切片把共享视觉层按稿面重做，而不是逐页打补丁。基线截图（1440×900 与 390×844，隔离合成预览）先确认了四处真实缺陷：状态只有裸文字没有胶囊、列表页筛选与表格挤在同一张卡、`td` 折行导致「允许/生效」被压成竖排、390px 下分组标题竖排且顶栏溢出。
+
+同批修正（只动视觉层，未改接口与权限语义）：
+
+- `index.css` 令牌层重定：画布 `#f5f7fa`、描边 `#e7ebf1`、主色 `#1677ff`、文字蓝 `#0958d9`、卡片圆角 12px、抽屉 16px、一层轻投影。新增 `.pill`（浅底胶囊 + 圆点）、`.filter-card`、`.table-caption`、`.btn--tinted`、`.btn--ghost`、`.card-tabs`、`.card-toolbar`、`.pane-head/.pane-title/.pane-sub/.pane-foot`、`.topbar-menu`，并统一细滚动条。
+- `AppShell.tsx`：把醒目的「退出登录」收进右上角 `⋯` 账户菜单（Esc 与点击外部关闭），视角切换改成分段控件；窄屏隐藏侧栏分组标题，避免竖排。
+- `common.tsx`：`StatusDot` 改为胶囊渲染，全站 23 处状态一次性统一；`TextInput` 补 `width` 以支持筛选项定宽（此前一律 100%，把审计筛选挤成一行一个控件）。
+- 三个目标页按稿对齐：接入配置（卡片内视图切换 + 工具栏 + 首列名称/编码两行 + 状态胶囊 + 演示数据说明下移页脚）、数据源（筛选独立成卡、查询改浅蓝实心、重置改幽灵、标题行给列表名与数量、批量操作在选择前禁用）、权限矩阵（三栏统一头部与底部计数条、主体行改圆形头像卡、表头列宽收紧）。
+- 审计页顺带修掉同源问题：筛选控件定宽后回到两行，不再一个输入框占一行。
+
+验证：`eslint --max-warnings 0`、`prettier --check src tests`、`tsc --noEmit`、`vite build` 全过；前端契约测试 168/168；`python3 scripts/check.py` PASS。浏览器证据为 1440×900 的接入配置、数据源、数据源抽屉、权限矩阵、审计页与 390×844 的接入配置截图（会话产物，未入库）。390px 复测后 `document.scrollWidth === innerWidth`，顶栏不再横向溢出。
+
+未验证或未做：像素级叠加比对（没有稿面切图与浏览器截图的逐像素 diff 工具）、真实后端模式下的同样走查、其余 10 个管理页的逐页目视复核；稿面中的通知铃铛与「更多筛选」「20 条/页」选择器没有后端支撑，按既有约定不加假控件，因此与稿面存在刻意差异；表格与列表的演示数据仍标注为合成预览，不代表真实登记。
+
 推送状态：U7 提交 `c65db63` 与其 docs 跟进 `d18e438` 当时均未能推送——`git push origin dev` 连续失败于 `TLS connect error: unexpected eof`，`curl https://api.github.com/` 同期返回 000/schannel 握手失败，`gh auth status` 另报 keyring 中 github.com 令牌无效；本会话内该机到 GitHub 的链路问题属外部状态而非仓库问题，未擅自修改 git 配置或重新认证。本轮（U8）按项目记忆记录的方式重试，仍失败于同一处：`git -c credential.helper= -c credential.helper='!gh auth git-credential' push origin dev` 报 `TLS connect error: error:0A000126:SSL routines::unexpected eof while reading`；同机 `curl https://api.github.com` 与 `curl --http1.1 https://github.com` 均返回 000 + schannel 握手失败，连只读的 `git ls-remote origin` 也失败，而 `git ls-remote codeup dev` 同期成功返回 `5047728…`——据此定性为该机到 GitHub 的 TLS 链路不可达，不是凭据、命令形式或仓库问题。未改推 `codeup`：历次切片都只推 `origin/dev`，切到另一 remote 会把本地领先的提交一并公开到团队内部仓，属需用户确认的共享状态操作。当前 `origin/dev` 停在 `1f96dfd`，本地未推的是 `c65db63`、`d18e438`、`7fb93e7`、`fe2ad6a`、`3c1519a`、`eb29823`、`eb82e07`（U10 代码）与本片的文档提交；本轮（U9）在提交后按同一命令再试，仍失败于同一处 `TLS connect error: error:0A000126:SSL routines::unexpected eof while reading`，与 U8 时相比外部链路没有变化。本轮（U10）在代码提交 `eb82e07` 后按同一命令重试，仍报同一处 TLS 错误，并补了一次只读对照：`git ls-remote origin HEAD` 同样失败，而 `git ls-remote codeup dev` 同期成功返回 `5047728…`——与 U8/U9 的定性一致（该机到 GitHub 的 HTTPS/TLS 链路不可达，非凭据、命令形式或仓库问题），未据此改配置或改推另一 remote。链路恢复后按同一命令补推即可，若 `gh auth status` 仍报 keyring 令牌无效则需用户执行 `gh auth refresh -h github.com`。每个切片只暂存自己改过的路径。预览端口 25175 用完须停止并确认无监听。待用户决断：DESIGN.md 与实现的调色板偏差以哪侧为准；P-13 普通模式是否需要后端提供“本人接入列表”端点（当前按契约缺失处理，只显示空态与出口，不伪造）；组织部门写操作是否补权限码（`SENSITIVE_ACTIONS` 现无该码，未擅自新增）；登录页“是否应当审计登录行为”按后端现状已改为不声称，若产品要求审计，属后端能力缺口而非页面文案问题。远端提示仓库已迁移到 `github.com/hxquan-q/PTMCP`，而本机 `origin` 现指向 `github.com/hxquan-q/Datachat`；是否更新 remote URL 属配置变更，未擅自修改。
+
+### 提交与集成验证（2026-11-02）
+
+U11 详情浮层与 U12 视觉收敛已提交 `7907ec3`；时间、枚举与证明表单属审计修复，已随 `39be5fd` 提交。共享树复验：React 契约测试 168/168，ESLint/Prettier/tsc/vite build 通过，仓库 `python scripts/check.py` 74 项 PASS（本机无 `python3` 别名，改用 `python`）。
+
+`AuditPage.tsx` 与 `DatasourcesPage.tsx` 同时含审计修复与视觉改动，提交时按 hunk 拆分：时区导入与引擎/状态枚举进入 `39be5fd`，筛选宽度、死按钮移除与卡片布局进入 `7907ec3`；未整文件暂存其他窗口内容。用户本轮明确授权提交与推送，推送回执以远端 refs 为准。

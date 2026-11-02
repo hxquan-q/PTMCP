@@ -45,7 +45,7 @@ UI 改动涵盖 App、PageState、useCursorPage、styles、权限/审计/数据�
 | G4 取消与容量 | T15-c S5/T19-d | 主体隔离取消、执行清理后归还额度、部署预算语义明确且有边界测试 | pending |
 | G5 密钥兼容 | T15-c S6 | 新旧钥兼容、对象绑定与迁移格式、日志不泄漏、恢复仍可读 | pending |
 | G6 字典上下文 | T15-c S7 | 三工具契约说明、授权后字典/关系/预算、撤权与恶意注释测试 | [verifying；定向 PASS](DEV-20261030-schema-context.md) |
-| G7 组合验收 | T19-e/T20 | 双引擎、OAuth、恢复、前后端适用门禁；真实客户端与部署证据单列 | pending |
+| G7 组合验收 | T19-e/T20 | 双引擎、OAuth、恢复、前后端适用门禁；真实客户端与部署证据单列 | pending；审计修复续接 [DEV-20261031-audit-fixes](DEV-20261031-audit-fixes.md) |
 
 G1 写入范围为 gateway 元数据/过滤器/测试、API 合同、相关工作项与笔记。
 资源元数据和 challenge 共享唯一受信配置，不从 Host/Forwarded 头生成 URI；
