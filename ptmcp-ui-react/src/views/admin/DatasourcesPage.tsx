@@ -17,7 +17,7 @@ import {
   Tabs,
   useDebounced,
 } from '../../components/common';
-import { CheckboxIcon, DatabaseIcon, DotsIcon, EditIcon, FilterIcon, PlusIcon } from '../../components/Icons';
+import { CheckboxIcon, DatabaseIcon, DotsIcon, EditIcon, PlusIcon } from '../../components/Icons';
 import { fmtTime as fmt, healthOf, statusOf } from './datasourceStatus';
 import { DATASOURCE_ENGINES, DATASOURCE_STATUSES, dsCreateValidate, emptyDsForm, type DsForm } from './dsForm';
 import { createDatasource } from '../../services/data';
@@ -81,18 +81,8 @@ export function DatasourcesPage() {
           </button>
         }
       />
-      <div className="table-card" style={{ flex: 1, minHeight: 0 }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: '12px 14px',
-            borderBottom: '1px solid var(--ptmcp-border)',
-            flex: 'none',
-            flexWrap: 'wrap',
-          }}
-        >
+      <div className="table-card filter-card">
+        <div className="filter-grow">
           <SearchInput
             value={keyword}
             onChange={(v) => {
@@ -100,37 +90,37 @@ export function DatasourcesPage() {
               setPage(1);
             }}
             placeholder="搜索数据源名称、编码、数据库、引擎…"
-            width={280}
+            width="100%"
           />
-          <Select label="引擎" value={engine} onChange={setEngine} options={ENGINE_OPTIONS} width={130} />
-          <Select label="状态" value={status} onChange={setStatus} options={STATUS_OPTIONS} width={120} />
-          <button className="btn btn--primary" style={{ padding: '7px 14px' }}>
+        </div>
+        <Select label="引擎" value={engine} onChange={setEngine} options={ENGINE_OPTIONS} width={120} />
+        <Select label="状态" value={status} onChange={setStatus} options={STATUS_OPTIONS} width={112} />
+        <div className="filter-actions">
+          {/* 筛选在输入时已即时生效，查询按钮重新向服务端取一次当前筛选下的列表。 */}
+          <button className="btn btn--tinted" onClick={() => setReloadTick((t) => t + 1)}>
             查询
           </button>
           <button
-            className="btn btn--secondary"
+            className="btn btn--ghost"
             onClick={() => {
               setKeyword('');
               setEngine('');
               setStatus('');
+              setPage(1);
             }}
           >
             重置
           </button>
-          <button className="btn btn--secondary">
-            <FilterIcon /> 更多筛选
-          </button>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 4px', flex: 'none' }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ptmcp-text-strong)' }}>
-            数据源列表 <span style={{ fontWeight: 400, color: 'var(--ptmcp-text-muted)' }}>共 {filtered.length} 个数据源</span>
-          </span>
-          <span style={{ display: 'inline-flex', gap: 8 }}>
-            <button className="btn btn--secondary">
-              <CheckboxIcon /> 批量操作
-            </button>
-            <button className="btn btn--link" style={{ color: 'var(--ptmcp-text-muted)' }}>
-              <DotsIcon />
+      </div>
+      <div className="table-card" style={{ flex: 1, minHeight: 0 }}>
+        <div className="table-caption">
+          <strong>
+            数据源列表 <span className="count">共 {filtered.length} 个数据源</span>
+          </strong>
+          <span className="caption-actions">
+            <button className="btn btn--secondary" disabled={selected.size === 0} onClick={() => setSelected(new Set())}>
+              <CheckboxIcon /> {selected.size > 0 ? `已选 ${selected.size} 项` : '批量操作'}
             </button>
           </span>
         </div>

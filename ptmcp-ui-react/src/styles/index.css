@@ -30,44 +30,66 @@ select {
 }
 
 :root {
-  --ptmcp-blue: #0071e3;
-  --ptmcp-blue-dark: #005bb8;
-  /* 着色面（选中态、浅蓝底）上的蓝文本：#0071e3 在白底 4.70:1 达标，但在浅蓝底只有 4.19:1。 */
-  --ptmcp-blue-text: #0061c9;
-  --ptmcp-blue-soft: #e8f2fd;
-  --ptmcp-blue-bg: rgba(0, 113, 227, 0.08);
-  --ptmcp-selected: #eaf3fd;
-  --ptmcp-heading: #1b2733;
-  --ptmcp-text: #354a5f;
-  --ptmcp-text-strong: #1b2733;
-  --ptmcp-text-muted: #556b7e;
+  --ptmcp-blue: #1677ff;
+  --ptmcp-blue-dark: #0f62d6;
+  /* 着色面（选中态、浅蓝底）上的蓝文本：#0958d9 在白底 6.2:1、浅蓝底 5.6:1。 */
+  --ptmcp-blue-text: #0958d9;
+  --ptmcp-blue-soft: #e9f2ff;
+  --ptmcp-blue-bg: rgba(22, 119, 255, 0.08);
+  --ptmcp-selected: #f2f8ff;
+  --ptmcp-heading: #101828;
+  --ptmcp-text: #475467;
+  --ptmcp-text-strong: #1d2939;
+  --ptmcp-text-muted: #667085;
   --ptmcp-text-faint: #5b6a77;
-  --ptmcp-border: #dfe4e9;
-  --ptmcp-border-strong: #c9d1d8;
-  --ptmcp-border-row: #eef1f4;
-  --ptmcp-border-input: #8b9aa8;
-  --ptmcp-canvas: #f5f5f7;
+  --ptmcp-border: #e7ebf1;
+  --ptmcp-border-strong: #d5dce5;
+  --ptmcp-border-row: #f0f2f5;
+  --ptmcp-border-input: #cdd5df;
+  --ptmcp-canvas: #f5f7fa;
   --ptmcp-surface: #ffffff;
-  --ptmcp-chrome: #f5f5f7;
-  --ptmcp-band: #fafafc;
-  --ptmcp-wash: #e9f4ff;
-  --ptmcp-hover: #f0f1f4;
-  --ptmcp-green: #256f3a;
-  --ptmcp-red: #aa0808;
-  --ptmcp-orange: #8d5200;
-  --ptmcp-bg-success: #edf6ee;
-  --ptmcp-bg-danger: #ffebeb;
-  --ptmcp-bg-warning: #fff3df;
-  --ptmcp-bg-neutral: #f0f3f5;
-  --ptmcp-bg-accent: #e6f1ff;
+  --ptmcp-chrome: #f5f6f8;
+  --ptmcp-band: #fafbfc;
+  --ptmcp-wash: #eef4fd;
+  --ptmcp-hover: #f4f6f9;
+  --ptmcp-green: #15803d;
+  --ptmcp-red: #b42318;
+  --ptmcp-orange: #b54708;
+  --ptmcp-bg-success: #ecfdf3;
+  --ptmcp-bg-danger: #fef3f2;
+  --ptmcp-bg-warning: #fffaeb;
+  --ptmcp-bg-neutral: #f2f4f7;
+  --ptmcp-bg-accent: #eff6ff;
   --ptmcp-code-bg: #0d1526;
   --ptmcp-code-fg: #c8dcf5;
   --ptmcp-code-gutter: #7f93b5;
-  --ptmcp-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.07);
-  --ptmcp-shadow-pop: 0 2px 8px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.12);
+  --ptmcp-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.03);
+  --ptmcp-shadow-pop: 0 4px 12px rgba(16, 24, 40, 0.08), 0 18px 40px rgba(16, 24, 40, 0.12);
   --ptmcp-radius-control: 8px;
   --ptmcp-radius-panel: 12px;
   --ptmcp-radius-pill: 999px;
+}
+
+/* ── 滚动条：细型、低对比，避免表格内的横/纵条抢走内容注意力 ── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cfd6e0 transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background-clip: content-box;
+  background-color: #cfd6e0;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #b3bcc9;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* ── 实体图标块(32px 圆角,引擎配色) ── */
@@ -122,6 +144,7 @@ select {
 .cell-stack {
   display: flex;
   flex-direction: column;
+  gap: 1px;
   min-width: 0;
   line-height: 1.3;
 }
@@ -147,6 +170,46 @@ select {
   min-width: 0;
 }
 
+/* ── 状态胶囊：稿面里状态与健康都是浅底胶囊 + 圆点，不是裸文字 ── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--ptmcp-radius-pill);
+  background: var(--ptmcp-bg-neutral);
+  color: var(--ptmcp-text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pill::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.pill--plain::before {
+  display: none;
+}
+.pill--success {
+  background: var(--ptmcp-bg-success);
+  color: var(--ptmcp-green);
+}
+.pill--warning {
+  background: var(--ptmcp-bg-warning);
+  color: var(--ptmcp-orange);
+}
+.pill--danger {
+  background: var(--ptmcp-bg-danger);
+  color: var(--ptmcp-red);
+}
+.pill--accent {
+  background: var(--ptmcp-bg-accent);
+  color: var(--ptmcp-blue-text);
+}
 /* ── 状态点(语义色) ── */
 .status-dot {
   display: inline-flex;
@@ -365,25 +428,119 @@ input[type='checkbox'] {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  color: var(--ptmcp-text);
 }
 .data-table thead th {
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: 0 14px;
-  height: 38px;
+  padding: 0 16px;
+  height: 44px;
   background: var(--ptmcp-surface);
-  border-bottom: 1px solid var(--ptmcp-border-strong);
+  border-bottom: 1px solid var(--ptmcp-border);
   color: var(--ptmcp-text-muted);
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   text-align: left;
   white-space: nowrap;
 }
 .data-table tbody td {
-  padding: 8px 14px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--ptmcp-border-row);
   vertical-align: middle;
+  white-space: nowrap;
+}
+/* 名称列允许折行，其余列保持单行：稿面里的「允许/生效」曾被挤成竖排。 */
+.data-table tbody td:first-child,
+.data-table td.cell-lead {
+  white-space: normal;
+}
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.page-header h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ptmcp-heading);
+  line-height: 1.28;
+}
+.page-header p {
+  margin: 6px 0 0;
+  max-width: 720px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ptmcp-text-muted);
+}
+.page-header-actions {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+.stat-card {
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  box-shadow: none;
+  min-width: 0;
+}
+.stat-card-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--ptmcp-blue-soft);
+  color: var(--ptmcp-blue);
+  font-size: 20px;
+}
+.stat-card--success .stat-card-icon {
+  background: #e7f6ec;
+  color: #1f8a3b;
+}
+.stat-card--warning .stat-card-icon {
+  background: #fff4e5;
+  color: #d48806;
+}
+.stat-card--danger .stat-card-icon {
+  background: #ffecec;
+  color: #d4380d;
+}
+.stat-card-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+.stat-card-value {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--ptmcp-heading);
+}
+.stat-card-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ptmcp-text);
+}
+.stat-card-hint {
+  font-size: 12px;
+  color: var(--ptmcp-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.data-table tbody tr:last-child td {
+  border-bottom: 0;
 }
 .data-table tbody tr:hover {
   background: var(--ptmcp-hover);
@@ -401,10 +558,87 @@ input[type='checkbox'] {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 9px 14px;
+  padding: 12px 16px;
   border-top: 1px solid var(--ptmcp-border);
   color: var(--ptmcp-text-muted);
-  font-size: 12px;
+  font-size: 12.5px;
+}
+/* 筛选条：独立白卡（稿面里与表格卡分开），标签在上、控件在下排一行。 */
+.filter-card {
+  display: flex;
+  flex: none;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.filter-card > * {
+  flex: none;
+}
+.filter-card .filter-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.filter-card .filter-label {
+  font-size: 13px;
+  color: var(--ptmcp-text-muted);
+  white-space: nowrap;
+}
+.filter-card .filter-grow {
+  flex: 0 1 340px;
+  min-width: 220px;
+}
+.filter-card .filter-actions {
+  display: inline-flex;
+  gap: 8px;
+  margin-left: 4px;
+}
+/* 表格标题行：列表名 + 数量 + 右侧操作 */
+.table-caption {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 10px;
+}
+.table-caption strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ptmcp-heading);
+}
+.table-caption span.count {
+  margin-left: 8px;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--ptmcp-text-muted);
+}
+.table-caption .caption-actions {
+  display: inline-flex;
+  gap: 8px;
+}
+.btn--tinted {
+  background: var(--ptmcp-bg-accent);
+  border-color: #b6d4fe;
+  color: var(--ptmcp-blue-text);
+}
+.btn--tinted:hover {
+  background: #e0edff;
+  border-color: var(--ptmcp-blue);
+}
+.btn--ghost {
+  padding: 7px 10px;
+  border-color: transparent;
+  background: none;
+  color: var(--ptmcp-text-muted);
+}
+.btn--ghost:hover {
+  background: var(--ptmcp-hover);
+  color: var(--ptmcp-text-strong);
 }
 .table-toolbar {
   display: flex;
@@ -551,33 +785,48 @@ input[type='checkbox'] {
   padding: 0 2px;
   color: var(--ptmcp-text-faint);
 }
-/* 侧栏行：悬停给浅底，选中行用左侧蓝条 + 蓝字。 */
+/* 侧栏行：分组标题压低，选中行用浅蓝胶囊，不再用贴边的蓝条。 */
+.nav-group {
+  margin-bottom: 10px;
+}
+.nav-group-title {
+  padding: 10px 12px 6px;
+  color: var(--ptmcp-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
 .nav-item {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 8px 12px;
-  margin: 1px 0;
+  height: 38px;
+  padding: 0 12px;
+  margin: 2px 0;
   border: none;
   border-radius: 8px;
   background: none;
-  color: var(--ptmcp-text-muted);
+  color: var(--ptmcp-text);
   font-weight: 500;
-  font-size: 13px;
+  font-size: 13.5px;
   text-align: left;
   transition:
     background 0.12s ease,
     color 0.12s ease;
+}
+.nav-icon {
+  display: inline-flex;
+  font-size: 16px;
 }
 .nav-item:hover {
   background: var(--ptmcp-hover);
   color: var(--ptmcp-text-strong);
 }
 .nav-item[aria-current='true'] {
-  background: var(--ptmcp-selected);
+  background: var(--ptmcp-blue-soft);
   color: var(--ptmcp-blue-text);
-  font-weight: 700;
+  font-weight: 600;
 }
 .nav-item:focus-visible {
   outline: 2px solid var(--ptmcp-blue);
@@ -626,8 +875,9 @@ input[type='checkbox'] {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 32px;
-  padding: 0 10px;
+  width: min(420px, 100%);
+  height: 36px;
+  padding: 0 14px;
   border-radius: var(--ptmcp-radius-pill);
   border: 1px solid var(--ptmcp-border);
   background: var(--ptmcp-chrome);
@@ -653,6 +903,7 @@ input[type='checkbox'] {
 /* 视图切换行：带名分组，下划线随状态着色，左右方向键作为原生 Tab 之外的快捷切换。 */
 .tab-row {
   display: flex;
+  width: 100%;
   gap: 2px;
   margin-bottom: 14px;
   border-bottom: 1px solid var(--ptmcp-border);
@@ -666,6 +917,7 @@ input[type='checkbox'] {
   font-weight: 600;
   font-size: 13px;
   margin-bottom: -1px;
+  white-space: nowrap;
   transition:
     color 0.12s ease,
     border-color 0.12s ease,
@@ -683,6 +935,25 @@ input[type='checkbox'] {
 .tab-btn:focus-visible {
   outline: 2px solid var(--ptmcp-blue);
   outline-offset: -2px;
+}
+/* 卡内视图切换行：贴齐卡片顶部，底边线与卡片同色后只留一条分隔。 */
+.card-tabs {
+  flex: none;
+  padding: 6px 16px 0;
+}
+.card-tabs .tab-row {
+  margin-bottom: 0;
+}
+.card-tabs .tab-btn {
+  padding: 10px 18px 12px;
+}
+.card-toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
 }
 /* 单选卡片：整行可点，悬停给出边框反馈。 */
 .option-card {
@@ -707,6 +978,29 @@ input[type='checkbox'] {
 .option-card.is-selected {
   background: var(--ptmcp-selected);
   border-color: var(--ptmcp-blue);
+  box-shadow: 0 0 0 1px var(--ptmcp-blue);
+}
+.option-card .cell-stack > strong,
+.option-card .cell-stack > span {
+  white-space: normal;
+}
+.option-card-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.option-card-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--ptmcp-radius-pill);
+  background: var(--ptmcp-bg-warning);
+  color: var(--ptmcp-orange);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 /* ─── 应用外壳：整屏布局、跳过导航、正文滚动区与命令面板 ─── */
@@ -716,6 +1010,171 @@ input[type='checkbox'] {
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
+  background: var(--ptmcp-canvas);
+}
+.app-shell-top {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 16px;
+  height: 60px;
+  padding: 0 24px;
+  background: var(--ptmcp-surface);
+  border-bottom: 1px solid var(--ptmcp-border);
+}
+.app-shell-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ptmcp-heading);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.app-shell-brand svg {
+  font-size: 24px;
+  color: var(--ptmcp-blue);
+}
+.app-shell-rule {
+  width: 1px;
+  height: 18px;
+  background: var(--ptmcp-border-strong);
+}
+.app-shell-subtitle {
+  color: var(--ptmcp-text-muted);
+  font-size: 13.5px;
+}
+/* 视角切换：无底色滑轨的分段控件，选中项抬成白底蓝字，和稿面顶部导航一致。 */
+.realm-switch {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 6px;
+  padding: 3px;
+  border: 1px solid var(--ptmcp-border);
+  border-radius: 10px;
+  background: var(--ptmcp-chrome);
+}
+.realm-switch-btn {
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ptmcp-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+.realm-switch-btn:hover[aria-disabled='false'],
+.realm-switch-btn:hover:not([aria-current='true']):not([aria-disabled='true']) {
+  color: var(--ptmcp-text-strong);
+}
+.realm-switch-btn[aria-current='true'] {
+  background: var(--ptmcp-surface);
+  color: var(--ptmcp-blue-text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+.realm-switch-btn[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.app-shell-search {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+}
+.app-shell-user {
+  background: none;
+  border: 1px solid transparent;
+}
+.app-shell-user:hover {
+  background: var(--ptmcp-hover);
+  border-color: var(--ptmcp-border);
+}
+.app-shell-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--ptmcp-blue-soft);
+  color: var(--ptmcp-blue-text);
+  font-size: 15px;
+}
+.app-shell-logout {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12.5px;
+}
+/* 顶栏账户菜单：定位在“⋯”下方，宽度随文案，不遮挡搜索框。 */
+.topbar-more {
+  position: relative;
+  flex: none;
+}
+.topbar-menu {
+  position: absolute;
+  top: 38px;
+  right: 0;
+  z-index: 50;
+  min-width: 156px;
+  padding: 5px;
+  border: 1px solid var(--ptmcp-border);
+  border-radius: 10px;
+  background: var(--ptmcp-surface);
+  box-shadow: var(--ptmcp-shadow-pop);
+}
+.topbar-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--ptmcp-text);
+  font-size: 13px;
+  text-align: left;
+}
+.topbar-menu-item:hover,
+.topbar-menu-item:focus-visible {
+  background: var(--ptmcp-hover);
+  color: var(--ptmcp-text-strong);
+}
+.app-shell-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.app-shell-nav {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 220px;
+  padding: 16px 12px 12px;
+  overflow-y: auto;
+  background: var(--ptmcp-surface);
+  border-right: 1px solid var(--ptmcp-border);
+}
+.nav-workspace {
+  margin-top: auto;
+  padding: 12px 12px 11px;
+  border: 1px solid #e4eefb;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+}
+.nav-workspace strong {
+  display: block;
+  font-size: 12.5px;
+  color: var(--ptmcp-heading);
+}
+.nav-workspace span {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--ptmcp-text-muted);
 }
 /* 键盘聚焦才进入视口；负偏移不会撑出滚动条。hash 路由下用按钮移焦，不能用 href="#…" 以免被当成路由变更。 */
 .skip-link {
@@ -745,9 +1204,9 @@ input[type='checkbox'] {
 }
 .app-shell-crumb {
   flex: none;
-  padding: 10px 20px 0;
-  font-size: 12px;
-  color: var(--ptmcp-text-faint);
+  padding: 12px 24px 0;
+  font-size: 12.5px;
+  color: var(--ptmcp-text-muted);
 }
 /* 面包屑：有序列表让读屏报出「第 N 个，共 M 个」，末项用 aria-current="page" 标出当前页。
    分隔箭头由图标组件自带 aria-hidden，不再像过去的 " › " 文本那样被念进名称里。 */
@@ -796,8 +1255,9 @@ input[type='checkbox'] {
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  padding: 10px 20px 20px;
+  padding: 10px 24px 24px;
   overflow: auto;
+  background: var(--ptmcp-canvas);
 }
 .app-shell-scroll:focus-visible {
   outline: 2px solid var(--ptmcp-blue);
@@ -829,7 +1289,8 @@ input[type='checkbox'] {
   .app-shell-nav .nav-label {
     display: none;
   }
-  .app-shell-nav .app-shell-workspace {
+  .app-shell-nav .app-shell-workspace,
+  .app-shell-nav .nav-workspace {
     display: none;
   }
   .app-shell-nav button {
@@ -884,12 +1345,12 @@ textarea:focus-visible {
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 40px;
-  padding: 9px 10px;
-  margin: 2px 0;
-  border: 1px solid transparent;
-  border-radius: var(--ptmcp-radius-control);
-  background: none;
+  min-height: 56px;
+  padding: 10px 12px;
+  margin: 6px 0;
+  border: 1px solid var(--ptmcp-border);
+  border-radius: 12px;
+  background: var(--ptmcp-surface);
   text-align: left;
   transition:
     background-color 120ms ease,
@@ -905,6 +1366,29 @@ textarea:focus-visible {
 .subject-row.is-selected {
   border-color: var(--ptmcp-blue);
   background: var(--ptmcp-selected);
+}
+/* 主体行用圆形头像，与稿面一致；资源树仍用方形引擎色块。 */
+.subject-row .cell-icon {
+  border-radius: 50%;
+}
+/* 三栏里的表格比全页表格更密，否则 8~9 列会把状态列挤到横向滚动之外。 */
+.perm-workspace .data-table thead th {
+  padding: 0 6px;
+  height: 38px;
+  font-size: 12px;
+}
+.perm-workspace .data-table tbody td {
+  padding: 6px;
+  font-size: 12px;
+}
+.perm-workspace .data-table .cell-stack > span {
+  font-size: 11px;
+}
+/* 栏宽有限，效果列胶囊不能因为内边距被挤出可视区。 */
+.perm-workspace .pill {
+  height: 22px;
+  padding: 0 8px;
+  font-size: 12px;
 }
 
 .tree-row {
@@ -947,6 +1431,13 @@ textarea:focus-visible {
 .perm-resizer {
   position: relative;
 }
+.perm-resizer > span {
+  opacity: 0;
+}
+.perm-resizer:hover > span,
+.perm-resizer:focus-visible > span {
+  opacity: 1;
+}
 /* 视觉保持 6px，但命中区向两侧各扩到 24px（WCAG 2.2 AA 2.5.8）。 */
 .perm-resizer::after {
   content: '';
@@ -964,6 +1455,133 @@ textarea:focus-visible {
 .perm-resizer:hover > span,
 .perm-resizer:focus-visible > span {
   background: var(--ptmcp-blue);
+}
+
+/* ─── 对话框与详情抽屉：遮罩、标题与滚动都归这一层，页面不再各自写定位 ─── */
+.overlay-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(11, 27, 40, 0.28);
+}
+.overlay-scrim--dialog {
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.38);
+  backdrop-filter: blur(3px);
+}
+.overlay-dialog {
+  width: min(480px, calc(100vw - 48px));
+  max-height: calc(100vh - 96px);
+  max-height: calc(100dvh - 96px);
+  box-shadow: var(--ptmcp-shadow-pop);
+}
+.overlay-drawer {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100vw - 24px);
+  background: var(--ptmcp-surface);
+  border: 1px solid var(--ptmcp-border);
+  border-radius: 16px;
+  box-shadow: var(--ptmcp-shadow-pop);
+}
+/* 三栏工作台的分栏头部：图标 + 标题 + 副标题（稿面里三栏顶一致） */
+.pane-head {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 16px 12px;
+}
+.pane-head .cell-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+}
+.pane-head-copy {
+  min-width: 0;
+}
+.pane-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ptmcp-heading);
+}
+.pane-sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ptmcp-text-muted);
+}
+.pane-foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--ptmcp-border);
+  color: var(--ptmcp-text-muted);
+  font-size: 12px;
+}
+.overlay-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--ptmcp-border);
+}
+.overlay-header--start {
+  align-items: flex-start;
+  padding: 16px 18px;
+}
+.overlay-heading {
+  flex: 1;
+  min-width: 0;
+}
+.overlay-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--ptmcp-heading);
+}
+.overlay-header--start .overlay-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.overlay-title:focus {
+  outline: none;
+}
+.overlay-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 18px;
+}
+.overlay-dialog .overlay-body {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.overlay-footer {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--ptmcp-border);
 }
 
 /* ─── 通用：仅供读屏使用的文本 ─── */
@@ -993,6 +1611,23 @@ textarea:focus-visible {
 .option-grid {
   display: grid;
   gap: 14px;
+}
+/* 稿面里平台是 2 列、客户端是 3 列：卡片留够宽度，描述不会被迫折成单字。 */
+.option-grid--platforms {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.option-grid--clients {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.option-grid--wide {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 760px) {
+  .option-grid--platforms,
+  .option-grid--clients,
+  .option-grid--wide {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .summary-grid {
   display: grid;
@@ -1378,5 +2013,100 @@ textarea:focus-visible {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* ─── 窄屏统一修正：分组标题、视角切换、视图切换与统计卡在 390px 仍可读 ─── */
+@media (max-width: 900px) {
+  /* 图标栏里分组标题会竖成一条：窄屏不显示文字分组，靠间距区分。 */
+  .app-shell-nav .nav-group-title {
+    display: none;
+  }
+  .app-shell-nav .nav-group {
+    margin-bottom: 6px;
+  }
+  .realm-switch {
+    margin-left: 0;
+    padding: 2px;
+  }
+  .realm-switch-btn {
+    height: 28px;
+    padding: 0 10px;
+    font-size: 12.5px;
+    white-space: nowrap;
+  }
+}
+@media (max-width: 620px) {
+  .app-shell-top {
+    padding: 0 12px !important;
+  }
+  .app-shell-brand span:last-child {
+    font-size: 15px;
+  }
+  .app-shell-crumb,
+  .app-shell-scroll {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+  /* 视图切换在窄屏横向滚动，避免「全部 (6)」被压成竖排单字。 */
+  .tab-row {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+  .tab-row::-webkit-scrollbar {
+    display: none;
+  }
+  .tab-btn {
+    flex: none;
+    white-space: nowrap;
+  }
+  .stat-card {
+    align-items: flex-start;
+    padding: 14px;
+    gap: 10px;
+  }
+  .stat-card-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    font-size: 17px;
+  }
+  .stat-card-value {
+    font-size: 20px;
+  }
+  .stat-card-label {
+    white-space: normal;
+  }
+  .stat-card-hint {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .page-header h1 {
+    font-size: 21px;
+  }
+  .filter-card {
+    flex-wrap: wrap;
+  }
+  .filter-card .filter-grow {
+    flex: 1 1 100%;
+  }
+  /* 顶栏在 390px 只留品牌、视角切换与头像；姓名/部门与检索收进账户菜单，避免横向溢出。 */
+  .app-shell-top {
+    gap: 8px !important;
+  }
+  .app-shell-user .cell-stack {
+    display: none;
+  }
+  .app-shell-brand,
+  .app-shell-rule {
+    flex: none;
+  }
+  .realm-switch {
+    flex: none;
+  }
+  .topbar-more {
+    margin-left: auto;
   }
 }

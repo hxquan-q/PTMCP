@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode, type Ref } from 'react';
+import { createPortal } from 'react-dom';
 import { CheckIcon, ChevronRightIcon, CloseIcon, InfoIcon, SearchIcon, WarningIcon } from './Icons';
 import type { IconComponent } from './Icons';
 
@@ -17,7 +18,9 @@ export function Dialog({
   width?: number;
   children: ReactNode;
 }) {
+  const titleId = useId();
   const trapRef = useFocusTrap(open);
+  useOverlayLock(open);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -27,73 +30,34 @@ export function Dialog({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
   if (!open) return null;
-  return (
+  return createPortal(
     <div
-      role="presentation"
+      className="overlay-scrim overlay-scrim--dialog"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
-      }}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 60,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'rgba(15,23,42,.38)',
-        backdropFilter: 'blur(3px)',
       }}
     >
       <div
         ref={trapRef}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
-        className="table-card"
-        style={{
-          width: width ?? 480,
-          maxWidth: 'calc(100vw - 48px)',
-          maxHeight: 'calc(100vh - 96px)',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 24px 64px rgba(15,23,42,.24)',
-        }}
+        aria-labelledby={titleId}
+        className="table-card overlay-dialog"
+        style={width ? { width } : undefined}
       >
-        <header
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            padding: '14px 18px',
-            borderBottom: '1px solid var(--ptmcp-border)',
-            flex: 'none',
-          }}
-        >
-          <strong style={{ fontSize: 15, color: 'var(--ptmcp-heading)' }}>{title}</strong>
-          <button className="btn btn--icon" aria-label="关闭" onClick={onClose}>
+        <header className="overlay-header">
+          <h2 id={titleId} className="overlay-title" tabIndex={-1}>
+            {title}
+          </h2>
+          <button type="button" className="btn btn--icon" aria-label="关闭" onClick={onClose}>
             <CloseIcon />
           </button>
         </header>
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 18px', display: 'grid', gap: 12, alignContent: 'start' }}>
-          {children}
-        </div>
-        {footer ? (
-          <footer
-            style={{
-              display: 'flex',
-              justifyContent: 'flex-end',
-              gap: 10,
-              padding: '12px 18px',
-              borderTop: '1px solid var(--ptmcp-border)',
-              flex: 'none',
-            }}
-          >
-            {footer}
-          </footer>
-        ) : null}
+        <div className="overlay-body">{children}</div>
+        {footer ? <footer className="overlay-footer">{footer}</footer> : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -119,6 +83,7 @@ export function TextInput({
   invalid,
   describedBy,
   inputRef,
+  width,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -131,6 +96,8 @@ export function TextInput({
   invalid?: boolean;
   describedBy?: string;
   inputRef?: Ref<HTMLInputElement>;
+  /* 筛选项需要固定宽度；表单里的输入框仍默认铺满所在单元格。 */
+  width?: number | string;
 }) {
   /* 控件此前没有 id：浏览器的表单启发式（自动填充、Chrome 的 “field should have an id or name” 告警）与任何按 id 关联的脚本都无从下手。
      可见名仍由外层 <label> 或 aria-label 提供，这里只补可编程标识。 */
@@ -139,7 +106,7 @@ export function TextInput({
     <input
       id={autoId}
       className={invalid ? 'input input--invalid' : 'input'}
-      style={{ width: '100%' }}
+      style={{ width: width ?? '100%' }}
       type={type ?? 'text'}
       ref={inputRef}
       value={value}
@@ -163,8 +130,8 @@ export function CellIcon({ icon: Icon, engine, large }: { icon: IconComponent; e
   );
 }
 
-export function StatusDot({ tone, children }: { tone: 'success' | 'warning' | 'danger' | 'neutral'; children: ReactNode }) {
-  return <span className={`status-dot is-${tone}`}>{children}</span>;
+export function StatusDot({ tone, children }: { tone: 'success' | 'warning' | 'danger' | 'neutral' | 'accent'; children: ReactNode }) {
+  return <span className={`pill pill--${tone}`}>{children}</span>;
 }
 
 export function Badge({ tone, children }: { tone: 'success' | 'warning' | 'danger' | 'neutral' | 'accent'; children: ReactNode }) {
@@ -173,12 +140,12 @@ export function Badge({ tone, children }: { tone: 'success' | 'warning' | 'dange
 
 export function PageHeader({ title, description, actions }: { title: string; description?: string; actions?: ReactNode }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 18, flexWrap: 'wrap' }}>
-      <div>
-        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--ptmcp-heading)', lineHeight: 1.25 }}>{title}</h1>
-        {description ? <p style={{ margin: '5px 0 0', fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>{description}</p> : null}
+    <div className="page-header">
+      <div className="page-header-copy">
+        <h1>{title}</h1>
+        {description ? <p>{description}</p> : null}
       </div>
-      {actions}
+      {actions ? <div className="page-header-actions">{actions}</div> : null}
     </div>
   );
 }
@@ -196,24 +163,16 @@ export function StatCard({
   hint?: string;
   tone?: 'success' | 'warning' | 'danger';
 }) {
-  const accent =
-    tone === 'success'
-      ? 'var(--ptmcp-green)'
-      : tone === 'warning'
-        ? 'var(--ptmcp-orange)'
-        : tone === 'danger'
-          ? 'var(--ptmcp-red)'
-          : 'var(--ptmcp-blue)';
   return (
-    <div className="table-card" style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: '14px 16px' }}>
-      <CellIcon icon={Icon} large />
-      <div className="cell-stack">
-        <strong style={{ fontSize: 20, color: accent }}>{value}</strong>
-        <span>
-          {label}
-          {hint ? ` · ${hint}` : ''}
-        </span>
-      </div>
+    <div className={`table-card stat-card${tone ? ` stat-card--${tone}` : ''}`}>
+      <span className="stat-card-icon" aria-hidden>
+        <Icon />
+      </span>
+      <span className="stat-card-copy">
+        <strong className="stat-card-value">{value}</strong>
+        <span className="stat-card-label">{label}</span>
+        {hint ? <span className="stat-card-hint">{hint}</span> : null}
+      </span>
     </div>
   );
 }
@@ -375,7 +334,16 @@ export function Stepper({ steps, current }: { steps: string[]; current: number }
               {label}
               <span className="sr-only">{done ? '（已完成）' : active ? '（当前步骤）' : '（未完成）'}</span>
             </span>
-            {i < steps.length - 1 ? <span style={{ width: 42, height: 1, margin: '0 12px', background: 'var(--ptmcp-border-strong)' }} /> : null}
+            {i < steps.length - 1 ? (
+              <span
+                style={{
+                  width: 42,
+                  height: 1,
+                  margin: '0 12px',
+                  background: done ? 'var(--ptmcp-blue)' : 'var(--ptmcp-border-strong)',
+                }}
+              />
+            ) : null}
           </li>
         );
       })}
@@ -402,9 +370,10 @@ export function OptionCard({
     <button type="button" onClick={onSelect} aria-pressed={selected} className={`option-card${selected ? ' is-selected' : ''}`}>
       <CellIcon icon={Icon} large />
       <span className="cell-stack" style={{ flex: 1 }}>
-        <strong style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <strong className="option-card-title">
           {title}
-          {tag}
+          {/* 标签必须包在元素里：裸文本会和标题连在一起，flex 的 gap 不适用于匿名文本。 */}
+          {tag ? <span className="option-card-tag">{tag}</span> : null}
         </strong>
         {description ? <span>{description}</span> : null}
       </span>
@@ -477,7 +446,9 @@ export function Drawer({
   footer?: ReactNode;
   width?: number;
 }) {
+  const titleId = useId();
   const trapRef = useFocusTrap(open);
+  useOverlayLock(open);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -485,48 +456,28 @@ export function Drawer({
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onClose]);
   if (!open) return null;
-  return (
+  return createPortal(
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(11,27,40,.28)', zIndex: 40 }} />
-      <aside
-        ref={trapRef}
-        role="dialog"
-        aria-modal="true"
-        style={{
-          position: 'fixed',
-          top: 0,
-          right: 0,
-          bottom: 0,
-          width,
-          maxWidth: '92vw',
-          background: 'var(--ptmcp-surface)',
-          boxShadow: 'var(--ptmcp-shadow-pop)',
-          zIndex: 41,
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        <header style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '16px 18px', borderBottom: '1px solid var(--ptmcp-border)' }}>
+      <div className="overlay-scrim" onClick={onClose} />
+      <div ref={trapRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="overlay-drawer" style={{ width }}>
+        <header className="overlay-header overlay-header--start">
           {icon}
-          <div className="cell-stack" style={{ flex: 1 }}>
-            <strong style={{ fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="cell-stack overlay-heading">
+            <h2 id={titleId} className="overlay-title" tabIndex={-1}>
               {title}
               {badge}
-            </strong>
+            </h2>
             {subtitle ? <span>{subtitle}</span> : null}
           </div>
-          <button className="btn btn--icon" aria-label="关闭" onClick={onClose}>
+          <button type="button" className="btn btn--icon" aria-label="关闭" onClick={onClose}>
             <CloseIcon />
           </button>
         </header>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px' }}>{children}</div>
-        {footer ? (
-          <footer style={{ padding: '12px 18px', borderTop: '1px solid var(--ptmcp-border)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-            {footer}
-          </footer>
-        ) : null}
-      </aside>
-    </>
+        <div className="overlay-body">{children}</div>
+        {footer ? <footer className="overlay-footer">{footer}</footer> : null}
+      </div>
+    </>,
+    document.body,
   );
 }
 
@@ -630,7 +581,10 @@ export function GlobalSearch({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-/** 焦点圈禁：打开时聚焦首个可操作元素、Tab 循环、关闭时归还焦点。供 Dialog/Drawer 共用。 */
+/**
+ * 焦点圈禁：打开时先落标题（只读详情没有比「关闭」更该先读的控件），Tab 只在层内循环，关闭后归还焦点。
+ * 供 Dialog/Drawer 共用。
+ */
 export function useFocusTrap(open: boolean) {
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -643,7 +597,11 @@ export function useFocusTrap(open: boolean) {
       Array.from(container.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter(
         (el) => !el.hasAttribute('disabled') && el.offsetParent !== null && el.tabIndex >= 0,
       );
-    window.setTimeout(() => focusables()[0]?.focus(), 0);
+    /* 标题 tabindex=-1，不进 Tab 序列，但打开时先读它；没有标题才退回第一个控件。 */
+    const title = container.querySelector<HTMLElement>('.overlay-title');
+    window.setTimeout(() => (title ?? focusables()[0])?.focus(), 0);
+    /* 归还由 useOverlayLock 在解开 inert 后调用：外壳还 inert 时 focus() 会被浏览器丢掉。 */
+    pendingRestores.push(() => previouslyFocused?.focus?.());
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Tab') return;
       const items = focusables();
@@ -661,10 +619,35 @@ export function useFocusTrap(open: boolean) {
     container.addEventListener('keydown', onKeyDown);
     return () => {
       container.removeEventListener('keydown', onKeyDown);
-      previouslyFocused?.focus?.();
     };
   }, [open]);
   return ref;
+}
+
+/**
+ * 打开期间把背后页面标成 inert，并锁住 body 滚动。
+ * aria-modal 只是声明，Chrome 仍会把 Tab 送进背后的侧栏和面包屑；inert 才真正挡住。
+ * 多层叠加时按计数归还，避免内层关闭把外层的锁一起解开。
+ */
+let overlayLocks = 0;
+const pendingRestores: Array<() => void> = [];
+function useOverlayLock(open: boolean) {
+  useEffect(() => {
+    if (!open) return;
+    /* 浮层通过 portal 挂在 body 下，不在 #root 里；锁 #root 会把浮层自己也锁死。 */
+    const shell = document.querySelector('.app-shell');
+    overlayLocks += 1;
+    shell?.setAttribute('inert', '');
+    document.body.style.overflow = 'hidden';
+    return () => {
+      overlayLocks = Math.max(0, overlayLocks - 1);
+      if (overlayLocks === 0) {
+        shell?.removeAttribute('inert');
+        document.body.style.overflow = '';
+        pendingRestores.splice(0).forEach((restore) => restore());
+      }
+    };
+  }, [open]);
 }
 
 export function useDebounced<T>(value: T, ms = 300): T {

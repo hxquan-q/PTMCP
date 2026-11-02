@@ -71,7 +71,7 @@ export function PermissionsPage() {
   const [grantsLoading, setGrantsLoading] = useState(false);
   const [grantPage, setGrantPage] = useState(1);
   const [focus, setFocus] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(true);
   const [platforms, setPlatforms] = useState<PlatformItem[]>([]);
   const [platformId, setPlatformId] = useState('');
   const [previewAt, setPreviewAt] = useState('');
@@ -376,7 +376,7 @@ export function PermissionsPage() {
     [toggleNode],
   );
 
-  const gridCols = focus ? '1fr' : `${colWidths[0]}% 6px ${colWidths[1]}% 6px 1fr`;
+  const gridCols = focus ? '1fr' : `${colWidths[0]}% 14px ${colWidths[1]}% 14px 1fr`;
   const previewIsFuture = !!previewRequestedAt && new Date(previewRequestedAt).getTime() > Date.now();
   /** datetime-local 的 min：默认给到下一分钟，减少“刚选好就已在过去”的无效提交。 */
   const validToMin = useMemo(() => {
@@ -406,7 +406,7 @@ export function PermissionsPage() {
         className="perm-workspace"
         onPointerMove={onResizerMove}
         onPointerUp={onResizerUp}
-        style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 0, flex: 1, minHeight: 0 }}
+        style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 0, flex: 1, minHeight: 360 }}
       >
         {/* ─── 栏 1:授权主体 ─── */}
         {!focus ? (
@@ -936,32 +936,16 @@ function Pane({
 }) {
   return (
     <section className="table-card" style={{ minHeight: 0, marginRight: 0 }}>
-      <header style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px 10px', flex: 'none' }}>
+      <header className="pane-head">
         {icon}
-        <span className="cell-stack" style={{ flex: 1 }}>
-          <strong style={{ fontSize: 14 }}>{title}</strong>
-          {subtitle ? <span>{subtitle}</span> : null}
+        <span className="pane-head-copy" style={{ flex: 1 }}>
+          <h2 className="pane-title">{title}</h2>
+          {subtitle ? <p className="pane-sub">{subtitle}</p> : null}
         </span>
         {headerExtra}
       </header>
       {children}
-      {footer ? (
-        <footer
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 10,
-            padding: '8px 14px',
-            borderTop: '1px solid var(--ptmcp-border)',
-            fontSize: 12,
-            color: 'var(--ptmcp-text-muted)',
-            flex: 'none',
-          }}
-        >
-          {footer}
-        </footer>
-      ) : null}
+      {footer ? <footer className="pane-foot">{footer}</footer> : null}
     </section>
   );
 }

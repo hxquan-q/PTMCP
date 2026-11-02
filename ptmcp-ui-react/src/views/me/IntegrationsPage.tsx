@@ -28,6 +28,8 @@ import {
   DocumentIcon,
   GearIcon,
   InfoIcon,
+  KeyIcon,
+  LockIcon,
   MonitorIcon,
   PlusIcon,
   PuzzleIcon,
@@ -39,7 +41,7 @@ import {
 import { mePortalApi, type McpConfig, type PlatformItem } from '../../services/mePortalApi';
 import { readFailure } from '../../services/http';
 import { frontendPreview } from '../../services/frontendMode';
-import { authAvailability, templatesFromConfig } from './mcpTemplate';
+import { authAvailability, preferredChoice, templatesFromConfig, transportAvailability, wizardCanAdvance } from './mcpTemplate';
 
 /* ─── 视图模型 ─── */
 interface IntegrationRow {
@@ -52,7 +54,7 @@ interface IntegrationRow {
   transport: string;
   auth: string;
   status: '已生效' | '配置中' | '未验证' | '草稿' | '异常';
-  tone: 'success' | 'warning' | 'danger' | 'neutral';
+  tone: 'success' | 'warning' | 'danger' | 'neutral' | 'accent';
   createdAt: string;
   updatedAt: string;
 }
@@ -111,7 +113,7 @@ const PREVIEW_INTEGRATIONS: IntegrationRow[] = [
     transport: 'streamable-http',
     auth: 'OAuth',
     status: '配置中',
-    tone: 'warning',
+    tone: 'accent',
     createdAt: '2026-10-27 11:04',
     updatedAt: '2026-10-27 11:04',
   },
@@ -153,9 +155,16 @@ const CLIENT_TYPES: { value: string; label: string; desc: string; icon: IconComp
   { value: 'VSCODE', label: 'VS Code', desc: 'Visual Studio Code', icon: MonitorIcon },
 ];
 
-/** 服务端 me/mcp-config 只返回 streamable-http 与 oauth/pat，UI 不再展示其他选项。 */
-const TRANSPORTS = [{ value: 'streamable-http', label: 'streamable-http', desc: '通过 HTTP 流式连接 MCP 服务端', icon: StreamIcon }];
-const AUTHS = [{ value: 'oauth-pat', label: 'OAuth / PAT', desc: '推荐使用，支持个人访问令牌（PAT）', icon: ShieldIcon }];
+/** 与设计稿一致的选项集合。是否可点由服务端 mcp-config 决定，不支持的卡片保留可见但禁用。 */
+const TRANSPORTS: { value: 'streamable-http' | 'stdio'; label: string; desc: string; icon: IconComponent }[] = [
+  { value: 'streamable-http', label: 'streamable-http', desc: '通过 HTTP 流式传输与 MCP 服务通信', icon: StreamIcon },
+  { value: 'stdio', label: 'stdio', desc: '本地进程通信，仅当服务端声明该传输时可选', icon: CodeIcon },
+];
+const AUTHS: { value: 'oauth-pat' | 'apikey' | 'none'; label: string; desc: string; icon: IconComponent }[] = [
+  { value: 'oauth-pat', label: 'OAuth / PAT', desc: '推荐使用，支持个人访问令牌（PAT）', icon: ShieldIcon },
+  { value: 'apikey', label: 'API Key', desc: '使用服务端声明的 API Key 认证', icon: KeyIcon },
+  { value: 'none', label: '无认证', desc: '仅当服务端明确声明测试环境无认证时可选', icon: LockIcon },
+];
 
 const PLATFORM_FILTER_OPTIONS = [
   { value: '', label: '全部平台' },
@@ -202,7 +211,7 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
 
   const stats = useMemo(
     () => [
-      { icon: DocumentIcon, value: integrations.length, label: '全部接入', hint: '配置总量', tone: undefined },
+      { icon: DocumentIcon, value: integrations.length, label: '我的接入', hint: '已创建的接入配置', tone: undefined },
       {
         icon: CheckIcon,
         value: integrations.filter((r) => r.status === '已生效').length,
@@ -252,10 +261,10 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
     <>
       <PageHeader
         title="MCP 接入配置"
-        description="按平台与客户端生成本人的 MCP 配置模板；实际连通由客户端完成 MCP 握手后验证。"
+        description="配置并管理本人的 MCP 客户端接入，快速获取配置模板并完成接入。是否连通仍由客户端握手验证。"
         actions={
           <button className="btn btn--primary" onClick={onCreate}>
-            <PlusIcon /> 新建接入
+            <PlusIcon /> 新建接入配置
           </button>
         }
       />
@@ -271,7 +280,7 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
       <div className="table-card" style={{ flex: 1, minHeight: 0 }}>
         {frontendPreview ? (
           <>
-            <div style={{ padding: '2px 14px 0' }}>
+            <div className="card-tabs">
               <Tabs
                 tabs={tabs}
                 active={tab}
@@ -281,7 +290,7 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
                 }}
               />
             </div>
-            <div className="toolbar-row" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '0 14px 12px' }}>
+            <div className="card-toolbar">
               <SearchInput
                 value={keyword}
                 onChange={(v) => {
@@ -289,7 +298,7 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
                   setPage(1);
                 }}
                 placeholder="搜索接入名称或客户端类型…"
-                width={220}
+                width={240}
               />
               <Select
                 value={platformFilter}
@@ -310,7 +319,7 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
                 options={STATUS_FILTER_OPTIONS}
               />
               <button
-                className="btn btn--secondary"
+                className="btn btn--ghost"
                 onClick={() => {
                   setTab('all');
                   setKeyword('');
@@ -321,9 +330,6 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
               >
                 重置
               </button>
-              <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
-                演示数据：合成预览模式下的样例接入，不代表真实登记。
-              </span>
             </div>
           </>
         ) : null}
@@ -348,9 +354,12 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
                   <td>
                     <span className="cell-lead">
                       <CellIcon icon={r.clientIcon} />
-                      <button className="link" onClick={() => setDetail(r)}>
-                        {r.name}
-                      </button>
+                      <span className="cell-stack">
+                        <button className="link" onClick={() => setDetail(r)}>
+                          {r.name}
+                        </button>
+                        <span>{r.code}</span>
+                      </span>
                     </span>
                   </td>
                   <td>{r.platform}</td>
@@ -395,7 +404,14 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
           </table>
         </div>
         <div className="table-footer">
-          <span style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>共 {rows.length} 条</span>
+          <span>
+            共 {rows.length} 条
+            {frontendPreview ? (
+              <span className="footer-note" style={{ marginLeft: 10 }}>
+                演示数据：合成预览模式下的样例接入，不代表真实登记
+              </span>
+            ) : null}
+          </span>
           <Pagination total={rows.length} page={page} pageSize={pageSize} onPage={setPage} />
         </div>
       </div>
@@ -443,7 +459,7 @@ function Wizard({ onExit }: { onExit: () => void }) {
 
   const platformMeta = platformItems.find((p) => p.id === platform) ?? null;
   const clientMeta = CLIENT_TYPES.find((c) => c.value === client)!;
-  const authMeta = AUTHS.find((a) => a.value === auth)!;
+  const authMeta = AUTHS.find((a) => a.value === auth);
 
   /* 平台目录来自 me/access-context?level=PLATFORM：只用真实 platformId，不按 tier 猜或回退。 */
   useEffect(() => {
@@ -511,17 +527,33 @@ function Wizard({ onExit }: { onExit: () => void }) {
   const template = templates ? templates[format] : '';
   const templateReady = !!mcpCfg && !!templates && !cfgError;
   const authAllowed = authAvailability(mcpCfg?.authentication);
+  const transportAllowed = transportAvailability(mcpCfg?.transport);
   // 只有服务端能力已成功返回时才展示“不支持”；加载/失败期间保持不可选，避免把未知当成不支持或支持。
   const authKnown = !!mcpCfg && !cfgError;
   /* 服务端未返回部署地址时按“待配置”呈现，不伪造可连通的 URL。 */
   const serverUrl = mcpCfg?.url?.trim() ?? '';
 
-  const canNext =
-    (step === 0 && !!platform) ||
-    (step === 1 && !!client) ||
-    // 认证方式必须由服务端 mcp-config.authentication 实际支持，元数据缺失时 fail-closed。
-    (step === 2 && transport === 'streamable-http' && auth === 'oauth-pat' && authAllowed['oauth-pat']) ||
-    (step === 3 && templateReady);
+  /* 能力返回后，把仍停在未声明选项上的选择拨到服务端允许的第一项；没有允许项则清空并挡住下一步。 */
+  useEffect(() => {
+    if (!authKnown) return;
+    setTransport((current) =>
+      transportAllowed[current as 'streamable-http' | 'stdio'] ? current : preferredChoice(transportAllowed, ['streamable-http', 'stdio']),
+    );
+    setAuth((current) =>
+      authAllowed[current as 'oauth-pat' | 'apikey' | 'none'] ? current : preferredChoice(authAllowed, ['oauth-pat', 'apikey', 'none']),
+    );
+  }, [authKnown, mcpCfg]);
+
+  const canNext = wizardCanAdvance(step, {
+    platform,
+    client,
+    transport,
+    auth,
+    transports: transportAllowed,
+    auths: authAllowed,
+    authKnown,
+    templateReady,
+  });
 
   /* 步骤切换后把焦点交给该步标题，键盘与读屏用户才知道内容已换。 */
   useEffect(() => {
@@ -545,7 +577,7 @@ function Wizard({ onExit }: { onExit: () => void }) {
   if (done) {
     return (
       <>
-        <PageHeader title="新建 MCP 接入" description="已按所选平台与客户端生成配置模板；实际接入由客户端握手验证。" />
+        <PageHeader title="新建 MCP 接入配置" description="已按所选平台与客户端生成配置模板；实际接入由客户端握手验证。" />
         <div className="table-card" style={{ maxWidth: 900, margin: '0 auto', padding: '32px 36px' }}>
           <div style={{ textAlign: 'center', marginBottom: 22 }}>
             <span className="done-badge">
@@ -585,7 +617,7 @@ function Wizard({ onExit }: { onExit: () => void }) {
               ['客户端', clientMeta.label],
               ['传输方式', transport],
               ['服务端地址', serverUrl || '待配置'],
-              ['认证方式', authMeta.label],
+              ['认证方式', authMeta?.label ?? '—'],
               ['状态', '待验证（模板已生成）'],
               [
                 '兼容性',
@@ -646,7 +678,7 @@ function Wizard({ onExit }: { onExit: () => void }) {
 
   return (
     <>
-      <PageHeader title="新建 MCP 接入" description="按 4 步生成客户端配置模板；实际接入由客户端完成 MCP 握手后验证。" />
+      <PageHeader title="新建 MCP 接入配置" description="通过以下步骤完成配置。模板生成后仍需在客户端完成握手，本页不代表已经接入。" />
       <Stepper steps={STEPS} current={step} />
       <p className="sr-only" aria-live="polite">
         第 {step + 1} 步，共 {STEPS.length} 步：{STEPS[step]}
@@ -655,7 +687,7 @@ function Wizard({ onExit }: { onExit: () => void }) {
       <div className="table-card wizard-card" ref={stepRef} tabIndex={-1}>
         {step === 0 && (
           <>
-            <StepHeading n={1} title="选择平台" desc="平台目录来自当前账号可见的授权范围（me/access-context）" />
+            <StepHeading n={1} title="选择平台" desc="选择要接入的平台环境；列表只包含当前账号可见的授权范围" />
             {platformLoading && platformItems.length === 0 ? (
               <p style={{ margin: '0 0 8px', fontSize: 12.5, color: 'var(--ptmcp-text-muted)' }}>正在加载平台目录…</p>
             ) : null}
@@ -670,7 +702,8 @@ function Wizard({ onExit }: { onExit: () => void }) {
                 当前账号没有可见的平台，无法生成 MCP 接入配置。请联系管理员开通平台授权后重试。
               </Alert>
             ) : null}
-            <div className="option-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+            <div className="option-grid option-grid--platforms">
+              {' '}
               {platformItems.map((p) => (
                 <OptionCard
                   key={p.id}
@@ -696,7 +729,7 @@ function Wizard({ onExit }: { onExit: () => void }) {
         {step === 1 && (
           <>
             <StepHeading n={2} title="选择客户端" desc="选择要使用的 MCP 客户端工具，模板按客户端类型生成" />
-            <div className="option-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
+            <div className="option-grid option-grid--clients">
               {CLIENT_TYPES.map((c) => (
                 <OptionCard
                   key={c.value}
@@ -713,8 +746,8 @@ function Wizard({ onExit }: { onExit: () => void }) {
 
         {step === 2 && (
           <>
-            <StepHeading n={3} title="连接方式与认证" desc="传输与认证能力取自服务端 mcp-config，不由界面假设" />
-            <div className="option-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24 }}>
+            <StepHeading n={3} title="连接方式与认证" desc="选择传输与认证方式；只有平台声明支持的组合才能继续" />
+            <div className="option-grid option-grid--wide" style={{ gap: 24 }}>
               <div>
                 <h4 style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>传输方式</h4>
                 <div style={{ display: 'grid', gap: 12 }}>
@@ -724,8 +757,9 @@ function Wizard({ onExit }: { onExit: () => void }) {
                       icon={t.icon}
                       title={t.label}
                       description={t.desc}
+                      tag={authKnown && !transportAllowed[t.value] ? '该平台不支持' : undefined}
                       selected={transport === t.value}
-                      onSelect={() => setTransport(t.value)}
+                      onSelect={() => authKnown && transportAllowed[t.value] && setTransport(t.value)}
                     />
                   ))}
                 </div>
@@ -739,9 +773,9 @@ function Wizard({ onExit }: { onExit: () => void }) {
                       icon={a.icon}
                       title={a.label}
                       description={a.desc}
-                      tag={authKnown && !authAllowed[a.value as keyof typeof authAllowed] ? '该平台不支持' : undefined}
+                      tag={authKnown && !authAllowed[a.value] ? '该平台不支持' : undefined}
                       selected={auth === a.value}
-                      onSelect={() => authKnown && authAllowed[a.value as keyof typeof authAllowed] && setAuth(a.value)}
+                      onSelect={() => authKnown && authAllowed[a.value] && setAuth(a.value)}
                     />
                   ))}
                 </div>
@@ -785,9 +819,14 @@ function Wizard({ onExit }: { onExit: () => void }) {
                 {cfgError.requestId ? <RequestIdText requestId={cfgError.requestId} /> : null}
               </Alert>
             ) : null}
-            {!cfgLoading && !cfgError && mcpCfg && !authAllowed['oauth-pat'] ? (
+            {!cfgLoading && !cfgError && mcpCfg && !Object.values(authAllowed).some(Boolean) ? (
               <Alert kind="warning" title="认证能力未确认">
-                服务端未返回 OAuth/PAT 认证能力（或该平台不支持），无法生成 MCP 配置。请返回上一步确认平台与客户端，或联系管理员补全认证元数据。
+                服务端未返回可用的认证方式，无法生成 MCP 配置。请返回上一步确认平台与客户端，或联系管理员补全认证元数据。
+              </Alert>
+            ) : null}
+            {!cfgLoading && !cfgError && mcpCfg && !Object.values(transportAllowed).some(Boolean) ? (
+              <Alert kind="warning" title="传输方式未确认">
+                服务端返回的 transport 不是 streamable-http 或 stdio，无法继续。请联系管理员核对网关传输声明。
               </Alert>
             ) : null}
           </>

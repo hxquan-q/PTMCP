@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { LogoIcon, SearchIcon, UserIcon } from '../components/Icons';
 import { GlobalSearch, useFocusTrap } from '../components/common';
-import { ChevronRightIcon, CloseIcon, DocumentIcon } from '../components/Icons';
+import { ChevronRightIcon, CloseIcon, DocumentIcon, DotsIcon } from '../components/Icons';
 import { listDatasources } from '../services/data';
 
 export interface NavItem {
@@ -48,6 +48,8 @@ export function AppShell({
   onSwitchRealm?: (realm: 'admin' | 'me') => void;
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -55,9 +57,17 @@ export function AppShell({
         e.preventDefault();
         setSearchOpen(true);
       }
+      if (e.key === 'Escape') setMoreOpen(false);
+    };
+    const onPointer = (e: PointerEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('pointerdown', onPointer);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pointerdown', onPointer);
+    };
   }, []);
   return (
     <div className="app-shell">
@@ -65,44 +75,38 @@ export function AppShell({
       <button type="button" className="skip-link" onClick={() => contentRef.current?.focus()}>
         跳到主内容
       </button>
-      <header
-        className="app-shell-top"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 14,
-          height: 52,
-          padding: '0 16px',
-          background: 'var(--ptmcp-surface)',
-          borderBottom: '1px solid var(--ptmcp-border)',
-          flex: 'none',
-        }}
-      >
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9, fontSize: 17, fontWeight: 800, color: 'var(--ptmcp-heading)' }}>
-          <LogoIcon style={{ fontSize: 24, color: 'var(--ptmcp-blue)' }} />
+      <header className="app-shell-top">
+        <span className="app-shell-brand">
+          <LogoIcon />
           PTMCP
         </span>
-        <span style={{ width: 1, height: 20, background: 'var(--ptmcp-border-strong)' }} />
-        <span className="app-shell-subtitle" style={{ fontSize: 14, color: 'var(--ptmcp-text-muted)' }}>
-          数据访问管理平台
-        </span>
-        <div className="app-shell-search" style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+        <span className="app-shell-rule" />
+        <span className="app-shell-subtitle">数据访问管理平台</span>
+        {onSwitchRealm ? (
+          <div className="realm-switch" role="group" aria-label="视角切换">
+            <button
+              type="button"
+              className="realm-switch-btn"
+              aria-current={realm === 'admin'}
+              aria-disabled={!adminHomePath}
+              title={adminHomePath ? '进入管理工作区' : '当前账号没有管理权限'}
+              onClick={() => {
+                if (!adminHomePath) return;
+                onSwitchRealm('admin');
+              }}
+            >
+              管理控制台
+            </button>
+            <button type="button" className="realm-switch-btn" aria-current={realm === 'me'} onClick={() => onSwitchRealm('me')}>
+              个人门户
+            </button>
+          </div>
+        ) : null}
+        <div className="app-shell-search">
           <GlobalSearch onOpen={() => setSearchOpen(true)} />
         </div>
-        <span className="chip-btn" style={{ background: 'var(--ptmcp-chrome)', border: '1px solid var(--ptmcp-border)' }}>
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 26,
-              height: 26,
-              borderRadius: '50%',
-              background: 'var(--ptmcp-blue-soft)',
-              color: 'var(--ptmcp-blue-text)',
-              fontSize: 13,
-            }}
-          >
+        <span className="chip-btn app-shell-user">
+          <span className="app-shell-avatar">
             <UserIcon />
           </span>
           <span className="cell-stack">
@@ -111,138 +115,51 @@ export function AppShell({
           </span>
         </span>
         {onLogout ? (
-          <button className="btn btn--secondary" onClick={onLogout} style={{ padding: '5px 12px', fontSize: 12.5 }}>
-            退出登录
-          </button>
+          <div className="topbar-more" ref={moreRef}>
+            {/* 稿面右上角是“⋯”而不是一个醒目的退出按钮：账户级动作收进菜单，顶栏只留身份与检索。 */}
+            <button
+              type="button"
+              className="btn btn--icon"
+              aria-label="更多账户操作"
+              aria-haspopup="menu"
+              aria-expanded={moreOpen}
+              onClick={() => setMoreOpen((v) => !v)}
+            >
+              <DotsIcon />
+            </button>
+            {moreOpen ? (
+              <div className="topbar-menu" role="menu" aria-label="账户操作">
+                <button type="button" role="menuitem" className="topbar-menu-item" onClick={onLogout}>
+                  退出登录
+                </button>
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </header>
-      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <nav
-          className="app-shell-nav"
-          aria-label={realm === 'admin' ? '管理工作区导航' : '个人门户导航'}
-          style={{
-            width: 208,
-            flex: 'none',
-            background: 'var(--ptmcp-surface)',
-            borderRight: '1px solid var(--ptmcp-border)',
-            padding: '12px 8px',
-            overflowY: 'auto',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          {onSwitchRealm ? (
-            <div
-              role="group"
-              aria-label="视角切换"
-              style={{
-                display: 'flex',
-                gap: 4,
-                padding: 4,
-                margin: '0 4px 10px',
-                borderRadius: 10,
-                background: 'var(--ptmcp-chrome)',
-                border: '1px solid var(--ptmcp-border)',
-                flex: 'none',
-              }}
-            >
-              <button
-                type="button"
-                aria-current={realm === 'admin'}
-                aria-disabled={!adminHomePath}
-                title={adminHomePath ? '进入管理工作区' : '当前账号没有管理权限'}
-                onClick={() => {
-                  if (!adminHomePath) return;
-                  onSwitchRealm('admin');
-                }}
-                style={{
-                  flex: 1,
-                  padding: '6px 8px',
-                  border: 'none',
-                  borderRadius: 7,
-                  fontSize: 12.5,
-                  fontWeight: realm === 'admin' ? 700 : 500,
-                  color: realm === 'admin' ? 'var(--ptmcp-blue-text)' : 'var(--ptmcp-text-muted)',
-                  background: realm === 'admin' ? 'var(--ptmcp-surface)' : 'transparent',
-                  cursor: adminHomePath ? 'pointer' : 'not-allowed',
-                  opacity: adminHomePath ? 1 : 0.45,
-                }}
-              >
-                管理视角
-              </button>
-              <button
-                type="button"
-                aria-current={realm === 'me'}
-                onClick={() => onSwitchRealm('me')}
-                style={{
-                  flex: 1,
-                  padding: '6px 8px',
-                  border: 'none',
-                  borderRadius: 7,
-                  fontSize: 12.5,
-                  fontWeight: realm === 'me' ? 700 : 500,
-                  color: realm === 'me' ? 'var(--ptmcp-blue-text)' : 'var(--ptmcp-text-muted)',
-                  background: realm === 'me' ? 'var(--ptmcp-surface)' : 'transparent',
-                  cursor: 'pointer',
-                }}
-              >
-                个人视角
-              </button>
+      <div className="app-shell-body">
+        <nav className="app-shell-nav" aria-label={realm === 'admin' ? '管理工作区导航' : '个人门户导航'}>
+          {groups.map((g, gi) => (
+            <div key={gi} className="nav-group">
+              {g.title ? <div className="nav-group-title">{g.title}</div> : null}
+              {g.items.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  className="nav-item"
+                  onClick={() => onNavigate(item.key)}
+                  aria-current={item.key === active}
+                  title={item.label}
+                >
+                  <span className="nav-icon">{item.icon}</span>
+                  <span className="nav-label">{item.label}</span>
+                </button>
+              ))}
             </div>
-          ) : null}
-          <div style={{ flex: 1 }}>
-            {groups.map((g, gi) => (
-              <div key={gi} style={{ marginBottom: 10 }}>
-                {g.title ? <div style={{ padding: '6px 12px 4px', fontSize: 12, color: 'var(--ptmcp-text-faint)' }}>{g.title}</div> : null}
-                {g.items.map((item) => {
-                  const selected = item.key === active;
-                  return (
-                    <button
-                      key={item.key}
-                      className="nav-item"
-                      onClick={() => onNavigate(item.key)}
-                      aria-current={selected}
-                      title={item.label}
-                      style={{ position: 'relative' }}
-                    >
-                      {selected ? (
-                        <span
-                          style={{
-                            position: 'absolute',
-                            left: -8,
-                            top: 6,
-                            bottom: 6,
-                            width: 3,
-                            borderRadius: 2,
-                            background: 'var(--ptmcp-blue)',
-                          }}
-                        />
-                      ) : null}
-                      <span style={{ fontSize: 15, display: 'inline-flex' }}>{item.icon}</span>
-                      <span className="nav-label">{item.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-          <div
-            className="app-shell-workspace"
-            style={{
-              flex: 'none',
-              margin: '8px 4px 4px',
-              padding: '10px 12px',
-              borderRadius: 10,
-              background: 'linear-gradient(180deg, var(--ptmcp-blue-bg) 0%, transparent 100%)',
-              border: '1px solid var(--ptmcp-border)',
-            }}
-          >
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ptmcp-heading)' }}>
-              {realm === 'admin' ? 'PTMCP 管理工作区' : 'PTMCP 个人门户'}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--ptmcp-text-muted)', marginTop: 2 }}>
-              {realm === 'admin' ? '权限、资源与运行状态' : '我的数据、授权与安全'}
-            </div>
+          ))}
+          <div className="nav-workspace">
+            <strong>PTMCP {realm === 'admin' ? '管理工作区' : '个人门户'}</strong>
+            <span>{realm === 'admin' ? '权限、资源与运行状态' : '接入、令牌与查询记录'}</span>
           </div>
         </nav>
         <main className="app-shell-main">

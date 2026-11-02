@@ -9,7 +9,9 @@ const sourceImports = registerHooks({
     return nextResolve(extensionlessSource ? `${specifier}.ts` : specifier, context);
   },
 });
-const { authAvailability, templatesFromConfig } = await import('../src/views/me/mcpTemplate.ts');
+const { authAvailability, preferredChoice, templatesFromConfig, transportAvailability, wizardCanAdvance } = await import(
+  '../src/views/me/mcpTemplate.ts'
+);
 const { mePortalApi } = await import('../src/services/mePortalApi.ts');
 const { setCsrfToken } = await import('../src/services/http.ts');
 const { createPreviewServer } = await import('../src/preview/server.ts');
@@ -50,6 +52,40 @@ test('authAvailability gates cards by what the platform actually supports', () =
   assert.deepEqual(authAvailability(['oauth']), { 'oauth-pat': true, apikey: false, none: false });
   assert.deepEqual(authAvailability(['API_KEY']), { 'oauth-pat': false, apikey: true, none: false });
   assert.deepEqual(authAvailability(['none']), { 'oauth-pat': false, apikey: false, none: true });
+});
+
+test('wizard follows the design choices but only advances on server-declared transport and auth', () => {
+  const httpOnly = transportAvailability('streamable-http');
+  const apiOnly = authAvailability(['API_KEY']);
+  assert.deepEqual(httpOnly, { 'streamable-http': true, stdio: false });
+  assert.equal(transportAvailability('HTTP')['streamable-http'], true);
+  assert.deepEqual(transportAvailability('stdio'), { 'streamable-http': false, stdio: true });
+  assert.deepEqual(transportAvailability('websocket'), { 'streamable-http': false, stdio: false });
+  assert.equal(preferredChoice(apiOnly, ['oauth-pat', 'apikey', 'none']), 'apikey');
+  assert.equal(preferredChoice(authAvailability(['none']), ['oauth-pat', 'apikey', 'none']), 'none');
+  assert.equal(preferredChoice(authAvailability(null), ['oauth-pat', 'apikey', 'none']), '');
+
+  const base = {
+    platform: 'p1',
+    client: 'CURSOR',
+    transport: 'streamable-http',
+    auth: 'oauth-pat',
+    transports: httpOnly,
+    auths: authAvailability(['OAuth', 'PAT']),
+    authKnown: true,
+    templateReady: true,
+  };
+  assert.equal(wizardCanAdvance(0, { ...base, platform: ' ' }), false);
+  assert.equal(wizardCanAdvance(1, { ...base, client: '' }), false);
+  assert.equal(wizardCanAdvance(2, base), true);
+  // 设计稿上的 stdio / API Key 在服务端未声明时不能当作已选通过。
+  assert.equal(wizardCanAdvance(2, { ...base, transport: 'stdio' }), false);
+  assert.equal(wizardCanAdvance(2, { ...base, auth: 'apikey' }), false);
+  assert.equal(wizardCanAdvance(2, { ...base, authKnown: false }), false);
+  assert.equal(wizardCanAdvance(2, { ...base, auth: 'apikey', auths: apiOnly }), true);
+  assert.equal(wizardCanAdvance(3, { ...base, templateReady: false }), false);
+  assert.equal(wizardCanAdvance(3, base), true);
+  assert.equal(wizardCanAdvance(4, base), false);
 });
 
 test('mcp-config contract: server template drives the wizard, auth list comes from server', async () => {

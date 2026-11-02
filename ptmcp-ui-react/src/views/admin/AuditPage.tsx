@@ -153,13 +153,13 @@ export function AuditPage({
               display: 'flex',
               alignItems: 'center',
               gap: 10,
-              padding: '12px 14px',
+              padding: '12px 16px',
               borderBottom: '1px solid var(--ptmcp-border)',
               flex: 'none',
               flexWrap: 'wrap',
             }}
           >
-            <TextInput value={filters.userId} onChange={setF('userId')} placeholder="用户 ID" />
+            <TextInput value={filters.userId} onChange={setF('userId')} placeholder="用户 ID" width={120} />
             <Select
               value={filters.platformId}
               onChange={setF('platformId')}
@@ -209,15 +209,17 @@ export function AuditPage({
                 { value: 'DENY', label: '拒绝' },
               ]}
             />
-            <TextInput value={filters.errorCode} onChange={setF('errorCode')} placeholder="错误码" />
-            <TextInput value={filters.from} onChange={setF('from')} type="date" />
-            <span style={{ color: 'var(--ptmcp-text-faint)' }}>→</span>
-            <TextInput value={filters.to} onChange={setF('to')} type="date" />
-            <button className="btn btn--secondary" onClick={() => setQueryTick((t) => t + 1)}>
+            <TextInput value={filters.errorCode} onChange={setF('errorCode')} placeholder="错误码" width={140} />
+            <span className="filter-field">
+              <TextInput value={filters.from} onChange={setF('from')} type="date" width={150} label="起" />
+              <span style={{ color: 'var(--ptmcp-text-faint)' }}>→</span>
+              <TextInput value={filters.to} onChange={setF('to')} type="date" width={150} label="止" />
+            </span>
+            <button className="btn btn--tinted" onClick={() => setQueryTick((t) => t + 1)}>
               查询
             </button>
             <button
-              className="btn btn--secondary"
+              className="btn btn--ghost"
               onClick={() => {
                 setFilters({ userId: '', platformId: '', datasourceId: '', tool: '', result: '', verdict: '', errorCode: '', from: '', to: '' });
                 setQueryTick((t) => t + 1);
@@ -226,7 +228,7 @@ export function AuditPage({
               重置
             </button>
             <span style={{ flex: 1 }} />
-            <TextInput value={quickId} onChange={setQuickId} placeholder="按 requestId 定位" />
+            <TextInput value={quickId} onChange={setQuickId} placeholder="按 requestId 定位" width={280} />
             <button
               className="btn btn--secondary"
               disabled={!quickId.trim()}

@@ -637,3 +637,21 @@ Photographs appear inside `{rounded.lg}` frames, never full-bleed and never crop
 - Don't add letter-spacing. The typeface is metrically tuned for these sizes and needs no correction.
 - Don't crop the product illustrations to a uniform ratio. Each composition is sized to what it explains.
 - Don't let a hero band and a content band sit adjacent without a white interval. The rhythm depends on white returning between coloured zones.
+
+---
+
+## 已实现控制台令牌（2026-11-01 按五张界面稿收敛）
+
+本节记录 `ptmcp-ui-react` 实际落地的视觉事实，供实现与评审对照；上半部分的 SAP 分析保留为选型来源，不作为当前像素依据。用户提供的五张控制台界面稿（接入配置总览与四步向导、数据源列表与右侧详情、权限矩阵三栏与有效权限预览）是这一轮的视觉权威。
+
+- 画布 `#f5f7fa`，表面 `#ffffff`；卡片描边 `#e7ebf1`，行分隔 `#f0f2f5`。
+- 主色 `#1677ff`（白字按钮），文字型蓝 `#0958d9`（白底 6.2:1、浅蓝底 5.6:1，满足 AA）；浅蓝填充 `#e9f2ff`，选中行 `#f2f8ff`。
+- 文本三级：标题 `#101828`、正文 `#475467`、辅助 `#667085`；`#667085` 在 `#f5f7fa` 上 4.69:1，仍满足 4.5:1。
+- 圆角：控件 8px、卡片 12px、抽屉 16px、胶囊 999px。阴影只有一层轻投影，深度靠描边而不是阴影。
+- 状态改用浅底胶囊 + 6px 圆点：成功 `#ecfdf3/#15803d`、进行 `#eff6ff/#0958d9`、待办 `#fffaeb/#b54708`、异常 `#fef3f2/#b42318`、中性 `#f2f4f7/#667085`。
+- 结构：顶栏 60px（品牌 / 视角切换 / 居中检索 / 身份 / 账户菜单）、侧栏 220px（分组标题 + 38px 行高 + 底部工作区卡）、内容区 24px 内边距、面包屑 12.5px。
+- 表格：表头 44px、行高约 56px、首列为「图标 + 名称 + 编码」两行，其余列单行不折行；表格标题行给列表名与数量，页脚给总数与翻页。
+- 列表页筛选另起一张白卡，与表格卡分开；查询用浅蓝实心按钮，重置用无边框幽灵按钮。
+- 三栏工作台（权限矩阵）各栏共用「32px 图标块 + 15px 标题 + 12px 副标题」头部与底部计数条。
+
+不要把这几条当成可选项：状态胶囊、筛选卡与表格卡的分层、首列两行结构是页面之间「看起来是一套系统」的主要来源。
