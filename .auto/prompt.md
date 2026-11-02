@@ -146,9 +146,20 @@ tests_passing 726（admin+gateway 双 reactor + 前端契约），0 失败；四
 - 之前（非本会话）已落地：审计 list/detail、平台只读 list、ACL grants CRUD+preview、
   用户/部门/角色 CRUD、会话+CSRF、me 全套只读端点。
 
-## 环境备忘
+## 环境备忘（2026-11-02 更新）
 
-- Docker 可用；测试镜像 `mysql@sha256:76f0358...` 首拉慢，已后台重试直到成功。
-- 后端测试 Testcontainers 需 Docker daemon；传输层瞬断重试已内建于测试夹具。
+- 本会话 bash 运行在 Ubuntu-26.04（无 Java/Maven/Docker/node）；工具链在 PTMCP-Dev 发行版：
+  `wsl.exe -d PTMCP-Dev -- bash -c '...'`，Java21=/usr/lib/jvm/java-21-openjdk-amd64，
+  Maven=/mnt/d/config/apache-maven-3.9.9/bin/mvn（-o + -Dmaven.repo.local=/mnt/d/config/ptmcp/cache/maven），Docker 可用。
+- 后端测试隔离工作区 ~/ptmcp-api-ws（ptmcp-parent + config/ + docs/backend/mcp-tools.json，
+  rsync --exclude target 增量）；measure.sh 已自动同步并路由。
+- measure.sh 度量范围：React 契约（直连 node，pnpm 被 esbuild approve-builds 阻断）+
+  后端 admin+authz+gateway -am（authz 为 2026-11-02 新纳入）；Vue ptmcp-ui 已退出度量。
+- checks.sh：直连 node 跑 eslint/prettier/tsc/vite build + python3 scripts/check.py。
+- log_experiment 的 keep 自动 git add -A 会吞并行会话未提交文件：先手动提交本任务路径，
+  log 后立即检查 git log，若出现多余提交用 git reset --mixed HEAD~1 还原（文件保留）。
+- 外层 bash 双引号内 $f 会被外层展开（已知坑），跨发行版拷贝用显式路径。
+- Docker 可用；测试镜像 mysql digest 已拉取，pg 用 postgres:15 标签。
+- 推送：github 走死代理 127.0.0.1:7897、codeup ssh 超时，均不可达（历史遗留），网络恢复后补推。
 - Vite 代理：5173 → `/backend/admin`→8080、`/backend/authz`→8081、`/backend/gateway`→8082。
 - 本机 JDK 默认 17，务必显式 `JAVA_HOME=java-21`。
