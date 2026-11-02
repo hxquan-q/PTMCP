@@ -36,7 +36,7 @@ public final class StrictJson {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
         if (body.length > MAX_BODY_BYTES) {
-            throw new DomainException(ErrorCode.METADATA_TOO_LARGE);
+            throw new DomainException(ErrorCode.REQUEST_TOO_LARGE);
         }
         T value;
         try {

@@ -266,4 +266,19 @@ public class AdminStoresConfiguration {
         registration.setOrder(20);
         return registration;
     }
+
+    /** api-spec: management request bodies over 1 MiB fail as REQUEST_TOO_LARGE before dispatch. */
+    @Bean
+    public FilterRegistrationBean<local.ptmcp.admin.web.AdminRequestSizeFilter>
+            adminRequestSizeFilter(
+                    @org.springframework.beans.factory.annotation.Qualifier(
+                                    "handlerExceptionResolver")
+                            org.springframework.web.servlet.HandlerExceptionResolver exceptions) {
+        FilterRegistrationBean<local.ptmcp.admin.web.AdminRequestSizeFilter> registration =
+                new FilterRegistrationBean<>(
+                        new local.ptmcp.admin.web.AdminRequestSizeFilter(exceptions));
+        registration.addUrlPatterns("/api/v1/*");
+        registration.setOrder(10);
+        return registration;
+    }
 }

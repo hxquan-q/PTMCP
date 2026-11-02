@@ -76,7 +76,7 @@ class StrictJsonTest {
         DomainException error =
                 assertThrows(DomainException.class, () -> StrictJson.parse(oversized, Probe.class));
 
-        assertEquals(ErrorCode.METADATA_TOO_LARGE, error.errorCode());
+        assertEquals(ErrorCode.REQUEST_TOO_LARGE, error.errorCode());
     }
 
     @Test

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.ModelAndView;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -36,11 +38,45 @@ import java.util.UUID;
 class WebBoundaryMockMvcTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
+    private static final java.util.List<DomainException> RESOLVED =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+
     private final MockMvc mvc =
             MockMvcBuilders.standaloneSetup(new ProbeController())
                     .setControllerAdvice(new ProbeErrors())
-                    .addFilters(new RequestIdFilter())
+                    .addFilters(
+                            new RequestIdFilter(),
+                            new AdminRequestSizeFilter(
+                                    (request, response, handler, failure) -> {
+                                        RESOLVED.add((DomainException) failure);
+                                        response.setStatus(413);
+                                        response.setContentType("application/json");
+                                        try {
+                                            response.getWriter()
+                                                    .write(
+                                                            "{\"status\":413,\"errorCode\":\"REQUEST_TOO_LARGE\",\"retryable\":false}");
+                                        } catch (java.io.IOException ignored) {
+                                            // The stub only records the handed-off failure.
+                                        }
+                                        return new ModelAndView();
+                                    }))
                     .build();
+
+    @Test
+    void bodiesExactlyAtTheCapAreNotRejectedByTheFilter() throws Exception {
+        String wrapper = "{\"name\":\"\",\"id\":1}";
+        StringBuilder json = new StringBuilder((int) AdminRequestSizeFilter.MAX_BODY_BYTES);
+        json.append("{\"name\":\"");
+        for (int i = 0; i < AdminRequestSizeFilter.MAX_BODY_BYTES - wrapper.length(); i++) {
+            json.append('a');
+        }
+        json.append("\",\"id\":1}");
+        mvc.perform(
+                        MockMvcRequestBuilders.post(ProbeController.PATH)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(json.toString()))
+                .andExpect(status().isOk());
+    }
 
     @Test
     void serverRequestIdWinsOverTheClientHeader() throws Exception {
@@ -91,7 +127,9 @@ class WebBoundaryMockMvcTest {
 
         JsonNode body = perform(oversized);
         assertEquals(413, body.get("status").asInt());
-        assertEquals("METADATA_TOO_LARGE", body.get("errorCode").asString());
+        assertEquals(
+                local.ptmcp.common.error.ErrorCode.REQUEST_TOO_LARGE,
+                RESOLVED.get(RESOLVED.size() - 1).errorCode());
         assertFalse(body.get("retryable").asBoolean());
     }
 

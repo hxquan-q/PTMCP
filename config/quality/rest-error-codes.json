@@ -23,6 +23,7 @@
     {"key": "OPERATION_UNKNOWN", "module": "common", "code": 100010},
     {"key": "DEPENDENCY_UNAVAILABLE", "module": "common", "code": 100011},
     {"key": "INTERNAL_ERROR", "module": "common", "code": 100012},
+    {"key": "REQUEST_TOO_LARGE", "module": "common", "code": 100013},
     {"key": "AUTHENTICATION_REQUIRED", "module": "authentication", "code": 110001},
     {"key": "TOKEN_INVALID", "module": "authentication", "code": 110002},
     {"key": "TOKEN_REVOKED", "module": "authentication", "code": 110003},

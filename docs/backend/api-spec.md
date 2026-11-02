@@ -107,7 +107,7 @@ ADMIN Cookie每次请求均在会话索引/权威版本通过后，从主库当�
 | RoleWrite | key≤100(创建后不变)、name≤30、status、permissionCodes[]（仅调用者可委派子集） | memberCount、managedDepartmentIds；菜单权限与表ACL分别管理 |
 | PlatformWrite | code/name、tier(1..3)、catalogMode DISCOVER/HIDE、proofMode MTLS/PROXY_SECRET/NONE、proofConfig（写入专用；证书指纹/代理约束）、status | scopeVersion/securityVersion/proofConfigured；Tier1不得NONE，降级要显式重新批准 |
 | ScopeWrite | items:[{resourceType:DATASOURCE/NAMESPACE/OBJECT,resourceId,resourceGeneration,action:META/READ,includeDescendants}]，≤100 | scopeVersion；取代整组，不能指向非活动对象 |
-| ClientWrite | name、type PUBLIC/CONFIDENTIAL、authMethods、redirectUris[]、allowedScopes[]、jwksUri(可选)、status；禁止PUBLIC secret | clientId/platformId/registrationSource；CONFIDENTIAL支持private_key_jwt或经审核secret方式；URI规则见认证设计 |
+| ClientWrite | name、type PUBLIC/CONFIDENTIAL、authMethods（PUBLIC 仅 none；CONFIDENTIAL 须 secret 方式，private_key_jwt 在密钥接线完成前创建/更新均拒绝，存量行 AS 侧 fail-closed）、redirectUris[]、allowedScopes[]、jwksUri(可选)、status；禁止PUBLIC secret | clientId/platformId/registrationSource；URI规则见认证设计 |
 | GrantWrite | subjectType USER/ROLE/DEPT、subjectId、resourceType/resourceId/resourceGeneration、action META/READ、effect ALLOW/DENY、includeDescendants、validFrom、validTo(nullable)、reason1..500 | status/effectiveNow/staleResource；validTo>validFrom；OPEN ended只有完整委派权限可设 |
 | DelegationWrite | userId、departmentRootId、resourceType/resourceId、allowedActions[]、validFrom、validTo | id/version/status；只有平台管理员能创建/撤销；不允许目标本人操作 |
 | DictionaryWrite | title≤128、description≤8000、ownerUserId可空、columns:[{columnName,title,description}]≤500 | schemaComment/业务说明分开；未知列拒绝，富文本一期禁用 |
