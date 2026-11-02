@@ -26,7 +26,7 @@ Updated: 2026-11-02
 
 已写入 PRD「管理侧与使用侧」、总体方案、PRODUCT、安全架构、授权设计、架构上下文、页面规格、开发指南、UI 索引、低保真、用户手册、用户流程和 FAQ。员工本人接入与面向其他主体的再授权已分开，可发布 MCP 服务标明为尚未实现的目标模型。
 
-命令与结果（Python 3.13，仓库根）：
+命令与结果（Python 3.12.3，仓库根）：
 
 - `python3 scripts/verify_agent_workflow.py` 退出码 0。
 - `python3 scripts/verify_quality_config.py` 退出码 0。
