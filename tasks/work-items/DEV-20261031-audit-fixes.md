@@ -104,4 +104,4 @@ RED → GREEN：
 - 前端：`node --experimental-strip-types --test tests/*.test.ts` 168/168；ESLint/Prettier/tsc/vite build 通过；`python scripts/check.py` 74 项 PASS（本机无 `python3` 别名）。
 - 浏览器：合成 transport 挂载真实组件的七场景此前 PASS，本轮未复跑。
 
-提交：`ed2f637`（后端 writer/POM/往返测试/合同）、`39be5fd`（前端时区/枚举/证明表单/回归）、`d1f6cf6`（AS JSON 数组授权码流）。共享 `AuditPage.tsx` 与 `DatasourcesPage.tsx` 按 hunk 拆分，视觉部分归 UI 提交 `7907ec3`，未整文件暂存其他窗口内容。Verification 改为 PASS，仍待人工验收；未做真实 Tier1 TLS 证书链、OAuth 四客户端、双库端到端与生产迁移，独立评审未复跑本轮测试。
+提交：`ed2f637`（后端 writer/POM/往返测试/合同）、`39be5fd`（前端时区/枚举/证明表单/回归）、`d1f6cf6`（AS JSON 数组授权码流）。共享 `AuditPage.tsx` 与 `DatasourcesPage.tsx` 按 hunk 拆分，视觉部分归 UI 提交 `7907ec3`，未整文件暂存其他窗口内容。Verification 改为 PASS，仍待人工验收；未做真实 Tier1 TLS 证书链、OAuth 四客户端、双库端到端与生产迁移，独立评审未复跑本轮测试。推送回执（2026-11-02）：`origin/dev` 与 `codeup/dev` 已包含本项提交（当时 tip `6f10a64`；代码提交为 `ed2f637`/`39be5fd`/`d1f6cf6`）。

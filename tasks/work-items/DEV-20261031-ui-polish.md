@@ -269,4 +269,4 @@ U8 交接点名的余量项，涉及当时仍 CLEAN 的三个文件：`src/App.t
 
 U11 详情浮层与 U12 视觉收敛已提交 `7907ec3`；时间、枚举与证明表单属审计修复，已随 `39be5fd` 提交。共享树复验：React 契约测试 168/168，ESLint/Prettier/tsc/vite build 通过，仓库 `python scripts/check.py` 74 项 PASS（本机无 `python3` 别名，改用 `python`）。
 
-`AuditPage.tsx` 与 `DatasourcesPage.tsx` 同时含审计修复与视觉改动，提交时按 hunk 拆分：时区导入与引擎/状态枚举进入 `39be5fd`，筛选宽度、死按钮移除与卡片布局进入 `7907ec3`；未整文件暂存其他窗口内容。用户本轮明确授权提交与推送，推送回执以远端 refs 为准。
+`AuditPage.tsx` 与 `DatasourcesPage.tsx` 同时含审计修复与视觉改动，提交时按 hunk 拆分：时区导入与引擎/状态枚举进入 `39be5fd`，筛选宽度、死按钮移除与卡片布局进入 `7907ec3`；未整文件暂存其他窗口内容。用户本轮明确授权提交与推送。推送回执（2026-11-02）：`origin/dev` 与 `codeup/dev` 已包含本项提交（当时 tip `6f10a64`）；GitHub 远端返回仓库已迁移到 `hxquan-q/PTMCP`，旧 URL 仍可推送，本机 `origin` 配置未改。
