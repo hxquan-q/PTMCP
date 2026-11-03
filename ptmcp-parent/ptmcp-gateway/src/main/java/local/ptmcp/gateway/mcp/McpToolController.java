@@ -20,8 +20,8 @@ import java.util.Map;
 /**
  * The single POST /mcp boundary. The authentication filter has already verified the bearer and
  * attached the identity; this controller enforces the body budget and content type, hands the
- * request to the tool service and maps only two non-200 outcomes: 202 for notifications and 503
- * when durable audit is unavailable. Tool-level failures stay inside JSON-RPC results.
+ * request to the tool service after transport version validation. Notifications return 202 and
+ * unavailable durable audit returns 503. Tool-level failures stay inside JSON-RPC results.
  */
 @RestController
 final class McpToolController {
@@ -29,18 +29,15 @@ final class McpToolController {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final ObjectProvider<McpToolService> toolService;
+    private final McpHttpPolicy httpPolicy;
 
-    McpToolController(ObjectProvider<McpToolService> toolService) {
+    McpToolController(ObjectProvider<McpToolService> toolService, McpHttpPolicy httpPolicy) {
         this.toolService = toolService;
+        this.httpPolicy = httpPolicy;
     }
 
     @PostMapping("/mcp")
     void mcp(HttpServletRequest request, HttpServletResponse response) throws IOException {
-        McpToolService service = toolService.getIfAvailable();
-        if (service == null) {
-            writeError(response, 503, ErrorCode.SECURITY_STATE_UNAVAILABLE, requestId(request));
-            return;
-        }
         String contentType = request.getContentType();
         if (contentType == null || !contentType.contains("application/json")) {
             response.setStatus(415);
@@ -56,11 +53,19 @@ final class McpToolController {
             writeError(response, 401, ErrorCode.AUTHENTICATION_REQUIRED, requestId(request));
             return;
         }
+        String json = new String(body, StandardCharsets.UTF_8);
+        if (!httpPolicy.allowsProtocol(request, json)) {
+            response.setStatus(400);
+            return;
+        }
+        McpToolService service = toolService.getIfAvailable();
+        if (service == null) {
+            writeError(response, 503, ErrorCode.SECURITY_STATE_UNAVAILABLE, requestId(request));
+            return;
+        }
         McpToolService.Outcome outcome;
         try {
-            outcome =
-                    service.handle(
-                            identity, new String(body, StandardCharsets.UTF_8), requestId(request));
+            outcome = service.handle(identity, json, requestId(request));
         } catch (DomainException failure) {
             if (failure.errorCode() == ErrorCode.AUDIT_UNAVAILABLE) {
                 writeError(response, 503, ErrorCode.AUDIT_UNAVAILABLE, requestId(request));

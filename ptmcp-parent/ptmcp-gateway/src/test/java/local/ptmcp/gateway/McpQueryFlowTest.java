@@ -1713,6 +1713,7 @@ class McpQueryFlowTest {
         return HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/mcp"))
                 .timeout(Duration.ofSeconds(30))
                 .header("Content-Type", "application/json")
+                .header("MCP-Protocol-Version", "2025-06-18")
                 .POST(HttpRequest.BodyPublishers.ofString(body));
     }
 

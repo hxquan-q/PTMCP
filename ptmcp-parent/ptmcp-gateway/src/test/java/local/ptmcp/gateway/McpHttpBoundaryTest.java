@@ -20,6 +20,28 @@ class McpHttpBoundaryTest {
     @LocalServerPort private int port;
 
     @Test
+    void originDefaultsToDenyBeforeAuthenticationOnEveryMcpMethod() throws Exception {
+        try (HttpClient client =
+                HttpClient.newBuilder()
+                        .connectTimeout(java.time.Duration.ofSeconds(3))
+                        .proxy(java.net.ProxySelector.of(null))
+                        .build()) {
+            for (String method : java.util.List.of("POST", "GET", "DELETE")) {
+                HttpRequest request =
+                        HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/mcp"))
+                                .timeout(java.time.Duration.ofSeconds(10))
+                                .header("Origin", "http://127.0.0.1:" + port)
+                                .method(method, HttpRequest.BodyPublishers.noBody())
+                                .build();
+                assertEquals(
+                        403,
+                        client.send(request, HttpResponse.BodyHandlers.ofString()).statusCode(),
+                        method);
+            }
+        }
+    }
+
+    @Test
     void missingCredentialsChallengedWithoutTrustingForwardedHost() throws Exception {
         try (HttpClient client =
                 HttpClient.newBuilder()

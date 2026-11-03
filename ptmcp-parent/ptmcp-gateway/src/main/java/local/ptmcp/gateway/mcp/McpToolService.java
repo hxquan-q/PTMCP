@@ -68,7 +68,7 @@ final class McpToolService {
     private static final int MAX_PAGE_SIZE = 100;
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_ROWS_LIMIT = 500;
-    private static final String PROTOCOL_VERSION = "2025-06-18";
+    static final String PROTOCOL_VERSION = "2025-06-18";
     private static final Set<String> TOOLS =
             Set.of(
                     "list_datasources",
@@ -1519,6 +1519,18 @@ final class McpToolService {
         schema.put("properties", described);
         Map<String, Object> descriptor = new LinkedHashMap<>();
         descriptor.put("name", name);
+        descriptor.put(
+                "title",
+                switch (name) {
+                    case "list_datasources" -> "List accessible datasources";
+                    case "list_databases_and_tables" -> "Browse authorized tables";
+                    case "get_table_schema" -> "Read authorized table schemas";
+                    case "execute_readonly_sql" -> "Execute read-only SQL";
+                    default -> throw new IllegalArgumentException("Unknown tool");
+                });
+        descriptor.put(
+                "annotations",
+                Map.of("readOnlyHint", true, "destructiveHint", false, "openWorldHint", false));
         descriptor.put(
                 "description",
                 switch (name) {

@@ -30,11 +30,15 @@ public final class McpAuthenticationFilter extends OncePerRequestFilter {
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private final ObjectProvider<McpAuthentication> authentication;
     private final McpResourceMetadata metadata;
+    private final McpHttpPolicy httpPolicy;
 
     public McpAuthenticationFilter(
-            ObjectProvider<McpAuthentication> authentication, McpResourceMetadata metadata) {
+            ObjectProvider<McpAuthentication> authentication,
+            McpResourceMetadata metadata,
+            McpHttpPolicy httpPolicy) {
         this.authentication = authentication;
         this.metadata = metadata;
+        this.httpPolicy = httpPolicy;
     }
 
     @Override
@@ -50,6 +54,10 @@ public final class McpAuthenticationFilter extends OncePerRequestFilter {
         request.setAttribute(REQUEST_ID, requestId);
         response.setHeader("X-Request-ID", requestId);
         response.setHeader("Cache-Control", "no-store");
+        if (!httpPolicy.allowsOrigin(request)) {
+            response.setStatus(403);
+            return;
+        }
         try {
             var headers = Collections.list(request.getHeaders("Authorization"));
             if (headers.isEmpty()) {

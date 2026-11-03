@@ -270,6 +270,7 @@ class McpAuditResilienceTest {
                             .timeout(Duration.ofSeconds(30))
                             .header("Authorization", "Bearer " + PAT)
                             .header("Content-Type", "application/json")
+                            .header("MCP-Protocol-Version", "2025-06-18")
                             .POST(
                                     HttpRequest.BodyPublishers.ofString(
                                             JSON.writeValueAsString(request)))

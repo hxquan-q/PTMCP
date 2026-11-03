@@ -231,6 +231,18 @@ Cookie 管理写的 Origin/Referer 必须与请求的 scheme/host/port 一致；
 
 唯一传输 HTTPS Streamable HTTP /mcp，Spring候选使用 protocol=STATELESS，不建立跨请求 Mcp-Session-Id 授权缓存。每次HTTP请求完整校验Bearer与平台proof；未认证返回401并带协议要求的WWW-Authenticate/资源元数据发现位置。服务可执行 initialize/tools/list/tools/call 等必要协议方法，但业务Tool只能注册下列四个。协议版本由SDK与客户端M0矩阵实测锁定，不宣称未知版本已兼容；不开放旧SSE路径。
 
+### HTTP 安全边界与工具元信息
+
+协议固定 `2025-06-18`，不是升级到 `2025-11-25`。按 [2025-06-18 transport 规范](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)处理版本头：
+
+- `initialize` 在正文协商，允许不带 `MCP-Protocol-Version`；如显式提供，仍须单个且等于 `2025-06-18`。无状态服务返回自身支持的版本，由客户端判断是否继续，不保存跨请求协商状态。
+- 其余有效 JSON-RPC 请求（包括通知、取消）须带单个 `MCP-Protocol-Version: 2025-06-18`。无头且无会话信息时规范建议默认 `2025-03-26`，本端未支持该版本，因此返回 HTTP 400；空值、重复头、非法及不支持版本同样 400，不进入工具。带合法版本头的正文 parse error / invalid request 继续使用 JSON-RPC 错误；无头的非法正文也保留已有 JSON-RPC 错误处理。
+- `/mcp` 所有方法在认证前验证 Origin：无 Origin 可继续认证；有 Origin 时必须只有一个合法 http(s) origin，命中部署配置 `ptmcp.gateway.allowed-origins`（逗号分隔，默认空）。scheme/host 忽略大小写，默认端口规范化；不允许 `null`、通配符、列表/重复头、用户信息、路径（包括末尾 `/`）、query、fragment 或非法端口。配置非法时启动失败；请求非法或不在白名单时 HTTP 403。
+- Origin 白名单**不从 Host、Forwarded、X-Forwarded-* 推导**，也不是 CORS、平台身份或 ACL。允许 Origin 和无 Origin 均不免除原有每请求 Bearer / 平台 proof / 当前身份检查。拒绝的 400/403 使用空 HTTP 正文，保留 `X-Request-ID` 和 `Cache-Control: no-store`，不附 REST 外壳或反射输入。
+- `tools/list` 的四工具新增稳定 `title`，以及 `annotations={readOnlyHint:true,destructiveHint:false,openWorldHint:false}`。这是只读、受配置资源约束的客户端提示，不代替 scope、实时资源 ACL、guard 或审计，也不承诺查询结果恒定。原工具名、description 和 inputSchema 不变；完整定义以 [机器契约](mcp-tools.json)及契约回归为准。
+
+兼容迁移：原先无版本头的直接工具调用改为 400，调用方需先补上述版本头；浏览器接入须由部署显式维护 Origin 白名单，不可配置 wildcard 或信任请求 Host。部署/真实客户端矩阵未运行不能视为协议合规或已发布。
+
 工具输入 JSON Schema（均 additionalProperties:false；string长度单位为字符，sql_query另按UTF-8字节上限64KiB）。datasource_id 非空十进制ID字符串，database_name/schema_name按目标快照原名精确绑定，不做模糊改库。list_datasources 无输入参数，作为外部 Agent 的发现入口，只返回可见数据源标识与 queryable 标志，绝不包含主机、端口、账号或凭证。
 
 ~~~json
