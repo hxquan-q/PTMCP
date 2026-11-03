@@ -4,9 +4,9 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-NODE_BIN="$(command -v node || true)"
-if [ -z "$NODE_BIN" ] && [ -x "/mnt/c/Program Files/nodejs/node.exe" ]; then
-  NODE_BIN="/mnt/c/Program Files/nodejs/node.exe"
+NODE_BIN="$(command -v node 2>/dev/null || true)"
+if [ -z "$NODE_BIN" ]; then
+  NODE_BIN="/mnt/c/Users/xquan/.openforge/runtimes/node/22.22.2/node.exe"
 fi
 
 cd ptmcp-ui-react || exit 1
