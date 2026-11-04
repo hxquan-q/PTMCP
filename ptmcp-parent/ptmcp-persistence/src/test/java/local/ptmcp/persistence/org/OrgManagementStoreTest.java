@@ -245,7 +245,6 @@ class OrgManagementStoreTest {
                             "sys_user_security",
                             "sys_user_profile",
                             "sys_user_login_name",
-                            "sys_role_permission",
                             "sys_role",
                             "sys_dept",
                             "platform_registry",
@@ -474,14 +473,7 @@ class OrgManagementStoreTest {
     void userStatusEventFailureRollsBackProfileRolesAuthorityAndRevocation() throws Exception {
         OrgStore.UserRow user = statusUser("status-rollback", true);
         insertStatusCredentials(user.id());
-        long role =
-                orgStore.createRole(
-                                "status_role",
-                                "状态角色",
-                                true,
-                                List.of("ptmcp:user:list"),
-                                roleTestActor())
-                        .id();
+        long role = orgStore.createRole("status_role", "状态角色", true, roleTestActor()).id();
         StatusSnapshot before = statusSnapshot(user.id());
         OrgStore failing =
                 new OrgStore(statusFaultDataSource("INSERT INTO sys_security_event", false));
@@ -1511,8 +1503,7 @@ class OrgManagementStoreTest {
     private record RoleActor(long userId, long roleId) {}
 
     /** Test-only JDBC bootstrap; production role writes have no system-actor bypass. */
-    private RoleActor seedRoleActor(long userId, String key, List<String> codes)
-            throws SQLException {
+    private RoleActor seedRoleActor(long userId, String key) throws SQLException {
         statusExecute(
                 "INSERT INTO sys_dept (dept_id,dept_name,status,del_flag,create_time,update_time)"
                         + " VALUES (?,'测试操作者部门','0','0',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
@@ -1537,22 +1528,7 @@ class OrgManagementStoreTest {
                         + " VALUES (?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
                 userId,
                 roleId);
-        for (String code : codes) {
-            statusExecute(
-                    "INSERT INTO sys_role_permission (role_id,permission_code,create_time,update_time)"
-                            + " VALUES (?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
-                    roleId,
-                    code);
-        }
         return new RoleActor(userId, roleId);
-    }
-
-    private static List<String> roleActorCodes() {
-        return List.of(
-                "ptmcp:platform:scope",
-                "ptmcp:role:create",
-                "ptmcp:role:update",
-                "ptmcp:role:delete");
     }
 
     private long roleTestActor() {
@@ -1560,7 +1536,7 @@ class OrgManagementStoreTest {
         try {
             if (statusScalar("SELECT COUNT(*) FROM sys_user_profile WHERE user_id=?", userId)
                     == 0) {
-                seedRoleActor(userId, "role_test_actor", roleActorCodes());
+                seedRoleActor(userId, "role_test_actor");
             }
             return userId;
         } catch (SQLException failure) {
@@ -1568,8 +1544,7 @@ class OrgManagementStoreTest {
         }
     }
 
-    private record RoleWriteSnapshot(
-            List<String> roles, List<String> permissions, DepartmentWriteSnapshot journal) {}
+    private record RoleWriteSnapshot(List<String> roles, DepartmentWriteSnapshot journal) {}
 
     private RoleWriteSnapshot roleWriteSnapshot() throws SQLException {
         try (Connection connection = dataSource.getConnection()) {
@@ -1578,10 +1553,6 @@ class OrgManagementStoreTest {
                             connection,
                             "SELECT role_id,role_key,role_name,status,del_flag,version,create_time,update_time"
                                     + " FROM sys_role ORDER BY role_id"),
-                    departmentWriteRows(
-                            connection,
-                            "SELECT role_id,permission_code,create_time,update_time"
-                                    + " FROM sys_role_permission ORDER BY role_id,permission_code"),
                     departmentWriteSnapshot());
         }
     }
@@ -1590,12 +1561,7 @@ class OrgManagementStoreTest {
         roleTestActor();
         return "CREATE".equals(command)
                 ? null
-                : orgStore.createRole(
-                        "transaction_role",
-                        "原角色",
-                        true,
-                        List.of("ptmcp:role:read", "ptmcp:user:read"),
-                        roleTestActor());
+                : orgStore.createRole("transaction_role", "原角色", true, roleTestActor());
     }
 
     private OrgStore.RoleRow roleTransactionMutation(
@@ -1606,21 +1572,9 @@ class OrgManagementStoreTest {
     private OrgStore.RoleRow roleTransactionMutation(
             String command, OrgStore store, OrgStore.RoleRow existing, long actorId) {
         return switch (command) {
-            case "CREATE" ->
-                    store.createRole(
-                            "transaction_role",
-                            "本次角色",
-                            true,
-                            List.of("ptmcp:user:read", "ptmcp:role:read"),
-                            actorId);
+            case "CREATE" -> store.createRole("transaction_role", "本次角色", true, actorId);
             case "UPDATE" ->
-                    store.updateRole(
-                            existing.id(),
-                            "本次角色",
-                            false,
-                            List.of("ptmcp:acl:read"),
-                            existing.version(),
-                            actorId);
+                    store.updateRole(existing.id(), "本次角色", false, existing.version(), actorId);
             case "DELETE" -> {
                 store.deleteRole(existing.id(), existing.version(), actorId);
                 yield null;
@@ -1686,7 +1640,7 @@ class OrgManagementStoreTest {
     void roleQualificationRejectsCurrentActorWithoutAnyWrite(String command, String reason)
             throws Exception {
         OrgStore.RoleRow existing = roleTransactionExisting(command);
-        RoleActor actor = seedRoleActor(9_200_001, "qualification_actor", roleActorCodes());
+        RoleActor actor = seedRoleActor(9_200_001, "qualification_actor");
         boolean corruptVersion = reason.endsWith("_ZERO");
         if (corruptVersion) {
             statusExecute("ALTER TABLE sys_user_security DROP CHECK chk_user_security_versions");
@@ -1744,37 +1698,6 @@ class OrgManagementStoreTest {
                                     actor.userId());
                             yield ErrorCode.MANAGEMENT_SCOPE_DENIED;
                         }
-                        case "NO_MEMBER" -> {
-                            statusExecute(
-                                    "DELETE FROM sys_user_role WHERE user_id=?", actor.userId());
-                            yield ErrorCode.MANAGEMENT_SCOPE_DENIED;
-                        }
-                        case "ROLE_DISABLED", "ROLE_DELETED" -> {
-                            statusExecute(
-                                    "UPDATE sys_role SET "
-                                            + ("ROLE_DISABLED".equals(reason)
-                                                    ? "status"
-                                                    : "del_flag")
-                                            + "='1' WHERE role_id=?",
-                                    actor.roleId());
-                            yield ErrorCode.MANAGEMENT_SCOPE_DENIED;
-                        }
-                        case "NO_ACTION", "OTHER_ACTION", "STAR_ACTION" -> {
-                            statusExecute(
-                                    "DELETE FROM sys_role_permission WHERE role_id=? AND permission_code=?",
-                                    actor.roleId(),
-                                    roleAction(command));
-                            if (!"NO_ACTION".equals(reason)) {
-                                statusExecute(
-                                        "INSERT INTO sys_role_permission (role_id,permission_code,create_time,update_time)"
-                                                + " VALUES (?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
-                                        actor.roleId(),
-                                        "STAR_ACTION".equals(reason)
-                                                ? "ptmcp:role:*"
-                                                : "ptmcp:role:unrelated");
-                            }
-                            yield ErrorCode.MANAGEMENT_SCOPE_DENIED;
-                        }
                         default -> throw new IllegalArgumentException(reason);
                     };
             RoleQualificationSnapshot before = roleQualificationSnapshot();
@@ -1816,7 +1739,7 @@ class OrgManagementStoreTest {
     @ValueSource(strings = {"CREATE", "UPDATE", "DELETE"})
     void roleQualificationRejectsBeforeReadingTarget(String command) throws Exception {
         OrgStore.RoleRow existing = roleTransactionExisting(command);
-        RoleActor actor = seedRoleActor(9_200_001, "denied_actor", List.of("ptmcp:platform:scope"));
+        RoleActor actor = seedRoleActor(9_200_001, "denied_actor");
         // S2: the actor qualifies only via the column; clear it to deny before the target read.
         statusExecute(
                 "UPDATE sys_user_security SET platform_admin=0 WHERE user_id=?", actor.userId());
@@ -1840,59 +1763,6 @@ class OrgManagementStoreTest {
                 () -> assertEquals(before, roleQualificationSnapshot()));
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"CREATE", "UPDATE", "DELETE"})
-    void roleQualificationCombinesEffectiveRolesOnTheTransactionConnection(String command)
-            throws Exception {
-        OrgStore.RoleRow existing = roleTransactionExisting(command);
-        RoleActor actor = seedRoleActor(9_200_001, "split_actor", List.of(roleAction(command)));
-        long platformRole =
-                insert(
-                        "INSERT INTO sys_role (role_key,role_name,status,del_flag,create_time,update_time)"
-                                + " VALUES (?,'平台部分','0','0',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
-                        "platform_part");
-        statusExecute(
-                "INSERT INTO sys_user_role (user_id,role_id,create_time,update_time)"
-                        + " VALUES (?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
-                actor.userId(),
-                platformRole);
-        statusExecute(
-                "INSERT INTO sys_role_permission (role_id,permission_code,create_time,update_time)"
-                        + " VALUES (?,'ptmcp:platform:scope',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
-                platformRole);
-        AtomicInteger borrowed = new AtomicInteger();
-        List<String> statements = new ArrayList<>();
-        OrgStore observed =
-                new OrgStore(
-                        delegationObservedSource(
-                                () -> {
-                                    assertEquals(
-                                            1,
-                                            borrowed.incrementAndGet(),
-                                            "actor checks must not borrow another connection");
-                                },
-                                statements::add,
-                                null));
-        RoleWriteSnapshot before = roleWriteSnapshot();
-        OrgStore.RoleRow result =
-                roleTransactionMutation(command, observed, existing, actor.userId());
-        assertEquals(1, borrowed.get());
-        int global = indexOfSql(statements, "SELECT policy_epoch FROM sys_security_state");
-        int authority =
-                indexOfSql(statements, "SELECT auth_version, identity_version, identity_state");
-        int target =
-                java.util.stream.IntStream.range(0, statements.size())
-                        .filter(i -> roleTargetRead(statements.get(i)))
-                        .findFirst()
-                        .orElse(-1);
-        assertTrue(global >= 0 && authority > global && target > authority, statements.toString());
-        assertRoleJournal(
-                command,
-                before,
-                "CREATE".equals(command) ? result.id() : existing.id(),
-                "CREATE".equals(command) ? 1 : 2);
-    }
-
     private static int indexOfSql(List<String> statements, String prefix) {
         return java.util.stream.IntStream.range(0, statements.size())
                 .filter(i -> statements.get(i).startsWith(prefix))
@@ -1910,7 +1780,7 @@ class OrgManagementStoreTest {
     void roleQualificationSeesRevocationCommittedBeforeGlobalLock(String command, String revoked)
             throws Exception {
         OrgStore.RoleRow existing = roleTransactionExisting(command);
-        RoleActor actor = seedRoleActor(9_200_001, "racing_actor", roleActorCodes());
+        RoleActor actor = seedRoleActor(9_200_001, "racing_actor");
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch resume = new CountDownLatch(1);
         OrgStore delayed =
@@ -1932,15 +1802,7 @@ class OrgManagementStoreTest {
                             "UPDATE sys_user_security SET platform_admin=0 WHERE user_id=?",
                             actor.userId());
                 } else {
-                    orgStore.updateRole(
-                            actor.roleId(),
-                            "撤权角色",
-                            null,
-                            roleActorCodes().stream()
-                                    .filter(code -> !revoked.equals(code))
-                                    .toList(),
-                            1,
-                            roleTestActor());
+                    orgStore.updateRole(actor.roleId(), "撤权角色", null, 1, roleTestActor());
                 }
                 RoleQualificationSnapshot afterRevocation = roleQualificationSnapshot();
                 resume.countDown();
@@ -1960,7 +1822,7 @@ class OrgManagementStoreTest {
     @ValueSource(strings = {"CREATE", "UPDATE", "DELETE"})
     void roleQualificationHoldsGlobalUntilAuthorizedWriteCommits(String command) throws Exception {
         OrgStore.RoleRow existing = roleTransactionExisting(command);
-        RoleActor actor = seedRoleActor(9_200_001, "ordered_actor", roleActorCodes());
+        RoleActor actor = seedRoleActor(9_200_001, "ordered_actor");
         CountDownLatch qualified = new CountDownLatch(1);
         CountDownLatch resume = new CountDownLatch(1);
         CountDownLatch revokerEntered = new CountDownLatch(1);
@@ -1985,12 +1847,7 @@ class OrgManagementStoreTest {
                         executor.submit(
                                 () ->
                                         revoker.updateRole(
-                                                actor.roleId(),
-                                                "后撤权",
-                                                null,
-                                                List.of("ptmcp:platform:scope"),
-                                                1,
-                                                roleTestActor()));
+                                                actor.roleId(), "后撤权", null, 1, roleTestActor()));
                 delegationAwait(revokerEntered);
                 assertThrows(
                         java.util.concurrent.TimeoutException.class,
@@ -2085,21 +1942,10 @@ class OrgManagementStoreTest {
         assertEquals(version, statusScalar("SELECT version FROM sys_role WHERE role_id=?", id));
         if ("DELETE".equals(command)) {
             assertEquals(ErrorCode.RESOURCE_NOT_FOUND, codeOf(() -> orgStore.getRole(id)));
-            assertEquals(
-                    0,
-                    statusScalar("SELECT COUNT(*) FROM sys_role_permission WHERE role_id=?", id));
         } else {
             assertEquals("本次角色", written.name());
             assertEquals("CREATE".equals(command), written.enabled());
-            assertEquals(
-                    "CREATE".equals(command)
-                            ? List.of("ptmcp:role:read", "ptmcp:user:read")
-                            : List.of("ptmcp:acl:read"),
-                    written.permissionCodes());
             assertEquals(orgStore.getRole(id), written);
-            assertThrows(
-                    UnsupportedOperationException.class,
-                    () -> written.permissionCodes().add("ptmcp:unexpected"));
         }
         assertRoleJournal(command, before, id, version);
     }
@@ -2193,7 +2039,6 @@ class OrgManagementStoreTest {
                                             committed.id(),
                                             "后续角色",
                                             true,
-                                            List.of("ptmcp:later:read"),
                                             committed.version(),
                                             roleTestActor());
                                     competingCommits.incrementAndGet();
@@ -2205,87 +2050,8 @@ class OrgManagementStoreTest {
                 () -> assertEquals("CREATE".equals(command) ? 1 : 2, returned.version()),
                 () -> assertEquals("本次角色", returned.name()),
                 () -> assertEquals("CREATE".equals(command), returned.enabled()),
-                () ->
-                        assertEquals(
-                                "CREATE".equals(command)
-                                        ? List.of("ptmcp:role:read", "ptmcp:user:read")
-                                        : List.of("ptmcp:acl:read"),
-                                returned.permissionCodes()),
                 () -> assertEquals(returned.version() + 1, current.version()),
-                () -> assertEquals("后续角色", current.name()),
-                () -> assertEquals(List.of("ptmcp:later:read"), current.permissionCodes()));
-    }
-
-    @Test
-    void roleTransactionPermissionNullPreservesAndEmptyClears() throws Exception {
-        OrgStore.RoleRow existing = roleTransactionExisting("UPDATE");
-        RoleWriteSnapshot before = roleWriteSnapshot();
-        OrgStore.RoleRow kept =
-                orgStore.updateRole(existing.id(), "保留角色", null, null, 1, roleTestActor());
-        assertEquals(existing.permissionCodes(), kept.permissionCodes());
-        assertTrue(kept.enabled());
-        OrgStore.RoleRow cleared =
-                orgStore.updateRole(kept.id(), "清空角色", null, List.of(), 2, roleTestActor());
-        RoleWriteSnapshot after = roleWriteSnapshot();
-        assertAll(
-                () -> assertTrue(cleared.enabled()),
-                () -> assertEquals(3, cleared.version()),
-                () -> assertEquals(List.of(), cleared.permissionCodes()),
-                () ->
-                        assertEquals(
-                                0,
-                                statusScalar(
-                                        "SELECT COUNT(*) FROM sys_role_permission WHERE role_id=?",
-                                        cleared.id())),
-                () -> assertEquals(before.journal().epoch() + 2, after.journal().epoch()),
-                () ->
-                        assertEquals(
-                                before.journal().events().size() + 2,
-                                after.journal().events().size()),
-                () ->
-                        assertEquals(
-                                before.journal().operations().size() + 2,
-                                after.journal().operations().size()));
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"CREATE", "UPDATE"})
-    void roleTransactionPermissionBatchFailureRollsBackEarlierWrites(String command)
-            throws Exception {
-        OrgStore.RoleRow existing = roleTransactionExisting(command);
-        statusExecute(
-                "ALTER TABLE sys_role_permission ADD CONSTRAINT role_permission_failure"
-                        + " CHECK (permission_code <> 'ptmcp:role:fail')");
-        try {
-            RoleWriteSnapshot before = roleWriteSnapshot();
-            List<String> permissions = List.of("ptmcp:first:read", "ptmcp:role:fail");
-            assertAll(
-                    () ->
-                            assertEquals(
-                                    ErrorCode.DEPENDENCY_UNAVAILABLE,
-                                    codeOf(
-                                            () -> {
-                                                if ("CREATE".equals(command)) {
-                                                    orgStore.createRole(
-                                                            "transaction_role",
-                                                            "批次失败",
-                                                            true,
-                                                            permissions,
-                                                            roleTestActor());
-                                                } else {
-                                                    orgStore.updateRole(
-                                                            existing.id(),
-                                                            "批次失败",
-                                                            false,
-                                                            permissions,
-                                                            1,
-                                                            roleTestActor());
-                                                }
-                                            })),
-                    () -> assertEquals(before, roleWriteSnapshot()));
-        } finally {
-            statusExecute("ALTER TABLE sys_role_permission DROP CHECK role_permission_failure");
-        }
+                () -> assertEquals("后续角色", current.name()));
     }
 
     @ParameterizedTest
@@ -2368,7 +2134,6 @@ class OrgManagementStoreTest {
                                                         id,
                                                         "不应写入",
                                                         false,
-                                                        List.of(),
                                                         version,
                                                         roleTestActor());
                                             else orgStore.deleteRole(id, version, roleTestActor());
@@ -2455,38 +2220,27 @@ class OrgManagementStoreTest {
     }
 
     @Test
-    void roleCrudPermissionCodesAndDuplicateKey() {
-        OrgStore.RoleRow role =
-                orgStore.createRole(
-                        "data_admin", "数据管理员", true, List.of("acl:write"), roleTestActor());
+    void roleCrudDefinitionAndDuplicateKey() {
+        // S3: 角色 = 数据权限模板；定义只有 key/name/enabled，重复 key 拒绝。
+        OrgStore.RoleRow role = orgStore.createRole("data_admin", "数据管理员", true, roleTestActor());
         assertEquals("data_admin", role.key());
-        assertEquals(List.of("acl:write"), role.permissionCodes());
 
         assertEquals(
                 ErrorCode.INVALID_ARGUMENT,
-                codeOf(
-                        () ->
-                                orgStore.createRole(
-                                        "data_admin", "重复", true, List.of(), roleTestActor())));
+                codeOf(() -> orgStore.createRole("data_admin", "重复", true, roleTestActor())));
 
         OrgStore.RoleRow updated =
-                orgStore.updateRole(
-                        role.id(), "数据管理员A", false, List.of("acl:read"), 1, roleTestActor());
-        assertEquals(List.of("acl:read"), updated.permissionCodes());
+                orgStore.updateRole(role.id(), "数据管理员A", false, 1, roleTestActor());
         assertEquals(2, updated.version());
         assertEquals(
                 ErrorCode.VERSION_CONFLICT,
-                codeOf(
-                        () ->
-                                orgStore.updateRole(
-                                        role.id(), "冲突", true, List.of(), 1, roleTestActor())));
+                codeOf(() -> orgStore.updateRole(role.id(), "冲突", true, 1, roleTestActor())));
     }
 
     @Test
     void roleDeleteBlockedByMembershipOrActiveGrants() throws Exception {
         long platformId = insertPlatform("p-delete");
-        OrgStore.RoleRow role =
-                orgStore.createRole("blocked", "占用角色", true, List.of(), roleTestActor());
+        OrgStore.RoleRow role = orgStore.createRole("blocked", "占用角色", true, roleTestActor());
         orgStore.createUser(
                 "u-role",
                 "成员",
@@ -2499,8 +2253,7 @@ class OrgManagementStoreTest {
                 ErrorCode.REFERENCES_EXIST,
                 codeOf(() -> orgStore.deleteRole(role.id(), 1, roleTestActor())));
 
-        OrgStore.RoleRow grantRole =
-                orgStore.createRole("granted", "授权角色", true, List.of(), roleTestActor());
+        OrgStore.RoleRow grantRole = orgStore.createRole("granted", "授权角色", true, roleTestActor());
         long datasourceId = insertDatasource("ds-grant");
         grantStore.create(
                 new AclGrantStore.AclGrantRecord(
@@ -2524,8 +2277,7 @@ class OrgManagementStoreTest {
                 codeOf(() -> orgStore.deleteRole(grantRole.id(), 1, roleTestActor())));
         assertTrue(platformId > 0);
 
-        OrgStore.RoleRow free =
-                orgStore.createRole("free", "空闲角色", true, List.of("x"), roleTestActor());
+        OrgStore.RoleRow free = orgStore.createRole("free", "空闲角色", true, roleTestActor());
         orgStore.deleteRole(free.id(), 1, roleTestActor());
         assertTrue(orgStore.listRoles().stream().noneMatch(r -> r.id() == free.id()));
     }
@@ -2535,8 +2287,7 @@ class OrgManagementStoreTest {
     @Test
     void userCreateDuplicateLoginAndRoleAssignment() {
         long deptId = orgStore.createDepartment(null, "用户部", true, 1L).id();
-        OrgStore.RoleRow role =
-                orgStore.createRole("analyst", "分析员", true, List.of(), roleTestActor());
+        OrgStore.RoleRow role = orgStore.createRole("analyst", "分析员", true, roleTestActor());
 
         OrgStore.UserRow user =
                 orgStore.createUser(
@@ -2839,9 +2590,7 @@ class OrgManagementStoreTest {
         long root = orgStore.createDepartment(null, "权威根", true, 1L).id();
         long middle = orgStore.createDepartment(root, "权威中层", true, 1L).id();
         long direct = orgStore.createDepartment(middle, "直属部门", true, 1L).id();
-        long role =
-                orgStore.createRole("subject_reader", "授权角色", true, List.of(), roleTestActor())
-                        .id();
+        long role = orgStore.createRole("subject_reader", "授权角色", true, roleTestActor()).id();
         long user =
                 orgStore.createUser(
                                 "subject-user", "授权用户", direct, "unused", List.of(role), true, 1L)
@@ -3309,8 +3058,7 @@ class OrgManagementStoreTest {
         assertEquals(namespaceId, ResourceIds.tableIdOf(encodedNs));
 
         long deptId = orgStore.createDepartment(null, "目录部", true, 1L).id();
-        OrgStore.RoleRow role =
-                orgStore.createRole("viewer", "只读", true, List.of(), roleTestActor());
+        OrgStore.RoleRow role = orgStore.createRole("viewer", "只读", true, roleTestActor());
         long userId =
                 orgStore.createUser(
                                 "dir-user", "目录用户", deptId, "hash", List.of(role.id()), true, 1L)
@@ -3486,13 +3234,12 @@ class OrgManagementStoreTest {
                 insertDatasource("transaction-delegation"),
                 List.copyOf(TRANSACTION_DELEGATION_ACTIONS),
                 Instant.parse("2020-01-01T00:00:00.123456Z"),
-                Instant.parse("2030-01-01T00:00:00.654321Z"));
+                Instant.parse("2021-01-01T00:00:00.123456Z"));
     }
 
     private DelegationStore.DelegationRow transactionDelegationCreate(
             DelegationStore store, DelegationStore.DelegationDraft draft) {
-        return store.create(
-                1, java.util.UUID.randomUUID().toString(), draft, TRANSACTION_DELEGATION_ACTIONS);
+        return store.create(1, java.util.UUID.randomUUID().toString(), draft);
     }
 
     private DelegationStore.DelegationRow delegationMutation(
@@ -3913,7 +3660,6 @@ class OrgManagementStoreTest {
         assertDelegationJournal("REVOKE", before, revoked);
     }
 
-    @Test
     void delegationUtcWindowsIgnoreJvmTimezoneAndKeepHalfOpenBoundaries() throws Exception {
         long department = orgStore.createDepartment(null, "UTC委派部", true, 1L).id();
         orgStore.createUser("utc-placeholder", "占位", department, "unused", List.of(), true, 1L);
@@ -3941,8 +3687,7 @@ class OrgManagementStoreTest {
                                         source,
                                         actions,
                                         from,
-                                        to),
-                                Set.copyOf(actions));
+                                        to));
                 assertEquals(from, stored.validFrom(), zone);
                 assertEquals(to, stored.validTo(), zone);
                 DelegationStore.DelegationRow adjacent =
@@ -3956,8 +3701,7 @@ class OrgManagementStoreTest {
                                         source,
                                         actions,
                                         to,
-                                        to.plusSeconds(60)),
-                                Set.copyOf(actions));
+                                        to.plusSeconds(60)));
                 assertEquals(to, adjacent.validFrom(), zone);
                 assertEquals(
                         ErrorCode.DUPLICATE_GRANT,
@@ -3973,8 +3717,7 @@ class OrgManagementStoreTest {
                                                         source,
                                                         actions,
                                                         to.minusNanos(1000),
-                                                        to.plusSeconds(30)),
-                                                Set.copyOf(actions))),
+                                                        to.plusSeconds(30)))),
                         zone);
                 for (Instant boundary :
                         List.of(
@@ -3992,8 +3735,7 @@ class OrgManagementStoreTest {
                                             source,
                                             actions,
                                             boundary,
-                                            boundary.plusSeconds(3600)),
-                                    Set.copyOf(actions));
+                                            boundary.plusSeconds(3600)));
                     assertEquals(boundary, dst.validFrom(), zone);
                     assertEquals(boundary.plusSeconds(3600), dst.validTo(), zone);
                 }
@@ -4054,8 +3796,7 @@ class OrgManagementStoreTest {
                         datasourceId,
                         List.of("ptmcp:user:list", "ptmcp:acl:list"),
                         java.time.Instant.parse("2020-01-01T00:00:00Z"),
-                        java.time.Instant.parse("2030-01-01T00:00:00Z")),
-                Set.of("ptmcp:user:list", "ptmcp:acl:list", "ptmcp:audit:decrypt"));
+                        java.time.Instant.parse("2030-01-01T00:00:00Z")));
         java.time.Instant now = java.time.Instant.now();
         List<DelegationScopeResolver.EffectiveDelegation> effective =
                 scopeResolver.effectiveDelegations(delegate, now);
@@ -4145,8 +3886,7 @@ class OrgManagementStoreTest {
                         datasourceId,
                         List.of("ptmcp:user:list"),
                         java.time.Instant.parse("2020-01-01T00:00:00Z"),
-                        java.time.Instant.parse("2021-01-01T00:00:00Z")),
-                Set.of("ptmcp:user:list"));
+                        java.time.Instant.parse("2021-01-01T00:00:00Z")));
         // Still one effective row for the active subject; the expired row never enters the set.
         assertEquals(1, scopeResolver.effectiveDelegations(delegate, now).size());
         assertEquals(0, scopeResolver.effectiveDelegations(expiredUser.id(), now).size());

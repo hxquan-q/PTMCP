@@ -44,13 +44,8 @@ public final class OrgStore {
     public record DepartmentRow(
             long id, Long parentId, String name, boolean enabled, long version, String ancestors) {}
 
-    public record RoleRow(
-            long id,
-            String key,
-            String name,
-            boolean enabled,
-            List<String> permissionCodes,
-            long version) {}
+    /** 角色 = 数据权限模板；S3 后只承载定义（key/name/enabled），不再携带能力码。 */
+    public record RoleRow(long id, String key, String name, boolean enabled, long version) {}
 
     public record UserRow(
             long id,
@@ -345,12 +340,10 @@ public final class OrgStore {
 
     // ---- roles -------------------------------------------------------------
 
-    public RoleRow createRole(
-            String key, String name, boolean enabled, List<String> permissionCodes, long actorId) {
+    public RoleRow createRole(String key, String name, boolean enabled, long actorId) {
         OrgSql.requireText(key, 100);
         OrgSql.requireText(name, 30);
         OrgSql.requireActor(actorId);
-        List<String> codes = normalizedCodes(permissionCodes);
         if (!ROLE_KEY.matcher(key).matches()) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
@@ -376,18 +369,13 @@ public final class OrgStore {
                                 }
                                 id = generatedKey(statement);
                             }
-                            insertPermissions(connection, id, codes);
                             writeOperationLog(
                                     connection,
                                     actorId,
                                     "ROLE_CREATE",
                                     "ROLE",
                                     id,
-                                    "{\"key\":\""
-                                            + key
-                                            + "\",\"permissionCount\":"
-                                            + codes.size()
-                                            + "}");
+                                    "{\"key\":\"" + key + "\"}");
                             return new SecurityChangeTransaction.Outcome<>(
                                     getRole(connection, id), roleEvent(id, 1));
                         })
@@ -395,15 +383,9 @@ public final class OrgStore {
     }
 
     public RoleRow updateRole(
-            long id,
-            String name,
-            Boolean enabled,
-            List<String> permissionCodes,
-            long expectedVersion,
-            long actorId) {
+            long id, String name, Boolean enabled, long expectedVersion, long actorId) {
         OrgSql.requireActor(actorId);
         requireVersion(expectedVersion);
-        List<String> codes = permissionCodes == null ? null : normalizedCodes(permissionCodes);
         return new SecurityChangeTransaction(primary)
                 .executeReturning(
                         connection -> {
@@ -429,25 +411,7 @@ public final class OrgStore {
                                     throw new DomainException(ErrorCode.VERSION_CONFLICT);
                                 }
                             }
-                            if (codes != null) {
-                                try (PreparedStatement delete =
-                                        OrgSql.statement(
-                                                connection,
-                                                "DELETE FROM sys_role_permission WHERE role_id = ?")) {
-                                    delete.setLong(1, id);
-                                    delete.executeUpdate();
-                                }
-                                insertPermissions(connection, id, codes);
-                            }
-                            writeOperationLog(
-                                    connection,
-                                    actorId,
-                                    "ROLE_UPDATE",
-                                    "ROLE",
-                                    id,
-                                    "{\"permissionCount\":"
-                                            + (codes == null ? 0 : codes.size())
-                                            + "}");
+                            writeOperationLog(connection, actorId, "ROLE_UPDATE", "ROLE", id, null);
                             return new SecurityChangeTransaction.Outcome<>(
                                     getRole(connection, id), roleEvent(id, nextVersion));
                         })
@@ -498,13 +462,6 @@ public final class OrgStore {
                                     throw new DomainException(ErrorCode.VERSION_CONFLICT);
                                 }
                             }
-                            try (PreparedStatement delete =
-                                    OrgSql.statement(
-                                            connection,
-                                            "DELETE FROM sys_role_permission WHERE role_id = ?")) {
-                                delete.setLong(1, id);
-                                delete.executeUpdate();
-                            }
                             writeOperationLog(connection, actorId, "ROLE_DELETE", "ROLE", id, null);
                             return new SecurityChangeTransaction.Outcome<Void>(
                                     null, roleEvent(id, nextVersion));
@@ -529,21 +486,7 @@ public final class OrgStore {
                                     result.getString(2),
                                     result.getString(3),
                                     "0".equals(result.getString(4)),
-                                    new ArrayList<>(),
                                     result.getLong(5)));
-                }
-            }
-            try (PreparedStatement statement =
-                            OrgSql.statement(
-                                    connection,
-                                    "SELECT role_id, permission_code FROM sys_role_permission"
-                                            + " ORDER BY role_id, permission_code");
-                    ResultSet result = statement.executeQuery()) {
-                while (result.next()) {
-                    RoleRow role = rows.get(result.getLong(1));
-                    if (role != null) {
-                        role.permissionCodes().add(result.getString(2));
-                    }
                 }
             }
             return List.copyOf(rows.values());
@@ -567,7 +510,6 @@ public final class OrgStore {
                         "SELECT role_id, role_key, role_name, status, version FROM sys_role"
                                 + " WHERE role_id = ? AND del_flag = '0'")) {
             statement.setLong(1, id);
-            List<String> codes = new ArrayList<>();
             RoleRow role;
             try (ResultSet result = statement.executeQuery()) {
                 if (!result.next()) {
@@ -579,28 +521,9 @@ public final class OrgStore {
                                 result.getString(2),
                                 result.getString(3),
                                 "0".equals(result.getString(4)),
-                                codes,
                                 result.getLong(5));
             }
-            try (PreparedStatement permissions =
-                    OrgSql.statement(
-                            connection,
-                            "SELECT permission_code FROM sys_role_permission WHERE role_id = ?"
-                                    + " ORDER BY permission_code")) {
-                permissions.setLong(1, id);
-                try (ResultSet result = permissions.executeQuery()) {
-                    while (result.next()) {
-                        codes.add(result.getString(1));
-                    }
-                }
-            }
-            return new RoleRow(
-                    role.id(),
-                    role.key(),
-                    role.name(),
-                    role.enabled(),
-                    List.copyOf(codes),
-                    role.version());
+            return role;
         }
     }
 
@@ -1285,24 +1208,6 @@ public final class OrgStore {
         }
     }
 
-    private static void insertPermissions(Connection connection, long roleId, List<String> codes)
-            throws SQLException {
-        try (PreparedStatement statement =
-                OrgSql.statement(
-                        connection,
-                        "INSERT INTO sys_role_permission (role_id, permission_code, create_time,"
-                                + " update_time) VALUES (?, ?, ?, ?)")) {
-            for (String code : codes) {
-                statement.setLong(1, roleId);
-                statement.setString(2, code);
-                statement.setObject(3, OrgSql.nowUtc());
-                statement.setObject(4, OrgSql.nowUtc());
-                statement.addBatch();
-            }
-            statement.executeBatch();
-        }
-    }
-
     private static void insertUserRoles(Connection connection, long userId, List<Long> roleIds)
             throws SQLException {
         try (PreparedStatement statement =
@@ -1335,20 +1240,6 @@ public final class OrgStore {
                 }
             }
         }
-    }
-
-    private static List<String> normalizedCodes(List<String> codes) {
-        if (codes == null) {
-            return List.of();
-        }
-        Set<String> unique = new HashSet<>();
-        for (String code : codes) {
-            OrgSql.requireText(code, 100);
-            if (!unique.add(code)) {
-                throw new DomainException(ErrorCode.INVALID_ARGUMENT);
-            }
-        }
-        return List.copyOf(codes);
     }
 
     private static List<Long> normalizedIds(List<Long> ids) {

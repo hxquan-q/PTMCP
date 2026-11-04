@@ -66,16 +66,10 @@ public class RoleAdminController {
         this.scopeResolver = scopeResolver;
     }
 
-    public record RoleWrite(
-            String key, String name, Boolean enabled, List<String> permissionCodes) {}
+    /** S3 后角色 = 数据权限模板：请求与响应都只含定义字段，不再携带能力码。 */
+    public record RoleWrite(String key, String name, Boolean enabled) {}
 
-    public record RoleRead(
-            long id,
-            String key,
-            String name,
-            boolean enabled,
-            List<String> permissionCodes,
-            long version) {}
+    public record RoleRead(long id, String key, String name, boolean enabled, long version) {}
 
     @AdminAction("ptmcp:role:list")
     @GetMapping
@@ -107,9 +101,6 @@ public class RoleAdminController {
                                                     write.key(),
                                                     write.name(),
                                                     write.enabled(),
-                                                    write.permissionCodes() == null
-                                                            ? List.of()
-                                                            : write.permissionCodes(),
                                                     actorId(request)));
                             return ResponseEntity.created(
                                             URI.create("/api/v1/admin/roles/" + created.id()))
@@ -141,7 +132,6 @@ public class RoleAdminController {
                                 id,
                                 write.name(),
                                 write.enabled(),
-                                write.permissionCodes(),
                                 expectedVersion,
                                 actorId(request)));
         return ResponseEntity.ok().eTag(IfMatch.etag(updated.version())).body(updated);
@@ -203,12 +193,6 @@ public class RoleAdminController {
     }
 
     private static RoleRead toRead(OrgStore.RoleRow row) {
-        return new RoleRead(
-                row.id(),
-                row.key(),
-                row.name(),
-                row.enabled(),
-                row.permissionCodes(),
-                row.version());
+        return new RoleRead(row.id(), row.key(), row.name(), row.enabled(), row.version());
     }
 }

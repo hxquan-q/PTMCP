@@ -191,6 +191,29 @@ Updated: 2026-11-05
     删 `ActorOneHasNoBypass`（前提死）。
   - 新增 S2 验收两用例：普通用户全拒（6 端点 403）、管理员无码全允（4 面 200）。
 
+### S3 去除 sys_role_permission 表 + 动作码链路（已实施）
+
+- 迁移 `V19__drop_role_permission_codes.sql`：DROP 表（V18 已回填管理员列；数据权限走
+  授权矩阵，从不读此表）。
+- `AdminSessionService`：`permissions()` 删除，`MeView` 去 `permissions` 字段，
+  `PLATFORM_SCOPE_PERMISSION` 常量删除。
+- `OrgStore`：`RoleRow` 只剩 `id/key/name/enabled/version`；`createRole/updateRole` 去码参数；
+  写路径的权限码 INSERT/DELETE、读路径 JOIN、`insertPermissions/normalizedCodes` 全删；
+  操作日志 payload 去 `permissionCount`。
+- `RoleAdminController`：`RoleWrite/RoleRead` 收窄为定义字段。
+- `UserScopeGate`：角色码覆盖检查随码消亡；`requestedRoles` 管道移除（caller 侧
+  `checkedRoleIds` 输入校验保留）。
+- `DelegationStore`：`permissionsOf` 双载删除；`create` 的 AC-07 包含检查随码源消亡
+  （形状校验保留）；`DelegationAdminController` 的 `delegatableActions/DELEGABLE_PREFIXES`
+  删除。委派面（控制器、scope gates、admin_delegation 表）S4 整体移除。
+- 测试：AdminActionTestSupport `grant/standardActions` 删除（注解契约 ACTION_BY_ROUTE 保留）；
+  SessionApiTest `addRolePermission` 与 `/me` permissions 断言删除；DatasourceApiTest 码播种
+  删除；BackendApiRegressionTest `capabilities` 删除；OrgManagementStoreTest 角色契约测试
+  重写为纯定义形态（快照去 permissions、死拒绝分支清理、码专用用例删除、委派 create 3 参）；
+  AdminApiTest 幂等计数表去 sys_role_permission 项；超限重放用例（主题死于码删除）删除。
+- 修正一处 S2 引入的过度防御：`requireRoleAssignment` 误拒空角色列表（合法清空语义），
+  回退为仅 null 校验；`specializedUserCommands*` 更名对齐模型。
+
 ## 结果与证据
 
 ### S1（2026-11-05）
@@ -221,11 +244,18 @@ Updated: 2026-11-05
   environment` 整类报错，按既有协议重跑后全绿；代码无相关改动。
 - 评审类型：自审（单 Agent 实施）。
 
+### S3（2026-11-05）
+
+- persistence 全量：`./mvnw -o -pl ptmcp-persistence test` → `Tests run: 379, Failures: 0`。
+- admin 全量：`./mvnw -o -pl ptmcp-admin test` → `Tests run: 224, Failures: 0, Errors: 0`。
+- 全仓 `clean test-compile` 通过；`python scripts/check.py` 门禁 PASS。
+- 评审类型：自审（单 Agent 实施）。
+
 ## 交接
 
-当前焦点：S3 删 `sys_role_permission` 表与动作码链路（`AdminSessionService.permissions()`、
-`/session/me` 的 `permissions` 字段、`DelegationStore.permissionsOf`、角色 CRUD 的
-`permissionCodes`、OrgStore role-permission 写路径、播种的 portal 角色码）。S2 已提交推送 `dev`。
+当前焦点：S4 委派全删 + 控制面收敛到纯平台管理员（`DelegationAdminController`、委派方法、
+`DelegationScopeResolver`、三个 ScopeGate、`admin_delegation` 表迁移 DROP、
+`requireCatalogAccess` 纯化）。S3 已提交推送 `dev`。
 
 已有授权与待决定事项：
 

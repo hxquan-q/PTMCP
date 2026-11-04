@@ -203,54 +203,13 @@ class DatasourceApiTest {
                             "schema_snapshot",
                             "acl_grant",
                             "sys_user_role",
-                            "sys_role_permission",
                             "sys_role",
                             "datasource")) {
                 statement.execute("DELETE FROM " + table);
             }
             statement.execute("SET FOREIGN_KEY_CHECKS = 1");
-            AdminActionTestSupport.grant(
-                    connection,
-                    Long.parseLong(ADMIN),
-                    AdminActionTestSupport.standardActions().stream()
-                            .filter(
-                                    code ->
-                                            code.startsWith("ptmcp:datasource:")
-                                                    || code.startsWith("ptmcp:metadata:")
-                                                    || code.equals("ptmcp:job:read"))
-                            .toArray(String[]::new));
-        }
-        seedDatasourceCapabilityCodes();
-    }
-
-    /**
-     * The acting admin must hold the action's capability code, so the fixture grants every
-     * datasource code to {@code ADMIN}. Idempotent: the role tables survive between tests.
-     */
-    private void seedDatasourceCapabilityCodes() throws Exception {
-        try (Connection connection = connect();
-                Statement statement = connection.createStatement()) {
-            statement.execute(
-                    "INSERT IGNORE INTO sys_role (role_id, role_key, role_name, status, del_flag,"
-                            + " create_time, update_time) VALUES (9001, 'datasource-api-admin',"
-                            + " '数据源接口测试角色', '0', '0', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))");
-            for (String action :
-                    List.of("list", "read", "create", "update", "delete", "test", "sync")) {
-                statement.execute(
-                        "INSERT IGNORE INTO sys_role_permission (role_id, permission_code,"
-                                + " create_time, update_time) VALUES (9001, 'ptmcp:datasource:"
-                                + action
-                                + "', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))");
-            }
-            statement.execute(
-                    "INSERT IGNORE INTO sys_user_role (user_id, role_id, create_time, update_time)"
-                            + " VALUES ("
-                            + ADMIN
-                            + ", 9001, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))");
         }
     }
-
-    // ------------------------------------------------------------------ datasource
 
     @Test
     void createValidatesDestinationAndNeverReturnsCredential() throws Exception {

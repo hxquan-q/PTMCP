@@ -53,7 +53,6 @@ public final class AdminSessionService {
     private static final int PASSWORD_MIN = 12;
     private static final int PASSWORD_MAX = 64;
     private static final int PASSWORD_MAX_BYTES = 72;
-    private static final String PLATFORM_SCOPE_PERMISSION = "ptmcp:platform:scope";
     private static final ZoneOffset UTC = ZoneOffset.UTC;
 
     private final DataSource primary;
@@ -91,7 +90,6 @@ public final class AdminSessionService {
             String displayName,
             DepartmentView department,
             List<RoleView> roles,
-            List<String> permissions,
             List<String> managedScopes,
             boolean platformAdmin,
             Instant expiresAt) {}
@@ -228,14 +226,12 @@ public final class AdminSessionService {
             throw new DomainException(ErrorCode.SESSION_EXPIRED);
         }
         List<RoleView> roles = roles(session.userId());
-        List<String> permissions = permissions(session.userId());
         return new MeView(
                 profile.userId(),
                 profile.username(),
                 profile.displayName(),
                 new DepartmentView(profile.deptId(), profile.deptName()),
                 roles,
-                permissions,
                 managedScopes(session.userId()),
                 platformAdmin(session.userId()),
                 session.expiresAt());
@@ -569,28 +565,6 @@ public final class AdminSessionService {
             throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
         return roles;
-    }
-
-    private List<String> permissions(long userId) {
-        List<String> permissions = new ArrayList<>();
-        try (Connection connection = primary.getConnection();
-                PreparedStatement statement =
-                        connection.prepareStatement(
-                                "SELECT DISTINCT rp.permission_code FROM sys_user_role ur"
-                                        + " JOIN sys_role r ON r.role_id = ur.role_id"
-                                        + " JOIN sys_role_permission rp ON rp.role_id = r.role_id"
-                                        + " WHERE ur.user_id = ? AND r.status = '0'"
-                                        + " AND r.del_flag = '0' ORDER BY rp.permission_code")) {
-            statement.setLong(1, userId);
-            try (ResultSet result = statement.executeQuery()) {
-                while (result.next()) {
-                    permissions.add(result.getString(1));
-                }
-            }
-        } catch (SQLException error) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
-        }
-        return permissions;
     }
 
     private List<String> managedScopes(long userId) {

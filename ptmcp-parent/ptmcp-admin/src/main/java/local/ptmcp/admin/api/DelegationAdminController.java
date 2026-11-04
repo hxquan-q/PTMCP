@@ -21,9 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
 import java.time.Instant;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -37,10 +35,6 @@ import java.util.UUID;
 @ConditionalOnProperty("ptmcp.admin.datasource.url")
 @RequestMapping("/api/v1/admin/delegations")
 public class DelegationAdminController {
-    /** Only capability codes a delegation may carry; mirrors the console's action options. */
-    private static final Set<String> DELEGABLE_PREFIXES =
-            Set.of("ptmcp:user:", "ptmcp:department:", "ptmcp:role:", "ptmcp:acl:");
-
     private final DelegationStore delegations;
     private final IdempotencyRecorder idempotency;
 
@@ -113,10 +107,7 @@ public class DelegationAdminController {
                 () -> {
                     DelegationStore.DelegationRow created =
                             delegations.create(
-                                    principal.userId(),
-                                    UUID.randomUUID().toString(),
-                                    draft(write),
-                                    delegatableActions(principal.userId()));
+                                    principal.userId(), UUID.randomUUID().toString(), draft(write));
                     return ResponseEntity.created(
                                     URI.create("/api/v1/admin/delegations/" + created.id()))
                             .eTag(IfMatch.etag(created.version()))
@@ -157,20 +148,6 @@ public class DelegationAdminController {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
         return value;
-    }
-
-    /** The delegable set is the caller's own org/ACL capability codes (AC-07 bound). */
-    private Set<String> delegatableActions(long userId) {
-        Set<String> delegatable = new LinkedHashSet<>();
-        for (String permission : delegations.permissionsOf(userId)) {
-            for (String prefix : DELEGABLE_PREFIXES) {
-                if (permission.startsWith(prefix)) {
-                    delegatable.add(permission);
-                    break;
-                }
-            }
-        }
-        return delegatable;
     }
 
     private static DelegationView view(DelegationStore.DelegationRow row, Instant now) {

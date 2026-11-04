@@ -171,8 +171,7 @@ public final class DelegationStore {
      * passes the actions it is allowed to delegate; the stored subset must stay inside it (AC-07: a
      * delegated admin can never hold actions beyond the delegation).
      */
-    public DelegationRow create(
-            long actorId, String requestId, DelegationDraft draft, Set<String> delegatableActions) {
+    public DelegationRow create(long actorId, String requestId, DelegationDraft draft) {
         OrgSql.requireActor(actorId);
         if (requestId == null || requestId.isBlank() || requestId.length() > 64) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
@@ -184,8 +183,7 @@ public final class DelegationStore {
         LinkedHashSet<String> actions = new LinkedHashSet<>();
         for (String action : draft.allowedActions()) {
             String normalized = action.trim().toLowerCase(Locale.ROOT);
-            if (!ACTION_CODE.matcher(normalized).matches()
-                    || !delegatableActions.contains(normalized)) {
+            if (!ACTION_CODE.matcher(normalized).matches()) {
                 throw new DomainException(ErrorCode.INVALID_ARGUMENT);
             }
             actions.add(normalized);
@@ -254,36 +252,6 @@ public final class DelegationStore {
                                     created, delegationEvent(created));
                         })
                 .value();
-    }
-
-    /** Distinct org/ACL capability codes of one user; mirrors the session permission query. */
-    public List<String> permissionsOf(long userId) {
-        try (Connection connection = OrgSql.configure(primary)) {
-            return permissionsOf(connection, userId);
-        } catch (SQLException failure) {
-            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
-        }
-    }
-
-    public static List<String> permissionsOf(Connection connection, long userId)
-            throws SQLException {
-        OrgSql.requireActor(userId);
-        String sql =
-                "SELECT DISTINCT rp.permission_code FROM sys_user_role ur"
-                        + " JOIN sys_role r ON r.role_id = ur.role_id"
-                        + " JOIN sys_role_permission rp ON rp.role_id = r.role_id"
-                        + " WHERE ur.user_id = ? AND r.status = '0' AND r.del_flag = '0'"
-                        + " ORDER BY rp.permission_code";
-        try (PreparedStatement statement = OrgSql.statement(connection, sql)) {
-            statement.setLong(1, userId);
-            List<String> permissions = new ArrayList<>();
-            try (ResultSet result = statement.executeQuery()) {
-                while (result.next()) {
-                    permissions.add(result.getString(1));
-                }
-            }
-            return List.copyOf(permissions);
-        }
     }
 
     /** Optimistic revoke: status flips to REVOKED only when the presented version still matches. */

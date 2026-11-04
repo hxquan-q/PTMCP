@@ -53,22 +53,15 @@ public final class UserScopeGate {
         if (rolesChanged) {
             actions.add("ptmcp:user:assign-role");
         }
-        requireCommand(
-                request,
-                before.deptId(),
-                targetDeptId,
-                actions,
-                rolesChanged ? requestedRoles : null);
+        requireCommand(request, before.deptId(), targetDeptId, actions);
     }
 
     public void requireUserStatus(HttpServletRequest request, OrgStore.UserRow before) {
-        requireCommand(
-                request, before.deptId(), before.deptId(), Set.of("ptmcp:user:status"), null);
+        requireCommand(request, before.deptId(), before.deptId(), Set.of("ptmcp:user:status"));
     }
 
     public void requireUserDelete(HttpServletRequest request, OrgStore.UserRow before) {
-        requireCommand(
-                request, before.deptId(), before.deptId(), Set.of("ptmcp:user:delete"), null);
+        requireCommand(request, before.deptId(), before.deptId(), Set.of("ptmcp:user:delete"));
     }
 
     public void requireRoleAssignment(
@@ -76,25 +69,17 @@ public final class UserScopeGate {
         if (roleIds == null) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
-        requireCommand(
-                request,
-                before.deptId(),
-                before.deptId(),
-                Set.of("ptmcp:user:assign-role"),
-                checkedRoleIds(roleIds));
+        checkedRoleIds(roleIds);
+        requireCommand(request, before.deptId(), before.deptId(), Set.of("ptmcp:user:assign-role"));
     }
 
     public void requireUserMove(
             HttpServletRequest request, OrgStore.UserRow before, long targetDeptId) {
-        requireCommand(request, before.deptId(), targetDeptId, Set.of("ptmcp:user:move"), null);
+        requireCommand(request, before.deptId(), targetDeptId, Set.of("ptmcp:user:move"));
     }
 
     private void requireCommand(
-            HttpServletRequest request,
-            long sourceDeptId,
-            long targetDeptId,
-            Set<String> actions,
-            Set<Long> requestedRoles) {
+            HttpServletRequest request, long sourceDeptId, long targetDeptId, Set<String> actions) {
         AdminPrincipal principal = AdminPrincipal.require(request);
         if (principal.platformAdmin()) {
             return;
@@ -123,17 +108,8 @@ public final class UserScopeGate {
         if (candidates.isEmpty()) {
             throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
         }
-        if (requestedRoles != null) {
-            Set<String> assignedCodes = new HashSet<>();
-            for (long roleId : requestedRoles) {
-                assignedCodes.addAll(orgStore.getRole(roleId).permissionCodes());
-            }
-            if (candidates.stream()
-                    .noneMatch(
-                            delegation -> delegation.allowedActions().containsAll(assignedCodes))) {
-                throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
-            }
-        }
+        // S3: 角色不再携带能力码，委派对「所挂角色码」的覆盖检查随之消亡；
+        // 委派面整体在 S4 移除。
     }
 
     private static Set<Long> checkedRoleIds(List<Long> roleIds) {

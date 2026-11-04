@@ -1,16 +1,7 @@
 package local.ptmcp.admin;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Independent HTTP contract and real role fixtures; never derives expectations from annotations.
@@ -85,54 +76,4 @@ final class AdminActionTestSupport {
                             Collectors.toUnmodifiableMap(
                                     parts -> parts[0] + " /api/v1/admin" + parts[1],
                                     parts -> parts[2]));
-
-    private AdminActionTestSupport() {}
-
-    static List<String> standardActions() {
-        return Stream.concat(ACTION_BY_ROUTE.values().stream(), Stream.of("ptmcp:platform:scope"))
-                .filter(code -> !code.equals("ptmcp:audit:decrypt"))
-                .distinct()
-                .toList();
-    }
-
-    static long grant(Connection connection, long userId, String... codes) throws SQLException {
-        long roleId;
-        try (PreparedStatement role =
-                connection.prepareStatement(
-                        "INSERT INTO sys_role (role_key,role_name,status,del_flag,create_time,update_time)"
-                                + " VALUES (?,'测试动作角色','0','0',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
-                        Statement.RETURN_GENERATED_KEYS)) {
-            role.setString(1, "test_actions_" + UUID.randomUUID().toString().replace("-", ""));
-            role.executeUpdate();
-            try (ResultSet keys = role.getGeneratedKeys()) {
-                if (!keys.next()) {
-                    throw new SQLException("test role was not created");
-                }
-                roleId = keys.getLong(1);
-            }
-        }
-        try (PreparedStatement delete =
-                        connection.prepareStatement("DELETE FROM sys_user_role WHERE user_id=?");
-                PreparedStatement member =
-                        connection.prepareStatement(
-                                "INSERT INTO sys_user_role (user_id,role_id,create_time,update_time)"
-                                        + " VALUES (?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
-                PreparedStatement permission =
-                        connection.prepareStatement(
-                                "INSERT INTO sys_role_permission (role_id,permission_code,create_time,update_time)"
-                                        + " VALUES (?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))")) {
-            delete.setLong(1, userId);
-            delete.executeUpdate();
-            member.setLong(1, userId);
-            member.setLong(2, roleId);
-            member.executeUpdate();
-            for (String code : Arrays.stream(codes).distinct().toList()) {
-                permission.setLong(1, roleId);
-                permission.setString(2, code);
-                permission.addBatch();
-            }
-            permission.executeBatch();
-        }
-        return roleId;
-    }
 }

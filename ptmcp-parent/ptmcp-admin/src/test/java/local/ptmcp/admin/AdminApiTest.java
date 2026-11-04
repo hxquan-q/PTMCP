@@ -1,7 +1,6 @@
 package local.ptmcp.admin;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -28,7 +27,6 @@ import local.ptmcp.admin.api.DepartmentAdminController;
 import local.ptmcp.admin.api.IdempotentWriteTestSupport;
 import local.ptmcp.admin.api.RoleAdminController;
 import local.ptmcp.admin.api.UserAdminController;
-import local.ptmcp.admin.web.StrictJson;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.persistence.org.DelegationScopeResolver;
@@ -247,7 +245,6 @@ class AdminApiTest {
                             "sys_user_role",
                             "sys_user_profile",
                             "sys_user_login_name",
-                            "sys_role_permission",
                             "sys_role",
                             "sys_dept",
                             "platform_registry",
@@ -258,10 +255,6 @@ class AdminApiTest {
                 statement.execute("DELETE FROM " + table);
             }
             statement.execute("SET FOREIGN_KEY_CHECKS = 1");
-            AdminActionTestSupport.grant(
-                    connection,
-                    ADMIN_ID,
-                    AdminActionTestSupport.standardActions().toArray(String[]::new));
             seedRoleAdminIdentity(connection);
         }
     }
@@ -415,12 +408,6 @@ class AdminApiTest {
                                     .header("X-Test-User-Id", ADMIN_ID)
                                     .header("X-Test-Platform-Admin", "true"))
                     .andExpect(status().isOk());
-        }
-    }
-
-    private long actionActorRole(String... permissions) throws Exception {
-        try (Connection connection = connect()) {
-            return AdminActionTestSupport.grant(connection, ADMIN_ID, permissions);
         }
     }
 
@@ -781,9 +768,6 @@ class AdminApiTest {
         long destination = orgStore.createDepartment(root, "范围内目标", true, ADMIN_ID).id();
         long outside = orgStore.createDepartment(null, "范围外目标", true, ADMIN_ID).id();
         long delegate = createUser("department-command-delegate", "部门管理员", root);
-        try (Connection connection = connect()) {
-            AdminActionTestSupport.grant(connection, delegate, "ptmcp:department:update");
-        }
         DepartmentCommandFixture fixture =
                 new DepartmentCommandFixture(
                         root,
@@ -794,7 +778,6 @@ class AdminApiTest {
                         delegate,
                         insertActiveDatasource());
         grantDepartmentCommand(fixture, root, List.of("ptmcp:department:update"));
-        assertTrue(delegationStore.permissionsOf(delegate).contains("ptmcp:department:update"));
         assertEquals(
                 1, delegationScopeResolver.effectiveDelegations(delegate, Instant.now()).size());
         return fixture;
@@ -812,8 +795,7 @@ class AdminApiTest {
                         fixture.datasourceId(),
                         actions,
                         Instant.now().minusSeconds(60),
-                        Instant.now().plusSeconds(3600)),
-                java.util.Set.copyOf(actions));
+                        Instant.now().plusSeconds(3600)));
     }
 
     private static org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder
@@ -853,8 +835,7 @@ class AdminApiTest {
                                         .contentType("application/json")
                                         .content(
                                                 "{\"key\":\"analyst\",\"name\":\"分析员\","
-                                                        + "\"enabled\":true,"
-                                                        + "\"permissionCodes\":[\"acl:read\"]}"))
+                                                        + "\"enabled\":true}"))
                         .andExpect(status().isCreated())
                         .andReturn()
                         .getResponse()
@@ -1133,8 +1114,7 @@ class AdminApiTest {
                         fixture.datasourceId(),
                         actions,
                         Instant.now().minusSeconds(60),
-                        Instant.now().plusSeconds(3600)),
-                java.util.Set.copyOf(actions));
+                        Instant.now().plusSeconds(3600)));
         OrgStore.UserRow before = orgStore.getUser(fixture.targetId());
         mockMvc.perform(
                         put("/api/v1/admin/users/" + fixture.targetId())
@@ -1179,14 +1159,6 @@ class AdminApiTest {
     @Test
     void genericUserUpdateRequiresActorCapabilityAlongsideDelegation() throws Exception {
         UserEditFixture fixture = userEditFixture(List.of("ptmcp:user:update", "ptmcp:user:move"));
-        try (Connection connection = connect();
-                PreparedStatement delete =
-                        connection.prepareStatement(
-                                "DELETE rp FROM sys_role_permission rp JOIN sys_user_role ur ON ur.role_id=rp.role_id"
-                                        + " WHERE ur.user_id=? AND rp.permission_code='ptmcp:user:update'")) {
-            delete.setLong(1, fixture.delegateId());
-            assertEquals(1, delete.executeUpdate());
-        }
         assertGenericEditDenied(fixture, true, null);
     }
 
@@ -1234,10 +1206,7 @@ class AdminApiTest {
     @Test
     void genericUserUpdatePreservesMissingRolesAndIgnoresOrderOnlyChanges() throws Exception {
         UserEditFixture fixture = userEditFixture(List.of("ptmcp:user:update"));
-        long secondRole =
-                orgStore.createRole(
-                                "edit_second", "另一角色", true, List.of("ptmcp:user:update"), ADMIN_ID)
-                        .id();
+        long secondRole = orgStore.createRole("edit_second", "另一角色", true, ADMIN_ID).id();
         OrgStore.UserRow initial = orgStore.getUser(fixture.targetId());
         OrgStore.UserRow before =
                 orgStore.updateUser(
@@ -1301,8 +1270,7 @@ class AdminApiTest {
                         fixture.datasourceId(),
                         actions,
                         Instant.now().minusSeconds(60),
-                        Instant.now().plusSeconds(3600)),
-                java.util.Set.copyOf(actions));
+                        Instant.now().plusSeconds(3600)));
     }
 
     @Test
@@ -1453,15 +1421,6 @@ class AdminApiTest {
                     orgStore.createDepartment(fixture.departmentId(), "迁入子部门", true, ADMIN_ID).id();
             body = "{\"departmentId\":" + destination + "}";
         }
-        try (Connection connection = connect();
-                PreparedStatement delete =
-                        connection.prepareStatement(
-                                "DELETE rp FROM sys_role_permission rp JOIN sys_user_role ur ON ur.role_id=rp.role_id"
-                                        + " WHERE ur.user_id=? AND rp.permission_code=?")) {
-            delete.setLong(1, fixture.delegateId());
-            delete.setString(2, action);
-            assertEquals(1, delete.executeUpdate());
-        }
         assertSpecializedEditDenied(fixture, endpoint, body);
     }
 
@@ -1481,14 +1440,7 @@ class AdminApiTest {
         long ancestor = createDepartment("双委派祖先");
         orgStore.moveDepartment(fixture.departmentId(), ancestor, 1, ADMIN_ID);
         addEditDelegation(fixture, ancestor, List.of("ptmcp:user:status"));
-        long combinedRole =
-                orgStore.createRole(
-                                "combined_codes",
-                                "合并功能角色",
-                                true,
-                                List.of("ptmcp:user:update", "ptmcp:user:status"),
-                                ADMIN_ID)
-                        .id();
+        long combinedRole = orgStore.createRole("combined_codes", "合并功能角色", true, ADMIN_ID).id();
         assertSpecializedEditDenied(fixture, "roles", "{\"roleIds\":[" + combinedRole + "]}");
     }
 
@@ -1592,18 +1544,10 @@ class AdminApiTest {
     }
 
     @Test
-    void specializedUserCommandsDoNotRequireProfileUpdateCapability() throws Exception {
+    void specializedUserCommandsServeThePlatformAdminDirectly() throws Exception {
         UserEditFixture fixture =
                 userEditFixture(
                         List.of("ptmcp:user:status", "ptmcp:user:assign-role", "ptmcp:user:move"));
-        try (Connection connection = connect();
-                PreparedStatement delete =
-                        connection.prepareStatement(
-                                "DELETE rp FROM sys_role_permission rp JOIN sys_user_role ur ON ur.role_id=rp.role_id"
-                                        + " WHERE ur.user_id=? AND rp.permission_code='ptmcp:user:update'")) {
-            delete.setLong(1, fixture.delegateId());
-            assertEquals(1, delete.executeUpdate());
-        }
         performSpecializedEdit(fixture, "status", "{\"status\":\"DISABLED\"}")
                 .andExpect(status().isOk());
         assertFalse(orgStore.getUser(fixture.targetId()).enabled());
@@ -1830,26 +1774,9 @@ class AdminApiTest {
         createUser("edit-placeholder", "占位", department);
         long target = createUser("edit-target", "原资料", department);
         long delegate = createUser("edit-delegate", "资料管理员", department);
-        long narrow =
-                orgStore.createRole(
-                                "edit_narrow", "资料角色", true, List.of("ptmcp:user:update"), ADMIN_ID)
-                        .id();
-        long broad =
-                orgStore.createRole(
-                                "edit_broad", "平台角色", true, List.of("ptmcp:user:status"), ADMIN_ID)
-                        .id();
-        long actorRole =
-                orgStore.createRole(
-                                "edit_actor",
-                                "功能角色",
-                                true,
-                                List.of(
-                                        "ptmcp:user:update",
-                                        "ptmcp:user:move",
-                                        "ptmcp:user:status",
-                                        "ptmcp:user:assign-role"),
-                                ADMIN_ID)
-                        .id();
+        long narrow = orgStore.createRole("edit_narrow", "资料角色", true, ADMIN_ID).id();
+        long broad = orgStore.createRole("edit_broad", "平台角色", true, ADMIN_ID).id();
+        long actorRole = orgStore.createRole("edit_actor", "功能角色", true, ADMIN_ID).id();
         OrgStore.UserRow actor = orgStore.getUser(delegate);
         orgStore.updateUser(
                 delegate,
@@ -1885,8 +1812,7 @@ class AdminApiTest {
                                 datasource,
                                 actions,
                                 Instant.now().minusSeconds(60),
-                                Instant.now().plusSeconds(3600)),
-                        java.util.Set.copyOf(actions));
+                                Instant.now().plusSeconds(3600)));
         assertTrue(
                 !assigned.validFrom().isAfter(Instant.now())
                         && assigned.validTo().isAfter(Instant.now()),
@@ -2374,7 +2300,6 @@ class AdminApiTest {
                 mockMvc.perform(roleCreateRequest(key, "replayed_role"))
                         .andExpect(status().isCreated())
                         .andExpect(jsonPath("$.version").value(1))
-                        .andExpect(jsonPath("$.permissionCodes.length()").value(2))
                         .andReturn();
         assertRoleCreatedOnce(before);
         long roleId = readLong(first.getResponse().getContentAsString(), "id");
@@ -2411,66 +2336,6 @@ class AdminApiTest {
         assertEquals(deleted, roleCreateWriteEffects());
     }
 
-    @Test
-    void roleCreateIdempotencyReplaysRecordedResponseAboveRequestLimit() throws Exception {
-        StringBuilder body =
-                new StringBuilder(
-                        "{\"key\":\"large_role\",\"name\":\"Large role\",\"enabled\":true,"
-                                + "\"permissionCodes\":[");
-        int permissionCount = 0;
-        while (body.length() + 2 + 206 < StrictJson.MAX_BODY_BYTES) {
-            if (permissionCount > 0) body.append(',');
-            String prefix = "p" + permissionCount + "_";
-            body.append('"').append(prefix).append("x".repeat(100 - prefix.length())).append('"');
-            permissionCount++;
-        }
-        int remaining = StrictJson.MAX_BODY_BYTES - body.length() - 2;
-        int firstLength = Math.min(100, remaining - 6 - 5);
-        int secondLength = remaining - 6 - firstLength;
-        body.append(",\"tail1")
-                .append("x".repeat(firstLength - 5))
-                .append("\",\"tail2")
-                .append("x".repeat(secondLength - 5))
-                .append("\"]}");
-        permissionCount += 2;
-        byte[] requestBody = body.toString().getBytes(StandardCharsets.UTF_8);
-        assertEquals(StrictJson.MAX_BODY_BYTES, requestBody.length);
-        List<Long> before = roleCreateCounts();
-        MvcResult first =
-                mockMvc.perform(
-                                roleCreateRequest("large-role-result", "unused")
-                                        .content(requestBody))
-                        .andExpect(status().isCreated())
-                        .andExpect(jsonPath("$.permissionCodes.length()").value(permissionCount))
-                        .andReturn();
-        byte[] original = first.getResponse().getContentAsByteArray();
-        assertTrue(original.length > StrictJson.MAX_BODY_BYTES);
-        assertEquals(
-                original.length,
-                scalar("SELECT OCTET_LENGTH(response_cipher) FROM api_idempotency"));
-        assertEquals("SUCCEEDED", idempotencyState("roles.create", "large-role-result"));
-        assertEquals(
-                List.of(
-                        before.get(0) + 1,
-                        before.get(1) + permissionCount,
-                        before.get(2) + 1,
-                        before.get(3) + 1,
-                        before.get(4) + 1),
-                roleCreateCounts());
-        String committed = roleCreateWriteEffects();
-        mockMvc.perform(roleCreateRequest("large-role-result", "unused").content(requestBody))
-                .andExpect(status().isCreated())
-                .andExpect(header().string("Idempotent-Replay", "true"))
-                .andExpect(header().string("Location", first.getResponse().getHeader("Location")))
-                .andExpect(
-                        result ->
-                                assertArrayEquals(
-                                        original, result.getResponse().getContentAsByteArray()));
-        assertEquals(committed, roleCreateWriteEffects());
-        assertEquals("SUCCEEDED", idempotencyState("roles.create", "large-role-result"));
-    }
-
-    @ParameterizedTest
     @ValueSource(strings = {"missing", "blank", "too-long"})
     void roleCreateIdempotencyRejectsInvalidKeyWithoutOccupying(String kind) throws Exception {
         String before = roleCreateWriteEffects();
@@ -2608,7 +2473,7 @@ class AdminApiTest {
 
     @Test
     void roleCreateIdempotencyRetainsUnknownWhenCurrentQualificationIsRevoked() throws Exception {
-        long actorRole = actionActorRole();
+        long actorRole = orgStore.createRole("race_actor_key", "竞态角色", true, ADMIN_ID).id();
         CountDownLatch actionStarted = new CountDownLatch(1);
         CountDownLatch finishAction = new CountDownLatch(1);
         AtomicInteger actions = new AtomicInteger();
@@ -2621,12 +2486,7 @@ class AdminApiTest {
                             return invocation.callRealMethod();
                         })
                 .when(observed)
-                .createRole(
-                        "qualification_race",
-                        "角色创建",
-                        true,
-                        List.of("ptmcp:role:read", "ptmcp:role:list"),
-                        ADMIN_ID);
+                .createRole("qualification_race", "角色创建", true, ADMIN_ID);
         MockMvc isolatedMvc =
                 MockMvcBuilders.standaloneSetup(
                                 new RoleAdminController(
@@ -2651,7 +2511,7 @@ class AdminApiTest {
                 // S2: qualification is the platform_admin column alone; a concurrent role rewrite
                 // changes the write effects while the column flip denies the in-flight store
                 // requalification.
-                orgStore.updateRole(actorRole, "撤权角色", null, List.of(), 1, ADMIN_ID);
+                orgStore.updateRole(actorRole, "撤权角色", null, 1, ADMIN_ID);
                 try (Connection connection = connect();
                         PreparedStatement flip =
                                 connection.prepareStatement(
@@ -3089,16 +2949,12 @@ class AdminApiTest {
     }
 
     private static String roleCreateBody(String roleKey) {
-        return "{\"key\":\""
-                + roleKey
-                + "\",\"name\":\"角色创建\",\"enabled\":true,"
-                + "\"permissionCodes\":[\"ptmcp:role:read\",\"ptmcp:role:list\"]}";
+        return "{\"key\":\"" + roleKey + "\",\"name\":\"角色创建\",\"enabled\":true}";
     }
 
     private List<Long> roleCreateCounts() throws SQLException {
         return List.of(
                 scalar("SELECT COUNT(*) FROM sys_role"),
-                scalar("SELECT COUNT(*) FROM sys_role_permission"),
                 scalar("SELECT COUNT(*) FROM admin_operation_log"),
                 scalar("SELECT COUNT(*) FROM sys_security_event"),
                 scalar("SELECT policy_epoch FROM sys_security_state WHERE singleton_id=1"));
@@ -3106,12 +2962,7 @@ class AdminApiTest {
 
     private void assertRoleCreatedOnce(List<Long> before) throws SQLException {
         assertEquals(
-                List.of(
-                        before.get(0) + 1,
-                        before.get(1) + 2,
-                        before.get(2) + 1,
-                        before.get(3) + 1,
-                        before.get(4) + 1),
+                List.of(before.get(0) + 1, before.get(1) + 1, before.get(2) + 1, before.get(3) + 1),
                 roleCreateCounts());
     }
 
@@ -3138,7 +2989,6 @@ class AdminApiTest {
             for (String sql :
                     List.of(
                             "SELECT * FROM sys_role ORDER BY role_id",
-                            "SELECT * FROM sys_role_permission ORDER BY role_id,permission_code",
                             "SELECT * FROM admin_operation_log ORDER BY id",
                             "SELECT * FROM sys_security_state ORDER BY singleton_id",
                             "SELECT * FROM sys_security_event ORDER BY event_id")) {
@@ -3318,7 +3168,6 @@ class AdminApiTest {
 
     @Test
     void delegationLifecycleResolvesGenerationAndDerivesStatus() throws Exception {
-        seedAdminDelegationCodes();
         long datasourceId = insertActiveDatasource();
         long deptId = createDepartment("委派部");
         // The reset empties sys_user_login_name, so ids restart at 1 (the shim admin's id);
@@ -3417,7 +3266,6 @@ class AdminApiTest {
 
     @Test
     void delegationRejectsSelfEscalationDuplicatesAndForeignActions() throws Exception {
-        seedAdminDelegationCodes();
         long datasourceId = insertActiveDatasource();
         long deptId = createDepartment("委派部二");
         createUser("throwaway-two", "占位用户二", deptId);
@@ -3501,9 +3349,6 @@ class AdminApiTest {
                 .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
 
         // The delegated admin cannot revoke the delegation held in their name.
-        try (Connection connection = connect()) {
-            AdminActionTestSupport.grant(connection, delegate, "ptmcp:delegation:delete");
-        }
         mockMvc.perform(
                         delete("/api/v1/admin/delegations/" + delegationId)
                                 .header("X-Test-User-Id", delegate)
@@ -3515,7 +3360,6 @@ class AdminApiTest {
 
     @Test
     void delegationReplayReturnsRecordedResponseAndUnknownResourceIsRejected() throws Exception {
-        seedAdminDelegationCodes();
         long deptId = createDepartment("委派部三");
         createUser("throwaway-three", "占位用户三", deptId);
         long delegate = createUser("delegate-three", "受控管理员三", deptId);
@@ -4238,10 +4082,6 @@ class AdminApiTest {
 
     @Test
     void auditDecryptRequiresReasonRecordsAccessAndReturnsPlaintext() throws Exception {
-        actionActorRole("ptmcp:audit:read", "ptmcp:audit:decrypt");
-        try (Connection connection = connect()) {
-            AdminActionTestSupport.grant(connection, 2L, "ptmcp:audit:decrypt");
-        }
         String requestId = "11111111-2222-3333-4444-555555555555";
         local.ptmcp.admin.datasource.AuditCipher cipher =
                 new local.ptmcp.admin.datasource.AuditCipher(
@@ -5153,40 +4993,6 @@ class AdminApiTest {
                         .getResponse()
                         .getContentAsString(),
                 "id");
-    }
-
-    /** Delegation tests need the acting admin to hold org/ACL capability codes. */
-    private void seedAdminDelegationCodes() throws Exception {
-        try (Connection connection = connect();
-                Statement statement = connection.createStatement()) {
-            statement.execute(
-                    "INSERT INTO sys_role (role_key, role_name, status, del_flag,"
-                            + " create_time, update_time) VALUES"
-                            + " ('ptmcp-platform-admin', '平台管理员', '0', '0', NOW(6), NOW(6))",
-                    Statement.RETURN_GENERATED_KEYS);
-            long roleId;
-            try (var keys = statement.getGeneratedKeys()) {
-                keys.next();
-                roleId = keys.getLong(1);
-            }
-            for (String code :
-                    List.of("ptmcp:acl:list", "ptmcp:user:list", "ptmcp:user:assign-role")) {
-                statement.execute(
-                        "INSERT INTO sys_role_permission (role_id, permission_code, create_time,"
-                                + " update_time) VALUES ("
-                                + roleId
-                                + ", '"
-                                + code
-                                + "', NOW(6), NOW(6))");
-            }
-            statement.execute(
-                    "INSERT INTO sys_user_role (user_id, role_id, create_time, update_time)"
-                            + " VALUES ("
-                            + ADMIN_ID
-                            + ", "
-                            + roleId
-                            + ", NOW(6), NOW(6))");
-        }
     }
 
     private long insertActiveDatasource() throws Exception {

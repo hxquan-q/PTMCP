@@ -64,7 +64,6 @@ class BackendApiRegressionTest {
         long actor = user("review-delegate", dept);
         long datasource = datasource();
         long platform = platform("review-platform");
-        capabilities(actor, "ptmcp:acl:delete");
         delegation(actor, dept, datasource);
         ceiling(platform, datasource);
         seedGrant(actor, datasource, "ALLOW", "review allow");
@@ -173,7 +172,6 @@ class BackendApiRegressionTest {
         long actor = user("review-delegate", dept);
         long datasource = datasource();
         long platform = platform("review-platform");
-        capabilities(actor, "ptmcp:acl:create");
         delegation(actor, dept, datasource);
         ceiling(platform, datasource);
         Instant from = Instant.now().plusSeconds(300);
@@ -386,7 +384,6 @@ class BackendApiRegressionTest {
                                 "sys_user_profile",
                                 "sys_user_login_name",
                                 "sys_user_security",
-                                "sys_role_permission",
                                 "sys_role",
                                 "sys_dept",
                                 "datasource",
@@ -404,10 +401,6 @@ class BackendApiRegressionTest {
                     "INSERT INTO sys_user_profile (user_id,dept_id,display_name,password_hash,status,create_time,update_time) VALUES (9000001,9000001,'fixture admin','test-external','ACTIVE',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
             statement.execute(
                     "INSERT INTO sys_user_security (user_id,auth_version,identity_version,identity_state,platform_admin,create_time,update_time) VALUES (9000001,1,1,'READY',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
-            AdminActionTestSupport.grant(
-                    connection,
-                    ADMIN,
-                    AdminActionTestSupport.standardActions().toArray(String[]::new));
         }
     }
 
@@ -457,12 +450,6 @@ class BackendApiRegressionTest {
                 assertTrue(keys.next());
                 return keys.getLong(1);
             }
-        }
-    }
-
-    private void capabilities(long actor, String... codes) throws Exception {
-        try (Connection connection = dataSource.getConnection()) {
-            AdminActionTestSupport.grant(connection, actor, codes);
         }
     }
 

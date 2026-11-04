@@ -217,7 +217,6 @@ class SessionApiTest {
                             "sys_user_role",
                             "sys_user_profile",
                             "sys_user_login_name",
-                            "sys_role_permission",
                             "sys_role",
                             "sys_dept",
                             "datasource",
@@ -319,7 +318,6 @@ class SessionApiTest {
                 .andExpect(jsonPath("$.username").value("alice"))
                 .andExpect(jsonPath("$.department.name").value("门户部"))
                 .andExpect(jsonPath("$.roles[0].name").value("门户用户"))
-                .andExpect(jsonPath("$.permissions[0]").value("mcp:query"))
                 .andExpect(
                         jsonPath("$.managedScopes[0]")
                                 .value("DATASOURCE:" + fixture.datasourceId()));
@@ -360,8 +358,6 @@ class SessionApiTest {
         executeSql("DELETE FROM sys_user_role WHERE user_id = " + ALICE);
         executeSql("UPDATE sys_role SET status = '1' WHERE role_key = 'portal-user'");
         executeSql("UPDATE sys_role SET del_flag = '1' WHERE role_key = 'portal-user'");
-        executeSql(
-                "DELETE FROM sys_role_permission WHERE permission_code = 'ptmcp:platform:scope'");
         assertSessionScope(session, true, expiresAt);
         assertEquals(index, sessionIndexSnapshot(ALICE));
         mockMvc.perform(
@@ -437,7 +433,6 @@ class SessionApiTest {
         mockMvc.perform(get("/api/v1/admin/roles").cookie(session.cookie()))
                 .andExpect(status().isOk());
         // S2: 管理资格由 platform_admin 列决定，删除能力码不影响管理面访问。
-        executeSql("DELETE FROM sys_role_permission WHERE permission_code='ptmcp:role:list'");
         mockMvc.perform(get("/api/v1/admin/roles").cookie(session.cookie()))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/session/me").cookie(session.cookie()))
@@ -467,8 +462,6 @@ class SessionApiTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(body))
                 .andExpect(status().isCreated());
-        executeSql(
-                "DELETE FROM sys_role_permission WHERE permission_code='ptmcp:department:create'");
         String operations = scalar("SELECT COUNT(*) FROM admin_operation_log");
         departments = scalar("SELECT COUNT(*) FROM sys_dept");
         String replays = scalar("SELECT COUNT(*) FROM api_idempotency");
@@ -1249,12 +1242,6 @@ class SessionApiTest {
     private Fixture seedPortal() throws Exception {
         long deptId = addDepartment("门户部");
         long roleId = addRole("portal-user", "门户用户");
-        addRolePermission(roleId, "mcp:query");
-        addRolePermission(roleId, "ptmcp:platform:scope");
-        addRolePermission(roleId, "ptmcp:role:list");
-        addRolePermission(roleId, "ptmcp:department:create");
-        addRolePermission(roleId, "ptmcp:user:read");
-        addRolePermission(roleId, "ptmcp:user:reset-password");
         addUser(ALICE, "alice", "爱丽丝", PASSWORD, deptId);
         addUser(BOB, "bob", "鲍勃", PASSWORD, deptId);
         makePlatformAdmin(ALICE);
@@ -1479,20 +1466,6 @@ class SessionApiTest {
             statement.setObject(4, now());
             statement.executeUpdate();
             return generatedKey(statement);
-        }
-    }
-
-    private static void addRolePermission(long roleId, String code) throws SQLException {
-        try (Connection connection = connect();
-                PreparedStatement statement =
-                        connection.prepareStatement(
-                                "INSERT INTO sys_role_permission (role_id, permission_code,"
-                                        + " create_time, update_time) VALUES (?, ?, ?, ?)")) {
-            statement.setLong(1, roleId);
-            statement.setString(2, code);
-            statement.setObject(3, now());
-            statement.setObject(4, now());
-            statement.executeUpdate();
         }
     }
 
