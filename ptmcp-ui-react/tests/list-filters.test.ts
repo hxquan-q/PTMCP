@@ -86,3 +86,45 @@ test('metadata list applies keyword server-side within a datasource', async () =
     );
   });
 });
+
+test('datasources list filters by engine/status server-side, not on the fetched page', async () => {
+  await withPreviewServer(async () => {
+    const { data: all } = await data.listDatasources({ pageSize: 100 });
+    assert.ok(all.items.length >= 2, 'seed must contain several datasources');
+    const target = all.items[0]!;
+
+    const byEngine = await data.listDatasources({ engine: target.engine, pageSize: 100 });
+    assert.ok(byEngine.data.items.length > 0, 'engine filter must return the seed row');
+    assert.ok(
+      byEngine.data.items.every((row) => row.engine === target.engine),
+      '服务端必须只回所选引擎的行',
+    );
+    assert.ok(byEngine.data.items.length <= all.items.length, '过滤后的集合不能比全量还大');
+
+    const byStatus = await data.listDatasources({ status: target.status, pageSize: 100 });
+    assert.ok(byStatus.data.items.length > 0);
+    assert.ok(
+      byStatus.data.items.every((row) => (row.status ?? '').toUpperCase() === target.status),
+      '服务端必须只回所选状态的行',
+    );
+
+    // 两个条件同时给：交集，而不是任一命中。
+    const both = await data.listDatasources({ engine: target.engine, status: target.status, pageSize: 100 });
+    assert.ok(both.data.items.some((row) => row.id === target.id));
+    assert.ok(
+      both.data.items.every((row) => row.engine === target.engine && (row.status ?? '').toUpperCase() === target.status),
+      'engine 与 status 必须按交集生效',
+    );
+  });
+});
+
+test('datasources 列表在服务端还有下一页时给出 nextCursor', async () => {
+  await withPreviewServer(async () => {
+    const first = await data.listDatasources({ pageSize: 1 });
+    assert.equal(first.data.items.length, 1);
+    assert.ok(first.data.nextCursor, '还有更多行时必须给 nextCursor，前端据此提示“仅显示前 N 条”');
+
+    const last = await data.listDatasources({ pageSize: 100 });
+    assert.equal(last.data.nextCursor, null, '拉全量后不应再有 nextCursor');
+  });
+});

@@ -109,10 +109,13 @@ function adaptDatasourcePage(dto: { items: (DatasourceRead & { id: string | numb
 }
 
 export async function listDatasources(
-  params: { keyword?: string; cursor?: string; pageSize?: number; signal?: AbortSignal } = {},
+  params: { keyword?: string; engine?: string; status?: string; cursor?: string; pageSize?: number; signal?: AbortSignal } = {},
 ): Promise<ApiResult<DatasourcePage>> {
   const query = new URLSearchParams();
   if (params.keyword) query.set('keyword', params.keyword);
+  // engine/status 交给服务端过滤：客户端过滤只能看见已拉取的那一页，超过 pageSize 的匹配会被静默丢掉。
+  if (params.engine) query.set('engine', params.engine);
+  if (params.status) query.set('status', params.status);
   if (params.cursor) query.set('cursor', params.cursor);
   query.set('pageSize', String(params.pageSize ?? 20));
   return adaptedRequest(`/api/v1/admin/datasources?${query}`, { signal: params.signal }, adaptDatasourcePage);

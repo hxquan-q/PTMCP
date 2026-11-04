@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Badge,
@@ -25,6 +25,9 @@ import { useSensitivePermissions } from '../../permissionsContext';
 import { showToast } from '../../toast';
 import { listDatasources, type DatasourceRead } from '../../services/data';
 
+/* 单次拉取上限：超过这个条数时列表会提示「仅显示前 N 条」。 */
+const PAGE_FETCH_SIZE = 100;
+
 const ENGINE_OPTIONS = [{ value: '', label: '全部引擎' }, ...DATASOURCE_ENGINES];
 const STATUS_OPTIONS = [{ value: '', label: '全部状态' }, ...DATASOURCE_STATUSES];
 
@@ -36,6 +39,8 @@ export function DatasourcesPage() {
   const [engine, setEngine] = useState('');
   const [status, setStatus] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  /* 服务端还有下一页时如实告知，而不是把前 N 条当成全部。 */
+  const [truncated, setTruncated] = useState(false);
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<DatasourceRead | null>(null);
   const [detailTab, setDetailTab] = useState('base');
@@ -43,22 +48,29 @@ export function DatasourcesPage() {
   const debounced = useDebounced(keyword);
 
   const [reloadTick, setReloadTick] = useState(0);
+  /* 引擎/状态由服务端过滤：客户端过滤只能看到已拉取的那一页，超出 pageSize 的匹配会被静默丢掉，
+     列表头的「共 N 个」也会偏小。keyword 已经过 useDebounced，三个筛选条件共同决定一次请求。 */
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    listDatasources({ keyword: debounced || undefined, pageSize: 100 })
-      .then(({ data }) => !cancelled && setRows(data.items))
-      .catch(() => !cancelled && setRows([]))
+    listDatasources({ keyword: debounced || undefined, engine: engine || undefined, status: status || undefined, pageSize: PAGE_FETCH_SIZE })
+      .then(({ data }) => {
+        if (cancelled) return;
+        setRows(data.items);
+        setTruncated(data.nextCursor !== null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRows([]);
+        setTruncated(false);
+      })
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [debounced, reloadTick]);
+  }, [debounced, engine, status, reloadTick]);
 
-  const filtered = useMemo(
-    () => rows.filter((r) => (!engine || r.engine === engine) && (!status || (r.status ?? '').toUpperCase() === status)),
-    [rows, engine, status],
-  );
+  const filtered = rows;
   const pageSize = 20;
   const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
   const toggle = (id: string) =>
@@ -93,8 +105,26 @@ export function DatasourcesPage() {
             width="100%"
           />
         </div>
-        <Select label="引擎" value={engine} onChange={setEngine} options={ENGINE_OPTIONS} width={120} />
-        <Select label="状态" value={status} onChange={setStatus} options={STATUS_OPTIONS} width={112} />
+        <Select
+          label="引擎"
+          value={engine}
+          onChange={(v) => {
+            setEngine(v);
+            setPage(1);
+          }}
+          options={ENGINE_OPTIONS}
+          width={120}
+        />
+        <Select
+          label="状态"
+          value={status}
+          onChange={(v) => {
+            setStatus(v);
+            setPage(1);
+          }}
+          options={STATUS_OPTIONS}
+          width={112}
+        />
         <div className="filter-actions">
           {/* 筛选在输入时已即时生效，查询按钮重新向服务端取一次当前筛选下的列表。 */}
           <button className="btn btn--tinted" onClick={() => setReloadTick((t) => t + 1)}>
@@ -116,7 +146,10 @@ export function DatasourcesPage() {
       <div className="table-card" style={{ flex: 1, minHeight: 0 }}>
         <div className="table-caption">
           <strong>
-            数据源列表 <span className="count">共 {filtered.length} 个数据源</span>
+            数据源列表{' '}
+            <span className="count">
+              共 {filtered.length} 个数据源{truncated ? `（仅显示前 ${PAGE_FETCH_SIZE} 条，用搜索缩小范围）` : ''}
+            </span>
           </strong>
           <span className="caption-actions">
             <button className="btn btn--secondary" disabled={selected.size === 0} onClick={() => setSelected(new Set())}>
