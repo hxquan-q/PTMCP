@@ -2113,13 +2113,12 @@ textarea:focus-visible {
   width: 100%;
   max-width: 360px;
   padding: 32px 30px;
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.92);
   border-radius: var(--ptmcp-radius-panel);
   box-shadow:
     0 24px 60px rgba(16, 24, 40, 0.16),
     0 2px 8px rgba(16, 24, 40, 0.08);
-  backdrop-filter: blur(18px) saturate(140%);
   animation: ptmcp-dialog-in var(--ptmcp-dur-slow) var(--ptmcp-ease-out) both;
 }
 /* 卡片顶边的一道主蓝，与页面标题、导航选中条同源。 */
