@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode, type Ref } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode, type Ref } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckIcon, ChevronRightIcon, CloseIcon, DocumentIcon, InfoIcon, SearchIcon, WarningIcon } from './Icons';
 import type { IconComponent } from './Icons';
@@ -773,4 +773,54 @@ export function LoginBackdrop() {
       />
     </div>
   );
+}
+
+/**
+ * 标题逐字入场（交互参考 react-bits 的 SplitText/BlurText）：文本拆成带序号的字符 span，
+ * 由 CSS 按序做模糊上浮级联；完整文本以 sr-only 并列，读屏只读一次整词。
+ * 仅一次性入场动画，之后零运行成本。
+ */
+export function CharReveal({ text, delay = 0, step = 35 }: { text: string; delay?: number; step?: number }) {
+  return (
+    <>
+      <span className="char-reveal" aria-hidden="true">
+        {Array.from(text).map((ch, i) => (
+          <span key={`${ch}-${i}`} className="char-reveal-char" style={{ '--char-delay': `${delay + i * step}ms` } as CSSProperties}>
+            {ch}
+          </span>
+        ))}
+      </span>
+      <span className="sr-only">{text}</span>
+    </>
+  );
+}
+
+/**
+ * 磁吸容器（交互参考 react-bits 的 Magnet）：鼠标在容器内移动时内容轻微跟随指针，
+ * 移出即回弹；只写 transform 不触发布局重排。触屏与「减少动态效果」偏好下不启用。
+ */
+export function useMagnetic<T extends HTMLElement>(max = 3) {
+  const ref = useRef<T | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse') return;
+      const rect = el.getBoundingClientRect();
+      const dx = (e.clientX - (rect.left + rect.width / 2)) / (rect.width / 2);
+      const dy = (e.clientY - (rect.top + rect.height / 2)) / (rect.height / 2);
+      el.style.transform = `translate(${dx * max}px, ${dy * max}px)`;
+    };
+    const onLeave = () => {
+      el.style.transform = '';
+    };
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerleave', onLeave);
+    return () => {
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerleave', onLeave);
+    };
+  }, [max]);
+  return ref;
 }

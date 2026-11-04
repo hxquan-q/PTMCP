@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Alert, Field, LoginBackdrop, RequestIdText, TextInput } from '../../components/common';
+import { Alert, CharReveal, Field, LoginBackdrop, RequestIdText, TextInput, useMagnetic } from '../../components/common';
 import { LogoIcon } from '../../components/Icons';
 import { readFailure, type Failure } from '../../services/http';
 import { getSession, login } from '../../services/session';
@@ -26,6 +26,7 @@ export function LoginPage({ onLoggedIn, reason }: { onLoggedIn: () => void; reas
   const [failure, setFailure] = useState<Failure | null>(null);
   const usernameRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
+  const magnetRef = useMagnetic<HTMLDivElement>();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,12 +64,27 @@ export function LoginPage({ onLoggedIn, reason }: { onLoggedIn: () => void; reas
     <div className="login-shell">
       {/* 纯装饰背景：工厂 CG 正反循环铺满视口，不进入可访问性树。 */}
       <LoginBackdrop />
-      <form onSubmit={submit} className="login-card" aria-label="登录 PTMCP" aria-busy={busy}>
+      <form
+        onSubmit={submit}
+        className="login-card glow-follow"
+        aria-label="登录 PTMCP"
+        aria-busy={busy}
+        onPointerMove={(e) => {
+          /* 柔光跟随指针：与统计卡同一习语，只写两个自定义属性，不触发布局重排。 */
+          const rect = e.currentTarget.getBoundingClientRect();
+          e.currentTarget.style.setProperty('--ptmcp-mx', `${e.clientX - rect.left}px`);
+          e.currentTarget.style.setProperty('--ptmcp-my', `${e.clientY - rect.top}px`);
+        }}
+      >
         <div className="login-brand">
           <LogoIcon className="login-brand-mark" />
           <div>
-            <h1 className="login-title">PTMCP</h1>
-            <p className="login-subtitle">数据访问管理平台</p>
+            <h1 className="login-title">
+              <CharReveal text="PTMCP" delay={220} />
+            </h1>
+            <p className="login-subtitle">
+              <CharReveal text="数据访问管理平台" delay={300} />
+            </p>
           </div>
         </div>
         {reason ? (
@@ -115,9 +131,12 @@ export function LoginPage({ onLoggedIn, reason }: { onLoggedIn: () => void; reas
             <RequestIdText requestId={failure.requestId} />
           </Alert>
         ) : null}
-        <button className="btn btn--primary login-submit" type="submit" disabled={busy}>
-          {busy ? '登录中…' : '登录'}
-        </button>
+        {/* 磁吸挂在包裹层：按钮自身的 hover/active/入场动画不被内联 transform 干扰。 */}
+        <div className="login-submit-wrap" ref={magnetRef}>
+          <button className="btn btn--primary login-submit" type="submit" disabled={busy}>
+            {busy ? '登录中…' : '登录'}
+          </button>
+        </div>
         <p className="login-footnote">权限管控型 MCP 网关 · 连续多次失败会临时锁定登录，锁定时长以服务端提示为准</p>
       </form>
     </div>

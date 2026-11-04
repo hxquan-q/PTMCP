@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Alert, LoginBackdrop, RequestIdText } from '../components/common';
+import { Alert, CharReveal, LoginBackdrop, RequestIdText } from '../components/common';
 import { LogoIcon } from '../components/Icons';
 import type { OAuthPageError } from './model';
 
@@ -18,8 +18,12 @@ export function OAuthBrand() {
     <div className="login-brand">
       <LogoIcon className="login-brand-mark" />
       <div>
-        <p className="login-title">PTMCP</p>
-        <p className="login-subtitle">数据访问服务</p>
+        <p className="login-title">
+          <CharReveal text="PTMCP" delay={220} />
+        </p>
+        <p className="login-subtitle">
+          <CharReveal text="数据访问服务" delay={300} />
+        </p>
       </div>
     </div>
   );
