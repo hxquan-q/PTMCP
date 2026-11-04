@@ -1,11 +1,11 @@
 # DEV-20261101-backend-api-fixes：后端接口评审九项修复
 
 ID: DEV-20261101-backend-api-fixes
-Status: in_progress
+Status: verifying
 Owner: current-agent
 Acceptance: pending
-Verification: FAIL
-Updated: 2026-11-02
+Verification: PASS
+Updated: 2026-11-04
 
 ## 目标与边界
 
@@ -111,3 +111,17 @@ authentication.md 属并行审计修复会话，其提交需该会话按 hunk �
 下一步：①人工接受（用户）；②审计会话 4 后端文件集成时连带 gateway POM 提交；
 ③部署顺序核对（先 AS 兼容读端，再管理写端）；④生产环境存量行清理按需执行 V15
 （仅隔离验证过，不涉生产）。已有用户修改保持原状。
+
+### 2026-11-04 状态复核
+
+- 四笔提交（edefd05、045e48f、621109f、e02d9d7）均已在 HEAD，`origin/dev` 与
+  `codeup/dev` 均包含；原先待补推的本地提交已推送。并行审计修复会话保留的
+  gateway/admin POM、PlatformAdminService、PlatformProofRoundTripTest 已随
+  `ed2f637` 等后续提交集成，工作树无本项未提交路径。
+- 2026-11-04 HEAD 全量门禁（[G7 组合验收](DEV-20261028-gateway-completion.md)）通过：
+  Maven 7 模块 1375 项、前端 189 项、`python scripts/check.py --all` exit 0；其 admin/authz
+  模块套件覆盖本项的 BackendApiRegressionTest、RegisteredClientCompatibilityTest、
+  SelfEscalationTimeTest 与网关依赖回归，故头部 Verification 由最终组合验证前的 FAIL
+  更新为 PASS；修复前 RED 证据保留在上文，不作为修复后通过。
+- 仍待：用户人工接受；生产存量明文幂等响应清理按需执行 V15（仅隔离验证）；部署顺序
+  先 AS 兼容读端、再管理写端。
