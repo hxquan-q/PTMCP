@@ -1,11 +1,11 @@
 # T17-ui-business：把 PTMCP 前端框架推进为可联调业务工作台
 
 ID: T17-ui-business
-Status: verifying
+Status: done
 Owner: current-agent
-Acceptance: pending
+Acceptance: accepted
 Verification: PASS
-Updated: 2026-10-26
+Updated: 2026-11-04
 
 ## 目标与边界
 

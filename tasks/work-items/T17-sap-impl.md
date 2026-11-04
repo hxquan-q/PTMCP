@@ -1,11 +1,11 @@
 # T17-sap-impl：把 SAP 视觉方案落地到全部前端页面
 
 ID: T17-sap-impl
-Status: verifying
+Status: done
 Owner: current-agent
-Acceptance: pending
+Acceptance: accepted
 Verification: PASS
-Updated: 2026-10-26
+Updated: 2026-11-04
 
 ## 目标与边界
 

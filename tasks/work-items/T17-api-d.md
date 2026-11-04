@@ -1,11 +1,11 @@
 # T17-api-d：管理委派端点与前端真实模式接线
 
 ID: T17-api-d
-Status: verifying
+Status: done
 Owner: current-agent
-Acceptance: pending
+Acceptance: accepted
 Verification: PASS
-Updated: 2026-10-26
+Updated: 2026-11-04
 
 ## 目标与边界
 

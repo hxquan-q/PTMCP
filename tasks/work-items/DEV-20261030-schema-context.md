@@ -1,11 +1,11 @@
 # DEV-20261030-schema-context：授权字典上下文
 
 ID: DEV-20261030-schema-context
-Status: verifying
+Status: done
 Owner: current-agent
-Acceptance: pending
+Acceptance: accepted
 Verification: PASS
-Updated: 2026-10-30
+Updated: 2026-11-04
 
 ## 目标与边界
 

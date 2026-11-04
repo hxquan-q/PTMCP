@@ -1,11 +1,11 @@
 # T17-sap-refine：全站视觉与核心工作台交互收敛
 
 ID: T17-sap-refine
-Status: verifying
+Status: done
 Owner: current-agent
-Acceptance: pending
+Acceptance: accepted
 Verification: PASS
-Updated: 2026-10-28
+Updated: 2026-11-04
 
 ## 目标与边界
 

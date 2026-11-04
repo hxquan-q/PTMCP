@@ -1,9 +1,9 @@
 # DEV-20261104-windows-wal-directory-fsync：Windows 上 WAL 目录 fsync 不能打开目录
 
 ID: DEV-20261104-windows-wal-directory-fsync
-Status: verifying
+Status: done
 Owner: current-agent
-Acceptance: pending
+Acceptance: accepted
 Verification: PASS
 Updated: 2026-11-04
 

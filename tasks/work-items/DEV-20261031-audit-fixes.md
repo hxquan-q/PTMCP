@@ -1,11 +1,11 @@
 # DEV-20261031-audit-fixes：核查确认缺陷分片修复
 
 ID: DEV-20261031-audit-fixes
-Status: verifying
+Status: done
 Owner: current-agent
-Acceptance: pending
+Acceptance: accepted
 Verification: PASS
-Updated: 2026-11-02
+Updated: 2026-11-04
 
 ## 目标与边界
 

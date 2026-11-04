@@ -1,11 +1,11 @@
 # T17-sap-visual：SAP 视觉方案与核心页面效果图
 
 ID: T17-sap-visual
-Status: verifying
+Status: done
 Owner: current-agent
-Acceptance: pending
+Acceptance: accepted
 Verification: PASS
-Updated: 2026-10-26
+Updated: 2026-11-04
 
 ## 目标与边界
 

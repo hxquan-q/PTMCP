@@ -1,11 +1,11 @@
 # T17-api-c：管理端审计与平台只读目录接口
 
 ID: T17-api-c
-Status: verifying
+Status: done
 Owner: current-agent
-Acceptance: pending
+Acceptance: accepted
 Verification: PASS
-Updated: 2026-10-26
+Updated: 2026-11-04
 
 ## 目标与边界
 

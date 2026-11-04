@@ -1,9 +1,9 @@
 # DEV-20261102-mcp-transport-hardening：MCP HTTP 边界与四工具元信息
 
 ID: DEV-20261102-mcp-transport-hardening
-Status: verifying
+Status: done
 Owner: current-agent
-Acceptance: pending
+Acceptance: accepted
 Verification: PASS
 Updated: 2026-11-04
 
