@@ -64,6 +64,7 @@
 | TC-AUT-011 | P0 / FR-09,R10 | 缺token、错iss/aud、过期/未生效JWT、改签名 | 请求/mcp，不进入工具 | HTTP401/403按契约返回，不包装成工具成功；无凭证日志泄露 |
 | TC-AUT-012 | P1 / FR-09,FR-18,R3 | WorkBuddy/Cursor/Claude Code/VS Code指定真实版本 | 各做首次登录、过期、刷新或重授权、拒绝、重启 | 每客户端记录真实行为和支持路径；未联调标NOT_RUN，不由模拟请求推定支持 |
 | TC-AUT-013 | P0 / FR-09,FR-10,R3,R5 | PUBLIC none客户端A/B各有授权族，受控revoke扩展已启用 | A不带code_verifier提交标准表单client_id/token/token_type_hint；再提交未知token、B的token、仅client_id、重复参数，并注入撤销事务写失败 | 专门revoke converter/provider/handler可达；A真实token只撤其对应族且JWT≤5秒失效；未知/跨client token均标准200但不影响B且不泄露存在性；缺真实token或非法参数拒绝；写失败不假报成功；机密客户端不能降级none |
+| TC-AUT-014 | P0 / FR-01,FR-09,R5 | 管理员新建UNBOUND用户；宿主已有同ID或同规范登录名（含大小写/首尾空白变体）账号 | 管理员设置首个密码后用该账密走AS首登；另构造宿主冲突、宿主写失败后重试、失败期间资料/状态/删除编辑 | 首次设置后identityState=READY且无第二个密码入口；宿主冲突422 RESOURCE_AMBIGUOUS且不接管既有账号；写失败保持UNBOUND，供应PENDING期间资料/状态/删除写入409且重试仍可用已持久目标完成；签发写USER_CREDENTIAL_ISSUED审计；无注册入口 |
 
 ## 4. JDBC、输出预算与取消
 

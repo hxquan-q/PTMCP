@@ -25,6 +25,8 @@ ADMIN和AS session最长8小时，不因页面轮询无限续期；成功登录�
 宿主提交确认后仅当前 operation 可恢复 READY。Pending 不允许登录、签发或刷新；失败与提交不明通过管理员恢复入口重试持久目标，
 不能超时放行或用新密码覆盖未收敛操作。该协议替代原同库原子改密假设；正常改密不把账号status改DISABLED。停用/删除同样撤销但改变status/del_flag；重新启用也不能恢复旧令牌，必须重新登录/授权。
 
+新建用户为 UNBOUND。管理员通过同一重置入口签发首个凭证时，元库先提交不可变供应意图（PENDING，保存目标 BCrypt 与版本提升），宿主仅在不存在同 ID 且不存在同规范登录名（忽略大小写与首尾空白）账号时创建 sys_user，宿主确认后才把 UNBOUND 收敛为 READY，仅保留 COMPLETED 墓碑；宿主已有账号返回 422 RESOURCE_AMBIGUOUS，不自动接管。供应失败保持 UNBOUND，重试只使用已持久目标，不接受新密码；PENDING 期间资料/角色/状态/删除写入 409，签发在同一事务写 USER_CREDENTIAL_ISSUED 操作日志。
+
 当前实现证据：用户ACTIVE/DISABLED实际切换通过OrgStore同一元库安全事务更新profile/roles、
 authVersion/identityVersion、ADMIN/AS索引、PAT、OAuth family/authorization、epoch、事件和操作日志；
 同值/普通资料不额外撤证，UNBOUND不因启停变READY，Pending拒绝，提交结果不明返回OPERATION_UNKNOWN。
@@ -35,7 +37,7 @@ ADMIN会话的管理员资格在每个新请求验证会话索引/权威用户�
 显式CSRF轮换仍保留既有行为。`/session/me`的platformAdmin与其本次permissions一致。
 权限依赖不可用时，身份附着过滤器使用既有错误映射返回503 SECURITY_STATE_UNAVAILABLE，
 设置no-store/nosniff并停止进入管理操作，不沿用登录时资格。
-这仅证明已验证切片；最后有效管理员并发保护、可信账号供应和共享登录限流仍待完成。
+这仅证明已验证切片；最后有效管理员并发保护、共享登录限流和真实外部客户端首登仍待完成。
 逐请求核验也不代替安全写入事务提交前的操作者授权重验。
 
 ## 3. 平台Tier与每请求来源证明

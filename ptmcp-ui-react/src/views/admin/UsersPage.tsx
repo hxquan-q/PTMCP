@@ -255,8 +255,8 @@ export function UsersPage() {
                       <button className="link" onClick={() => setEditing(r)} aria-label={`编辑 ${r.displayName || r.username}`}>
                         <EditIcon /> 编辑
                       </button>
-                      <button className="link" onClick={() => setResetting(r)} aria-label={`重置密码：${r.displayName || r.username}`}>
-                        重置密码
+                      <button className="link" onClick={() => setResetting(r)} aria-label={`设置或重置密码：${r.displayName || r.username}`}>
+                        设置/重置密码
                       </button>
                       <button
                         className="link"
@@ -609,7 +609,7 @@ function UserDialog({
   );
 }
 
-/** 管理员重置用户密码：强度校验 + 两次一致 + 理由 10–500；If-Match 版本门禁。 */
+/** 管理员设置或重置用户密码：首次设置创建登录凭证；强度校验 + 两次一致 + 理由 10–500；If-Match 版本门禁。 */
 function ResetPasswordDialog({ user, onClose, onSaved }: { user: UserRow; onClose: () => void; onSaved: () => void }) {
   const [newPassword, setNewPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -647,9 +647,9 @@ function ResetPasswordDialog({ user, onClose, onSaved }: { user: UserRow; onClos
   };
 
   return (
-    <Dialog open title={`重置密码 · ${user.displayName || user.username}`} onClose={onClose} width={480}>
-      <Alert kind="warning" title="重置会记录审计理由">
-        新密码仅本次输入，系统不保留明文；重置动作与理由会进入操作审计。
+    <Dialog open title={`设置或重置密码 · ${user.displayName || user.username}`} onClose={onClose} width={480}>
+      <Alert kind="warning" title="账密仅由管理员创建和管理">
+        首次设置会为该用户创建登录凭证；新密码仅本次输入，系统不保留明文，操作与理由进入审计。
       </Alert>
       <Field label="新密码" hint="12～64 个字符，UTF-8 不超过 72 字节">
         <TextInput value={newPassword} onChange={setNewPassword} type="password" autoComplete="new-password" />
@@ -657,7 +657,7 @@ function ResetPasswordDialog({ user, onClose, onSaved }: { user: UserRow; onClos
       <Field label="确认新密码">
         <TextInput value={confirm} onChange={setConfirm} type="password" autoComplete="new-password" />
       </Field>
-      <Field label={`重置理由（${reason.length}/500）`} hint="至少 10 个字符，写入审计">
+      <Field label={`操作理由（${reason.length}/500）`} hint="至少 10 个字符，写入审计">
         <textarea
           className="input"
           style={{ width: '100%', minHeight: 64, resize: 'vertical', fontFamily: 'inherit' }}
@@ -677,7 +677,7 @@ function ResetPasswordDialog({ user, onClose, onSaved }: { user: UserRow; onClos
           取消
         </button>
         <button className="btn btn--primary" onClick={submit} disabled={saving}>
-          {saving ? '重置中…' : '确认重置'}
+          {saving ? '提交中…' : '确认提交'}
         </button>
       </div>
     </Dialog>

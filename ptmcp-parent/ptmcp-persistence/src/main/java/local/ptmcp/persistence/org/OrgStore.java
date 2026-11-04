@@ -750,6 +750,7 @@ public final class OrgStore {
         if (statusChanged) {
             UserSecurityStore.State captured = new UserSecurityStore(primary).read(id);
             requireEditableIdentity(captured);
+            requireNoPendingProvision(id);
             if (captured.authVersion() == Long.MAX_VALUE
                     || captured.identityVersion() == Long.MAX_VALUE) {
                 throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
@@ -767,6 +768,7 @@ public final class OrgStore {
                                 UserSecurityStore.State current =
                                         UserSecurityStore.read(connection, id, true);
                                 requireEditableIdentity(current);
+                                requireNoPendingProvision(connection, id);
                                 if (!captured.equals(current)) {
                                     throw new DomainException(ErrorCode.VERSION_CONFLICT);
                                 }
@@ -811,6 +813,7 @@ public final class OrgStore {
                 UserSecurityStore.lockGlobal(connection);
                 UserSecurityStore.State security = UserSecurityStore.read(connection, id, true);
                 requireEditableIdentity(security);
+                requireNoPendingProvision(connection, id);
                 UserRow updated =
                         applyUserUpdate(
                                 connection,
@@ -882,6 +885,33 @@ public final class OrgStore {
         }
         if (!security.ready() && !"UNBOUND".equals(security.identityState())) {
             throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+        }
+    }
+
+    /**
+     * A committed provisioning intent anchors the profile version until it completes. Letting a
+     * profile or status edit advance the version would strand the persisted target: retry looks the
+     * operation up by that version and would never find it.
+     */
+    private void requireNoPendingProvision(long userId) {
+        try (Connection connection = OrgSql.configure(primary)) {
+            requireNoPendingProvision(connection, userId);
+        } catch (SQLException failure) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+    }
+
+    private static void requireNoPendingProvision(Connection connection, long userId) {
+        try (PreparedStatement statement =
+                OrgSql.statement(
+                        connection,
+                        "SELECT 1 FROM identity_provision WHERE user_id=? AND status='PENDING'")) {
+            statement.setLong(1, userId);
+            try (ResultSet result = statement.executeQuery()) {
+                if (result.next()) throw new DomainException(ErrorCode.VERSION_CONFLICT);
+            }
+        } catch (SQLException failure) {
+            throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
     }
 
@@ -998,6 +1028,7 @@ public final class OrgStore {
         UserRow before = getUser(id);
         UserSecurityStore.State captured = new UserSecurityStore(primary).read(id);
         requireEditableIdentity(captured);
+        requireNoPendingProvision(id);
         if (captured.authVersion() == Long.MAX_VALUE
                 || captured.identityVersion() == Long.MAX_VALUE) {
             throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
@@ -1015,6 +1046,7 @@ public final class OrgStore {
                             UserSecurityStore.State current =
                                     UserSecurityStore.read(connection, id, true);
                             requireEditableIdentity(current);
+                            requireNoPendingProvision(connection, id);
                             if (!captured.equals(current)) {
                                 throw new DomainException(ErrorCode.VERSION_CONFLICT);
                             }

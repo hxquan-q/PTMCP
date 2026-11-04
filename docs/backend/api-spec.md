@@ -137,7 +137,7 @@ DatasourceDTO.health只取当前configVersion、当前host/port/database/usernam
 | PUT /users/{id}/status | user:status | {status:ACTIVE/DISABLED}+If-Match→UserDTO；保留其他资料与角色；不能停用最后一个有效平台管理员 |
 | DELETE /users/{id} | user:delete | If-Match→UserDTO；逻辑删除（status=DELETED，列表隐藏，行留审计）；同一安全事务撤销全部会话/PAT/刷新族/授权并递增权威版本；重复删除按版本冲突拒绝；不能删除最后一个有效平台管理员（LAST_PLATFORM_ADMIN，与停用同守卫） |
 | GET /users/{id}/identity | user:read，平台管理员 | →IdentityState={userId,version,identityState:UNBOUND/READY/CHANGE_PENDING,recoveryRequired}；不返回摘要、目标或操作材料 |
-| PUT /users/{id}/password | user:reset-password，平台管理员 | {newPassword,reason}+If-Match+Idempotency-Key→200 IdentityState；先提权威版本并撤销全部认证，跨库异常保持 Pending，由管理员恢复 |
+| PUT /users/{id}/password | user:reset-password，平台管理员 | {newPassword,reason}+If-Match+Idempotency-Key→200 IdentityState；UNBOUND用户签发首个凭证：元库先提交不可变供应意图，宿主仅在不存在同ID或同规范登录名（忽略大小写与首尾空白）账号时创建sys_user，确认后才转READY；宿主已有账号→422 RESOURCE_AMBIGUOUS，不接管既有账号；已有PENDING供应→409 OPERATION_IN_PROGRESS，只可走retry。READY/CHANGE_PENDING用户先提权威版本并撤销全部认证，跨库异常保持Pending，由管理员恢复 |
 | POST /users/{id}/password/retry | user:reset-password，平台管理员 | {}+If-Match+Idempotency-Key→200 IdentityState；只重试持久目标；完成重试不写宿主、不提版本/epoch；不接受新密码；版本与 body 一起绑定幂等摘要 |
 | PUT /users/{id}/roles | user:assign-role | {roleIds:[]}+If-Match→UserDTO；整组替换，最终整组功能码由同一有效委派覆盖，不能逐角色拼接不同委派 |
 | PUT /users/{id}/department | user:move | {departmentId,reason}+If-Match→UserDTO；新旧部门均可管理；更新身份版本与epoch |
@@ -184,7 +184,7 @@ ACL 三写在全局安全锁之后，以同一主库连接重验当前 actor 的
 | POST /audit/{requestId}/decrypt | audit:decrypt，额外明确授权 | {fields:[sqlRaw/sqlFinal],reason:10..500}→{sqlRaw?,sqlFinal?,expiresAt}；每次持久审计后才返回，no-store，服务端不缓存明文；保留期外404 |
 | GET /operations | audit:list，平台管理员 | action/aggregateType/actorId/cursor/pageSize→管理操作日志游标页；不含原始SQL或结果 |
 
-身份绑定：新建用户为 UNBOUND；宿主供应/显式导入闭环前，登录、改密和发证均拒绝。普通资料编辑不改变绑定状态；当前尚无供应转换接口。已有 READY/Pending 也核对宿主 ID 与元库规范化登录名，不符时不自动重绑。
+身份绑定：新建用户为 UNBOUND；登录、改密和发证均拒绝，普通资料编辑不改变绑定状态。平台管理员通过 PUT /users/{id}/password 为 UNBOUND 用户签发首个凭证：元库先提交不可变供应意图（PENDING，保存目标 BCrypt），宿主仅在不存在同 ID 且不存在同规范登录名（忽略大小写与首尾空白）账号时插入 sys_user，宿主确认后才把 UNBOUND 收敛为 READY 并清空目标 hash。宿主已有同 ID 或同名账号一律 422 RESOURCE_AMBIGUOUS，绝不自动接管；供应失败保持 UNBOUND，retry 只使用已持久目标。供应 PENDING 存在期间，用户资料、角色、部门、状态与删除写入返回 409 VERSION_CONFLICT，避免 profile version 脱离意图锚点使恢复不可达；签发动作在同一事务写 `USER_CREDENTIAL_ISSUED` 操作日志。已有 READY/Pending 也核对宿主 ID 与元库规范化登录名，不符时不自动重绑。
 
 专用status/roles/department接口始终核对应动作；委派管理员还须自身当前功能码与同一有效委派相交。
 这一份委派必须覆盖本条命令的全部动作、新旧部门及最终整组角色功能码，不从其他委派补足。

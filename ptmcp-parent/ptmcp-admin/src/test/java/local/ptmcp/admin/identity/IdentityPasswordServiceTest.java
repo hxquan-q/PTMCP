@@ -10,6 +10,7 @@ import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.persistence.org.OrgStore;
 import local.ptmcp.persistence.security.HostIdentityStore;
 import local.ptmcp.persistence.security.IdentityPasswordChanges;
+import local.ptmcp.persistence.security.IdentityProvisions;
 import local.ptmcp.persistence.security.UserSecurityStore;
 
 import org.flywaydb.core.Flyway;
@@ -30,6 +31,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Base64;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -89,7 +91,7 @@ class IdentityPasswordServiceTest {
                 .load()
                 .migrate();
         hostJdbc.execute(
-                "CREATE TABLE sys_user (user_id BIGINT PRIMARY KEY, user_name VARCHAR(64), nick_name VARCHAR(64), password VARCHAR(100), status CHAR(1), del_flag CHAR(1))");
+                "CREATE TABLE sys_user (user_id BIGINT PRIMARY KEY, user_name VARCHAR(64) COLLATE utf8mb4_0900_bin, nick_name VARCHAR(64), password VARCHAR(100), status CHAR(1), del_flag CHAR(1))");
         jdbc.update(
                 "INSERT INTO sys_dept (dept_id,parent_id,ancestors,dept_name,status,del_flag,create_time,update_time) VALUES (42,0,'','Test','0','0',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
         jdbc.update(
@@ -116,11 +118,17 @@ class IdentityPasswordServiceTest {
         jdbc.update(
                 "UPDATE sys_user_security SET auth_version=7,identity_version=1,identity_state='READY',identity_change_id=NULL WHERE user_id=42");
         jdbc.update("DELETE FROM identity_password_change");
+        jdbc.update("DELETE FROM identity_provision");
+        jdbc.update("DELETE FROM admin_operation_log WHERE aggregate_id=42");
         jdbc.update(
-                "UPDATE sys_user_profile SET password_hash=?,version=5,status='ACTIVE' WHERE user_id=42",
+                "UPDATE sys_user_profile SET password_hash=?,display_name='Synthetic',version=5,status='ACTIVE' WHERE user_id=42",
                 ENCODER.encode(OLD));
+        hostJdbc.update("DELETE FROM sys_user WHERE user_id<>42");
         hostJdbc.update(
-                "UPDATE sys_user SET user_name='synthetic',password=?,status='0',del_flag='0' WHERE user_id=42",
+                "INSERT INTO sys_user (user_id,user_name,nick_name,password,status,del_flag)"
+                        + " VALUES (42,'synthetic','Synthetic',?,'0','0')"
+                        + " ON DUPLICATE KEY UPDATE user_name='synthetic',nick_name='Synthetic',"
+                        + "password=VALUES(password),status='0',del_flag='0'",
                 ENCODER.encode(OLD));
         jdbc.update("UPDATE sys_security_state SET policy_epoch=20 WHERE singleton_id=1");
         jdbc.update("DELETE FROM web_session_index");
@@ -156,6 +164,242 @@ class IdentityPasswordServiceTest {
     }
 
     @Test
+    void anUnboundUserIsProvisionedWithAnAdministratorFirstCredential() {
+        jdbc.update(
+                "UPDATE sys_user_security SET identity_state='UNBOUND',identity_change_id=NULL WHERE user_id=42");
+        hostJdbc.update("DELETE FROM sys_user WHERE user_id=42");
+
+        assertEquals(
+                6, service(primary, identity).reset(42, 5, NEXT, "Synthetic first credential", 99));
+
+        IdentityPasswordService.Status status = service(primary, identity).status(42);
+        assertEquals("READY", status.identityState());
+        assertEquals(6, status.version());
+        assertFalse(status.recoveryRequired());
+        assertReady(NEXT, 8);
+        assertEquals(
+                "synthetic",
+                hostJdbc.queryForObject(
+                        "SELECT user_name FROM sys_user WHERE user_id=42", String.class));
+        assertEquals(
+                "Synthetic",
+                hostJdbc.queryForObject(
+                        "SELECT nick_name FROM sys_user WHERE user_id=42", String.class));
+        assertEquals(
+                1,
+                jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM identity_provision WHERE user_id=42"
+                                + " AND status='COMPLETED' AND target_hash IS NULL",
+                        Integer.class));
+        assertEquals(
+                1,
+                jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM admin_operation_log WHERE aggregate_id=42"
+                                + " AND action='USER_CREDENTIAL_ISSUED'",
+                        Integer.class));
+        assertEquals(
+                2L,
+                jdbc.queryForObject(
+                        "SELECT identity_version FROM sys_user_security WHERE user_id=42",
+                        Long.class));
+        assertEquals(6, service(primary, identity).retry(42, 6));
+    }
+
+    @Test
+    void provisioningHostFailureStaysUnboundAndRetryUsesThePersistedTarget() {
+        jdbc.update(
+                "UPDATE sys_user_security SET identity_state='UNBOUND',identity_change_id=NULL WHERE user_id=42");
+        hostJdbc.update("DELETE FROM sys_user WHERE user_id=42");
+
+        DomainException failure =
+                assertThrows(
+                        DomainException.class,
+                        () ->
+                                service(primary, failingHost())
+                                        .reset(42, 5, NEXT, "Synthetic provision outage", 99));
+        assertEquals(ErrorCode.DEPENDENCY_UNAVAILABLE, failure.errorCode());
+        assertPending();
+        assertEquals("UNBOUND", service(primary, identity).status(42).identityState());
+        assertTrue(service(primary, identity).status(42).recoveryRequired());
+        assertEquals(
+                0,
+                hostJdbc.queryForObject(
+                        "SELECT COUNT(*) FROM sys_user WHERE user_id=42", Integer.class));
+
+        assertEquals(6, service(primary, identity).retry(42, 6));
+        assertReady(NEXT, 8);
+        assertFalse(service(primary, identity).status(42).recoveryRequired());
+    }
+
+    @Test
+    void aPendingProvisionBlocksProfileEditsAndStillRecovers() {
+        jdbc.update(
+                "UPDATE sys_user_security SET identity_state='UNBOUND',identity_change_id=NULL WHERE user_id=42");
+        hostJdbc.update("DELETE FROM sys_user WHERE user_id=42");
+        assertThrows(
+                DomainException.class,
+                () ->
+                        service(primary, failingHost())
+                                .reset(42, 5, NEXT, "Synthetic provision outage", 99));
+        assertPending();
+
+        DomainException edit =
+                assertThrows(
+                        DomainException.class,
+                        () ->
+                                new OrgStore(primary)
+                                        .updateUser(
+                                                42, "Renamed", 42, null, null, null, null, null, 6,
+                                                99));
+        assertEquals(ErrorCode.VERSION_CONFLICT, edit.errorCode());
+        DomainException delete =
+                assertThrows(
+                        DomainException.class, () -> new OrgStore(primary).deleteUser(42, 6, 99));
+        assertEquals(ErrorCode.VERSION_CONFLICT, delete.errorCode());
+
+        assertEquals(6, service(primary, identity).retry(42, 6));
+        assertReady(NEXT, 8);
+    }
+
+    @Test
+    void aCaseVariantHostLoginNameStillBlocksProvisioning() {
+        jdbc.update(
+                "UPDATE sys_user_security SET identity_state='UNBOUND',identity_change_id=NULL WHERE user_id=42");
+        hostJdbc.update("DELETE FROM sys_user WHERE user_id=42");
+        hostJdbc.update(
+                "INSERT INTO sys_user VALUES (43,' SYNTHETIC ','Other',?,'0','0')",
+                ENCODER.encode(OLD));
+
+        DomainException failure =
+                assertThrows(
+                        DomainException.class,
+                        () ->
+                                service(primary, identity)
+                                        .reset(42, 5, NEXT, "Synthetic case collision", 99));
+        assertEquals(ErrorCode.RESOURCE_AMBIGUOUS, failure.errorCode());
+        assertEquals(
+                0, jdbc.queryForObject("SELECT COUNT(*) FROM identity_provision", Integer.class));
+    }
+
+    @Test
+    void anInactiveTargetIsAConflictNeverTheAdministratorSession() {
+        jdbc.update(
+                "UPDATE sys_user_security SET identity_state='READY',identity_change_id=NULL WHERE user_id=42");
+        jdbc.update("DELETE FROM identity_password_change");
+        jdbc.update("UPDATE sys_user_profile SET status='DISABLED',version=5 WHERE user_id=42");
+
+        DomainException failure =
+                assertThrows(
+                        DomainException.class,
+                        () ->
+                                service(primary, identity)
+                                        .reset(42, 5, NEXT, "Synthetic disabled target", 99));
+        assertEquals(ErrorCode.VERSION_CONFLICT, failure.errorCode());
+    }
+
+    @Test
+    void aLostProvisioningHostAcknowledgementIsCompletedByRetry() {
+        jdbc.update(
+                "UPDATE sys_user_security SET identity_state='UNBOUND',identity_change_id=NULL WHERE user_id=42");
+        hostJdbc.update("DELETE FROM sys_user WHERE user_id=42");
+
+        DomainException failure =
+                assertThrows(
+                        DomainException.class,
+                        () ->
+                                service(primary, commitFault(identity, 1, true))
+                                        .reset(42, 5, NEXT, "Synthetic provision ack loss", 99));
+        assertEquals(ErrorCode.OPERATION_UNKNOWN, failure.errorCode());
+        assertPending();
+        assertTrue(ENCODER.matches(NEXT, hostHash()));
+
+        assertEquals(6, service(primary, identity).retry(42, 6));
+        assertReady(NEXT, 8);
+    }
+
+    @Test
+    void aLostProvisioningCompletionAcknowledgementIsIdempotentOnRetry() {
+        jdbc.update(
+                "UPDATE sys_user_security SET identity_state='UNBOUND',identity_change_id=NULL WHERE user_id=42");
+        hostJdbc.update("DELETE FROM sys_user WHERE user_id=42");
+
+        DomainException failure =
+                assertThrows(
+                        DomainException.class,
+                        () ->
+                                service(commitFault(primary, 2, true), identity)
+                                        .reset(42, 5, NEXT, "Synthetic completion ack loss", 99));
+        assertEquals(ErrorCode.OPERATION_UNKNOWN, failure.errorCode());
+        assertReady(NEXT, 8);
+
+        assertEquals(6, service(primary, identity).retry(42, 6));
+        assertReady(NEXT, 8);
+        assertEquals(
+                1,
+                jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM identity_provision WHERE user_id=42"
+                                + " AND status='COMPLETED'",
+                        Integer.class));
+    }
+
+    @Test
+    void completingAnAlreadyCompletedProvisionRollsBackWithoutAnotherEpochOrEvent() {
+        jdbc.update(
+                "UPDATE sys_user_security SET identity_state='UNBOUND',identity_change_id=NULL WHERE user_id=42");
+        hostJdbc.update("DELETE FROM sys_user WHERE user_id=42");
+        assertEquals(
+                6, service(primary, identity).reset(42, 5, NEXT, "Synthetic stale completion", 99));
+        long epoch = epoch();
+        Integer events =
+                jdbc.queryForObject("SELECT COUNT(*) FROM sys_security_event", Integer.class);
+        IdentityProvisions.Pending stale =
+                new IdentityProvisions.Pending(
+                        UUID.fromString(
+                                jdbc.queryForObject(
+                                        "SELECT operation_id FROM identity_provision WHERE user_id=42",
+                                        String.class)),
+                        42,
+                        jdbc.queryForObject(
+                                "SELECT auth_version FROM identity_provision WHERE user_id=42",
+                                Long.class),
+                        6,
+                        null,
+                        false);
+
+        assertEquals(6, new IdentityProvisions(primary).complete(stale));
+        assertEquals(epoch, epoch(), "a rolled-back duplicate completion must not advance");
+        assertEquals(
+                events,
+                jdbc.queryForObject("SELECT COUNT(*) FROM sys_security_event", Integer.class),
+                "a rolled-back duplicate completion must not append an event");
+    }
+
+    @Test
+    void aHostLoginNameCollisionBlocksProvisioningBeforeAnyIntent() {
+        jdbc.update(
+                "UPDATE sys_user_security SET identity_state='UNBOUND',identity_change_id=NULL WHERE user_id=42");
+        hostJdbc.update("DELETE FROM sys_user WHERE user_id=42");
+        hostJdbc.update(
+                "INSERT INTO sys_user VALUES (43,'synthetic','Other',?,'0','0')",
+                ENCODER.encode(OLD));
+
+        DomainException failure =
+                assertThrows(
+                        DomainException.class,
+                        () ->
+                                service(primary, identity)
+                                        .reset(42, 5, NEXT, "Synthetic name collision", 99));
+        assertEquals(ErrorCode.RESOURCE_AMBIGUOUS, failure.errorCode());
+        assertEquals("UNBOUND", service(primary, identity).status(42).identityState());
+        assertFalse(service(primary, identity).status(42).recoveryRequired());
+        assertEquals(
+                0,
+                jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM identity_provision WHERE user_id=42", Integer.class));
+        hostJdbc.update("DELETE FROM sys_user WHERE user_id=43");
+    }
+
+    @Test
     void anUnboundNewUserCannotResetEvenAnIdenticallyNamedHostAccount() {
         long userId =
                 new OrgStore(primary)
@@ -171,7 +415,7 @@ class IdentityPasswordServiceTest {
                         () ->
                                 service(primary, identity)
                                         .reset(userId, 1, NEXT, "Synthetic unbound test", 99));
-        assertEquals(ErrorCode.TOKEN_REVOKED, failure.errorCode());
+        assertEquals(ErrorCode.RESOURCE_AMBIGUOUS, failure.errorCode());
         assertEquals("UNBOUND", service(primary, identity).status(userId).identityState());
         assertFalse(service(primary, identity).status(userId).recoveryRequired());
         assertTrue(
@@ -496,7 +740,7 @@ class IdentityPasswordServiceTest {
         return intercept(
                 identity,
                 (real, method, args) -> {
-                    if (isHostUpdate(method, args))
+                    if (isHostUpdate(method, args) || isHostInsert(method, args))
                         throw new SQLException("synthetic host write outage");
                     return invoke(real, method, args);
                 });
@@ -510,6 +754,11 @@ class IdentityPasswordServiceTest {
     private static boolean isHostUpdate(Method method, Object[] args) {
         return method.getName().equals("prepareStatement")
                 && ((String) args[0]).startsWith("UPDATE sys_user ");
+    }
+
+    private static boolean isHostInsert(Method method, Object[] args) {
+        return method.getName().equals("prepareStatement")
+                && ((String) args[0]).startsWith("INSERT INTO sys_user ");
     }
 
     private static DataSource commitFault(DataSource delegate, int number, boolean after) {

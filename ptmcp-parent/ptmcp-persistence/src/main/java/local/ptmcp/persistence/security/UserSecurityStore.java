@@ -55,6 +55,34 @@ public final class UserSecurityStore {
         }
     }
 
+    /** Host display text only; identity binding always uses the normalized login name. */
+    public String displayName(long userId) {
+        try (Connection connection = primary.getConnection();
+                PreparedStatement query =
+                        connection.prepareStatement(
+                                "SELECT display_name FROM sys_user_profile WHERE user_id=?")) {
+            connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+            query.setQueryTimeout(5);
+            query.setLong(1, userId);
+            try (ResultSet result = query.executeQuery()) {
+                if (!result.next()) throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+                return result.getString(1);
+            }
+        } catch (SQLException failure) {
+            throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+        }
+    }
+
+    /** Fails closed before an external side effect when the target is no longer active. */
+    public void requireActiveProfile(long userId) {
+        try (Connection connection = primary.getConnection()) {
+            connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+            requireActiveProfile(connection, userId);
+        } catch (SQLException failure) {
+            throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
+        }
+    }
+
     /** Caller owns the transaction; a locking read requires the global security lock first. */
     public static State read(Connection connection, long userId, boolean lock) throws SQLException {
         try (PreparedStatement statement =

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doAnswer;
@@ -223,6 +224,9 @@ class AdminApiTest {
         try (Connection connection = connect();
                 Statement statement = connection.createStatement()) {
             statement.execute("SET FOREIGN_KEY_CHECKS = 0");
+            // The host identity table is test-created and not migrated; metadata IDs restart per
+            // test, so a leftover host row would collide with the next test's user ID.
+            statement.execute("DROP TABLE IF EXISTS sys_user");
             for (String table :
                     List.of(
                             "resource_object",
@@ -234,6 +238,7 @@ class AdminApiTest {
                             "admin_delegation",
                             "admin_operation_log",
                             "identity_password_change",
+                            "identity_provision",
                             "sys_user_security",
                             "web_session_index",
                             "personal_token",
@@ -5565,6 +5570,116 @@ class AdminApiTest {
                         throw new AssertionError("log leaked plaintext");
                     }
                 }
+            }
+        }
+    }
+
+    @Test
+    void adminSetsTheFirstPasswordForANewUser() throws Exception {
+        long deptId = createDepartment("First credential department");
+        long target = createUser("first-credential", "First Credential", deptId);
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            statement.execute(
+                    "CREATE TABLE IF NOT EXISTS sys_user ("
+                            + "user_id BIGINT NOT NULL AUTO_INCREMENT,"
+                            + " user_name VARCHAR(30) NOT NULL,"
+                            + " nick_name VARCHAR(30) NOT NULL,"
+                            + " password VARCHAR(100) NOT NULL,"
+                            + " status CHAR(1) NOT NULL,"
+                            + " del_flag CHAR(1) NOT NULL DEFAULT '0',"
+                            + " PRIMARY KEY (user_id),"
+                            + " UNIQUE KEY uk_sys_user_user_name (user_name))");
+        }
+        String secret = "first-" + UUID.randomUUID();
+        mockMvc.perform(
+                        put("/api/v1/admin/users/" + target + "/password")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "1")
+                                .header("Idempotency-Key", "first-credential-" + target)
+                                .contentType("application/json")
+                                .content(
+                                        "{\"newPassword\":\""
+                                                + secret
+                                                + "\",\"reason\":\"管理员为新建账户设置初始登录密码\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.identityState").value("READY"))
+                .andExpect(jsonPath("$.version").value(2));
+
+        try (Connection connection = connect();
+                PreparedStatement query =
+                        connection.prepareStatement(
+                                "SELECT user_name,password FROM sys_user WHERE user_id=?")) {
+            query.setLong(1, target);
+            try (ResultSet result = query.executeQuery()) {
+                assertTrue(result.next());
+                assertEquals("first-credential", result.getString(1));
+                assertTrue(
+                        new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder()
+                                .matches(secret, result.getString(2)));
+            }
+        }
+        try (Connection connection = connect();
+                PreparedStatement query =
+                        connection.prepareStatement(
+                                "SELECT status,target_hash FROM identity_provision WHERE user_id=?")) {
+            query.setLong(1, target);
+            try (ResultSet result = query.executeQuery()) {
+                assertTrue(result.next());
+                assertEquals("COMPLETED", result.getString(1));
+                assertNull(result.getString(2));
+            }
+        }
+    }
+
+    @Test
+    void adminFirstCredentialNeverAdoptsACaseVariantHostAccount() throws Exception {
+        long deptId = createDepartment("Credential collision dept");
+        long target = createUser("credential-collision", "Credential Collision", deptId);
+        try (Connection connection = connect();
+                Statement statement = connection.createStatement()) {
+            statement.execute(
+                    "CREATE TABLE IF NOT EXISTS sys_user ("
+                            + "user_id BIGINT NOT NULL AUTO_INCREMENT,"
+                            + " user_name VARCHAR(30) COLLATE utf8mb4_0900_bin NOT NULL,"
+                            + " nick_name VARCHAR(30) NOT NULL,"
+                            + " password VARCHAR(100) NOT NULL,"
+                            + " status CHAR(1) NOT NULL,"
+                            + " del_flag CHAR(1) NOT NULL DEFAULT '0',"
+                            + " PRIMARY KEY (user_id),"
+                            + " UNIQUE KEY uk_sys_user_user_name (user_name))");
+            statement.execute(
+                    "INSERT INTO sys_user"
+                            + " (user_id,user_name,nick_name,password,status,del_flag)"
+                            + " VALUES ("
+                            + (target + 1000)
+                            + ",' CREDENTIAL-COLLISION ','Existing','"
+                            + new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder()
+                                    .encode(UUID.randomUUID().toString())
+                            + "','0','0')");
+        }
+        mockMvc.perform(
+                        put("/api/v1/admin/users/" + target + "/password")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .header("If-Match", "1")
+                                .header("Idempotency-Key", "first-credential-collision-" + target)
+                                .contentType("application/json")
+                                .content(
+                                        "{\"newPassword\":\"first-"
+                                                + UUID.randomUUID()
+                                                + "\",\"reason\":\"管理员不得接管同名宿主账号\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("RESOURCE_AMBIGUOUS"));
+        try (Connection connection = connect();
+                PreparedStatement query =
+                        connection.prepareStatement(
+                                "SELECT COUNT(*) FROM identity_provision WHERE user_id=?")) {
+            query.setLong(1, target);
+            try (ResultSet result = query.executeQuery()) {
+                assertTrue(result.next());
+                assertEquals(0, result.getInt(1));
             }
         }
     }

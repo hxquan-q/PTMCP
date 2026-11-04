@@ -75,6 +75,7 @@ ERD 的 acl_grant 还可以指向数据源/命名空间；多态主体/目标用
 | --- | --- | --- |
 | sys_user_security | user_id BIGINT；auth_version BIGINT=1；identity_version BIGINT=1；identity_state UNBOUND/READY/CHANGE_PENDING（默认UNBOUND）；identity_change_id UUID N；version BIGINT；password_changed_at DATETIME(6) N | PK/FK sys_user_profile.user_id；唯一权威；改密同时提升 auth/identity 版本；Pending 拒绝认证，不因超时释放 |
 | identity_password_change | operation_id UUID；user_id；auth_version；profile_version；expected_hash BINARY(32) N；target_hash BCrypt N；status PENDING/COMPLETED；requested_by；时间 | PK operation_id；UNIQUE(user_id,profile_version)；FK sys_user_security；Pending 必须保留不可变 hash，完成同事务清空两列，仅保留幂等墓碑 |
+| identity_provision | operation_id UUID；user_id；auth_version；profile_version；target_hash BCrypt N；status PENDING/COMPLETED；requested_by；时间 | PK operation_id；UNIQUE(user_id)；FK sys_user_security；仅用于 UNBOUND→READY 首次发证；Pending 必须保留目标 hash，COMPLETED 清空，不接管既有宿主账号；PENDING 期间用户资料/状态写入 409，删除需先完成或由运维处置 |
 | sys_subject_version | subject_type VARCHAR(16) USER/ROLE/DEPT；subject_id BIGINT；policy_version BIGINT；version BIGINT | PK(type,id)；删除保留 tombstone，不复用主体 ID |
 | sys_security_state | singleton_id TINYINT=1；policy_epoch BIGINT；update_time DATETIME(6) | PK 1，锁住本行分配全局 epoch |
 | sys_security_event | event_id CHAR(36)；epoch BIGINT；aggregate_type VARCHAR(32)；aggregate_id VARCHAR(64)；event_type VARCHAR(48)；payload JSON；occurred_at DATETIME(6)；published_at N；attempts INT=0 | PK event_id；UNIQUE(epoch,event_id)；INDEX(published_at,occurred_at,event_id)；payload 仅 ID/版本，不能含凭证或 SQL |
