@@ -53,7 +53,7 @@ public class AclGrantAdminController {
         this.grantStore = grantStore;
         this.directory = directory;
         this.scopeGate = new AclScopeGate(scopeResolver, orgStore);
-        this.mutations = new AclMutationGuard(directory, scopeGate);
+        this.mutations = new AclMutationGuard(directory);
         this.sessions = sessions;
     }
 
@@ -244,10 +244,7 @@ public class AclGrantAdminController {
                         draft,
                         principal.userId(),
                         RequestIdFilter.requestId(request),
-                        mutations.policy(
-                                principal.userId(),
-                                expectedAuthVersion(request),
-                                "ptmcp:acl:create"));
+                        mutations.policy(principal.userId(), expectedAuthVersion(request)));
         return ResponseEntity.created(
                         java.net.URI.create("/api/v1/admin/acl/grants/" + created.id()))
                 .body(toRead(created));
@@ -273,10 +270,7 @@ public class AclGrantAdminController {
                         toDraft(write),
                         principal.userId(),
                         RequestIdFilter.requestId(request),
-                        mutations.policy(
-                                principal.userId(),
-                                expectedAuthVersion(request),
-                                "ptmcp:acl:update"));
+                        mutations.policy(principal.userId(), expectedAuthVersion(request)));
         return ResponseEntity.ok().eTag(IfMatch.etag(updated.version())).body(toRead(updated));
     }
 
@@ -292,10 +286,7 @@ public class AclGrantAdminController {
                         "revoked via API",
                         principal.userId(),
                         RequestIdFilter.requestId(request),
-                        mutations.policy(
-                                principal.userId(),
-                                expectedAuthVersion(request),
-                                "ptmcp:acl:delete"));
+                        mutations.policy(principal.userId(), expectedAuthVersion(request)));
         return ResponseEntity.ok().body(toRead(revoked));
     }
 

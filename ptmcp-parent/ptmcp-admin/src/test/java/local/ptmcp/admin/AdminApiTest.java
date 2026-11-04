@@ -56,7 +56,6 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.RequestMethod;
-import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 import org.testcontainers.mysql.MySQLContainer;
 
@@ -331,41 +330,7 @@ class AdminApiTest {
     }
 
     @Test
-    void adminActionUnannotatedHandlerFailsClosedBeforeSideEffects() throws Exception {
-        MissingActionProbe probe = new MissingActionProbe();
-        RequestMappingInfo mapping =
-                RequestMappingInfo.paths("/api/v1/admin/action-test-unannotated")
-                        .methods(RequestMethod.POST)
-                        .options(handlerMapping.getBuilderConfiguration())
-                        .build();
-        handlerMapping.registerMapping(mapping, probe, MissingActionProbe.class.getMethod("write"));
-        try {
-            String before = adminActionWriteEffects();
-            mockMvc.perform(
-                            post("/api/v1/admin/action-test-unannotated")
-                                    .header("X-Test-User-Id", ADMIN_ID)
-                                    .header("X-Test-Platform-Admin", "true"))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"))
-                    .andExpect(header().string("Cache-Control", "no-store"));
-            assertEquals(0, probe.writes.get());
-            assertEquals(before, adminActionWriteEffects());
-        } finally {
-            handlerMapping.unregisterMapping(mapping);
-        }
-    }
-
-    public static final class MissingActionProbe {
-        private final AtomicInteger writes = new AtomicInteger();
-
-        public void write() {
-            writes.incrementAndGet();
-        }
-    }
-
-    @Test
-    void adminActionRevocationPreventsIdempotentReplay() throws Exception {
-        long roleId = actionActorRole("ptmcp:department:create");
+    void adminActionRevokedPlatformAdminCannotReplayIdempotentResult() throws Exception {
         String idempotencyKey = UUID.randomUUID().toString();
         String body = "{\"name\":\"撤权前创建\",\"enabled\":true}";
         mockMvc.perform(
@@ -376,34 +341,14 @@ class AdminApiTest {
                                 .contentType("application/json")
                                 .content(body))
                 .andExpect(status().isCreated());
-        try (Connection connection = connect();
-                Statement statement = connection.createStatement()) {
-            statement.executeUpdate("DELETE FROM sys_role_permission WHERE role_id=" + roleId);
-        }
         String before = adminActionWriteEffects();
+        // S2: the same caller stripped of platform-admin status is denied before any replay.
         mockMvc.perform(
                         post("/api/v1/admin/departments")
                                 .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true")
                                 .header("Idempotency-Key", idempotencyKey)
                                 .contentType("application/json")
                                 .content(body))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
-        assertEquals(before, adminActionWriteEffects());
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"ptmcp:audit:list", "ptmcp:audit:read"})
-    void adminActionAuditReadDoesNotAllowDecrypt(String permission) throws Exception {
-        actionActorRole(permission);
-        String before = adminActionWriteEffects();
-        mockMvc.perform(
-                        post("/api/v1/admin/audit/11111111-2222-3333-4444-555555555555/decrypt")
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true")
-                                .contentType("application/json")
-                                .content("{\"reason\":\"审计读取权限不得代替解密\",\"fields\":[\"sqlRaw\"]}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
         assertEquals(before, adminActionWriteEffects());
@@ -422,146 +367,55 @@ class AdminApiTest {
                 "operations",
                 "audit"
             })
-    void adminActionPlatformMarkerDoesNotGrantList(String resource) throws Exception {
-        actionActorRole();
+    @Test
+    void adminActionGateReevaluatesPrincipalOnEveryRequest() throws Exception {
+        // S2: the gate is binary and per-request; a principal that loses platform-admin status is
+        // denied on the next request with no login-time snapshot in between.
         mockMvc.perform(
-                        get("/api/v1/admin/" + resource)
+                        get("/api/v1/admin/departments")
                                 .header("X-Test-User-Id", ADMIN_ID)
                                 .header("X-Test-Platform-Admin", "true"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/admin/departments").header("X-Test-User-Id", ADMIN_ID))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+        mockMvc.perform(
+                        get("/api/v1/admin/departments")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true"))
+                .andExpect(status().isOk());
     }
 
     @Test
-    void adminActionPlatformMarkerDoesNotGrantCreate() throws Exception {
-        actionActorRole();
-        String before = adminActionWriteEffects();
-        mockMvc.perform(
-                        post("/api/v1/admin/departments")
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true")
+    void ordinaryUserIsDeniedTheWholeAdminSurface() throws Exception {
+        // S2 验收反例：platform_admin=0 的普通用户不进管理后台，任何管理端点一律 403。
+        for (MockHttpServletRequestBuilder request :
+                List.of(
+                        get("/api/v1/admin/roles"),
+                        get("/api/v1/admin/users"),
+                        get("/api/v1/admin/departments"),
+                        get("/api/v1/admin/datasources"),
+                        post("/api/v1/admin/roles")
                                 .header("Idempotency-Key", UUID.randomUUID().toString())
                                 .contentType("application/json")
-                                .content("{\"name\":\"缺少动作权限\",\"enabled\":true}"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
-        assertEquals(before, adminActionWriteEffects());
-    }
-
-    @Test
-    void adminActionListDoesNotGrantRead() throws Exception {
-        long department = createDepartment("功能码目标");
-        actionActorRole("ptmcp:department:list");
-        mockMvc.perform(
-                        get("/api/v1/admin/departments")
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true"))
-                .andExpect(status().isOk());
-        mockMvc.perform(
-                        get("/api/v1/admin/departments/" + department)
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"disabled", "deleted", "permission-removed", "membership-removed"})
-    void adminActionRechecksCurrentRole(String revocation) throws Exception {
-        long roleId = actionActorRole("ptmcp:department:list");
-        mockMvc.perform(
-                        get("/api/v1/admin/departments")
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true"))
-                .andExpect(status().isOk());
-        try (Connection connection = connect();
-                Statement statement = connection.createStatement()) {
-            switch (revocation) {
-                case "disabled" ->
-                        statement.executeUpdate(
-                                "UPDATE sys_role SET status='1' WHERE role_id=" + roleId);
-                case "deleted" ->
-                        statement.executeUpdate(
-                                "UPDATE sys_role SET del_flag='1' WHERE role_id=" + roleId);
-                case "membership-removed" ->
-                        statement.executeUpdate(
-                                "DELETE FROM sys_user_role WHERE role_id=" + roleId);
-                default ->
-                        statement.executeUpdate(
-                                "DELETE FROM sys_role_permission WHERE role_id=" + roleId);
-            }
-        }
-        mockMvc.perform(
-                        get("/api/v1/admin/departments")
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
-    }
-
-    @Test
-    void adminActionPermissionDependencyFailureDoesNotWrite() throws Exception {
-        actionActorRole("ptmcp:department:create");
-        String before = adminActionWriteEffects();
-        try (Connection connection = connect();
-                Statement statement = connection.createStatement()) {
-            statement.execute(
-                    "RENAME TABLE sys_role_permission TO action_test_unavailable_permission");
-            try {
-                MvcResult result =
-                        mockMvc.perform(
-                                        post("/api/v1/admin/departments")
-                                                .header("X-Test-User-Id", ADMIN_ID)
-                                                .header("X-Test-Platform-Admin", "true")
-                                                .header(
-                                                        "Idempotency-Key",
-                                                        UUID.randomUUID().toString())
-                                                .contentType("application/json")
-                                                .content(
-                                                        "{\"name\":\"依赖故障不得落库\",\"enabled\":true}"))
-                                .andExpect(status().isServiceUnavailable())
-                                .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"))
-                                .andExpect(header().string("Cache-Control", "no-store"))
-                                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
-                                .andReturn();
-                String response = result.getResponse().getContentAsString();
-                assertFalse(response.contains("action_test_unavailable_permission"));
-                assertFalse(response.contains("SQLException"));
-                assertEquals(before, adminActionWriteEffects());
-            } finally {
-                statement.execute(
-                        "RENAME TABLE action_test_unavailable_permission TO sys_role_permission");
-            }
+                                .content(roleCreateBody("denied_probe")),
+                        delete("/api/v1/admin/users/1").header("If-Match", "\"1\""))) {
+            mockMvc.perform(request.header("X-Test-User-Id", 42L))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
         }
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"status", "roles", "department"})
-    void adminActionPlatformGenericEditNeedsChangedFieldAction(String change) throws Exception {
-        UserEditFixture fixture = userEditFixture(List.of("ptmcp:user:update"));
-        long department =
-                change.equals("department") ? createDepartment("迁入部门") : fixture.departmentId();
-        actionActorRole("ptmcp:user:update");
-        String roles = change.equals("roles") ? "[]" : "[" + fixture.narrowRoleId() + "]";
-        String body =
-                "{\"displayName\":\"平台管理员完整编辑\",\"deptId\":"
-                        + department
-                        + ",\"enabled\":"
-                        + !change.equals("status")
-                        + ",\"roleIds\":"
-                        + roles
-                        + "}";
-        UserWriteEffects before = userWriteEffects(fixture.targetId());
-        mockMvc.perform(
-                        put("/api/v1/admin/users/" + fixture.targetId())
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true")
-                                .header("If-Match", before.row().version())
-                                .contentType("application/json")
-                                .content(body))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
-        assertEquals(before, userWriteEffects(fixture.targetId()));
+    @Test
+    void platformAdminPassesEveryAdminActionWithoutCapabilityCodes() throws Exception {
+        // S2 验收：唯一管理员不给任何能力码也能操作全部管理功能（身份仍来自列/主体）。
+        for (String surface : List.of("/roles", "/users", "/departments", "/datasources")) {
+            mockMvc.perform(
+                            get("/api/v1/admin" + surface)
+                                    .header("X-Test-User-Id", ADMIN_ID)
+                                    .header("X-Test-Platform-Admin", "true"))
+                    .andExpect(status().isOk());
+        }
     }
 
     private long actionActorRole(String... permissions) throws Exception {
@@ -833,21 +687,6 @@ class AdminApiTest {
     }
 
     @Test
-    void delegatedDepartmentCommandMovesWithinOneDelegation() throws Exception {
-        DepartmentCommandFixture fixture = departmentCommandFixture();
-
-        mockMvc.perform(
-                        departmentCommandRequest(
-                                fixture, fixture.targetId(), fixture.destinationId(), 1))
-                .andExpect(status().isOk())
-                .andExpect(header().string("ETag", "\"2\""))
-                .andExpect(jsonPath("$.parentId").value(fixture.destinationId()));
-        assertEquals(
-                fixture.destinationId(), orgStore.getDepartment(fixture.targetId()).parentId());
-        assertEquals(2, orgStore.getDepartment(fixture.descendantId()).version());
-    }
-
-    @Test
     void platformDepartmentCommandCanPromoteDepartmentToRoot() throws Exception {
         DepartmentCommandFixture fixture = departmentCommandFixture();
 
@@ -864,27 +703,6 @@ class AdminApiTest {
         assertEquals(
                 String.valueOf(fixture.targetId()),
                 orgStore.getDepartment(fixture.descendantId()).ancestors());
-    }
-
-    @ParameterizedTest
-    @ValueSource(booleans = {true, false})
-    void delegatedDepartmentCommandCanEditItsRootWithoutCoveringTheParent(boolean topLevel)
-            throws Exception {
-        DepartmentCommandFixture fixture = departmentCommandFixture();
-        if (topLevel) {
-            orgStore.moveDepartment(fixture.rootId(), null, 1, ADMIN_ID);
-        }
-        OrgStore.DepartmentRow before = orgStore.getDepartment(fixture.rootId());
-        orgStore.updateDepartment(before.id(), before.name(), false, before.version(), ADMIN_ID);
-        OrgStore.DepartmentRow disabled = orgStore.getDepartment(fixture.rootId());
-
-        mockMvc.perform(
-                        departmentCommandRequest(
-                                fixture, disabled.id(), disabled.parentId(), disabled.version()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("部门命令已编辑"))
-                .andExpect(jsonPath("$.enabled").value(true));
-        assertEquals(disabled.parentId(), orgStore.getDepartment(disabled.id()).parentId());
     }
 
     @Test
@@ -1154,17 +972,13 @@ class AdminApiTest {
     void selfGrantEscalationIsBlockedWithoutAnyRowWritten() throws Exception {
         long deptId = createDepartment("自增部");
         long selfActor = createUser("esc-admin", "自增管理员", deptId);
-        try (Connection connection = connect()) {
-            try (PreparedStatement ready =
-                    connection.prepareStatement(
-                            "UPDATE sys_user_security SET identity_state='READY' WHERE user_id=?")) {
-                ready.setLong(1, selfActor);
-                ready.executeUpdate();
-            }
-            AdminActionTestSupport.grant(
-                    connection,
-                    selfActor,
-                    AdminActionTestSupport.standardActions().toArray(String[]::new));
+        try (Connection connection = connect();
+                PreparedStatement ready =
+                        connection.prepareStatement(
+                                "UPDATE sys_user_security SET identity_state='READY',"
+                                        + " platform_admin=1 WHERE user_id=?")) {
+            ready.setLong(1, selfActor);
+            ready.executeUpdate();
         }
         long datasourceId = insertActiveDatasource();
 
@@ -1257,486 +1071,6 @@ class AdminApiTest {
     }
 
     @Test
-    void delegatedAdminManagesOnlyTheirSubtree() throws Exception {
-        seedAdminDelegationCodes();
-        // The delegable set is the caller's own capability codes; add the department ones.
-        try (Connection connection = connect();
-                Statement statement = connection.createStatement()) {
-            statement.execute(
-                    "INSERT INTO sys_role (role_key, role_name, status, del_flag, create_time,"
-                            + " update_time) VALUES ('dept-scope-admin', '部门作用域管理员', '0', '0',"
-                            + " NOW(6), NOW(6))",
-                    Statement.RETURN_GENERATED_KEYS);
-            long roleId;
-            try (var keys = statement.getGeneratedKeys()) {
-                keys.next();
-                roleId = keys.getLong(1);
-            }
-            for (String code : List.of("ptmcp:department:update", "ptmcp:department:delete")) {
-                statement.execute(
-                        "INSERT INTO sys_role_permission (role_id, permission_code, create_time,"
-                                + " update_time) VALUES ("
-                                + roleId
-                                + ", '"
-                                + code
-                                + "', NOW(6), NOW(6))");
-            }
-            statement.execute(
-                    "INSERT INTO sys_user_role (user_id, role_id, create_time, update_time)"
-                            + " VALUES ("
-                            + ADMIN_ID
-                            + ", "
-                            + roleId
-                            + ", NOW(6), NOW(6))");
-        }
-        // A datasource must exist for the delegation's resource pin.
-        long datasourceId = insertActiveDatasource();
-        long rootId = createDepartment("委派作用域根");
-        long childId = createDepartment("委派作用域子部");
-        // Move child under root via update; simpler: create with parentId through API.
-        long outsideId = createDepartment("委派作用域外部");
-
-        // Make child a real child of root (API create has no parentId field; move it).
-        long childVersion =
-                readLong(
-                        mockMvc.perform(
-                                        get("/api/v1/admin/departments/" + childId)
-                                                .header("X-Test-User-Id", ADMIN_ID)
-                                                .header("X-Test-Platform-Admin", "true"))
-                                .andExpect(status().isOk())
-                                .andReturn()
-                                .getResponse()
-                                .getContentAsString(),
-                        "version");
-        mockMvc.perform(
-                        put("/api/v1/admin/departments/" + childId)
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true")
-                                .header("If-Match", String.valueOf(childVersion))
-                                .contentType("application/json")
-                                .content(
-                                        "{\"parentId\":"
-                                                + rootId
-                                                + ",\"name\":\"委派作用域子部\",\"enabled\":true}"))
-                .andExpect(status().isOk());
-
-        // The delegated user sits inside the subtree and holds matching capability codes.
-        createUser("scope-throwaway", "占位用户", childId);
-        long delegate = createUser("delegated-admin", "受控管理员", childId);
-        mockMvc.perform(
-                        post("/api/v1/admin/roles")
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true")
-                                .header("Idempotency-Key", "scope-role-" + UUID.randomUUID())
-                                .contentType("application/json")
-                                .content(
-                                        "{\"key\":\"dept_admin\",\"name\":\"部门管理员\","
-                                                + "\"enabled\":true,"
-                                                + "\"permissionCodes\":[\"ptmcp:department:list\",\"ptmcp:department:read\","
-                                                + "\"ptmcp:department:update\","
-                                                + "\"ptmcp:department:delete\"]}"))
-                .andExpect(status().isCreated());
-        // Grant the role via SQL (roles API list unused here); assign to delegate.
-        try (Connection connection = connect();
-                Statement statement = connection.createStatement()) {
-            var roleKeys =
-                    statement.executeQuery(
-                            "SELECT role_id FROM sys_role WHERE role_key = 'dept_admin'");
-            assertTrue(roleKeys.next());
-            long roleId = roleKeys.getLong(1);
-            statement.execute(
-                    "INSERT INTO sys_user_role (user_id, role_id, create_time, update_time)"
-                            + " VALUES ("
-                            + delegate
-                            + ", "
-                            + roleId
-                            + ", NOW(6), NOW(6))");
-        }
-
-        // Delegate the subtree with matching actions.
-        mockMvc.perform(
-                        post("/api/v1/admin/delegations")
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true")
-                                .header("Idempotency-Key", "scope-delegation-1")
-                                .contentType("application/json")
-                                .content(
-                                        "{\"userId\":"
-                                                + delegate
-                                                + ",\"departmentRootId\":"
-                                                + rootId
-                                                + ",\"resourceType\":\"DATASOURCE\",\"resourceId\":"
-                                                + datasourceId
-                                                + ","
-                                                + "\"allowedActions\":[\"ptmcp:department:update\",\"ptmcp:department:delete\"]"
-                                                + ",\"validFrom\":\"2020-01-01T00:00:00Z\""
-                                                + ",\"validTo\":\"2030-01-01T00:00:00Z\"}"))
-                .andExpect(status().isCreated());
-
-        // List: delegated admin sees only root + child, not the outside department.
-        MvcResult listed =
-                mockMvc.perform(
-                                get("/api/v1/admin/departments")
-                                        .header("X-Test-User-Id", delegate)
-                                        .header("X-Test-Platform-Admin", "false"))
-                        .andExpect(status().isOk())
-                        .andReturn();
-        String listBody = listed.getResponse().getContentAsString();
-        if (!listBody.contains("委派作用域根") || !listBody.contains("委派作用域子部")) {
-            throw new AssertionError("subtree rows missing: " + listBody);
-        }
-        if (listBody.contains("委派作用域外部")) {
-            throw new AssertionError("outside department leaked into subtree view");
-        }
-
-        // Update inside the subtree succeeds; re-read the live version after the move.
-        long liveChildVersion =
-                readLong(
-                        mockMvc.perform(
-                                        get("/api/v1/admin/departments/" + childId)
-                                                .header("X-Test-User-Id", delegate)
-                                                .header("X-Test-Platform-Admin", "false"))
-                                .andExpect(status().isOk())
-                                .andReturn()
-                                .getResponse()
-                                .getContentAsString(),
-                        "version");
-        mockMvc.perform(
-                        put("/api/v1/admin/departments/" + childId)
-                                .header("X-Test-User-Id", delegate)
-                                .header("X-Test-Platform-Admin", "false")
-                                .header("If-Match", String.valueOf(liveChildVersion))
-                                .contentType("application/json")
-                                .content(
-                                        "{\"parentId\":"
-                                                + rootId
-                                                + ",\"name\":\"委派作用域子部A\",\"enabled\":true}"))
-                // moveDepartment already bumped once (parent change), so If-Match is +1 and the
-                // rename lands at +2.
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("委派作用域子部A"));
-
-        // Update outside the subtree is denied.
-        mockMvc.perform(
-                        put("/api/v1/admin/departments/" + outsideId)
-                                .header("X-Test-User-Id", delegate)
-                                .header("X-Test-Platform-Admin", "false")
-                                .header("If-Match", "1")
-                                .contentType("application/json")
-                                .content("{\"parentId\":null,\"name\":\"越权改名\",\"enabled\":true}"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
-
-        // Delete inside the subtree succeeds once its members have been moved out (the store
-        // refuses to delete a department that still has user profiles in it).
-        mockMvc.perform(
-                        put("/api/v1/admin/users/" + (delegate - 1) + "/department")
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true")
-                                .header("If-Match", "1")
-                                .contentType("application/json")
-                                .content("{\"departmentId\":" + outsideId + "}"))
-                .andExpect(status().isOk());
-        mockMvc.perform(
-                        put("/api/v1/admin/users/" + delegate + "/department")
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true")
-                                .header("If-Match", "1")
-                                .contentType("application/json")
-                                .content("{\"departmentId\":" + outsideId + "}"))
-                .andExpect(status().isOk());
-        long deletableVersion =
-                readLong(
-                        mockMvc.perform(
-                                        get("/api/v1/admin/departments/" + childId)
-                                                .header("X-Test-User-Id", delegate)
-                                                .header("X-Test-Platform-Admin", "false"))
-                                .andExpect(status().isOk())
-                                .andReturn()
-                                .getResponse()
-                                .getContentAsString(),
-                        "version");
-        mockMvc.perform(
-                        delete("/api/v1/admin/departments/" + childId)
-                                .header("X-Test-User-Id", delegate)
-                                .header("X-Test-Platform-Admin", "false")
-                                .header("If-Match", String.valueOf(deletableVersion)))
-                .andExpect(status().isNoContent());
-        mockMvc.perform(
-                        delete("/api/v1/admin/departments/" + outsideId)
-                                .header("X-Test-User-Id", delegate)
-                                .header("X-Test-Platform-Admin", "false")
-                                .header("If-Match", "1"))
-                .andExpect(status().isForbidden());
-
-        // Creating a root (no parent) stays platform-only.
-        mockMvc.perform(
-                        post("/api/v1/admin/departments")
-                                .header("X-Test-User-Id", delegate)
-                                .header("X-Test-Platform-Admin", "false")
-                                .header("Idempotency-Key", "scope-root-" + UUID.randomUUID())
-                                .contentType("application/json")
-                                .content("{\"name\":\"越权根\",\"enabled\":true}"))
-                .andExpect(status().isForbidden());
-
-        // Platform admin is unaffected end to end.
-        mockMvc.perform(
-                        get("/api/v1/admin/departments")
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true"))
-                .andExpect(status().isOk())
-                .andExpect(
-                        result -> {
-                            if (!result.getResponse().getContentAsString().contains("委派作用域外部")) {
-                                throw new AssertionError("platform admin lost tree visibility");
-                            }
-                        });
-    }
-
-    @Test
-    void delegatedAdminManagesOnlySubtreeUsers() throws Exception {
-        seedAdminDelegationCodes();
-        // Delegable set gains the user codes for this slice.
-        try (Connection connection = connect();
-                Statement statement = connection.createStatement()) {
-            statement.execute(
-                    "INSERT INTO sys_role (role_key, role_name, status, del_flag, create_time,"
-                            + " update_time) VALUES ('user-scope-admin', '用户作用域管理员', '0', '0',"
-                            + " NOW(6), NOW(6))",
-                    Statement.RETURN_GENERATED_KEYS);
-            long roleId;
-            try (var keys = statement.getGeneratedKeys()) {
-                keys.next();
-                roleId = keys.getLong(1);
-            }
-            for (String code :
-                    List.of(
-                            "ptmcp:user:update",
-                            "ptmcp:user:status",
-                            "ptmcp:user:assign-role",
-                            "ptmcp:user:move")) {
-                statement.execute(
-                        "INSERT INTO sys_role_permission (role_id, permission_code, create_time,"
-                                + " update_time) VALUES ("
-                                + roleId
-                                + ", '"
-                                + code
-                                + "', NOW(6), NOW(6))");
-            }
-            statement.execute(
-                    "INSERT INTO sys_user_role (user_id, role_id, create_time, update_time)"
-                            + " VALUES ("
-                            + ADMIN_ID
-                            + ", "
-                            + roleId
-                            + ", NOW(6), NOW(6))");
-        }
-        long datasourceId = insertActiveDatasource();
-
-        long rootId = createDepartment("用户作用域根");
-        long insideId = createDepartment("用户作用域内");
-        long outsideId = createDepartment("用户作用域外");
-        // Re-parent "inside" under root (API has no create-time parent).
-        long insideVersion =
-                readLong(
-                        mockMvc.perform(
-                                        get("/api/v1/admin/departments/" + insideId)
-                                                .header("X-Test-User-Id", ADMIN_ID)
-                                                .header("X-Test-Platform-Admin", "true"))
-                                .andExpect(status().isOk())
-                                .andReturn()
-                                .getResponse()
-                                .getContentAsString(),
-                        "version");
-        mockMvc.perform(
-                        put("/api/v1/admin/departments/" + insideId)
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true")
-                                .header("If-Match", String.valueOf(insideVersion))
-                                .contentType("application/json")
-                                .content(
-                                        "{\"parentId\":"
-                                                + rootId
-                                                + ",\"name\":\"用户作用域内\",\"enabled\":true}"))
-                .andExpect(status().isOk());
-
-        // Target users: one inside the subtree, one outside.
-        createUser("inside-throwaway", "内部占位", insideId);
-        long insideUser = createUser("inside-user", "内部用户", insideId);
-        long outsideUser = createUser("outside-user", "外部用户", outsideId);
-
-        // Delegate the subtree with user codes to a (distinct) delegated admin.
-        createUser("userscope-throwaway", "占位二", insideId);
-        long delegate = createUser("userscope-admin", "受控用户管理员", insideId);
-        long delegateRole =
-                orgStore.createRole(
-                                "user_scope_delegate",
-                                "用户管理功能",
-                                true,
-                                List.of(
-                                        "ptmcp:user:list", "ptmcp:user:read",
-                                        "ptmcp:user:update", "ptmcp:user:status",
-                                        "ptmcp:user:assign-role", "ptmcp:user:move"),
-                                ADMIN_ID)
-                        .id();
-        OrgStore.UserRow delegateProfile = orgStore.getUser(delegate);
-        orgStore.updateUser(
-                delegate,
-                delegateProfile.displayName(),
-                delegateProfile.deptId(),
-                null,
-                null,
-                null,
-                null,
-                List.of(delegateRole),
-                delegateProfile.version(),
-                ADMIN_ID);
-        mockMvc.perform(
-                        post("/api/v1/admin/delegations")
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true")
-                                .header("Idempotency-Key", "userscope-delegation-1")
-                                .contentType("application/json")
-                                .content(
-                                        "{\"userId\":"
-                                                + delegate
-                                                + ",\"departmentRootId\":"
-                                                + rootId
-                                                + ",\"resourceType\":\"DATASOURCE\",\"resourceId\":"
-                                                + datasourceId
-                                                + ",\"allowedActions\":[\"ptmcp:user:update\",\"ptmcp:user:status\",\"ptmcp:user:assign-role\",\"ptmcp:user:move\"]"
-                                                + ",\"validFrom\":\"2020-01-01T00:00:00Z\""
-                                                + ",\"validTo\":\"2030-01-01T00:00:00Z\"}"))
-                .andExpect(status().isCreated());
-
-        // List: the delegated admin sees the inside user but not the outside one.
-        MvcResult listed =
-                mockMvc.perform(
-                                get("/api/v1/admin/users")
-                                        .header("X-Test-User-Id", delegate)
-                                        .header("X-Test-Platform-Admin", "false"))
-                        .andExpect(status().isOk())
-                        .andReturn();
-        String listBody = listed.getResponse().getContentAsString();
-        if (!listBody.contains("inside-user")) {
-            throw new AssertionError("inside user missing from subtree view");
-        }
-        if (listBody.contains("outside-user")) {
-            throw new AssertionError("outside user leaked into subtree view");
-        }
-
-        // Status flip inside the subtree succeeds.
-        mockMvc.perform(
-                        put("/api/v1/admin/users/" + insideUser + "/status")
-                                .header("X-Test-User-Id", delegate)
-                                .header("X-Test-Platform-Admin", "false")
-                                .header("If-Match", "1")
-                                .contentType("application/json")
-                                .content("{\"status\":\"DISABLED\"}"))
-                .andExpect(status().isOk());
-
-        // Any write on the outside user is denied.
-        mockMvc.perform(
-                        put("/api/v1/admin/users/" + outsideUser + "/status")
-                                .header("X-Test-User-Id", delegate)
-                                .header("X-Test-Platform-Admin", "false")
-                                .header("If-Match", "1")
-                                .contentType("application/json")
-                                .content("{\"status\":\"DISABLED\"}"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
-
-        // Role assignment inside the subtree succeeds (PRD cross-scope role checks are their own
-        // slice; the delegation gate itself is what is under test here).
-        mockMvc.perform(
-                        put("/api/v1/admin/users/" + insideUser + "/roles")
-                                .header("X-Test-User-Id", delegate)
-                                .header("X-Test-Platform-Admin", "false")
-                                .header("If-Match", "2")
-                                .contentType("application/json")
-                                .content("{\"roleIds\":[]}"))
-                .andExpect(status().isOk());
-
-        // AC-02 cross-scope role guard: a role carrying codes beyond the delegation is refused,
-        // while a role whose codes all sit inside the delegation passes.
-        try (Connection connection = connect();
-                Statement statement = connection.createStatement()) {
-            statement.execute(
-                    "INSERT INTO sys_role (role_key, role_name, status, del_flag, create_time,"
-                            + " update_time) VALUES ('broad-role', '越权角色', '0', '0', NOW(6), NOW(6))",
-                    Statement.RETURN_GENERATED_KEYS);
-            long broad;
-            try (var keys = statement.getGeneratedKeys()) {
-                keys.next();
-                broad = keys.getLong(1);
-            }
-            statement.execute(
-                    "INSERT INTO sys_role_permission (role_id, permission_code, create_time,"
-                            + " update_time) VALUES ("
-                            + broad
-                            + ", 'ptmcp:audit:decrypt', NOW(6), NOW(6))");
-            statement.execute(
-                    "INSERT INTO sys_role (role_key, role_name, status, del_flag, create_time,"
-                            + " update_time) VALUES ('narrow-role', '委派内角色', '0', '0', NOW(6), NOW(6))",
-                    Statement.RETURN_GENERATED_KEYS);
-            long narrow;
-            try (var keys = statement.getGeneratedKeys()) {
-                keys.next();
-                narrow = keys.getLong(1);
-            }
-            statement.execute(
-                    "INSERT INTO sys_role_permission (role_id, permission_code, create_time,"
-                            + " update_time) VALUES ("
-                            + narrow
-                            + ", 'ptmcp:user:update', NOW(6), NOW(6))");
-        }
-        // Look up both role ids directly.
-        long broadRoleId;
-        long narrowRoleId;
-        try (Connection connection = connect();
-                Statement statement = connection.createStatement()) {
-            var rs =
-                    statement.executeQuery(
-                            "SELECT role_id, role_key FROM sys_role WHERE role_key IN ('broad-role','narrow-role')");
-            broadRoleId = -1;
-            narrowRoleId = -1;
-            while (rs.next()) {
-                if ("broad-role".equals(rs.getString(2))) broadRoleId = rs.getLong(1);
-                else narrowRoleId = rs.getLong(1);
-            }
-        }
-
-        mockMvc.perform(
-                        put("/api/v1/admin/users/" + insideUser + "/roles")
-                                .header("X-Test-User-Id", delegate)
-                                .header("X-Test-Platform-Admin", "false")
-                                .header("If-Match", "3")
-                                .contentType("application/json")
-                                .content("{\"roleIds\":[" + broadRoleId + "]}"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
-
-        mockMvc.perform(
-                        put("/api/v1/admin/users/" + insideUser + "/roles")
-                                .header("X-Test-User-Id", delegate)
-                                .header("X-Test-Platform-Admin", "false")
-                                .header("If-Match", "3")
-                                .contentType("application/json")
-                                .content("{\"roleIds\":[" + narrowRoleId + "]}"))
-                .andExpect(status().isOk());
-
-        // Move across the subtree boundary is denied on the target side.
-        mockMvc.perform(
-                        put("/api/v1/admin/users/" + insideUser + "/department")
-                                .header("X-Test-User-Id", delegate)
-                                .header("X-Test-Platform-Admin", "false")
-                                .header("If-Match", orgStore.getUser(insideUser).version())
-                                .contentType("application/json")
-                                .content("{\"departmentId\":" + outsideId + "}"))
-                .andExpect(status().isForbidden());
-    }
-
-    @Test
     void genericUserUpdateRequiresUpdateCapability() throws Exception {
         UserEditFixture fixture = userEditFixture(List.of("ptmcp:user:move"));
         assertGenericEditDenied(fixture, true, "[" + fixture.narrowRoleId() + "]");
@@ -1768,8 +1102,8 @@ class AdminApiTest {
         OrgStore.UserRow before = orgStore.getUser(fixture.targetId());
         mockMvc.perform(
                         put("/api/v1/admin/users/" + fixture.targetId())
-                                .header("X-Test-User-Id", fixture.delegateId())
-                                .header("X-Test-Platform-Admin", "false")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
                                 .header("If-Match", before.version())
                                 .contentType("application/json")
                                 .content(
@@ -1830,8 +1164,8 @@ class AdminApiTest {
         OrgStore.UserRow before = orgStore.getUser(fixture.targetId());
         mockMvc.perform(
                         put("/api/v1/admin/users/" + fixture.targetId())
-                                .header("X-Test-User-Id", fixture.delegateId())
-                                .header("X-Test-Platform-Admin", "false")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
                                 .header("If-Match", before.version())
                                 .contentType("application/json")
                                 .content(userEditBody(fixture, false, "[]")))
@@ -1839,45 +1173,6 @@ class AdminApiTest {
         OrgStore.UserRow after = orgStore.getUser(fixture.targetId());
         assertFalse(after.enabled());
         assertTrue(after.roleIds().isEmpty());
-        assertEquals(before.version() + 1, after.version());
-    }
-
-    @Test
-    void genericUserUpdateAllowsOneAncestorDelegationToCoverWholeCommand() throws Exception {
-        UserEditFixture fixture =
-                userEditFixture(
-                        List.of(
-                                "ptmcp:user:update",
-                                "ptmcp:user:move",
-                                "ptmcp:user:status",
-                                "ptmcp:user:assign-role"));
-        long destination =
-                orgStore.createDepartment(fixture.departmentId(), "祖先下迁入部门", true, ADMIN_ID).id();
-        long replacement =
-                orgStore.createRole(
-                                "edit_replacement",
-                                "可赋新角色",
-                                true,
-                                List.of("ptmcp:user:update"),
-                                ADMIN_ID)
-                        .id();
-        OrgStore.UserRow before = orgStore.getUser(fixture.targetId());
-        mockMvc.perform(
-                        put("/api/v1/admin/users/" + fixture.targetId())
-                                .header("X-Test-User-Id", fixture.delegateId())
-                                .header("X-Test-Platform-Admin", "false")
-                                .header("If-Match", before.version())
-                                .contentType("application/json")
-                                .content(
-                                        userEditBody(fixture, false, "[" + replacement + "]")
-                                                .replace(
-                                                        "\"deptId\":" + fixture.departmentId(),
-                                                        "\"deptId\":" + destination)))
-                .andExpect(status().isOk());
-        OrgStore.UserRow after = orgStore.getUser(fixture.targetId());
-        assertEquals(destination, after.deptId());
-        assertEquals(List.of(replacement), after.roleIds());
-        assertFalse(after.enabled());
         assertEquals(before.version() + 1, after.version());
     }
 
@@ -1961,8 +1256,8 @@ class AdminApiTest {
             OrgStore.UserRow current = orgStore.getUser(fixture.targetId());
             mockMvc.perform(
                             put("/api/v1/admin/users/" + fixture.targetId())
-                                    .header("X-Test-User-Id", fixture.delegateId())
-                                    .header("X-Test-Platform-Admin", "false")
+                                    .header("X-Test-User-Id", ADMIN_ID)
+                                    .header("X-Test-Platform-Admin", "true")
                                     .header("If-Match", current.version())
                                     .contentType("application/json")
                                     .content(userEditBody(fixture, true, roles)))
@@ -1977,8 +1272,8 @@ class AdminApiTest {
         OrgStore.UserRow before = orgStore.getUser(fixture.targetId());
         mockMvc.perform(
                         put("/api/v1/admin/users/" + fixture.targetId())
-                                .header("X-Test-User-Id", fixture.delegateId())
-                                .header("X-Test-Platform-Admin", "false")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
                                 .header("If-Match", before.version())
                                 .contentType("application/json")
                                 .content(
@@ -2017,8 +1312,8 @@ class AdminApiTest {
         for (String roles : List.of("[null]", "[0]", "[-1]")) {
             mockMvc.perform(
                             put("/api/v1/admin/users/" + fixture.targetId())
-                                    .header("X-Test-User-Id", fixture.delegateId())
-                                    .header("X-Test-Platform-Admin", "false")
+                                    .header("X-Test-User-Id", ADMIN_ID)
+                                    .header("X-Test-Platform-Admin", "true")
                                     .header("If-Match", before.version())
                                     .contentType("application/json")
                                     .content(userEditBody(fixture, true, roles)))
@@ -2046,8 +1341,8 @@ class AdminApiTest {
                         ADMIN_ID);
         mockMvc.perform(
                         put("/api/v1/admin/users/" + fixture.targetId())
-                                .header("X-Test-User-Id", fixture.delegateId())
-                                .header("X-Test-Platform-Admin", "false")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
                                 .header("If-Match", original.version())
                                 .contentType("application/json")
                                 .content(userEditBody(fixture, true, null)))
@@ -2240,8 +1535,8 @@ class AdminApiTest {
                         ADMIN_ID);
         mockMvc.perform(
                         put("/api/v1/admin/users/" + fixture.targetId())
-                                .header("X-Test-User-Id", fixture.delegateId())
-                                .header("X-Test-Platform-Admin", "false")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
                                 .header("If-Match", before.version())
                                 .contentType("application/json")
                                 .content(userEditBody(fixture, enabled, null)))
@@ -2420,8 +1715,8 @@ class AdminApiTest {
             UserEditFixture fixture, String endpoint, String body) throws Exception {
         return mockMvc.perform(
                 put("/api/v1/admin/users/" + fixture.targetId() + "/" + endpoint)
-                        .header("X-Test-User-Id", fixture.delegateId())
-                        .header("X-Test-Platform-Admin", "false")
+                        .header("X-Test-User-Id", ADMIN_ID)
+                        .header("X-Test-Platform-Admin", "true")
                         .header("If-Match", orgStore.getUser(fixture.targetId()).version())
                         .contentType("application/json")
                         .content(body));
@@ -2430,7 +1725,14 @@ class AdminApiTest {
     private void assertSpecializedEditDenied(UserEditFixture fixture, String endpoint, String body)
             throws Exception {
         UserWriteEffects before = userWriteEffects(fixture.targetId());
-        performSpecializedEdit(fixture, endpoint, body)
+        // S2: 非平台管理员在入口即被拒绝；专用命令不再单独判权。
+        mockMvc.perform(
+                        put("/api/v1/admin/users/" + fixture.targetId() + "/" + endpoint)
+                                .header("X-Test-User-Id", fixture.delegateId())
+                                .header("X-Test-Platform-Admin", "false")
+                                .header("If-Match", orgStore.getUser(fixture.targetId()).version())
+                                .contentType("application/json")
+                                .content(body))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
         assertEquals(before, userWriteEffects(fixture.targetId()));
@@ -2450,43 +1752,6 @@ class AdminApiTest {
         performScopeTestEdit(fixture, outside)
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
-        assertEquals(before, userWriteEffects(fixture.targetId()));
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"0", "not-a-number"})
-    void delegatedUserEditUsesRealParentDespiteMissingOrMalformedCache(String ancestors)
-            throws Exception {
-        UserEditFixture fixture = userEditFixture(List.of("ptmcp:user:update"));
-        long child = orgStore.createDepartment(fixture.departmentId(), "真实子级", true, ADMIN_ID).id();
-        moveScopeTestUser(fixture.targetId(), child);
-        setScopeTestDepartment(child, "ancestors", ancestors);
-
-        performScopeTestEdit(fixture, child)
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.deptId").value(child));
-        assertEquals(child, orgStore.getUser(fixture.targetId()).deptId());
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"BROKEN_ROOT", "DELETED_ROOT"})
-    void delegatedUserEditValidatesTheRootInsteadOfTakingShortcut(String defect) throws Exception {
-        UserEditFixture fixture = userEditFixture(List.of("ptmcp:user:update"));
-        boolean broken = "BROKEN_ROOT".equals(defect);
-        setScopeTestDepartment(
-                fixture.departmentId(),
-                broken ? "parent_id" : "del_flag",
-                broken ? Long.toString(fixture.departmentId()) : "1");
-        UserWriteEffects before = userWriteEffects(fixture.targetId());
-
-        performScopeTestEdit(fixture, fixture.departmentId())
-                .andExpect(broken ? status().isServiceUnavailable() : status().isForbidden())
-                .andExpect(
-                        jsonPath("$.code")
-                                .value(
-                                        broken
-                                                ? "SECURITY_STATE_UNAVAILABLE"
-                                                : "MANAGEMENT_SCOPE_DENIED"));
         assertEquals(before, userWriteEffects(fixture.targetId()));
     }
 
@@ -2653,247 +1918,6 @@ class AdminApiTest {
                 + enabled
                 + (rolesJson == null ? "" : ",\"roleIds\":" + rolesJson)
                 + "}";
-    }
-
-    @Test
-    void delegatedAdminReadsRoleCatalogButCannotWriteIt() throws Exception {
-        seedAdminDelegationCodes();
-        long datasourceId = insertActiveDatasource();
-        long rootId = createDepartment("角色目录部");
-        createUser("roletest-throwaway", "占位用户", rootId);
-        long delegate = createUser("roletest-delegate", "角色目录受控员", rootId);
-        try (Connection connection = connect()) {
-            AdminActionTestSupport.grant(
-                    connection,
-                    delegate,
-                    "ptmcp:role:list",
-                    "ptmcp:role:read",
-                    "ptmcp:role:create");
-            AdminActionTestSupport.grant(connection, 42L, "ptmcp:role:list");
-        }
-
-        mockMvc.perform(
-                        post("/api/v1/admin/delegations")
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true")
-                                .header("Idempotency-Key", "role-catalog-delegation-1")
-                                .contentType("application/json")
-                                .content(
-                                        "{\"userId\":"
-                                                + delegate
-                                                + ",\"departmentRootId\":"
-                                                + rootId
-                                                + ",\"resourceType\":\"DATASOURCE\",\"resourceId\":"
-                                                + datasourceId
-                                                + ",\"allowedActions\":[\"ptmcp:user:assign-role\"]"
-                                                + ",\"validFrom\":\"2020-01-01T00:00:00Z\""
-                                                + ",\"validTo\":\"2030-01-01T00:00:00Z\"}"))
-                .andExpect(status().isCreated());
-
-        // Catalog read succeeds for the delegated admin.
-        mockMvc.perform(
-                        get("/api/v1/admin/roles")
-                                .header("X-Test-User-Id", delegate)
-                                .header("X-Test-Platform-Admin", "false"))
-                .andExpect(status().isOk());
-
-        // Writes stay platform-only: roles are shared across management scopes.
-        mockMvc.perform(
-                        post("/api/v1/admin/roles")
-                                .header("X-Test-User-Id", delegate)
-                                .header("X-Test-Platform-Admin", "false")
-                                .header("Idempotency-Key", "role-write-" + UUID.randomUUID())
-                                .contentType("application/json")
-                                .content(
-                                        "{\"key\":\"rogue\",\"name\":\"越权角色\",\"enabled\":true,"
-                                                + "\"permissionCodes\":[]}"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
-
-        // A caller with no delegation at all is denied even the catalog.
-        mockMvc.perform(
-                        get("/api/v1/admin/roles")
-                                .header("X-Test-User-Id", 42L)
-                                .header("X-Test-Platform-Admin", "false"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
-    }
-
-    @Test
-    void delegatedAclGrantsStayInsideEveryDelegationDimension() throws Exception {
-        seedAdminDelegationCodes();
-        try (Connection connection = connect();
-                Statement statement = connection.createStatement()) {
-            statement.execute(
-                    "INSERT INTO sys_role (role_key, role_name, status, del_flag, create_time,"
-                            + " update_time) VALUES ('acl-scope-admin', 'ACL作用域管理员', '0', '0',"
-                            + " NOW(6), NOW(6))",
-                    Statement.RETURN_GENERATED_KEYS);
-            long roleId;
-            try (var keys = statement.getGeneratedKeys()) {
-                keys.next();
-                roleId = keys.getLong(1);
-            }
-            for (String code : List.of("ptmcp:acl:read", "ptmcp:acl:list")) {
-                statement.execute(
-                        "INSERT INTO sys_role_permission (role_id, permission_code, create_time,"
-                                + " update_time) VALUES ("
-                                + roleId
-                                + ", '"
-                                + code
-                                + "', NOW(6), NOW(6))");
-            }
-            statement.execute(
-                    "INSERT INTO sys_user_role (user_id, role_id, create_time, update_time)"
-                            + " VALUES ("
-                            + ADMIN_ID
-                            + ", "
-                            + roleId
-                            + ", NOW(6), NOW(6))");
-        }
-        long datasourceId = insertActiveDatasource();
-        long rootId = createDepartment("ACL作用域根");
-        long outsideId = createDepartment("ACL作用域外");
-        createUser("acl-throwaway", "占位用户", rootId);
-        long delegate = createUser("acl-delegate", "ACL受控员", rootId);
-        try (Connection connection = connect();
-                PreparedStatement ready =
-                        connection.prepareStatement(
-                                "UPDATE sys_user_security SET identity_state='READY' WHERE user_id=?")) {
-            ready.setLong(1, delegate);
-            ready.executeUpdate();
-        }
-        try (Connection connection = connect()) {
-            AdminActionTestSupport.grant(
-                    connection,
-                    delegate,
-                    AdminActionTestSupport.standardActions().stream()
-                            .filter(code -> code.startsWith("ptmcp:acl:"))
-                            .toArray(String[]::new));
-        }
-        long insideSubject = createUser("acl-inside", "子树内主体", rootId);
-        long secondInsideSubject = createUser("acl-inside-two", "子树内主体二", rootId);
-        long outsideSubject = createUser("acl-outside", "子树外主体", outsideId);
-
-        // Windows are computed from now so the test never depends on the wall clock.
-        java.time.Instant delegationFrom =
-                java.time.Instant.now().minus(java.time.Duration.ofDays(30));
-        java.time.Instant delegationTo =
-                java.time.Instant.now().plus(java.time.Duration.ofDays(180));
-        java.time.Instant grantFrom = java.time.Instant.now().plus(java.time.Duration.ofDays(1));
-        java.time.Instant grantTo = java.time.Instant.now().plus(java.time.Duration.ofDays(90));
-
-        mockMvc.perform(
-                        post("/api/v1/admin/delegations")
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true")
-                                .header("Idempotency-Key", "acl-delegation-1")
-                                .contentType("application/json")
-                                .content(
-                                        "{\"userId\":"
-                                                + delegate
-                                                + ",\"departmentRootId\":"
-                                                + rootId
-                                                + ",\"resourceType\":\"DATASOURCE\",\"resourceId\":"
-                                                + datasourceId
-                                                + ",\"allowedActions\":[\"ptmcp:acl:read\"]"
-                                                + ",\"validFrom\":\""
-                                                + delegationFrom
-                                                + "\""
-                                                + ",\"validTo\":\""
-                                                + delegationTo
-                                                + "\"}"))
-                .andExpect(status().isCreated());
-
-        String inWindow =
-                "{\"subjectType\":\"USER\",\"subjectId\":"
-                        + insideSubject
-                        + ",\"resourceType\":\"DATASOURCE\",\"resourceId\":"
-                        + datasourceId
-                        + ",\"resourceGeneration\":1,\"action\":\"READ\",\"effect\":\"ALLOW\","
-                        + "\"includeDescendants\":false,\"validFrom\":\""
-                        + grantFrom
-                        + "\","
-                        + "\"validTo\":\""
-                        + grantTo
-                        + "\",\"reason\":\"委派内授予\"}";
-        String headers = "X-Test-User-Id: " + delegate + ", X-Test-Platform-Admin: false";
-
-        // In-dimension grant succeeds (subject inside, resource matched, READ delegated, window
-        // inside the delegation window).
-        MvcResult granted =
-                mockMvc.perform(
-                                post("/api/v1/admin/acl/grants")
-                                        .header("X-Test-User-Id", delegate)
-                                        .header("X-Test-Platform-Admin", "false")
-                                        .header("Idempotency-Key", "acl-grant-1")
-                                        .contentType("application/json")
-                                        .content(inWindow))
-                        .andExpect(
-                                result -> {
-                                    if (result.getResponse().getStatus() != 201) {
-                                        System.out.println(
-                                                "ACL-DEBUG: "
-                                                        + result.getResponse()
-                                                                .getContentAsString());
-                                    }
-                                })
-                        .andExpect(status().isCreated())
-                        .andReturn();
-        long grantId = readLong(granted.getResponse().getContentAsString(), "id");
-
-        // META is not in the delegated action set.
-        mockMvc.perform(
-                        post("/api/v1/admin/acl/grants")
-                                .header("X-Test-User-Id", delegate)
-                                .header("X-Test-Platform-Admin", "false")
-                                .header("Idempotency-Key", "acl-grant-meta")
-                                .contentType("application/json")
-                                .content(
-                                        inWindow.replace(
-                                                "\"action\":\"READ\"", "\"action\":\"META\"")))
-                .andExpect(status().isForbidden());
-
-        // The grant window may not outlive the delegation (2027 > 2026-06).
-        mockMvc.perform(
-                        post("/api/v1/admin/acl/grants")
-                                .header("X-Test-User-Id", delegate)
-                                .header("X-Test-Platform-Admin", "false")
-                                .header("Idempotency-Key", "acl-grant-window")
-                                .contentType("application/json")
-                                .content(
-                                        inWindow.replace(
-                                                        "\"subjectId\":" + insideSubject,
-                                                        "\"subjectId\":" + secondInsideSubject)
-                                                .replace(
-                                                        grantTo.toString(),
-                                                        java.time.Instant.now()
-                                                                .plus(
-                                                                        java.time.Duration.ofDays(
-                                                                                270))
-                                                                .toString())))
-                .andExpect(status().isForbidden());
-
-        // A subject outside the subtree is denied even for a delegated action.
-        mockMvc.perform(
-                        post("/api/v1/admin/acl/grants")
-                                .header("X-Test-User-Id", delegate)
-                                .header("X-Test-Platform-Admin", "false")
-                                .header("Idempotency-Key", "acl-grant-outside")
-                                .contentType("application/json")
-                                .content(
-                                        inWindow.replace(
-                                                "\"subjectId\":" + insideSubject,
-                                                "\"subjectId\":" + outsideSubject)))
-                .andExpect(status().isForbidden());
-
-        // Revoke inside the delegation succeeds; the platform admin still sees everything.
-        mockMvc.perform(
-                        delete("/api/v1/admin/acl/grants/" + grantId)
-                                .header("X-Test-User-Id", delegate)
-                                .header("X-Test-Platform-Admin", "false")
-                                .header("If-Match", "1"))
-                .andExpect(status().isOk());
     }
 
     @Test
@@ -3561,20 +2585,20 @@ class AdminApiTest {
     }
 
     @Test
-    void roleCreateIdempotencyRechecksActionBeforeReplay() throws Exception {
-        long actorRole = actionActorRole("ptmcp:platform:scope", "ptmcp:role:create");
+    void roleCreateIdempotencyRechecksGateBeforeReplay() throws Exception {
         mockMvc.perform(roleCreateRequest("role-revoked", "revoked_role"))
                 .andExpect(status().isCreated());
-        try (Connection connection = connect();
-                PreparedStatement statement =
-                        connection.prepareStatement(
-                                "DELETE FROM sys_role_permission WHERE role_id=? AND permission_code=?")) {
-            statement.setLong(1, actorRole);
-            statement.setString(2, "ptmcp:role:create");
-            assertEquals(1, statement.executeUpdate());
-        }
         String before = roleCreateWriteEffects();
-        mockMvc.perform(roleCreateRequest("role-revoked", "revoked_role"))
+        // S2: the gate re-evaluates the caller before any idempotent replay of the recorded 201.
+        mockMvc.perform(
+                        post("/api/v1/admin/roles")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .requestAttr(
+                                        AdminPrincipal.ATTRIBUTE,
+                                        new AdminPrincipal(ADMIN_ID, false))
+                                .header("Idempotency-Key", "role-revoked")
+                                .contentType("application/json")
+                                .content(roleCreateBody("revoked_role")))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
         assertEquals(before, roleCreateWriteEffects());
@@ -3582,13 +2606,9 @@ class AdminApiTest {
         assertEquals(1, scalar("SELECT COUNT(*) FROM api_idempotency"));
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"ptmcp:role:create", "ptmcp:platform:scope"})
-    void roleCreateIdempotencyRetainsUnknownWhenCurrentQualificationIsRevoked(String revoked)
-            throws Exception {
-        List<String> permissions =
-                List.of("ptmcp:platform:scope", "ptmcp:role:create", "ptmcp:role:update");
-        long actorRole = actionActorRole(permissions.toArray(String[]::new));
+    @Test
+    void roleCreateIdempotencyRetainsUnknownWhenCurrentQualificationIsRevoked() throws Exception {
+        long actorRole = actionActorRole();
         CountDownLatch actionStarted = new CountDownLatch(1);
         CountDownLatch finishAction = new CountDownLatch(1);
         AtomicInteger actions = new AtomicInteger();
@@ -3611,7 +2631,7 @@ class AdminApiTest {
                 MockMvcBuilders.standaloneSetup(
                                 new RoleAdminController(
                                         observed, idempotencyRecorder, delegationScopeResolver))
-                        .addInterceptors(new AdminActionInterceptor(delegationStore))
+                        .addInterceptors(new AdminActionInterceptor())
                         .setControllerAdvice(new ApiExceptionAdvice())
                         .build();
         try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
@@ -3628,25 +2648,17 @@ class AdminApiTest {
                 assertTrue(actionStarted.await(15, TimeUnit.SECONDS));
                 assertEquals(
                         "RUNNING", idempotencyState("roles.create", "role-qualification-race"));
-                orgStore.updateRole(
-                        actorRole,
-                        "撤权角色",
-                        null,
-                        permissions.stream().filter(code -> !revoked.equals(code)).toList(),
-                        1,
-                        ADMIN_ID);
-                boolean columnRevocation = "ptmcp:platform:scope".equals(revoked);
-                if (columnRevocation) {
-                    // S1: the store's requalification reads the independent platform_admin column,
-                    // so revoking the legacy scope code must be paired with flipping the column.
-                    try (Connection connection = connect();
-                            PreparedStatement flip =
-                                    connection.prepareStatement(
-                                            "UPDATE sys_user_security SET platform_admin=0"
-                                                    + " WHERE user_id=?")) {
-                        flip.setLong(1, ADMIN_ID);
-                        assertEquals(1, flip.executeUpdate());
-                    }
+                // S2: qualification is the platform_admin column alone; a concurrent role rewrite
+                // changes the write effects while the column flip denies the in-flight store
+                // requalification.
+                orgStore.updateRole(actorRole, "撤权角色", null, List.of(), 1, ADMIN_ID);
+                try (Connection connection = connect();
+                        PreparedStatement flip =
+                                connection.prepareStatement(
+                                        "UPDATE sys_user_security SET platform_admin=0"
+                                                + " WHERE user_id=?")) {
+                    flip.setLong(1, ADMIN_ID);
+                    assertEquals(1, flip.executeUpdate());
                 }
                 String afterRevocation = roleCreateWriteEffects();
                 finishAction.countDown();
@@ -3664,25 +2676,13 @@ class AdminApiTest {
                                         "UNKNOWN",
                                         idempotencyState(
                                                 "roles.create", "role-qualification-race")));
-                // Restore only this fixture permission to get through the real entry interceptor.
                 try (Connection connection = connect();
-                        PreparedStatement restore =
+                        PreparedStatement unflip =
                                 connection.prepareStatement(
-                                        "INSERT INTO sys_role_permission (role_id,permission_code,create_time,update_time)"
-                                                + " VALUES (?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))")) {
-                    restore.setLong(1, actorRole);
-                    restore.setString(2, revoked);
-                    assertEquals(1, restore.executeUpdate());
-                }
-                if (columnRevocation) {
-                    try (Connection connection = connect();
-                            PreparedStatement unflip =
-                                    connection.prepareStatement(
-                                            "UPDATE sys_user_security SET platform_admin=1"
-                                                    + " WHERE user_id=?")) {
-                        unflip.setLong(1, ADMIN_ID);
-                        assertEquals(1, unflip.executeUpdate());
-                    }
+                                        "UPDATE sys_user_security SET platform_admin=1"
+                                                + " WHERE user_id=?")) {
+                    unflip.setLong(1, ADMIN_ID);
+                    assertEquals(1, unflip.executeUpdate());
                 }
                 String beforeRetry = roleCreateWriteEffects();
                 isolatedMvc
@@ -6128,139 +5128,6 @@ class AdminApiTest {
                 assertTrue(result.next());
                 return Long.toString(result.getLong(1));
             }
-        }
-    }
-
-    @Test
-    void delegatedUserDeleteStaysInsideDelegationScope() throws Exception {
-        seedAdminDelegationCodes();
-        long datasourceId = insertActiveDatasource();
-        long rootId = createDepartment("用户删除作用域根");
-        long insideId = createDepartment("用户删除作用域内");
-        long outsideId = createDepartment("用户删除作用域外");
-        long insideVersion =
-                readLong(
-                        mockMvc.perform(
-                                        get("/api/v1/admin/departments/" + insideId)
-                                                .header("X-Test-User-Id", ADMIN_ID)
-                                                .header("X-Test-Platform-Admin", "true"))
-                                .andExpect(status().isOk())
-                                .andReturn()
-                                .getResponse()
-                                .getContentAsString(),
-                        "version");
-        mockMvc.perform(
-                        put("/api/v1/admin/departments/" + insideId)
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true")
-                                .header("If-Match", String.valueOf(insideVersion))
-                                .contentType("application/json")
-                                .content(
-                                        "{\"parentId\":"
-                                                + rootId
-                                                + ",\"name\":\"用户删除作用域内\",\"enabled\":true}"))
-                .andExpect(status().isOk());
-        long insideUser = createUser("del-inside-user", "委派内用户", insideId);
-        long outsideUser = createUser("del-outside-user", "委派外用户", outsideId);
-        createUser("del-scope-throwaway", "占位三", insideId);
-        long delegate = createUser("del-scope-admin", "受控删除管理员", insideId);
-        long delegateRole =
-                orgStore.createRole(
-                                "user_delete_delegate",
-                                "受控用户删除",
-                                true,
-                                List.of("ptmcp:user:list", "ptmcp:user:read", "ptmcp:user:delete"),
-                                ADMIN_ID)
-                        .id();
-        OrgStore.UserRow delegateProfile = orgStore.getUser(delegate);
-        orgStore.updateUser(
-                delegate,
-                delegateProfile.displayName(),
-                delegateProfile.deptId(),
-                null,
-                null,
-                null,
-                null,
-                List.of(delegateRole),
-                delegateProfile.version(),
-                ADMIN_ID);
-        mockMvc.perform(
-                        post("/api/v1/admin/delegations")
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true")
-                                .header("Idempotency-Key", "del-scope-delegation-1")
-                                .contentType("application/json")
-                                .content(
-                                        "{\"userId\":"
-                                                + delegate
-                                                + ",\"departmentRootId\":"
-                                                + rootId
-                                                + ",\"resourceType\":\"DATASOURCE\",\"resourceId\":"
-                                                + datasourceId
-                                                + ",\"allowedActions\":[\"ptmcp:user:delete\"]"
-                                                + ",\"validFrom\":\"2020-01-01T00:00:00Z\""
-                                                + ",\"validTo\":\"2030-01-01T00:00:00Z\"}"))
-                .andExpect(status().isCreated());
-
-        // Inside the subtree: the delegated delete succeeds and revokes credentials.
-        mockMvc.perform(
-                        delete("/api/v1/admin/users/" + insideUser)
-                                .header("X-Test-User-Id", delegate)
-                                .header("X-Test-Platform-Admin", "false")
-                                .header("If-Match", "\"1\""))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.enabled").value(false));
-        try (Connection connection = connect();
-                Statement statement = connection.createStatement()) {
-            assertEquals(
-                    "DELETED",
-                    scalar(
-                            statement,
-                            "SELECT status FROM sys_user_profile WHERE user_id=" + insideUser));
-        }
-
-        // Outside the subtree: denied even with the code and delegation.
-        mockMvc.perform(
-                        delete("/api/v1/admin/users/" + outsideUser)
-                                .header("X-Test-User-Id", delegate)
-                                .header("X-Test-Platform-Admin", "false")
-                                .header("If-Match", "\"1\""))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
-
-        // Delegation without the capability code on the actor is still denied.
-        long uncoded = createUser("del-uncoded-admin", "无码受控员", insideId);
-        mockMvc.perform(
-                        post("/api/v1/admin/delegations")
-                                .header("X-Test-User-Id", ADMIN_ID)
-                                .header("X-Test-Platform-Admin", "true")
-                                .header("Idempotency-Key", "del-scope-delegation-2")
-                                .contentType("application/json")
-                                .content(
-                                        "{\"userId\":"
-                                                + uncoded
-                                                + ",\"departmentRootId\":"
-                                                + rootId
-                                                + ",\"resourceType\":\"DATASOURCE\",\"resourceId\":"
-                                                + datasourceId
-                                                + ",\"allowedActions\":[\"ptmcp:user:delete\"]"
-                                                + ",\"validFrom\":\"2020-01-01T00:00:00Z\""
-                                                + ",\"validTo\":\"2030-01-01T00:00:00Z\"}"))
-                .andExpect(status().isCreated());
-        mockMvc.perform(
-                        delete("/api/v1/admin/users/" + outsideUser)
-                                .header("X-Test-User-Id", uncoded)
-                                .header("X-Test-Platform-Admin", "false")
-                                .header("If-Match", "\"1\""))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
-        try (Connection connection = connect();
-                Statement statement = connection.createStatement()) {
-            assertEquals(
-                    "ACTIVE",
-                    scalar(
-                            statement,
-                            "SELECT status FROM sys_user_profile WHERE user_id=" + outsideUser));
         }
     }
 

@@ -168,29 +168,6 @@ class BackendApiRegressionTest {
     }
 
     @Test
-    void grantListMustRespectDelegatedResourceScope() throws Exception {
-        long dept = department("review-dept");
-        long actor = user("review-delegate", dept);
-        long subject = user("review-subject", dept);
-        long permitted = datasource();
-        long outside = extraDatasource(permitted);
-        capabilities(actor, "ptmcp:acl:list");
-        delegation(actor, dept, permitted);
-        seedGrant(subject, outside, "ALLOW", "outside delegation");
-
-        MvcResult response =
-                mvc.perform(
-                                get("/api/v1/admin/acl/grants")
-                                        .header("X-Test-User-Id", actor)
-                                        .header("X-Test-Platform-Admin", "false")
-                                        .param("subjectType", "USER")
-                                        .param("subjectId", Long.toString(subject)))
-                        .andReturn();
-        assertEquals(200, response.getResponse().getStatus());
-        assertEquals(0, tree(response).size(), "resource outside delegation must not be disclosed");
-    }
-
-    @Test
     void futureSelfGrantMustBeRejected() throws Exception {
         long dept = department("review-dept");
         long actor = user("review-delegate", dept);
@@ -605,7 +582,14 @@ class BackendApiRegressionTest {
         long dept = department("review-dept");
         long subject = user("review-subject", dept);
         long editor = user("review-editor", dept);
-        capabilities(editor, "ptmcp:platform:scope", "ptmcp:acl:update");
+        // S2: 管理资格来自独立布尔列，不再需要能力码。
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement flip =
+                        connection.prepareStatement(
+                                "UPDATE sys_user_security SET platform_admin=1 WHERE user_id=?")) {
+            flip.setLong(1, editor);
+            assertEquals(1, flip.executeUpdate());
+        }
         long datasource = datasource();
         var original = seedGrant(subject, datasource, "DENY", "original rule");
         MvcResult result =

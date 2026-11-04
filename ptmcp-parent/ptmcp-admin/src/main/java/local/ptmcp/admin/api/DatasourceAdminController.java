@@ -8,7 +8,6 @@ import local.ptmcp.admin.web.RequestIdFilter;
 import local.ptmcp.admin.web.StrictJson;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
-import local.ptmcp.persistence.org.DelegationStore;
 import local.ptmcp.persistence.org.IdempotencyRecorder;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -33,30 +32,17 @@ import java.net.URI;
 @ConditionalOnProperty("ptmcp.admin.datasource.url")
 @RequestMapping("/api/v1/admin/datasources")
 public class DatasourceAdminController {
-    /** One capability code per action; api-spec forbids mapping one CRUD code to all actions. */
-    private static final String LIST = "ptmcp:datasource:list";
-
-    private static final String READ = "ptmcp:datasource:read";
-    private static final String CREATE = "ptmcp:datasource:create";
-    private static final String UPDATE = "ptmcp:datasource:update";
-    private static final String DELETE = "ptmcp:datasource:delete";
-    private static final String TEST = "ptmcp:datasource:test";
-    private static final String SYNC = "ptmcp:datasource:sync";
-
     private final DatasourceAdminService datasources;
     private final DatasourceJobService jobs;
     private final IdempotencyRecorder idempotency;
-    private final DelegationStore delegations;
 
     public DatasourceAdminController(
             DatasourceAdminService datasources,
             DatasourceJobService jobs,
-            IdempotencyRecorder idempotency,
-            DelegationStore delegations) {
+            IdempotencyRecorder idempotency) {
         this.datasources = datasources;
         this.jobs = jobs;
         this.idempotency = idempotency;
-        this.delegations = delegations;
     }
 
     public record TestRequest(DatasourceAdminService.Write draft) {}
@@ -74,7 +60,7 @@ public class DatasourceAdminController {
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false) Integer pageSize,
             HttpServletRequest request) {
-        ManagementScope.requirePlatformAdminPrincipal(request, delegations, LIST);
+        ManagementScope.requirePlatformAdminPrincipal(request);
         Long afterId = parseCursor(cursor);
         int size = pageSize == null ? 20 : pageSize;
         DatasourceAdminService.Page page = datasources.list(keyword, engine, status, afterId, size);
@@ -85,7 +71,7 @@ public class DatasourceAdminController {
     @GetMapping("/{id}")
     public ResponseEntity<DatasourceAdminService.Read> get(
             @PathVariable long id, HttpServletRequest request) {
-        ManagementScope.requirePlatformAdminPrincipal(request, delegations, READ);
+        ManagementScope.requirePlatformAdminPrincipal(request);
         DatasourceAdminService.Read read = datasources.get(id);
         return ResponseEntity.ok()
                 .eTag(IfMatch.etag(Long.parseLong(read.configVersion())))
@@ -96,8 +82,7 @@ public class DatasourceAdminController {
     @PostMapping
     public ResponseEntity<byte[]> create(
             @RequestBody(required = false) byte[] body, HttpServletRequest request) {
-        AdminPrincipal principal =
-                ManagementScope.requirePlatformAdminPrincipal(request, delegations, CREATE);
+        AdminPrincipal principal = ManagementScope.requirePlatformAdminPrincipal(request);
         DatasourceAdminService.Write write =
                 StrictJson.parse(body, DatasourceAdminService.Write.class);
         return IdempotentWrites.execute(
@@ -123,8 +108,7 @@ public class DatasourceAdminController {
             @RequestBody(required = false) byte[] body,
             HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
-        AdminPrincipal principal =
-                ManagementScope.requirePlatformAdminPrincipal(request, delegations, UPDATE);
+        AdminPrincipal principal = ManagementScope.requirePlatformAdminPrincipal(request);
         DatasourceAdminService.Write write =
                 StrictJson.parse(body, DatasourceAdminService.Write.class);
         DatasourceAdminService.Read updated =
@@ -144,8 +128,7 @@ public class DatasourceAdminController {
     public ResponseEntity<DatasourceAdminService.DeleteView> delete(
             @PathVariable long id, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
-        AdminPrincipal principal =
-                ManagementScope.requirePlatformAdminPrincipal(request, delegations, DELETE);
+        AdminPrincipal principal = ManagementScope.requirePlatformAdminPrincipal(request);
         return ResponseEntity.ok(datasources.delete(id, expectedVersion, principal.userId()));
     }
 
@@ -155,8 +138,7 @@ public class DatasourceAdminController {
             @PathVariable long id,
             @RequestBody(required = false) byte[] body,
             HttpServletRequest request) {
-        AdminPrincipal principal =
-                ManagementScope.requirePlatformAdminPrincipal(request, delegations, TEST);
+        AdminPrincipal principal = ManagementScope.requirePlatformAdminPrincipal(request);
         DatasourceAdminService.Write draft =
                 body == null || body.length == 0
                         ? null
@@ -189,8 +171,7 @@ public class DatasourceAdminController {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
         long expectedVersion = IfMatch.requireVersion(request);
-        AdminPrincipal principal =
-                ManagementScope.requirePlatformAdminPrincipal(request, delegations, UPDATE);
+        AdminPrincipal principal = ManagementScope.requirePlatformAdminPrincipal(request);
         return IdempotentWrites.execute(
                 idempotency,
                 principal.userId(),
@@ -217,8 +198,7 @@ public class DatasourceAdminController {
             @PathVariable long id,
             @RequestBody(required = false) byte[] body,
             HttpServletRequest request) {
-        AdminPrincipal principal =
-                ManagementScope.requirePlatformAdminPrincipal(request, delegations, SYNC);
+        AdminPrincipal principal = ManagementScope.requirePlatformAdminPrincipal(request);
         SyncRequest sync = StrictJson.parse(body, SyncRequest.class);
         if (!"FULL".equals(sync.mode())) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);

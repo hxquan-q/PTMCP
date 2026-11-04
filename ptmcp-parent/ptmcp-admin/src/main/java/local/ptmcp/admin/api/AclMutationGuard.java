@@ -7,7 +7,6 @@ import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.persistence.org.AclDirectory;
 import local.ptmcp.persistence.org.AclGrantStore;
-import local.ptmcp.persistence.org.DelegationStore;
 import local.ptmcp.persistence.org.ResourceIds;
 import local.ptmcp.persistence.org.SelfEscalationGuard;
 import local.ptmcp.persistence.security.UserSecurityStore;
@@ -16,24 +15,19 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Set;
 
 /**
  * Per-command policy evaluated on the metadata write connection, never from an old HTTP snapshot.
  */
 final class AclMutationGuard {
     private final AclDirectory directory;
-    private final AclScopeGate scope;
 
-    AclMutationGuard(AclDirectory directory, AclScopeGate scope) {
+    AclMutationGuard(AclDirectory directory) {
         this.directory = directory;
-        this.scope = scope;
     }
 
-    AclGrantStore.MutationCheck policy(long actorId, Long expectedAuthVersion, String action) {
+    AclGrantStore.MutationCheck policy(long actorId, Long expectedAuthVersion) {
         return new AclGrantStore.MutationCheck() {
-            private Boolean platformAdmin;
-
             @Override
             public void authorize(Connection connection) throws SQLException {
                 UserSecurityStore.State user = UserSecurityStore.read(connection, actorId, true);
@@ -41,12 +35,9 @@ final class AclMutationGuard {
                         user,
                         expectedAuthVersion == null ? user.authVersion() : expectedAuthVersion);
                 UserSecurityStore.requireActiveProfile(connection, actorId);
-                Set<String> permissions =
-                        Set.copyOf(DelegationStore.permissionsOf(connection, actorId));
-                if (!permissions.contains(action)) {
+                if (!UserSecurityStore.isPlatformAdmin(connection, actorId)) {
                     throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
                 }
-                platformAdmin = permissions.contains("ptmcp:platform:scope");
             }
 
             @Override
@@ -55,11 +46,6 @@ final class AclMutationGuard {
                     AclGrantStore.AclGrantRecord before,
                     AclGrantStore.AclGrantRecord after)
                     throws SQLException {
-                if (platformAdmin == null) {
-                    throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
-                }
-                if (!platformAdmin)
-                    scope.requireMutationAllowed(connection, actorId, before, after);
                 var subjects = directory.subjectScope(connection, actorId);
                 var original = directory.activeGrants(connection, actorId);
                 var replacement = new ArrayList<>(original);

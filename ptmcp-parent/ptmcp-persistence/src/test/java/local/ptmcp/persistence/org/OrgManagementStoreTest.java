@@ -1663,6 +1663,9 @@ class OrgManagementStoreTest {
     }
 
     private static Stream<Arguments> roleQualificationCases() {
+        // S2: qualification is the platform_admin column alone; the code-based denial reasons
+        // (NO_ACTION/NO_MEMBER/ROLE_DISABLED/ROLE_DELETED/OTHER_ACTION/STAR_ACTION) no longer
+        // exist and are covered by the S2 acceptance on the admin surface.
         return Stream.of("CREATE", "UPDATE", "DELETE")
                 .flatMap(
                         command ->
@@ -1672,13 +1675,7 @@ class OrgManagementStoreTest {
                                                 "UNBOUND",
                                                 "DISABLED_PROFILE",
                                                 "MISSING_PROFILE",
-                                                "NO_ACTION",
                                                 "NO_PLATFORM",
-                                                "NO_MEMBER",
-                                                "ROLE_DISABLED",
-                                                "ROLE_DELETED",
-                                                "OTHER_ACTION",
-                                                "STAR_ACTION",
                                                 "AUTH_ZERO",
                                                 "IDENTITY_ZERO")
                                         .map(reason -> Arguments.of(command, reason)));
@@ -1810,20 +1807,6 @@ class OrgManagementStoreTest {
         }
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"CREATE", "UPDATE", "DELETE"})
-    void roleQualificationActorOneHasNoBypass(String command) throws Exception {
-        OrgStore.RoleRow existing = roleTransactionExisting(command);
-        seedRoleActor(1, "actor_one", List.of("ptmcp:platform:scope"));
-        RoleQualificationSnapshot before = roleQualificationSnapshot();
-        assertAll(
-                () ->
-                        assertEquals(
-                                ErrorCode.MANAGEMENT_SCOPE_DENIED,
-                                roleQualificationAttempt(command, orgStore, existing, 1)),
-                () -> assertEquals(before, roleQualificationSnapshot()));
-    }
-
     private static boolean roleTargetRead(String sql) {
         return sql.startsWith("SELECT 1 FROM sys_role WHERE role_key")
                 || sql.startsWith("SELECT version FROM sys_role WHERE role_id");
@@ -1834,6 +1817,9 @@ class OrgManagementStoreTest {
     void roleQualificationRejectsBeforeReadingTarget(String command) throws Exception {
         OrgStore.RoleRow existing = roleTransactionExisting(command);
         RoleActor actor = seedRoleActor(9_200_001, "denied_actor", List.of("ptmcp:platform:scope"));
+        // S2: the actor qualifies only via the column; clear it to deny before the target read.
+        statusExecute(
+                "UPDATE sys_user_security SET platform_admin=0 WHERE user_id=?", actor.userId());
         AtomicInteger targetReads = new AtomicInteger();
         OrgStore observed =
                 new OrgStore(
@@ -1915,9 +1901,11 @@ class OrgManagementStoreTest {
     }
 
     @ParameterizedTest
+    // S2: revoking a capability code no longer denies the write; only clearing the column does.
     @CsvSource({
-        "CREATE,ptmcp:role:create", "UPDATE,ptmcp:role:update", "DELETE,ptmcp:role:delete",
-        "CREATE,ptmcp:platform:scope", "UPDATE,ptmcp:platform:scope", "DELETE,ptmcp:platform:scope"
+        "CREATE,ptmcp:platform:scope",
+        "UPDATE,ptmcp:platform:scope",
+        "DELETE,ptmcp:platform:scope"
     })
     void roleQualificationSeesRevocationCommittedBeforeGlobalLock(String command, String revoked)
             throws Exception {
@@ -2026,8 +2014,8 @@ class OrgManagementStoreTest {
         "CREATE,SELECT auth_version", "UPDATE,SELECT auth_version", "DELETE,SELECT auth_version",
         "CREATE,SELECT status FROM sys_user_profile", "UPDATE,SELECT status FROM sys_user_profile",
                 "DELETE,SELECT status FROM sys_user_profile",
-        "CREATE,SELECT DISTINCT rp.permission_code", "UPDATE,SELECT DISTINCT rp.permission_code",
-                "DELETE,SELECT DISTINCT rp.permission_code"
+        "CREATE,SELECT platform_admin", "UPDATE,SELECT platform_admin",
+                "DELETE,SELECT platform_admin"
     })
     void roleQualificationDependencyFailureDoesNotWrite(String command, String failedSql)
             throws Exception {

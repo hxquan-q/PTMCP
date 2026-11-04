@@ -96,9 +96,6 @@ public final class UserScopeGate {
             Set<String> actions,
             Set<Long> requestedRoles) {
         AdminPrincipal principal = AdminPrincipal.require(request);
-        if (!delegationStore.permissionsOf(principal.userId()).containsAll(actions)) {
-            throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
-        }
         if (principal.platformAdmin()) {
             return;
         }

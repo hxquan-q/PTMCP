@@ -357,7 +357,7 @@ public final class OrgStore {
         return new SecurityChangeTransaction(primary)
                 .executeReturning(
                         connection -> {
-                            requireCurrentRoleActor(connection, actorId, "ptmcp:role:create");
+                            requireCurrentRoleActor(connection, actorId);
                             requireRoleKeyFree(connection, key);
                             long id;
                             try (PreparedStatement statement =
@@ -407,7 +407,7 @@ public final class OrgStore {
         return new SecurityChangeTransaction(primary)
                 .executeReturning(
                         connection -> {
-                            requireCurrentRoleActor(connection, actorId, "ptmcp:role:update");
+                            requireCurrentRoleActor(connection, actorId);
                             long nextVersion = lockNextRoleVersion(connection, id, expectedVersion);
                             try (PreparedStatement statement =
                                     OrgSql.statement(
@@ -460,7 +460,7 @@ public final class OrgStore {
         new SecurityChangeTransaction(primary)
                 .executeReturning(
                         connection -> {
-                            requireCurrentRoleActor(connection, actorId, "ptmcp:role:delete");
+                            requireCurrentRoleActor(connection, actorId);
                             long nextVersion = lockNextRoleVersion(connection, id, expectedVersion);
                             try (PreparedStatement members =
                                             OrgSql.statement(
@@ -1200,32 +1200,14 @@ public final class OrgStore {
     }
 
     /** Called first in the security transaction, after its global lock and before target reads. */
-    private static void requireCurrentRoleActor(Connection connection, long actorId, String action)
+    private static void requireCurrentRoleActor(Connection connection, long actorId)
             throws SQLException {
         UserSecurityStore.State security = UserSecurityStore.read(connection, actorId, true);
         if (!security.ready()) {
             throw new DomainException(ErrorCode.TOKEN_REVOKED);
         }
         UserSecurityStore.requireActiveProfile(connection, actorId);
-        boolean platform = UserSecurityStore.isPlatformAdmin(connection, actorId);
-        boolean permitted = false;
-        try (PreparedStatement statement =
-                OrgSql.statement(
-                        connection,
-                        "SELECT DISTINCT rp.permission_code FROM sys_user_role ur"
-                                + " JOIN sys_role r ON r.role_id = ur.role_id"
-                                + " JOIN sys_role_permission rp ON rp.role_id = r.role_id"
-                                + " WHERE ur.user_id = ? AND r.status = '0' AND r.del_flag = '0'"
-                                + " AND rp.permission_code = ?")) {
-            statement.setLong(1, actorId);
-            statement.setString(2, action);
-            try (ResultSet result = statement.executeQuery()) {
-                while (result.next()) {
-                    permitted |= action.equals(result.getString(1));
-                }
-            }
-        }
-        if (!platform || !permitted) {
+        if (!UserSecurityStore.isPlatformAdmin(connection, actorId)) {
             throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
         }
     }

@@ -664,50 +664,47 @@ class DatasourceApiTest {
     }
 
     @Test
-    void platformAdminWithoutCapabilityCodeIsRejectedOnEveryAction() throws Exception {
-        // A platform-scoped identity that holds no datasource capability code must not reach any
-        // datasource action; the code check applies to platform admins too.
+    void platformAdminNeedsNoCapabilityCodeOnDatasourceActions() throws Exception {
+        // S2: 平台管理员不再依赖功能码；无任何数据源能力码也放行全部数据源动作。
+        MvcResult created =
+                mockMvc.perform(
+                                noCode(post("/api/v1/admin/datasources"))
+                                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(body("orders", "127.0.0.1")))
+                        .andExpect(status().isCreated())
+                        .andReturn();
+        long id = Long.parseLong(json(created).get("id").asString());
+        mockMvc.perform(noCode(get("/api/v1/admin/datasources"))).andExpect(status().isOk());
+        mockMvc.perform(noCode(get("/api/v1/admin/datasources/" + id))).andExpect(status().isOk());
         mockMvc.perform(
-                        noCode(post("/api/v1/admin/datasources"))
-                                .header("Idempotency-Key", UUID.randomUUID().toString())
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(body("orders", "127.0.0.1")))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
-        mockMvc.perform(noCode(get("/api/v1/admin/datasources")))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
-        mockMvc.perform(noCode(get("/api/v1/admin/datasources/1")))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
-        mockMvc.perform(
-                        noCode(put("/api/v1/admin/datasources/1"))
+                        noCode(put("/api/v1/admin/datasources/" + id))
                                 .header("If-Match", "\"1\"")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(body("orders", "127.0.0.1")))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
-        mockMvc.perform(noCode(delete("/api/v1/admin/datasources/1")).header("If-Match", "\"1\""))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+                .andExpect(status().isOk());
         mockMvc.perform(
-                        noCode(post("/api/v1/admin/datasources/1/test"))
+                        noCode(delete("/api/v1/admin/datasources/" + id))
+                                .header("If-Match", "\"2\""))
+                .andExpect(status().isOk());
+        // 门放行后业务层按不存在拒绝（404），而不是入口的 403 MANAGEMENT_SCOPE_DENIED。
+        mockMvc.perform(noCode(get("/api/v1/admin/datasources/999999")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(
+                        noCode(post("/api/v1/admin/datasources/999999/test"))
                                 .header("Idempotency-Key", UUID.randomUUID().toString()))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+                .andExpect(status().isNotFound());
         mockMvc.perform(
-                        noCode(post("/api/v1/admin/datasources/1/sync"))
+                        noCode(post("/api/v1/admin/datasources/999999/sync"))
                                 .header("Idempotency-Key", UUID.randomUUID().toString())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"mode\":\"FULL\"}"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+                .andExpect(status().isNotFound());
         mockMvc.perform(
-                        noCode(post("/api/v1/admin/datasources/1/candidates/1/publish"))
+                        noCode(post("/api/v1/admin/datasources/999999/candidates/1/publish"))
                                 .header("Idempotency-Key", UUID.randomUUID().toString())
                                 .header("If-Match", "\"1\""))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+                .andExpect(status().isNotFound());
     }
 
     @Test

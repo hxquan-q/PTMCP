@@ -436,10 +436,10 @@ class SessionApiTest {
         String index = sessionIndexSnapshot(ALICE);
         mockMvc.perform(get("/api/v1/admin/roles").cookie(session.cookie()))
                 .andExpect(status().isOk());
+        // S2: 管理资格由 platform_admin 列决定，删除能力码不影响管理面访问。
         executeSql("DELETE FROM sys_role_permission WHERE permission_code='ptmcp:role:list'");
         mockMvc.perform(get("/api/v1/admin/roles").cookie(session.cookie()))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+                .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/session/me").cookie(session.cookie()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.platformAdmin").value(true))
@@ -472,6 +472,7 @@ class SessionApiTest {
         String operations = scalar("SELECT COUNT(*) FROM admin_operation_log");
         departments = scalar("SELECT COUNT(*) FROM sys_dept");
         String replays = scalar("SELECT COUNT(*) FROM api_idempotency");
+        // 删码后再重放：门仍放行，幂等层直接返回已记录结果，不重复执行。
         mockMvc.perform(
                         post("/api/v1/admin/departments")
                                 .cookie(session.cookie())
@@ -479,8 +480,7 @@ class SessionApiTest {
                                 .header("Idempotency-Key", key)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(body))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("MANAGEMENT_SCOPE_DENIED"));
+                .andExpect(status().isCreated());
         assertEquals(operations, scalar("SELECT COUNT(*) FROM admin_operation_log"));
         assertEquals(departments, scalar("SELECT COUNT(*) FROM sys_dept"));
         assertEquals(replays, scalar("SELECT COUNT(*) FROM api_idempotency"));

@@ -165,6 +165,32 @@ Updated: 2026-11-05
   （表已不在 JOIN 中）导致 `userCreateDuplicateLoginAndRoleAssignment` 抛
   `DEPENDENCY_UNAVAILABLE`，改为 `s.user_id`。
 
+### S2 AdminActionInterceptor 全允/全拒二元化（已实施）
+
+- `AdminActionInterceptor`：仅判 `AdminPrincipal.platformAdmin()`——管理员全放行，
+  其余一律 `MANAGEMENT_SCOPE_DENIED`；构造函数去掉 `DelegationStore` 依赖，
+  `AdminWebConfiguration` 同步收窄。
+- `OrgStore.requireCurrentRoleActor`：删动作码查询，只判 `isPlatformAdmin`（列）；
+  `action` 参数随用移除。管理员免码放行成立，S2 验收「含未显式给码端点」可达。
+- `ManagementScope.requirePlatformAdminPrincipal(3 参)`（管理员 ∧ 能力码）折叠为平台管理员
+  单判；`DatasourceAdminController` 8 处调用点与 7 个码常量删除。
+- `AclMutationGuard.authorize`：`platformAdmin` 改由列判定，非管理员直接拒；`validate` 的
+  委派范围分支（非管理员路径）随二元化死亡而移除；`policy()` 去 `action` 参数。
+- `UserScopeGate.requireCommand`：删能力码前置检查，保留平台管理员早退与委派收窄（S4 删）。
+- 测试随二元化重指向：
+  - 删除（前提死于码分离/委派，行为已不可达）：`adminAction*` 码分离家族 7 个、
+    委派行为家族 10 个（delegated* 与 ancestor-delegation）、
+    `BackendApiRegressionTest.grantListMustRespectDelegatedResourceScope`。
+  - 重写为列驱动：撤销/重检/幂等竞态全部改列翻转（含 AdminApiTest 两个幂等用例收敛为
+    单测、SessionApiTest cookie 用例「删码仍放行」）；`DatasourceApiTest` 反转为
+    「无码管理员放行」（CRUD 精确断言 + 作业端点 404 证门放行）。
+  - 通用校验测试换管理员主体：genericUserUpdate* 7 个、specializedUser* 2 个、
+    escalation 夹具置列；`assertSpecializedEditDenied` 独立走非管理员请求。
+  - OrgManagementStoreTest：拒绝原因收敛为 8 个列/安全态原因；依赖失败行改
+    `SELECT platform_admin`；撤销竞态只留列行；`RejectsBeforeReadingTarget` 改清列拒绝；
+    删 `ActorOneHasNoBypass`（前提死）。
+  - 新增 S2 验收两用例：普通用户全拒（6 端点 403）、管理员无码全允（4 面 200）。
+
 ## 结果与证据
 
 ### S1（2026-11-05）
@@ -186,10 +212,20 @@ Updated: 2026-11-05
 - 环境备注：Docker 经 WSL relay `tcp://127.0.0.1:12476`（mTLS 客户端证书置于
   `~/.docker-ptmcp`），`TESTCONTAINERS_HOST_OVERRIDE=<WSL VM IP>` 直连发布端口。
 
+### S2（2026-11-05）
+
+- admin 全量：`./mvnw -o -pl ptmcp-admin test` → `Tests run: 228, Failures: 0, Errors: 0`。
+- persistence 全量：`./mvnw -o -pl ptmcp-persistence test` → `Tests run: 386, Failures: 0, Errors: 0`。
+- 全仓 `test-compile` 通过；`python scripts/check.py` 五项门禁 PASS。
+- 备注：本机 loopback 对 WSL 转发间歇抖动，两轮 suite 因 `Could not find a valid Docker
+  environment` 整类报错，按既有协议重跑后全绿；代码无相关改动。
+- 评审类型：自审（单 Agent 实施）。
+
 ## 交接
 
-当前焦点：S2 `AdminActionInterceptor` 二元化（平台管理员全允、普通用户全拒），
-随后 S3 删 `sys_role_permission` 与动作码链路。S1 已提交推送 `dev`。
+当前焦点：S3 删 `sys_role_permission` 表与动作码链路（`AdminSessionService.permissions()`、
+`/session/me` 的 `permissions` 字段、`DelegationStore.permissionsOf`、角色 CRUD 的
+`permissionCodes`、OrgStore role-permission 写路径、播种的 portal 角色码）。S2 已提交推送 `dev`。
 
 已有授权与待决定事项：
 
