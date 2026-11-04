@@ -95,6 +95,7 @@
 | [Agent 开发流程](standards/agent-workflow.md) | 调查、任务合同、切片、验证、权限、交付、恢复与规则治理 |
 | [决策笔记](standards/decision-notes.md) | 文档/ADR/工作项分工、真实取舍和笔记生命周期 |
 | [工程标准与工具门禁](standards/quality-tooling.md) | p3c、Spotless/Checkstyle、React/ESLint/Prettier、MySQL 采用与配置来源 |
+| [研发闭环](standards/harness-development.md) | 上游 DeepSeek Harness 治理来源映射、只读变更范围报告、分层验证与文档/测试评审 |
 | [Agent 与设计资产治理](standards/agent-assets.md) | 根入口/桥接、DESIGN、.agents 技能、.claude 本机配置的职责、加载与变更边界 |
 | [云效质量流水线记录](ops/yunxiao-quality.md) | 2026-10-26 Flow 与扫描配置快照；当前云端配置应另行核实 |
 | [ASVS 安全自查](test/asvs-checklist.md) | ASVS 5.0.0 身份/会话/授权/日志的条款、证据与差距 |
