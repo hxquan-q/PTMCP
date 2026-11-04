@@ -5,7 +5,7 @@ Status: in_progress
 Owner: current-agent
 Acceptance: pending
 Verification: PASS
-Updated: 2026-11-02
+Updated: 2026-11-04
 
 ## 目标与边界
 
@@ -270,3 +270,19 @@ U8 交接点名的余量项，涉及当时仍 CLEAN 的三个文件：`src/App.t
 U11 详情浮层与 U12 视觉收敛已提交 `7907ec3`；时间、枚举与证明表单属审计修复，已随 `39be5fd` 提交。共享树复验：React 契约测试 168/168，ESLint/Prettier/tsc/vite build 通过，仓库 `python scripts/check.py` 74 项 PASS（本机无 `python3` 别名，改用 `python`）。
 
 `AuditPage.tsx` 与 `DatasourcesPage.tsx` 同时含审计修复与视觉改动，提交时按 hunk 拆分：时区导入与引擎/状态枚举进入 `39be5fd`，筛选宽度、死按钮移除与卡片布局进入 `7907ec3`；未整文件暂存其他窗口内容。用户本轮明确授权提交与推送。推送回执（2026-11-02）：`origin/dev` 与 `codeup/dev` 已包含本项提交（当时 tip `6f10a64`）；GitHub 远端返回仓库已迁移到 `hxquan-q/PTMCP`，旧 URL 仍可推送，本机 `origin` 配置未改。
+
+### 切片 U13：参考 React Bits / Arc / Efferd 的共享层升级（2026-11-04）
+
+来源：用户要求参考 `reactbits.dev`、`DavidHDev/react-bits`、`uiarc.dev`、`kuratli/arc-library`、`efferd.com` 优化页面与布局；经选择确认范围为「全站共享层」，强度为「企业级升级」，保留 SAP 白/蓝企业语言。不新增依赖（仍只有 React/ReactDOM），不引入渐变函数，不伪造后端能力。
+
+改动集中在共享层：
+
+- `src/styles/index.css`：新增缓出/强调两档无过冲缓动与 120/220/420ms 时长令牌；登录画布三团实色模糊光斑（`filter: blur()`）漂移，登录卡 88% 白玻璃 + 顶部 2px 蓝线 + 60ms 阶梯入场；内容页最大 1600px 居中并按导航分组 `rise-in`；页面标题 3px 蓝竖条、导航选中竖条、Tab 下划线中心展开；统计卡指针柔光/强调线/抬升、表格行悬停首列蓝线、加载呼吸点、空态图标浮动；遮罩/对话框/抽屉/Toast/顶栏菜单入场；reduced-motion 下动画与过渡压到 0.01ms（含 `animation-delay`）。另修移动端真实缺陷：`.data-table .link` 是 `<button>`，默认 `white-space: normal` 会把首列名称折成两行，显式 `nowrap` 并保留 24px 可点高度。
+- `src/views/auth/LoginPage.tsx`：加入纯装饰 `.login-aurora` 光斑层（`aria-hidden`），表单结构不变。
+- `src/layouts/AppShell.tsx`：内容区包一层 `key={active}` 的 `.app-shell-page`，切换分组时整页入场；详情页共享 active，不重挂载。
+- `src/components/common.tsx`：`StatCard` 增加 `useCountUp`（640ms 三次缓出，非数字原样输出，reduced-motion 直接落位）与指针柔光变量。
+- `DESIGN.md`：新增「2026-11-04 共享层动效与登录表面」，记录令牌、表面与动效边界。
+
+实际检查：`pnpm --ignore-workspace --config.verify-deps-before-run=false check` 全过（ESLint `--max-warnings 0`、Prettier、`tsc --noEmit`、主站与 OAuth 两套 build）；`pnpm ... test` 204/204。Impeccable detector 仅余两条 warning，均为刻意/既有：`.toast` 的 3px 左边线（既有样式，未改）与 `.page-header-copy::before` 3px 页签竖条（本切片刻意标识，非卡片侧边条）。浏览器实测（隔离合成预览 `http://127.0.0.1:25175`，Playwright；agent-browser 在本机连续挂起，改用 Playwright）：1440×900 与 390×844 的登录页、工作区、接入配置；统计卡悬停柔光、表格行悬停蓝线、抽屉、对话框、skip-link 焦点；390px 下统计卡 2×2、Tab 横向滚动、表格 `scrollWidth 923 / clientWidth 286` 可横向滚动；reduced-motion 模拟下 `.app-shell-page`/`.stat-card`/`.nav-item` 计算时长 `1e-05s`，计数直接落位为 `6/3/2/0`。
+
+未验证：真实后端联调、OAuth 页面与权限验收（预览为合成数据，不能作为验收证据）；读屏软件实际播报；Safari/Firefox 的 `backdrop-filter` 与 `inert` 表现。预览端口 25175 的 vite 进程停止后数秒内被宿主侧重新拉起，判断为其他会话/看护进程所有，未继续强行终止。会话截图（仓库根 `01-…12-*.png`）未入库，验证后已删除；`.playwright-mcp/` 为既有未跟踪会话目录，未清理。共享树中 `index.css` 同时含另一窗口的 `.oauth-*` 样式块，本次按 hunk 归属只暂存本切片的共享层改动，不整文件带入；`package.json`/`tsconfig.json` 的 OAuth 构建改动也未暂存。

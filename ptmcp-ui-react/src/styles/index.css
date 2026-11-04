@@ -18,6 +18,23 @@ body {
   background: var(--ptmcp-canvas);
   -webkit-font-smoothing: antialiased;
 }
+/* 浏览器自带的选区、插入符与数字字形不属于任何设计系统，按调色板统一。
+   表格与统计值用等宽数字，数值变化时列宽不再跳动。 */
+::selection {
+  background: var(--ptmcp-blue-soft);
+  color: var(--ptmcp-heading);
+}
+:where(input, textarea, select) {
+  caret-color: var(--ptmcp-blue);
+}
+.data-table,
+.stat-card-value,
+.page-btn,
+.pagination,
+.table-footer,
+.cell-stack code {
+  font-variant-numeric: tabular-nums;
+}
 button {
   font: inherit;
   color: inherit;
@@ -93,6 +110,12 @@ select {
   --ptmcp-space-14: 48px;
   /* 触控热区：WCAG 2.2 AAA 2.5.5 的 44px。视觉尺寸可以更小，热区不得更小。 */
   --ptmcp-hit: 44px;
+  /* 动效刻度：一套缓动、三档时长。新动效只复用，不另写魔法曲线。 */
+  --ptmcp-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ptmcp-ease-emphasis: cubic-bezier(0.22, 1, 0.36, 1);
+  --ptmcp-dur-fast: 120ms;
+  --ptmcp-dur-base: 220ms;
+  --ptmcp-dur-slow: 420ms;
 }
 
 /* ── 滚动条：细型、低对比，避免表格内的横/纵条抢走内容注意力 ── */
@@ -321,7 +344,9 @@ select {
   transition:
     background 0.15s ease,
     border-color 0.15s ease,
-    color 0.15s ease;
+    color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform var(--ptmcp-dur-fast) var(--ptmcp-ease-out);
 }
 .btn::after {
   content: '';
@@ -335,13 +360,20 @@ select {
 .btn--primary {
   background: var(--ptmcp-blue-strong);
   color: #fff;
+  box-shadow: 0 1px 2px rgba(15, 98, 214, 0.18);
 }
+/* 主按钮的「浮起」只靠投影，不裁剪按钮：::after 的 44px 热区必须留在外面。 */
 .btn--primary:hover {
   background: var(--ptmcp-blue-strong-hover);
+  box-shadow: 0 6px 16px rgba(15, 98, 214, 0.26);
 }
 .btn--primary:active {
   background: var(--ptmcp-blue-strong-hover);
-  filter: brightness(0.96);
+  box-shadow: 0 1px 2px rgba(15, 98, 214, 0.18);
+  transform: translateY(1px);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 .btn--secondary {
   background: var(--ptmcp-surface);
@@ -511,8 +543,24 @@ input[type='checkbox'] {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   flex-wrap: wrap;
+}
+/* 页面标题前的短竖条是控制台的统一「页签」：位置固定、颜色只有主蓝，不随页面换色。 */
+.page-header-copy {
+  position: relative;
+  min-width: 0;
+  padding-left: 14px;
+}
+.page-header-copy::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  width: 3px;
+  border-radius: var(--ptmcp-radius-pill);
+  background: var(--ptmcp-blue);
 }
 .page-header h1 {
   margin: 0;
@@ -535,12 +583,67 @@ input[type='checkbox'] {
   gap: 8px;
 }
 .stat-card {
+  --stat-accent: var(--ptmcp-blue);
+  --ptmcp-mx: 50%;
+  --ptmcp-my: 50%;
+  position: relative;
   flex-direction: row;
   align-items: center;
   gap: 14px;
   padding: 16px 18px;
   box-shadow: none;
   min-width: 0;
+  transition:
+    transform var(--ptmcp-dur-base) var(--ptmcp-ease-out),
+    border-color var(--ptmcp-dur-base) ease,
+    box-shadow var(--ptmcp-dur-base) ease;
+}
+/* 跟随指针的柔光只回应悬停，离开即熄灭；它是状态反馈，不是常驻装饰。 */
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: var(--ptmcp-my);
+  left: var(--ptmcp-mx);
+  width: 160px;
+  height: 160px;
+  border-radius: var(--ptmcp-radius-circle);
+  background: var(--stat-accent);
+  filter: blur(36px);
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  transition: opacity var(--ptmcp-dur-base) ease;
+  pointer-events: none;
+}
+.stat-card:hover::before {
+  opacity: 0.12;
+}
+/* 顶部强调线从左侧展开，与页面标题的竖条呼应。 */
+.stat-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 16px;
+  left: 16px;
+  height: 2px;
+  border-radius: var(--ptmcp-radius-pill);
+  background: var(--stat-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--ptmcp-dur-slow) var(--ptmcp-ease-out);
+}
+.stat-card:hover::after {
+  transform: scaleX(1);
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--ptmcp-border-strong);
+  box-shadow:
+    0 10px 24px rgba(16, 24, 40, 0.08),
+    0 2px 6px rgba(16, 24, 40, 0.04);
+}
+.stat-card > * {
+  position: relative;
+  z-index: 1;
 }
 .stat-card-icon {
   display: inline-flex;
@@ -553,6 +656,19 @@ input[type='checkbox'] {
   background: var(--ptmcp-blue-soft);
   color: var(--ptmcp-blue);
   font-size: 20px;
+  transition: transform var(--ptmcp-dur-slow) var(--ptmcp-ease-emphasis);
+}
+.stat-card:hover .stat-card-icon {
+  transform: rotate(-6deg) scale(1.06);
+}
+.stat-card--success {
+  --stat-accent: #1f8a3b;
+}
+.stat-card--warning {
+  --stat-accent: #d48806;
+}
+.stat-card--danger {
+  --stat-accent: #d4380d;
 }
 .stat-card--success .stat-card-icon {
   background: #e7f6ec;
@@ -713,6 +829,18 @@ input[type='checkbox'] {
   font-size: 13px;
   color: var(--ptmcp-text-muted);
 }
+/* 读取中的呼吸点：只有真实等待才出现，静止画面不额外占位。 */
+.table-state::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: var(--ptmcp-radius-circle);
+  background: var(--ptmcp-blue);
+  vertical-align: 1px;
+  animation: ptmcp-pulse 1.4s ease-in-out infinite;
+}
 
 /* ─── 空态：图标容器 + 标题 + 说明 + 可选操作。四种 kind 用颜色区分语气，
    尺寸随容器走（表格内 24px 图标、整页 40px），不写死高度。 ─── */
@@ -739,6 +867,7 @@ input[type='checkbox'] {
   background: var(--ptmcp-bg-neutral);
   color: var(--ptmcp-text-faint);
   font-size: 22px;
+  animation: ptmcp-float 6s ease-in-out infinite;
 }
 .empty-state--filtered .empty-state-mark {
   background: var(--ptmcp-bg-accent);
@@ -797,6 +926,7 @@ input[type='checkbox'] {
 }
 .link:hover {
   text-decoration: underline;
+  text-underline-offset: 2px;
 }
 /* 禁用态必须与可用态肉眼可辨：此前禁用「删除」与可用「删除」样式一致。 */
 .link:not(:disabled) {
@@ -854,14 +984,20 @@ input[type='checkbox'] {
   font-size: 12px;
   color: var(--ptmcp-text-muted);
 }
-/* 表格行内主链接：行高保持紧凑，但把可点高度抬到 24px。 */
+/* 表格行内主链接：行高保持紧凑，但把可点高度抬到 24px。
+   按钮默认 white-space: normal，窄屏会把名称折成两行，这里显式保持单行。 */
 .data-table .link {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
+  white-space: nowrap;
 }
 .data-table tbody tr {
   transition: background 0.12s ease;
+}
+/* 悬停时首列亮起一道 2px 蓝色定位线：比整行变色更轻，也不干扰选中态的浅蓝底。 */
+.data-table tbody tr:hover td:first-child {
+  box-shadow: inset 2px 0 0 var(--ptmcp-blue);
 }
 /* 分页：nav 让读屏能在 landmark 列表里直达；页码与箭头统一 28×28，避免只有 13px 的图标点击区。 */
 .pagination {
@@ -913,6 +1049,7 @@ input[type='checkbox'] {
   letter-spacing: 0.01em;
 }
 .nav-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -931,9 +1068,30 @@ input[type='checkbox'] {
     background 0.12s ease,
     color 0.12s ease;
 }
+/* 选中项左侧的短竖条从中心展开，与页面标题的竖条共用同一套语言。 */
+.nav-item::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 2px;
+  height: 18px;
+  border-radius: var(--ptmcp-radius-pill);
+  background: var(--ptmcp-blue);
+  transform: translateY(-50%) scaleY(0);
+  transform-origin: center;
+  transition: transform var(--ptmcp-dur-base) var(--ptmcp-ease-out);
+}
+.nav-item[aria-current='true']::before {
+  transform: translateY(-50%) scaleY(1);
+}
 .nav-icon {
   display: inline-flex;
   font-size: 16px;
+  transition: transform var(--ptmcp-dur-base) var(--ptmcp-ease-emphasis);
+}
+.nav-item:hover .nav-icon {
+  transform: translateX(2px);
 }
 .nav-item:hover {
   background: var(--ptmcp-hover);
@@ -1025,6 +1183,7 @@ input[type='checkbox'] {
   border-bottom: 1px solid var(--ptmcp-border);
 }
 .tab-btn {
+  position: relative;
   padding: 8px 14px;
   border: none;
   border-bottom: 2px solid transparent;
@@ -1039,14 +1198,30 @@ input[type='checkbox'] {
     border-color 0.12s ease,
     background 0.12s ease;
 }
+/* 下划线从中心展开，切换标签时读起来像同一支笔划过去，而不是硬切。 */
+.tab-btn::after {
+  content: '';
+  position: absolute;
+  right: 12px;
+  bottom: -2px;
+  left: 12px;
+  height: 2px;
+  border-radius: var(--ptmcp-radius-pill);
+  background: var(--ptmcp-blue);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform var(--ptmcp-dur-base) var(--ptmcp-ease-out);
+}
 .tab-btn:hover {
   color: var(--ptmcp-text-strong);
   background: var(--ptmcp-hover);
   border-radius: var(--ptmcp-radius-sm) var(--ptmcp-radius-sm) 0 0;
 }
 .tab-btn.is-active {
-  border-bottom-color: var(--ptmcp-blue);
   color: var(--ptmcp-blue-text);
+}
+.tab-btn.is-active::after {
+  transform: scaleX(1);
 }
 .tab-btn:focus-visible {
   outline: 2px solid var(--ptmcp-blue);
@@ -1150,6 +1325,10 @@ input[type='checkbox'] {
 .app-shell-brand svg {
   font-size: 24px;
   color: var(--ptmcp-blue);
+  transition: transform var(--ptmcp-dur-slow) var(--ptmcp-ease-emphasis);
+}
+.app-shell-brand:hover svg {
+  transform: rotate(-8deg) scale(1.06);
 }
 .app-shell-rule {
   width: 1px;
@@ -1239,6 +1418,8 @@ input[type='checkbox'] {
   border-radius: var(--ptmcp-radius-panel);
   background: var(--ptmcp-surface);
   box-shadow: var(--ptmcp-shadow-pop);
+  transform-origin: top right;
+  animation: ptmcp-pop-in var(--ptmcp-dur-base) var(--ptmcp-ease-out) both;
 }
 .topbar-menu-item {
   display: flex;
@@ -1371,13 +1552,24 @@ input[type='checkbox'] {
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  padding: 10px 24px 24px;
+  padding: 12px 24px 28px;
   overflow: auto;
   background: var(--ptmcp-canvas);
 }
 .app-shell-scroll:focus-visible {
   outline: 2px solid var(--ptmcp-blue);
   outline-offset: -2px;
+}
+/* 页面切换的统一入场：整页上浮 8px。key 只随导航分组变化，
+   详情页之间共享同一 key，避免重挂载清空页面内部状态。 */
+.app-shell-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  animation: ptmcp-rise-in var(--ptmcp-dur-slow) var(--ptmcp-ease-out) both;
 }
 /* 命令面板：宽度随视口收，避免窄屏被 520px 固定宽撑出横向溢出。 */
 .cmdk-panel {
@@ -1579,6 +1771,7 @@ textarea:focus-visible {
   inset: 0;
   z-index: 40;
   background: rgba(11, 27, 40, 0.28);
+  animation: ptmcp-fade-in var(--ptmcp-dur-base) ease both;
 }
 .overlay-scrim--dialog {
   z-index: 60;
@@ -1593,6 +1786,7 @@ textarea:focus-visible {
   max-height: calc(100vh - 96px);
   max-height: calc(100dvh - 96px);
   box-shadow: var(--ptmcp-shadow-pop);
+  animation: ptmcp-dialog-in var(--ptmcp-dur-slow) var(--ptmcp-ease-out) both;
 }
 .overlay-drawer {
   position: fixed;
@@ -1607,6 +1801,7 @@ textarea:focus-visible {
   border: 1px solid var(--ptmcp-border);
   border-radius: var(--ptmcp-radius-panel);
   box-shadow: var(--ptmcp-shadow-pop);
+  animation: ptmcp-drawer-in var(--ptmcp-dur-slow) var(--ptmcp-ease-out) both;
 }
 /* 三栏工作台的分栏头部：图标 + 标题 + 副标题（稿面里三栏顶一致） */
 .pane-head {
@@ -1875,27 +2070,111 @@ textarea:focus-visible {
   pointer-events: none;
 }
 
-/* ─── P-01 登录页：卡片按窄屏自适应，不再固定 360px 宽 ─── */
+/* ─── P-01 登录页：整站唯一的品牌时刻。三团实色光斑在画布上缓慢漂移，
+   卡片以玻璃质感浮在其上；不用渐变函数，模糊半径负责颜色过渡。 ─── */
 .login-shell {
-  min-height: 100vh;
-  min-height: 100dvh;
+  position: relative;
+  isolation: isolate;
   display: flex;
   align-items: center;
   justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
   padding: 24px 16px;
+  overflow: hidden;
   background: var(--ptmcp-canvas);
 }
+.login-aurora {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.login-aurora span {
+  position: absolute;
+  display: block;
+  width: 420px;
+  height: 420px;
+  border-radius: var(--ptmcp-radius-circle);
+  filter: blur(80px);
+  opacity: 0.5;
+  will-change: transform;
+}
+.login-aurora span:nth-child(1) {
+  top: -120px;
+  left: -80px;
+  background: #6bc0ff;
+  animation: ptmcp-drift-a 26s ease-in-out infinite alternate;
+}
+.login-aurora span:nth-child(2) {
+  right: -120px;
+  bottom: -140px;
+  width: 520px;
+  height: 520px;
+  background: #1677ff;
+  opacity: 0.26;
+  animation: ptmcp-drift-b 32s ease-in-out infinite alternate;
+}
+.login-aurora span:nth-child(3) {
+  top: 38%;
+  left: 56%;
+  width: 360px;
+  height: 360px;
+  background: #b9c8ff;
+  opacity: 0.46;
+  animation: ptmcp-drift-c 24s ease-in-out infinite alternate;
+}
 .login-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 4px;
   width: 100%;
   max-width: 360px;
   padding: 32px 30px;
-  background: var(--ptmcp-surface);
-  border: 1px solid var(--ptmcp-border);
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.92);
   border-radius: var(--ptmcp-radius-panel);
-  box-shadow: var(--ptmcp-shadow);
+  box-shadow:
+    0 24px 60px rgba(16, 24, 40, 0.12),
+    0 2px 8px rgba(16, 24, 40, 0.06);
+  backdrop-filter: blur(18px) saturate(140%);
+  animation: ptmcp-dialog-in var(--ptmcp-dur-slow) var(--ptmcp-ease-out) both;
+}
+/* 卡片顶边的一道主蓝，与页面标题、导航选中条同源。 */
+.login-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 30px;
+  left: 30px;
+  height: 2px;
+  border-radius: var(--ptmcp-radius-pill);
+  background: var(--ptmcp-blue);
+  opacity: 0.8;
+}
+/* 卡片内容按 60ms 步进依次入场：只在上电时发生一次，之后不再干扰输入。 */
+.login-card > * {
+  animation: ptmcp-rise-in var(--ptmcp-dur-slow) var(--ptmcp-ease-out) both;
+}
+.login-card > *:nth-child(2) {
+  animation-delay: 60ms;
+}
+.login-card > *:nth-child(3) {
+  animation-delay: 120ms;
+}
+.login-card > *:nth-child(4) {
+  animation-delay: 180ms;
+}
+.login-card > *:nth-child(5) {
+  animation-delay: 240ms;
+}
+.login-card > *:nth-child(6) {
+  animation-delay: 300ms;
+}
+.login-card > *:nth-child(7) {
+  animation-delay: 360ms;
 }
 .login-brand {
   display: flex;
@@ -1906,6 +2185,7 @@ textarea:focus-visible {
 .login-brand-mark {
   font-size: 30px;
   color: var(--ptmcp-blue);
+  filter: drop-shadow(0 4px 10px rgba(22, 119, 255, 0.25));
 }
 .login-title {
   margin: 0;
@@ -1951,6 +2231,7 @@ textarea:focus-visible {
   display: flex;
   align-items: flex-start;
   gap: 8px;
+  animation: ptmcp-toast-in var(--ptmcp-dur-base) var(--ptmcp-ease-out) both;
   padding: 10px 12px;
   background: var(--ptmcp-surface);
   border: 1px solid var(--ptmcp-border);
@@ -2137,12 +2418,117 @@ textarea:focus-visible {
   }
 }
 
+/* ─── 动效关键帧：全站共用同一套曲线与位移刻度 ─── */
+@keyframes ptmcp-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes ptmcp-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes ptmcp-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes ptmcp-drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes ptmcp-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes ptmcp-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes ptmcp-drift-a {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(80px, 60px, 0) scale(1.12);
+  }
+}
+@keyframes ptmcp-drift-b {
+  from {
+    transform: translate3d(0, 0, 0) scale(1.08);
+  }
+  to {
+    transform: translate3d(-70px, -50px, 0) scale(1);
+  }
+}
+@keyframes ptmcp-drift-c {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-60px, 40px, 0) scale(1.15);
+  }
+}
+@keyframes ptmcp-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.86);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes ptmcp-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
 /* ─── 动效偏好：尊重系统"减少动态效果"（WCAG 2.1 AA 2.3.3） ─── */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;

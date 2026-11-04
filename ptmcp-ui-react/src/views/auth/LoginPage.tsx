@@ -61,6 +61,12 @@ export function LoginPage({ onLoggedIn, reason }: { onLoggedIn: () => void; reas
 
   return (
     <div className="login-shell">
+      {/* 纯装饰背景：三团模糊实色光斑缓慢漂移，不进入可访问性树。 */}
+      <div className="login-aurora" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
       <form onSubmit={submit} className="login-card" aria-label="登录 PTMCP" aria-busy={busy}>
         <div className="login-brand">
           <LogoIcon className="login-brand-mark" />

@@ -150,6 +150,36 @@ export function PageHeader({ title, description, actions }: { title: string; des
   );
 }
 
+/* 统计数字从当前值计数到目标值：只对纯数字生效，节点与字符串原样输出。
+   系统开启「减少动态效果」时直接落位，不播中间帧。 */
+function useCountUp(value: ReactNode): ReactNode {
+  const [display, setDisplay] = useState(0);
+  const current = useRef(0);
+  useEffect(() => {
+    if (typeof value !== 'number') return;
+    const target = value;
+    if (typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      current.current = target;
+      setDisplay(target);
+      return;
+    }
+    const from = current.current;
+    const started = performance.now();
+    let frame = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - started) / 640);
+      const eased = 1 - (1 - t) ** 3;
+      const next = Math.round(from + (target - from) * eased);
+      current.current = next;
+      setDisplay(next);
+      if (t < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [value]);
+  return typeof value === 'number' ? display : value;
+}
+
 export function StatCard({
   icon: Icon,
   value,
@@ -163,13 +193,22 @@ export function StatCard({
   hint?: string;
   tone?: 'success' | 'warning' | 'danger';
 }) {
+  const shown = useCountUp(value);
   return (
-    <div className={`table-card stat-card${tone ? ` stat-card--${tone}` : ''}`}>
+    <div
+      className={`table-card stat-card${tone ? ` stat-card--${tone}` : ''}`}
+      onPointerMove={(e) => {
+        /* 柔光跟随指针：只写两个自定义属性，不触发布局重排。 */
+        const rect = e.currentTarget.getBoundingClientRect();
+        e.currentTarget.style.setProperty('--ptmcp-mx', `${e.clientX - rect.left}px`);
+        e.currentTarget.style.setProperty('--ptmcp-my', `${e.clientY - rect.top}px`);
+      }}
+    >
       <span className="stat-card-icon" aria-hidden>
         <Icon />
       </span>
       <span className="stat-card-copy">
-        <strong className="stat-card-value">{value}</strong>
+        <strong className="stat-card-value">{shown}</strong>
         <span className="stat-card-label">{label}</span>
         {hint ? <span className="stat-card-hint">{hint}</span> : null}
       </span>

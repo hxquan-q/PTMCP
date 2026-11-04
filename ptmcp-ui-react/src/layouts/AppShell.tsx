@@ -192,7 +192,10 @@ export function AppShell({
           ) : null}
           {/* 内容区是本页唯一的纵向滚动容器；给可聚焦命名区域，键盘用户才能滚动并跳过导航直达正文。 */}
           <div className="app-shell-scroll" ref={contentRef} role="region" aria-label="页面内容" tabIndex={0}>
-            {children}
+            {/* 切换导航分组时整页入场；详情页共享同一 active，避免重挂载清空页面状态。 */}
+            <div className="app-shell-page" key={active}>
+              {children}
+            </div>
           </div>
         </main>
       </div>
