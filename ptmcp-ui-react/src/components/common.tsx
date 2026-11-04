@@ -2,6 +2,8 @@ import { useEffect, useId, useRef, useState, type ReactNode, type Ref } from 're
 import { createPortal } from 'react-dom';
 import { CheckIcon, ChevronRightIcon, CloseIcon, DocumentIcon, InfoIcon, SearchIcon, WarningIcon } from './Icons';
 import type { IconComponent } from './Icons';
+import loginBgPosterUrl from '../assets/login-bg-poster.jpg?url';
+import loginBgVideoUrl from '../assets/login-bg.mp4?url';
 
 export function Dialog({
   open,
@@ -723,4 +725,52 @@ export function useDebounced<T>(value: T, ms = 300): T {
     return () => clearTimeout(t.current);
   }, [value, ms]);
   return v;
+}
+
+/** 跟随系统「减少动态效果」偏好，并在偏好切换时实时更新。 */
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  useEffect(() => {
+    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const onChange = () => setReduced(query.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
+  return reduced;
+}
+
+/**
+ * P-01 登录页背景 CG：工厂视频铺满视口，静音自动播放，素材本身正反双向无缝循环。
+ * 纯装饰，不进入可访问性树；「减少动态效果」偏好下暂停在海报帧，偏好切换实时生效。
+ * 主控台登录页与 OAuth 登录/同意页共用（OAuthShell），视频经打包器带哈希分发。
+ */
+export function LoginBackdrop() {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const reduced = usePrefersReducedMotion();
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (reduced) {
+      video.pause();
+    } else {
+      // 自动播放可能被浏览器策略拒绝（如省流模式）：失败就停在海报帧，不再重试。
+      void video.play().catch(() => undefined);
+    }
+  }, [reduced]);
+  return (
+    <div className="login-media" aria-hidden="true">
+      <video
+        ref={videoRef}
+        className="login-media-video"
+        src={loginBgVideoUrl}
+        poster={loginBgPosterUrl}
+        muted
+        loop
+        playsInline
+        autoPlay={!reduced}
+        disablePictureInPicture
+        preload="auto"
+      />
+    </div>
+  );
 }

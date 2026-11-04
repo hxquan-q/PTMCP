@@ -55,7 +55,7 @@ public class OAuthPageController {
                     + "frame-ancestors 'none'; base-uri 'none'";
     static final String REACT_CONTENT_SECURITY_POLICY =
             "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-                    + "img-src 'self' data:; font-src 'self'; connect-src 'self'; "
+                    + "img-src 'self' data:; font-src 'self'; connect-src 'self'; media-src 'self'; "
                     + "form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
     private static final String SCOPE_CATALOG = "mcp:catalog";

@@ -1,17 +1,13 @@
 import type { ReactNode } from 'react';
-import { Alert, RequestIdText } from '../components/common';
+import { Alert, LoginBackdrop, RequestIdText } from '../components/common';
 import { LogoIcon } from '../components/Icons';
 import type { OAuthPageError } from './model';
 
 export function OAuthShell({ children }: { children: ReactNode }) {
   return (
     <div className="login-shell">
-      {/* 与 P-01 登录页同一组装饰光斑；不进入可访问性树。 */}
-      <div className="login-aurora" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-      </div>
+      {/* 与 P-01 登录页同一组背景 CG；不进入可访问性树。 */}
+      <LoginBackdrop />
       {children}
     </div>
   );

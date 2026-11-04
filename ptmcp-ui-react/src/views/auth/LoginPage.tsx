@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Alert, Field, RequestIdText, TextInput } from '../../components/common';
+import { Alert, Field, LoginBackdrop, RequestIdText, TextInput } from '../../components/common';
 import { LogoIcon } from '../../components/Icons';
 import { readFailure, type Failure } from '../../services/http';
 import { getSession, login } from '../../services/session';
@@ -61,12 +61,8 @@ export function LoginPage({ onLoggedIn, reason }: { onLoggedIn: () => void; reas
 
   return (
     <div className="login-shell">
-      {/* 纯装饰背景：三团模糊实色光斑缓慢漂移，不进入可访问性树。 */}
-      <div className="login-aurora" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-      </div>
+      {/* 纯装饰背景：工厂 CG 正反循环铺满视口，不进入可访问性树。 */}
+      <LoginBackdrop />
       <form onSubmit={submit} className="login-card" aria-label="登录 PTMCP" aria-busy={busy}>
         <div className="login-brand">
           <LogoIcon className="login-brand-mark" />

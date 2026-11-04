@@ -2070,8 +2070,8 @@ textarea:focus-visible {
   pointer-events: none;
 }
 
-/* ─── P-01 登录页：整站唯一的品牌时刻。三团实色光斑在画布上缓慢漂移，
-   卡片以玻璃质感浮在其上；不用渐变函数，模糊半径负责颜色过渡。 ─── */
+/* ─── P-01 登录页：整站唯一的品牌时刻。工厂 CG 静音正反循环铺满视口，
+   实色白纱压住画面饱和度，卡片以玻璃质感浮在其上；不用渐变函数，白纱负责调性统一。 ─── */
 .login-shell {
   position: relative;
   isolation: isolate;
@@ -2084,46 +2084,26 @@ textarea:focus-visible {
   overflow: hidden;
   background: var(--ptmcp-canvas);
 }
-.login-aurora {
+.login-media {
   position: absolute;
   inset: 0;
   z-index: -1;
   overflow: hidden;
   pointer-events: none;
+  animation: login-media-in var(--ptmcp-dur-slow) var(--ptmcp-ease-out) both;
 }
-.login-aurora span {
-  position: absolute;
+.login-media-video {
   display: block;
-  width: 420px;
-  height: 420px;
-  border-radius: var(--ptmcp-radius-circle);
-  filter: blur(80px);
-  opacity: 0.5;
-  will-change: transform;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
-.login-aurora span:nth-child(1) {
-  top: -120px;
-  left: -80px;
-  background: #6bc0ff;
-  animation: ptmcp-drift-a 26s ease-in-out infinite alternate;
-}
-.login-aurora span:nth-child(2) {
-  right: -120px;
-  bottom: -140px;
-  width: 520px;
-  height: 520px;
-  background: #1677ff;
-  opacity: 0.26;
-  animation: ptmcp-drift-b 32s ease-in-out infinite alternate;
-}
-.login-aurora span:nth-child(3) {
-  top: 38%;
-  left: 56%;
-  width: 360px;
-  height: 360px;
-  background: #b9c8ff;
-  opacity: 0.46;
-  animation: ptmcp-drift-c 24s ease-in-out infinite alternate;
+/* 实色白纱：视频只作环境层，白纱把高饱和的机械臂压进背景调性，保证卡片对比。 */
+.login-media::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.45);
 }
 .login-card {
   position: relative;
@@ -2137,8 +2117,8 @@ textarea:focus-visible {
   border: 1px solid rgba(255, 255, 255, 0.92);
   border-radius: var(--ptmcp-radius-panel);
   box-shadow:
-    0 24px 60px rgba(16, 24, 40, 0.12),
-    0 2px 8px rgba(16, 24, 40, 0.06);
+    0 24px 60px rgba(16, 24, 40, 0.16),
+    0 2px 8px rgba(16, 24, 40, 0.08);
   backdrop-filter: blur(18px) saturate(140%);
   animation: ptmcp-dialog-in var(--ptmcp-dur-slow) var(--ptmcp-ease-out) both;
 }
@@ -2211,7 +2191,7 @@ textarea:focus-visible {
   text-align: center;
 }
 
-/* ─── OAuth 登录/授权页：沿用 P-01 的卡片与光斑，授权信息按「客户端 →
+/* ─── OAuth 登录/授权页：沿用 P-01 的卡片与背景 CG，授权信息按「客户端 →
    权限 → 回调目标 → 有效期」分段，拒绝与允许并排。 ─── */
 .oauth-card {
   gap: 16px;
@@ -2646,28 +2626,12 @@ textarea:focus-visible {
     transform: translateY(0) scale(1);
   }
 }
-@keyframes ptmcp-drift-a {
+@keyframes login-media-in {
   from {
-    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0;
   }
   to {
-    transform: translate3d(80px, 60px, 0) scale(1.12);
-  }
-}
-@keyframes ptmcp-drift-b {
-  from {
-    transform: translate3d(0, 0, 0) scale(1.08);
-  }
-  to {
-    transform: translate3d(-70px, -50px, 0) scale(1);
-  }
-}
-@keyframes ptmcp-drift-c {
-  from {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  to {
-    transform: translate3d(-60px, 40px, 0) scale(1.15);
+    opacity: 1;
   }
 }
 @keyframes ptmcp-pulse {
