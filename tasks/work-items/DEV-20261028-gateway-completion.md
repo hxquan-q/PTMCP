@@ -1,10 +1,10 @@
 # DEV-20261028-gateway-completion：完整问数鉴权网关收尾
 
 ID: DEV-20261028-gateway-completion
-Status: in_progress
+Status: verifying
 Owner: current-agent
 Acceptance: pending
-Verification: NOT_RUN
+Verification: PASS
 Updated: 2026-11-04
 
 ## 目标与边界
@@ -46,6 +46,9 @@ UI 改动涵盖 App、PageState、useCursorPage、styles、权限/审计/数据�
 | G5 密钥兼容 | T15-c S6 | 新旧钥兼容、对象绑定与迁移格式、日志不泄漏、恢复仍可读 | completed；G5a/G5b 定向 PASS，G7 组合验收覆盖新旧钥、对象绑定、WAL 恢复可读与日志脱敏；旧行不重封/无盘点告警为已记录残余 |
 | G6 字典上下文 | T15-c S7 | 三工具契约说明、授权后字典/关系/预算、撤权与恶意注释测试 | [verifying；定向 PASS](DEV-20261030-schema-context.md) |
 | G7 组合验收 | T19-e/T20 | 双引擎、OAuth、恢复、前后端适用门禁；真实客户端与部署证据单列 | verifying；7 模块 1375 项、前端 189 项与 Windows `check.py --all` PASS（2026-11-04，重跑 exit 0）；T19-e 仍 blocked，真实客户端/部署证据未取得 |
+
+当前状态：G1–G7 的本地适用门禁已通过并转入待验收；T19-e 的外部客户端矩阵与部署证据仍由该独立
+工作项跟踪（blocked），不能由本地门禁替代。人工接受仍待确认。
 
 G1 写入范围为 gateway 元数据/过滤器/测试、API 合同、相关工作项与笔记。
 资源元数据和 challenge 共享唯一受信配置，不从 Host/Forwarded 头生成 URI；
