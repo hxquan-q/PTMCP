@@ -13,6 +13,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -22,6 +23,11 @@ final class WalDirectoryOwner implements AutoCloseable {
     // POSIX record locks are process scoped: closing any second descriptor for .owner can
     // release the first descriptor's native lock. Reject local contenders before opening it.
     private static final Set<Path> LOCAL_OWNERS = ConcurrentHashMap.newKeySet();
+
+    /** 目录不能作为 FileChannel 打开的平台：Windows 上目录 fsync 需退化，见 {@link #syncOnWindows}。 */
+    private static final boolean WINDOWS =
+            System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows");
+
     private final Path directory;
     private final FileChannel channel;
     private final FileLock lock;
@@ -111,8 +117,29 @@ final class WalDirectoryOwner implements AutoCloseable {
     }
 
     static void sync(Path directory) throws IOException {
-        try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ)) {
+        if (!WINDOWS) {
+            // POSIX：打开目录并 force 是把目录项落盘的惯用做法。
+            try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ)) {
+                channel.force(true);
+            }
+            return;
+        }
+        syncOnWindows(directory);
+    }
+
+    /**
+     * Windows 不能把目录当 FileChannel 打开（CreateFile 需 FILE_FLAG_BACKUP_SEMANTICS， 纯 NIO 不可达），所以上面那条
+     * POSIX 语义在 NTFS 上直接抛异常。
+     *
+     * <p>这里退化为「在 WAL 目录内建临时文件 → force(true) → 删除」：强制刷盘的仍是文件数据， 不是目录项，因此属于尽力而为而非等价保证。取舍是明确的——保留
+     * Windows 上可运行的审计链， 同时把降级写在这里而不是静默跳过；临时文件用 `.fsync-` 前缀，不会与 `wal-*.open` 恢复扫描撞车。
+     */
+    private static void syncOnWindows(Path directory) throws IOException {
+        Path probe = Files.createTempFile(directory, ".fsync-", ".tmp");
+        try (FileChannel channel = FileChannel.open(probe, StandardOpenOption.WRITE)) {
             channel.force(true);
+        } finally {
+            Files.deleteIfExists(probe);
         }
     }
 

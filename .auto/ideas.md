@@ -12,3 +12,25 @@
 - **九项修复收尾（2026-11-02）**：切片 A+B 已提交 edefd05、评审修复 045e48f/621109f；C 在共享树待随审计会话 POM 提交；纯 HEAD 定向套件全绿（可部署）；真机 HTTP 冒烟（disposable MySQL+纯 HEAD jar+Tomcat 18080）全过：secret 一次展示/回放 TOKEN_ALREADY_CREATED/分页 nextCursor/幂等存体无明文/JSON 数组落盘。V15 迁移+测试已落地（ls 字典序误导：V10-V14 早已提交占用，V10「冲突」实为误判）。待办：审计会话 4 后端文件按 hunk 复核后集成、部署顺序核对、人工接受。
 - **教训：`ls | tail` 字典序陷阱**：V1x 排在 V2-V9 前，曾误判 V10-V14 不存在；迁移版本核查必须 `sort -V`。
 - **后端度量已恢复（2026-11-02）**：measure.sh 经 wsl.exe -d PTMCP-Dev 路由（隔离工作区 ~/ptmcp-api-ws 增量同步），authz 纳入度量；基线 1494（React 168+后端 1326）。pnpm 被禁时用直连 node 跑全部前端门禁。
+
+## 2026-11-04 会话新增（UI/无障碍/拆分）
+
+- ~~设计系统令牌化 + axe 清零~~ 已完成（e166345）：圆角 6 档、间距 2px 偶数网格、去渐变、
+  44px 热区、主按钮对比度 4.1→5.6、Select/滚动区可访问名、EmptyState 四态。
+  axe 扫 21 路由 + 7 弹窗 0 violations（tags: wcag2a/2aa/21a/21aa/22aa）。
+- ~~空表格卡拉满视口~~ 已完成（a47fcb2）：`.table-card:has(.empty-state){flex:0 0 auto!important}`。
+- ~~千行页面拆分~~ 已完成（34055fb）：DetailPages/MePages/PlatformsPage/IntegrationsPage/PermissionsPage
+  全部 <900 行，barrel 保持引用；新增 900 行体量预算测试。
+- **真实后端（非 preview）联调仍是最大缺口**：本轮所有 UI/axe 证据都来自 Vite frontend-preview
+  的合成夹具。需要起 MySQL + admin/authz/gateway 三服务，用真实会话把 21 条路由再走一遍
+  axe + 关键交互；否则「前后端联调真实化」主线没有推进。前置：业务库 TLS 证书（见上文第一条）。
+- **Windows native 47 项 MCP 集成仍未重跑**：WAL 目录 fsync 已修（DEV-20261104 已 RED→GREEN），
+  但 Testcontainers 需要宿主 Docker API 稳定；Windows 侧此前多次 Connection reset。
+- **common.tsx 687 行可再拆**：Form 控件（TextInput/Select/Field）/ Overlay（Dialog/Drawer/
+  useFocusTrap/useOverlayLock）/ Feedback（Alert/EmptyState/Toast 入口）三块边界清晰。
+- **PermissionsPage 891 行**：主体列表、资源树、规则表、有效权限预览四块可各自成文件。
+- **useEffect 数据获取未收敛**：各页手写 cancelled/AbortController，写法一致但重复。
+  若要引入 React Query/SWR 需新增依赖并改 10+ 页面，收益是缓存与重试，风险是行为回归；
+  建议单独 ADR 后再做，不要混进 UI 打磨片。
+- **preview 夹具与真实契约的漂移风险**：src/preview/server.ts 956 行手写夹具，
+  tests/preview-server.test.ts 只覆盖部分端点；新端点容易出现「夹具通过、真实后端不通过」。
