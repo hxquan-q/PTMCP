@@ -214,6 +214,22 @@ Updated: 2026-11-05
 - 修正一处 S2 引入的过度防御：`requireRoleAssignment` 误拒空角色列表（合法清空语义），
   回退为仅 null 校验；`specializedUserCommands*` 更名对齐模型。
 
+### S4 委派全删 + 控制面收敛到纯平台管理员（已实施）
+
+- 迁移 `V20__drop_admin_delegation.sql`：DROP 表。
+- 删除：`DelegationAdminController`、`DelegationStore`、`DelegationScopeResolver`、
+  `DepartmentScopeGate`/`UserScopeGate`/`AclScopeGate`（main 五文件 + persistence 两文件）。
+- `RoleAdminController.requireCatalogAccess` 纯化为 `requirePlatformAdmin`；`Department/User/
+  AclGrant` 三个控制器去掉 scopeGate/scopeResolver 构造与调用，列表直接全量（拦截器已二元
+  把关）；`AclGrantAdminController` 的 `GrantWrite` 不再实现已删除的门接口；list 直接收敛。
+- `AdminStoresConfiguration` 删两个委派 bean。
+- 测试：AdminApiTest 委派主题 16 用例与 `DepartmentCommandFixture` 委派播种、三个控制器
+  standalone 构造 2 参化、ACTION_BY_ROUTE 去 delegation 路由；BackendApiRegressionTest 删
+  `denyRevocation...`/`futureSelfGrantMustBeRejected`（SelfEscalation 防护仍由管理员路径用例
+  覆盖）与 `delegation()` helper；OrgManagementStoreTest 删委派节（3202→EOF）但保留被 role
+  测试复用的 `delegationObservedSource/delegationAwait` 通用工具；两个 schema 迁移测试的表
+  清单与计数断言随 V20 校准；历史审计文档的断链去链接保文字。
+
 ## 结果与证据
 
 ### S1（2026-11-05）
@@ -251,11 +267,17 @@ Updated: 2026-11-05
 - 全仓 `clean test-compile` 通过；`python scripts/check.py` 门禁 PASS。
 - 评审类型：自审（单 Agent 实施）。
 
+### S4（2026-11-05）
+
+- persistence 全量：`./mvnw -o -pl ptmcp-persistence test` → `Tests run: 336, Failures: 0`。
+- admin 全量：`./mvnw -o -pl ptmcp-admin test` → `Tests run: 201, Failures: 0, Errors: 0`。
+- 全仓 `clean test-compile` 通过；`python scripts/check.py` 门禁 PASS。
+- 评审类型：自审（单 Agent 实施）。
+
 ## 交接
 
-当前焦点：S4 委派全删 + 控制面收敛到纯平台管理员（`DelegationAdminController`、委派方法、
-`DelegationScopeResolver`、三个 ScopeGate、`admin_delegation` 表迁移 DROP、
-`requireCatalogAccess` 纯化）。S3 已提交推送 `dev`。
+当前焦点：S5 前端主路径化 + platformAdmin 过滤（去「管理委派」路由、授权矩阵默认主体=角色、
+角色页去功能码呈现、前端权限过滤改用 platformAdmin）。S4 已提交推送 `dev`。
 
 已有授权与待决定事项：
 

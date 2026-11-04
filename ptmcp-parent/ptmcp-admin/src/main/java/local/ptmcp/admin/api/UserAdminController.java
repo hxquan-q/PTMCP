@@ -2,8 +2,6 @@ package local.ptmcp.admin.api;
 
 import jakarta.servlet.http.HttpServletRequest;
 
-import local.ptmcp.persistence.org.DelegationScopeResolver;
-import local.ptmcp.persistence.org.DelegationStore;
 import local.ptmcp.persistence.org.IdempotencyRecorder;
 import local.ptmcp.persistence.org.OrgStore;
 
@@ -30,16 +28,10 @@ import java.util.Locale;
 public class UserAdminController {
     private final OrgStore orgStore;
     private final IdempotencyRecorder idempotency;
-    private final UserScopeGate scopeGate;
 
-    public UserAdminController(
-            OrgStore orgStore,
-            IdempotencyRecorder idempotency,
-            DelegationScopeResolver scopeResolver,
-            DelegationStore delegationStore) {
+    public UserAdminController(OrgStore orgStore, IdempotencyRecorder idempotency) {
         this.orgStore = orgStore;
         this.idempotency = idempotency;
-        this.scopeGate = new UserScopeGate(scopeResolver, orgStore, delegationStore);
     }
 
     public record UserWrite(
@@ -68,7 +60,7 @@ public class UserAdminController {
             @RequestParam(required = false) Long departmentId,
             @RequestParam(required = false) String keyword,
             HttpServletRequest request) {
-        return scopeGate.visibleUsers(request, orgStore.listUsers()).stream()
+        return orgStore.listUsers().stream()
                 .filter(user -> departmentId == null || user.deptId() == departmentId)
                 .filter(user -> matchesKeyword(user, keyword))
                 .map(UserAdminController::toRead)
@@ -120,7 +112,6 @@ public class UserAdminController {
     @AdminAction("ptmcp:user:read")
     @GetMapping("/{id}")
     public UserRead get(@PathVariable long id, HttpServletRequest request) {
-        scopeGate.requireUserAccess(request, orgStore.getUser(id).deptId());
         return toRead(orgStore.getUser(id));
     }
 
@@ -134,8 +125,6 @@ public class UserAdminController {
                     local.ptmcp.common.error.ErrorCode.INVALID_ARGUMENT);
         }
         OrgStore.UserRow before = currentUser(id, expectedVersion);
-        scopeGate.requireUserUpdate(
-                request, before, write.deptId(), write.enabled(), write.roleIds());
         UserRead updated =
                 toRead(
                         orgStore.updateUser(
@@ -162,7 +151,6 @@ public class UserAdminController {
                     local.ptmcp.common.error.ErrorCode.INVALID_ARGUMENT);
         }
         OrgStore.UserRow before = currentUser(id, expectedVersion);
-        scopeGate.requireUserStatus(request, before);
         UserRead updated =
                 toRead(
                         orgStore.updateUser(
@@ -189,7 +177,6 @@ public class UserAdminController {
                     local.ptmcp.common.error.ErrorCode.INVALID_ARGUMENT);
         }
         OrgStore.UserRow current = currentUser(id, expectedVersion);
-        scopeGate.requireRoleAssignment(request, current, write.roleIds());
         UserRead updated =
                 toRead(
                         orgStore.updateUser(
@@ -218,7 +205,6 @@ public class UserAdminController {
                     local.ptmcp.common.error.ErrorCode.INVALID_ARGUMENT);
         }
         OrgStore.UserRow current = currentUser(id, expectedVersion);
-        scopeGate.requireUserMove(request, current, write.departmentId());
         UserRead updated =
                 toRead(
                         orgStore.updateUser(
@@ -241,7 +227,6 @@ public class UserAdminController {
     public ResponseEntity<UserRead> delete(@PathVariable long id, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
         OrgStore.UserRow before = currentUser(id, expectedVersion);
-        scopeGate.requireUserDelete(request, before);
         UserRead deleted = toRead(orgStore.deleteUser(id, expectedVersion, actorId(request)));
         return ResponseEntity.ok().eTag(IfMatch.etag(deleted.version())).body(deleted);
     }

@@ -24,8 +24,6 @@ import local.ptmcp.admin.session.SessionAuthFilter;
 import local.ptmcp.datasource.connection.DestinationPolicy;
 import local.ptmcp.persistence.org.AclDirectory;
 import local.ptmcp.persistence.org.AclGrantStore;
-import local.ptmcp.persistence.org.DelegationScopeResolver;
-import local.ptmcp.persistence.org.DelegationStore;
 import local.ptmcp.persistence.org.IdempotencyRecorder;
 import local.ptmcp.persistence.org.OrgStore;
 import local.ptmcp.persistence.schema.MetadataSyncJobRunner;
@@ -113,16 +111,6 @@ public class AdminStoresConfiguration {
     @Bean
     public AuditDecryptService auditDecryptService(DataSource dataSource, AuditCipher cipher) {
         return new AuditDecryptService(dataSource, cipher);
-    }
-
-    @Bean
-    public DelegationStore delegationStore(DataSource dataSource) {
-        return new DelegationStore(dataSource);
-    }
-
-    @Bean
-    public DelegationScopeResolver delegationScopeResolver(DataSource dataSource) {
-        return new DelegationScopeResolver(dataSource);
     }
 
     @Bean

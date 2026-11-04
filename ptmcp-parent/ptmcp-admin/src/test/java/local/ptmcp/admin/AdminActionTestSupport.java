@@ -61,9 +61,6 @@ final class AdminActionTestSupport {
             DELETE /acl/grants/{id} ptmcp:acl:delete
             POST /acl/preview ptmcp:acl:preview
             GET /acl/effective ptmcp:acl:effective
-            GET /delegations ptmcp:delegation:list
-            POST /delegations ptmcp:delegation:create
-            DELETE /delegations/{id} ptmcp:delegation:delete
             GET /operations ptmcp:audit:list
             GET /audit ptmcp:audit:list
             GET /audit/{requestId} ptmcp:audit:read

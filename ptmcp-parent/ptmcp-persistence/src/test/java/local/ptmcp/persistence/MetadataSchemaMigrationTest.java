@@ -40,7 +40,6 @@ class MetadataSchemaMigrationTest {
                     "business_dictionary",
                     "platform_scope",
                     "acl_grant",
-                    "admin_delegation",
                     "sys_dept",
                     "sys_role",
                     "sys_user_role",
@@ -85,11 +84,6 @@ class MetadataSchemaMigrationTest {
                     + "resource_generation, action, effect, include_descendants, valid_from, valid_to, "
                     + "status, reason, version, create_time, update_time, created_by, updated_by) "
                     + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-    private static final String INSERT_DELEGATION =
-            "INSERT INTO admin_delegation (user_id, department_root_id, resource_type, resource_id, "
-                    + "resource_generation, allowed_actions, valid_from, valid_to, status, version, "
-                    + "create_time, update_time, created_by, updated_by) "
-                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     private static final String INSERT_DEPT =
             "INSERT INTO sys_dept (dept_id, parent_id, ancestors, dept_name, status, del_flag, "
                     + "create_time, update_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
@@ -153,7 +147,7 @@ class MetadataSchemaMigrationTest {
             assertEquals("2", flyway.info().current().getVersion().getVersion());
             try (Connection connection = connection()) {
                 assertEquals(
-                        V2_TABLES.size() + 3,
+                        V2_TABLES.size() + 4,
                         scalar(
                                 connection,
                                 "SELECT COUNT(*) FROM information_schema.tables "
@@ -638,216 +632,7 @@ class MetadataSchemaMigrationTest {
                         null,
                         NOW,
                         NOW);
-                execute(
-                        connection,
-                        INSERT_SCOPE,
-                        platformId,
-                        "DATASOURCE",
-                        datasourceId,
-                        1,
-                        "READ",
-                        0,
-                        NOW,
-                        NOW,
-                        1,
-                        1);
-                rejected(
-                        connection,
-                        3819,
-                        INSERT_SCOPE,
-                        platformId,
-                        "DATASOURCE",
-                        datasourceId,
-                        1,
-                        "WRITE",
-                        0,
-                        NOW,
-                        NOW,
-                        1,
-                        1);
-                rejected(
-                        connection,
-                        1062,
-                        INSERT_SCOPE,
-                        platformId,
-                        "DATASOURCE",
-                        datasourceId,
-                        1,
-                        "READ",
-                        1,
-                        NOW,
-                        NOW,
-                        1,
-                        1);
-            } finally {
-                connection.rollback();
-            }
-        }
-    }
 
-    @Test
-    void aclDelegationAndOrganizationConstraintsRejectInvalidRows() throws Exception {
-        try (Connection connection = connection()) {
-            connection.setAutoCommit(false);
-            try {
-                long platformId = insertPlatform(connection, "PLATFORM_B");
-                execute(
-                        connection,
-                        INSERT_GRANT,
-                        "USER",
-                        7,
-                        "DATASOURCE",
-                        42,
-                        1,
-                        "READ",
-                        "ALLOW",
-                        0,
-                        NOW,
-                        NOW.plusYears(1),
-                        "ACTIVE",
-                        "initial grant",
-                        1,
-                        NOW,
-                        NOW,
-                        1,
-                        1);
-                rejected(
-                        connection,
-                        3819,
-                        INSERT_GRANT,
-                        "USER",
-                        7,
-                        "DATASOURCE",
-                        42,
-                        1,
-                        "READ",
-                        "ALLOW",
-                        0,
-                        NOW,
-                        NOW,
-                        "ACTIVE",
-                        "empty window",
-                        1,
-                        NOW,
-                        NOW,
-                        1,
-                        1);
-                rejected(
-                        connection,
-                        3819,
-                        INSERT_GRANT,
-                        "USER",
-                        7,
-                        "DATASOURCE",
-                        42,
-                        1,
-                        "READ",
-                        "MAYBE",
-                        0,
-                        NOW,
-                        null,
-                        "ACTIVE",
-                        "bad effect",
-                        1,
-                        NOW,
-                        NOW,
-                        1,
-                        1);
-                rejected(
-                        connection,
-                        3819,
-                        INSERT_GRANT,
-                        "GROUP",
-                        7,
-                        "DATASOURCE",
-                        42,
-                        1,
-                        "READ",
-                        "ALLOW",
-                        0,
-                        NOW,
-                        null,
-                        "ACTIVE",
-                        "bad subject",
-                        1,
-                        NOW,
-                        NOW,
-                        1,
-                        1);
-                rejected(
-                        connection,
-                        3819,
-                        INSERT_GRANT,
-                        "USER",
-                        7,
-                        "DATASOURCE",
-                        42,
-                        1,
-                        "WRITE",
-                        "ALLOW",
-                        0,
-                        NOW,
-                        null,
-                        "ACTIVE",
-                        "bad action",
-                        1,
-                        NOW,
-                        NOW,
-                        1,
-                        1);
-                execute(
-                        connection,
-                        INSERT_DELEGATION,
-                        9,
-                        3,
-                        "DATASOURCE",
-                        42,
-                        1,
-                        "[\"META\",\"READ\"]",
-                        NOW,
-                        NOW.plusMonths(1),
-                        "ACTIVE",
-                        1,
-                        NOW,
-                        NOW,
-                        1,
-                        1);
-                rejected(
-                        connection,
-                        3819,
-                        INSERT_DELEGATION,
-                        9,
-                        3,
-                        "DATASOURCE",
-                        42,
-                        1,
-                        "{}",
-                        NOW,
-                        NOW.plusMonths(1),
-                        "ACTIVE",
-                        1,
-                        NOW,
-                        NOW,
-                        1,
-                        1);
-                rejected(
-                        connection,
-                        3819,
-                        INSERT_DELEGATION,
-                        9,
-                        3,
-                        "DATASOURCE",
-                        42,
-                        1,
-                        "[\"READ\"]",
-                        NOW,
-                        NOW,
-                        "ACTIVE",
-                        1,
-                        NOW,
-                        NOW,
-                        1,
-                        1);
                 execute(connection, INSERT_DEPT, 1, 0, "", "root", "0", "0", NOW, NOW);
                 rejected(
                         connection, 3819, INSERT_DEPT, 3, 1, "0", "bad status", "2", "0", NOW, NOW);
@@ -1047,23 +832,6 @@ class MetadataSchemaMigrationTest {
                         null,
                         "ACTIVE",
                         "grouped",
-                        1,
-                        NOW,
-                        NOW,
-                        1,
-                        1);
-                execute(
-                        connection,
-                        INSERT_DELEGATION,
-                        9,
-                        1,
-                        "DATASOURCE",
-                        datasourceId,
-                        1,
-                        "[\"READ\"]",
-                        NOW,
-                        null,
-                        "ACTIVE",
                         1,
                         NOW,
                         NOW,

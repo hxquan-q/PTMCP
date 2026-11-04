@@ -27,7 +27,7 @@
 | 审计与恢复 | START 主库准入；terminal 主库失败可写加密、fsync WAL；[WalReplayer](../../ptmcp-parent/ptmcp-persistence/src/main/java/local/ptmcp/persistence/audit/wal/WalReplayer.java) 有恢复原语与测试 | gateway 未见生产回放 owner/启动调度与过期 START 收敛接线，不能将写 WAL 等同于恢复完成 |
 | 容量与取消 | 有用户/源/网关/队列限额和执行器取消原语 | 当前装配 InMemoryQuotaLimiter，用户/源额度未跨副本共享；无 id 的 notifications/cancelled 被直接 202，未关联请求主体和执行句柄 |
 | 密钥轮换 | 凭据 AES-GCM 加密；WAL 加密写入 | [CredentialCipher](../../ptmcp-parent/ptmcp-datasource/src/main/java/local/ptmcp/datasource/connection/CredentialCipher.java) 为单钥、无对象 AAD；WAL 生产 key provider 也仅当前钥，旧钥读取/迁移需补 |
-| 组织、ACL 与委派 | 组织/角色/ACL、[DelegationAdminController](../../ptmcp-parent/ptmcp-admin/src/main/java/local/ptmcp/admin/api/DelegationAdminController.java) 与范围解析已存在；[AclScopeGate](../../ptmcp-parent/ptmcp-admin/src/main/java/local/ptmcp/admin/api/AclScopeGate.java) 对授权写入检查部门、资源、动作和时间 | 不能称“委派全未实现”；也不能称所有管理端点支持委派。部分读取/effective/preview 仍限平台管理员，ROLE 范围 fail-closed；列表与写入的范围一致性待专项验证 |
+| 组织、ACL 与委派 | 组织/角色/ACL、`DelegationAdminController`（S4 已删除） 与范围解析已存在；`AclScopeGate`（S4 已删除） 对授权写入检查部门、资源、动作和时间 | 不能称“委派全未实现”；也不能称所有管理端点支持委派。部分读取/effective/preview 仍限平台管理员，ROLE 范围 fail-closed；列表与写入的范围一致性待专项验证 |
 | 管理与个人门户 | 平台/client/scope、审计查询/解密/操作日志、密码重置、PAT、授权族撤销、查询历史、MCP 配置均有实际服务端入口 | 用户 DELETE 未实现；账号供应与档案维护尚未闭环；18 组页面及四客户端验收不能由接口存在替代 |
 
 ## 2. OAuth 如何工作，首次连接是否跳转

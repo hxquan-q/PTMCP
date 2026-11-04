@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -58,33 +57,6 @@ class BackendApiRegressionTest {
     @Qualifier("adminDataSource")
     private DataSource dataSource;
 
-    @Test
-    void denyRevocationMustNotRaiseDelegatedAdminsOwnRead() throws Exception {
-        long dept = department("review-dept");
-        long actor = user("review-delegate", dept);
-        long datasource = datasource();
-        long platform = platform("review-platform");
-        delegation(actor, dept, datasource);
-        ceiling(platform, datasource);
-        seedGrant(actor, datasource, "ALLOW", "review allow");
-        AclGrantStore.AclGrantRecord denied = seedGrant(actor, datasource, "DENY", "review deny");
-        assertFalse(read(actor, platform, datasource, Instant.now()));
-
-        MvcResult response =
-                mvc.perform(
-                                delete("/api/v1/admin/acl/grants/" + denied.id())
-                                        .header("X-Test-User-Id", actor)
-                                        .header("X-Test-Platform-Admin", "false")
-                                        .header("If-Match", "1"))
-                        .andReturn();
-
-        boolean after = read(actor, platform, datasource, Instant.now());
-        assertAll(
-                () -> assertEquals(403, response.getResponse().getStatus()),
-                () -> assertFalse(after, "revoking own DENY must not create effective READ"));
-    }
-
-    @Test
     void invalidReplacementMustLeaveOriginalGrantActive() throws Exception {
         long dept = department("review-dept");
         long target = user("review-target", dept);
@@ -166,31 +138,6 @@ class BackendApiRegressionTest {
                                 "credential is returned again on idempotent replay"));
     }
 
-    @Test
-    void futureSelfGrantMustBeRejected() throws Exception {
-        long dept = department("review-dept");
-        long actor = user("review-delegate", dept);
-        long datasource = datasource();
-        long platform = platform("review-platform");
-        delegation(actor, dept, datasource);
-        ceiling(platform, datasource);
-        Instant from = Instant.now().plusSeconds(300);
-        MvcResult response =
-                mvc.perform(
-                                post("/api/v1/admin/acl/grants")
-                                        .header("X-Test-User-Id", actor)
-                                        .header("X-Test-Platform-Admin", "false")
-                                        .contentType("application/json")
-                                        .content(
-                                                grantBody(actor, datasource, from, "future grant")))
-                        .andReturn();
-        boolean futureRead = read(actor, platform, datasource, from.plusSeconds(1));
-        assertAll(
-                () -> assertEquals(403, response.getResponse().getStatus()),
-                () -> assertFalse(futureRead, "future activation must not bypass self-escalation"));
-    }
-
-    @Test
     void clientListMustProvideBoundedPageAndContinuation() throws Exception {
         long platform = platform("review-platform");
         ClientAdminService clients = new ClientAdminService(dataSource);
@@ -374,7 +321,6 @@ class BackendApiRegressionTest {
                         List.of(
                                 "acl_grant",
                                 "platform_scope",
-                                "admin_delegation",
                                 "admin_operation_log",
                                 "api_idempotency",
                                 "oauth2_registered_client",
@@ -450,25 +396,6 @@ class BackendApiRegressionTest {
                 assertTrue(keys.next());
                 return keys.getLong(1);
             }
-        }
-    }
-
-    private void delegation(long actor, long dept, long datasource) throws Exception {
-        try (Connection connection = dataSource.getConnection();
-                PreparedStatement insert =
-                        connection.prepareStatement(
-                                "INSERT INTO admin_delegation (user_id,department_root_id,resource_type,"
-                                        + "resource_id,resource_generation,allowed_actions,valid_from,valid_to,"
-                                        + "status,version,create_time,update_time,created_by,updated_by)"
-                                        + " VALUES (?,?,'DATASOURCE',?,1,'[\"ptmcp:acl:read\"]',"
-                                        + "UTC_TIMESTAMP(6)-INTERVAL 1 DAY,UTC_TIMESTAMP(6)+INTERVAL 1 DAY,"
-                                        + "'ACTIVE',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),?,?)")) {
-            insert.setLong(1, actor);
-            insert.setLong(2, dept);
-            insert.setLong(3, datasource);
-            insert.setLong(4, ADMIN);
-            insert.setLong(5, ADMIN);
-            insert.executeUpdate();
         }
     }
 

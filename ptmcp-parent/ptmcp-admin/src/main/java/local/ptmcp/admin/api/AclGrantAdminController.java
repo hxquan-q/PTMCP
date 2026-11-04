@@ -9,8 +9,6 @@ import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.persistence.org.AclDirectory;
 import local.ptmcp.persistence.org.AclGrantStore;
-import local.ptmcp.persistence.org.DelegationScopeResolver;
-import local.ptmcp.persistence.org.OrgStore;
 import local.ptmcp.persistence.org.ResourceIds;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -40,19 +38,13 @@ import java.util.List;
 public class AclGrantAdminController {
     private final AclGrantStore grantStore;
     private final AclDirectory directory;
-    private final AclScopeGate scopeGate;
     private final AclMutationGuard mutations;
     private final AdminSessionService sessions;
 
     public AclGrantAdminController(
-            AclGrantStore grantStore,
-            AclDirectory directory,
-            DelegationScopeResolver scopeResolver,
-            OrgStore orgStore,
-            AdminSessionService sessions) {
+            AclGrantStore grantStore, AclDirectory directory, AdminSessionService sessions) {
         this.grantStore = grantStore;
         this.directory = directory;
-        this.scopeGate = new AclScopeGate(scopeResolver, orgStore);
         this.mutations = new AclMutationGuard(directory);
         this.sessions = sessions;
     }
@@ -84,8 +76,7 @@ public class AclGrantAdminController {
             Instant validTo,
             String status,
             String reason,
-            long version)
-            implements AclScopeGate.AclGrantStoreGrant {}
+            long version) {}
 
     public record PreviewRequest(
             Long subjectUserId, Long platformId, List<Long> resourceIds, Instant at) {}
@@ -219,17 +210,9 @@ public class AclGrantAdminController {
             @RequestParam(required = false) String subjectType,
             @RequestParam(required = false) Long subjectId,
             HttpServletRequest request) {
-        AdminPrincipal principal = AdminPrincipal.require(request);
-        List<GrantRead> rows =
-                grantStore.list(subjectType, subjectId).stream()
-                        .map(AclGrantAdminController::toRead)
-                        .toList();
-        // Platform admins see everything; delegated admins only their subtree subjects.
-        if (principal.platformAdmin()) {
-            return rows;
-        }
-        return scopeGate.visibleGrants(request, List.copyOf(rows)).stream()
-                .map(grant -> (GrantRead) grant)
+        ManagementScope.requirePlatformAdmin(request);
+        return grantStore.list(subjectType, subjectId).stream()
+                .map(AclGrantAdminController::toRead)
                 .toList();
     }
 

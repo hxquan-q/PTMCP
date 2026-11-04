@@ -5,7 +5,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import local.ptmcp.admin.web.StrictJson;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
-import local.ptmcp.persistence.org.DelegationScopeResolver;
 import local.ptmcp.persistence.org.IdempotencyRecorder;
 import local.ptmcp.persistence.org.OrgStore;
 
@@ -30,15 +29,10 @@ import java.util.List;
 public class DepartmentAdminController {
     private final OrgStore orgStore;
     private final IdempotencyRecorder idempotency;
-    private final DepartmentScopeGate scopeGate;
 
-    public DepartmentAdminController(
-            OrgStore orgStore,
-            IdempotencyRecorder idempotency,
-            DelegationScopeResolver scopeResolver) {
+    public DepartmentAdminController(OrgStore orgStore, IdempotencyRecorder idempotency) {
         this.orgStore = orgStore;
         this.idempotency = idempotency;
-        this.scopeGate = new DepartmentScopeGate(scopeResolver);
     }
 
     public record DepartmentWrite(Long parentId, String name, boolean enabled) {}
@@ -49,10 +43,7 @@ public class DepartmentAdminController {
     @AdminAction("ptmcp:department:list")
     @GetMapping
     public List<DepartmentRead> list(HttpServletRequest request) {
-        // Platform admins see the whole tree; delegated admins their subtree (403 without one).
-        return scopeGate.visibleDepartments(request, orgStore.listDepartments()).stream()
-                .map(DepartmentAdminController::toRead)
-                .toList();
+        return orgStore.listDepartments().stream().map(DepartmentAdminController::toRead).toList();
     }
 
     @AdminAction("ptmcp:department:create")
@@ -60,7 +51,6 @@ public class DepartmentAdminController {
     public ResponseEntity<byte[]> create(
             @RequestBody(required = false) byte[] body, HttpServletRequest request) {
         DepartmentWrite write = StrictJson.parse(body, DepartmentWrite.class);
-        scopeGate.requireParentForCreate(request, write.parentId(), "ptmcp:department:create");
         return IdempotentWrites.execute(
                 idempotency,
                 actorId(request),
@@ -95,7 +85,6 @@ public class DepartmentAdminController {
     @AdminAction("ptmcp:department:read")
     @GetMapping("/{id}")
     public DepartmentRead get(@PathVariable long id, HttpServletRequest request) {
-        scopeGate.requireDepartmentAccess(request, id);
         return toRead(orgStore.getDepartment(id));
     }
 
@@ -104,12 +93,10 @@ public class DepartmentAdminController {
     public ResponseEntity<DepartmentRead> update(
             @PathVariable long id, @RequestBody DepartmentWrite write, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
-        scopeGate.requireDepartmentAction(request, id, "ptmcp:department:update");
         OrgStore.DepartmentRow before = orgStore.getDepartment(id);
         if (before.version() != expectedVersion) {
             throw new DomainException(ErrorCode.VERSION_CONFLICT);
         }
-        scopeGate.requireDepartmentUpdate(request, before, write.parentId());
         DepartmentRead updated =
                 toRead(
                         orgStore.editDepartment(
@@ -127,7 +114,6 @@ public class DepartmentAdminController {
     public ResponseEntity<DepartmentRead> delete(
             @PathVariable long id, HttpServletRequest request) {
         long expectedVersion = IfMatch.requireVersion(request);
-        scopeGate.requireDepartmentAction(request, id, "ptmcp:department:delete");
         orgStore.deleteDepartment(id, expectedVersion, actorId(request));
         return ResponseEntity.noContent().build();
     }

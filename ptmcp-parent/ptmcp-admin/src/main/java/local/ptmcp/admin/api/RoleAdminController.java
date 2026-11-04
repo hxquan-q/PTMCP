@@ -5,7 +5,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import local.ptmcp.admin.web.StrictJson;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
-import local.ptmcp.persistence.org.DelegationScopeResolver;
 import local.ptmcp.persistence.org.IdempotencyRecorder;
 import local.ptmcp.persistence.org.OrgStore;
 
@@ -30,7 +29,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
 import java.util.List;
 
 /**
@@ -55,15 +53,10 @@ public class RoleAdminController {
 
     private final OrgStore orgStore;
     private final IdempotencyRecorder idempotency;
-    private final DelegationScopeResolver scopeResolver;
 
-    public RoleAdminController(
-            OrgStore orgStore,
-            IdempotencyRecorder idempotency,
-            DelegationScopeResolver scopeResolver) {
+    public RoleAdminController(OrgStore orgStore, IdempotencyRecorder idempotency) {
         this.orgStore = orgStore;
         this.idempotency = idempotency;
-        this.scopeResolver = scopeResolver;
     }
 
     /** S3 后角色 = 数据权限模板：请求与响应都只含定义字段，不再携带能力码。 */
@@ -147,14 +140,9 @@ public class RoleAdminController {
     }
 
     /** Catalog read: platform admins, or delegated admins with any effective delegation. */
+    /** S4: 目录读取面收敛到唯一平台管理员，委派读取路径已删除。 */
     private void requireCatalogAccess(HttpServletRequest request) {
-        AdminPrincipal principal = AdminPrincipal.require(request);
-        if (principal.platformAdmin()) {
-            return;
-        }
-        if (scopeResolver.effectiveDelegations(principal.userId(), Instant.now()).isEmpty()) {
-            throw new DomainException(ErrorCode.MANAGEMENT_SCOPE_DENIED);
-        }
+        ManagementScope.requirePlatformAdmin(request);
     }
 
     private static long actorId(HttpServletRequest request) {

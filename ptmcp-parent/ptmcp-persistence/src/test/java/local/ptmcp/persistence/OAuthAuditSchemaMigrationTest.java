@@ -63,7 +63,6 @@ class OAuthAuditSchemaMigrationTest {
                     "business_dictionary",
                     "platform_scope",
                     "acl_grant",
-                    "admin_delegation",
                     "sys_dept",
                     "sys_role",
                     "sys_user_role",
@@ -250,7 +249,7 @@ class OAuthAuditSchemaMigrationTest {
             assertEquals("3", flyway.info().current().getVersion().getVersion());
             try (Connection connection = connection()) {
                 assertEquals(
-                        V3_TABLES.size() + V2_TABLES.size() + 3,
+                        V3_TABLES.size() + V2_TABLES.size() + 4,
                         scalar(
                                 connection,
                                 "SELECT COUNT(*) FROM information_schema.tables "
