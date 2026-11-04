@@ -1105,6 +1105,44 @@ class AdminApiTest {
                                 .param("keyword", "ali"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1));
+
+        // 大小写不敏感：数据源列表走 MySQL LIKE（ai_ci）、预览服务端小写化比较，用户列表不能例外。
+        mockMvc.perform(
+                        get("/api/v1/admin/users")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("keyword", "ALI"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].username").value("alice"));
+
+        // 显示名同样参与匹配：命中中文子串。
+        mockMvc.perform(
+                        get("/api/v1/admin/users")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("keyword", "爱丽"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].username").value("alice"));
+
+        // 无命中时必须是空列表，而不是回退成不过滤。
+        mockMvc.perform(
+                        get("/api/v1/admin/users")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("keyword", "no-such-user-zzz"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+
+        // 空白关键字等于不过滤，不能把列表清空。
+        mockMvc.perform(
+                        get("/api/v1/admin/users")
+                                .header("X-Test-User-Id", ADMIN_ID)
+                                .header("X-Test-Platform-Admin", "true")
+                                .param("keyword", "   "))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(org.hamcrest.Matchers.greaterThan(0)));
     }
 
     @Test

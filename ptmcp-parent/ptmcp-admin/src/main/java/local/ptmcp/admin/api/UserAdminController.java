@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Locale;
 
 /** /api/v1/admin/users CRUD plus status/roles/department moves; DTOs are explicit. */
 @RestController
@@ -69,14 +70,25 @@ public class UserAdminController {
             HttpServletRequest request) {
         return scopeGate.visibleUsers(request, orgStore.listUsers()).stream()
                 .filter(user -> departmentId == null || user.deptId() == departmentId)
-                .filter(
-                        user ->
-                                keyword == null
-                                        || keyword.isBlank()
-                                        || user.username().contains(keyword)
-                                        || user.displayName().contains(keyword))
+                .filter(user -> matchesKeyword(user, keyword))
                 .map(UserAdminController::toRead)
                 .toList();
+    }
+
+    /**
+     * 用户名/显示名的关键字搜索不区分大小写。
+     *
+     * <p>之前用 {@code String.contains}，大小写敏感，而数据源列表走的是 MySQL 的 {@code
+     * LIKE}（utf8mb4_0900_ai_ci，大小写不敏感），预览服务端也是小写化后比较。 同一个搜索框在不同资源上行为不一致，输入 “ALI” 找不到
+     * “alice”。这里与另两处对齐。
+     */
+    private static boolean matchesKeyword(OrgStore.UserRow user, String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return true;
+        }
+        String needle = keyword.toLowerCase(Locale.ROOT);
+        return user.username().toLowerCase(Locale.ROOT).contains(needle)
+                || user.displayName().toLowerCase(Locale.ROOT).contains(needle);
     }
 
     @AdminAction("ptmcp:user:create")
