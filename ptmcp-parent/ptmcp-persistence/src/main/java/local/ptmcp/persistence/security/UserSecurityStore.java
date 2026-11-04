@@ -113,6 +113,22 @@ public final class UserSecurityStore {
         }
     }
 
+    /**
+     * True when the security row marks this user as the independent platform administrator.
+     * Decoupled from any capability-code role; the single admin owns every management action.
+     */
+    public static boolean isPlatformAdmin(Connection connection, long userId) throws SQLException {
+        try (PreparedStatement query =
+                connection.prepareStatement(
+                        "SELECT platform_admin FROM sys_user_security WHERE user_id = ?")) {
+            query.setQueryTimeout(5);
+            query.setLong(1, userId);
+            try (ResultSet result = query.executeQuery()) {
+                return result.next() && result.getInt(1) == 1;
+            }
+        }
+    }
+
     public static void lockGlobal(Connection connection) throws SQLException {
         try (PreparedStatement statement =
                 connection.prepareStatement(

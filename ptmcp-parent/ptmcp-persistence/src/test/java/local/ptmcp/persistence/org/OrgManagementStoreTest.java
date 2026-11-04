@@ -1525,7 +1525,7 @@ class OrgManagementStoreTest {
                 userId);
         statusExecute(
                 "INSERT INTO sys_user_security (user_id,auth_version,identity_version,identity_state,"
-                        + "create_time,update_time) VALUES (?,1,1,'READY',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
+                        + "platform_admin,create_time,update_time) VALUES (?,1,1,'READY',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
                 userId);
         long roleId =
                 insert(
@@ -1739,10 +1739,12 @@ class OrgManagementStoreTest {
                             yield ErrorCode.TOKEN_REVOKED;
                         }
                         case "NO_PLATFORM" -> {
+                            // S1: platform-admin qualification lives in sys_user_security; the
+                            // legacy ptmcp:platform:scope role code is no longer consulted, so the
+                            // denial is triggered by clearing the independent column.
                             statusExecute(
-                                    "DELETE FROM sys_role_permission WHERE role_id=? AND permission_code=?",
-                                    actor.roleId(),
-                                    "ptmcp:platform:scope");
+                                    "UPDATE sys_user_security SET platform_admin=0 WHERE user_id=?",
+                                    actor.userId());
                             yield ErrorCode.MANAGEMENT_SCOPE_DENIED;
                         }
                         case "NO_MEMBER" -> {
@@ -1934,21 +1936,30 @@ class OrgManagementStoreTest {
                                             command, delayed, existing, actor.userId()));
             try {
                 delegationAwait(entered);
-                orgStore.updateRole(
-                        actor.roleId(),
-                        "撤权角色",
-                        null,
-                        roleActorCodes().stream().filter(code -> !revoked.equals(code)).toList(),
-                        1,
-                        roleTestActor());
+                if ("ptmcp:platform:scope".equals(revoked)) {
+                    // S1: platform-admin qualification is the independent column; dropping the
+                    // legacy scope code from the role no longer changes it, so the race revokes
+                    // the column flag instead.
+                    statusExecute(
+                            "UPDATE sys_user_security SET platform_admin=0 WHERE user_id=?",
+                            actor.userId());
+                } else {
+                    orgStore.updateRole(
+                            actor.roleId(),
+                            "撤权角色",
+                            null,
+                            roleActorCodes().stream()
+                                    .filter(code -> !revoked.equals(code))
+                                    .toList(),
+                            1,
+                            roleTestActor());
+                }
                 RoleQualificationSnapshot afterRevocation = roleQualificationSnapshot();
                 resume.countDown();
                 assertAll(
                         () ->
                                 assertEquals(
-                                        "ptmcp:platform:scope".equals(revoked)
-                                                ? ErrorCode.MANAGEMENT_SCOPE_DENIED
-                                                : ErrorCode.MANAGEMENT_SCOPE_DENIED,
+                                        ErrorCode.MANAGEMENT_SCOPE_DENIED,
                                         mutation.get(10, TimeUnit.SECONDS)),
                         () -> assertEquals(afterRevocation, roleQualificationSnapshot()));
             } finally {

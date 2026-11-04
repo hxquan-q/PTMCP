@@ -347,28 +347,33 @@ class SessionApiTest {
     }
 
     @Test
-    void platformAdminSessionLosesScopeAfterMembershipRemoval() throws Exception {
-        assertScopeRevokedBy("DELETE FROM sys_user_role WHERE user_id = " + ALICE);
-    }
-
-    @Test
-    void platformAdminSessionLosesScopeAfterRoleDisabled() throws Exception {
-        assertScopeRevokedBy("UPDATE sys_role SET status = '1' WHERE role_key = 'portal-user'");
-    }
-
-    @Test
-    void platformAdminSessionLosesScopeAfterRoleSoftDeleted() throws Exception {
-        assertScopeRevokedBy("UPDATE sys_role SET del_flag = '1' WHERE role_key = 'portal-user'");
-    }
-
-    @Test
-    void platformAdminSessionLosesScopeAfterPermissionRemoval() throws Exception {
-        assertScopeRevokedBy(
+    void platformAdminColumnWithstandsRoleMembershipChangesWithoutRenewingSession()
+            throws Exception {
+        seedPortal();
+        Session session = login("alice", PASSWORD);
+        String expiresAt = assertSessionScope(session, true, null);
+        String index = sessionIndexSnapshot(ALICE);
+        // Admin qualification is column-driven and survives role/scoping mutations.
+        executeSql("DELETE FROM sys_user_role WHERE user_id = " + ALICE);
+        assertSessionScope(session, true, expiresAt);
+        assertEquals(index, sessionIndexSnapshot(ALICE));
+        executeSql("DELETE FROM sys_user_role WHERE user_id = " + ALICE);
+        executeSql("UPDATE sys_role SET status = '1' WHERE role_key = 'portal-user'");
+        executeSql("UPDATE sys_role SET del_flag = '1' WHERE role_key = 'portal-user'");
+        executeSql(
                 "DELETE FROM sys_role_permission WHERE permission_code = 'ptmcp:platform:scope'");
+        assertSessionScope(session, true, expiresAt);
+        assertEquals(index, sessionIndexSnapshot(ALICE));
+        mockMvc.perform(
+                        post("/api/v1/session/logout")
+                                .cookie(session.cookie())
+                                .header("X-CSRF-Token", session.csrf()))
+                .andExpect(status().isOk());
     }
 
     @Test
-    void platformAdminScopeGrantedAfterLoginAppliesWithoutRenewingSession() throws Exception {
+    void roleScopeCodeGrantDoesNotElevateNonAdminWithoutRenewingSession() throws Exception {
+        // S1 counter-example: a non-admin stays non-admin even if the legacy scope code is granted.
         seedPortal();
         Session session = login("bob", PASSWORD);
         String expiresAt = assertSessionScope(session, false, null);
@@ -377,7 +382,7 @@ class SessionApiTest {
                 Long.parseLong(
                         scalar("SELECT role_id FROM sys_role WHERE role_key = 'portal-user'"));
         addUserRole(BOB, roleId);
-        assertSessionScope(session, true, expiresAt);
+        assertSessionScope(session, false, expiresAt);
         assertEquals(index, sessionIndexSnapshot(BOB));
         mockMvc.perform(
                         post("/api/v1/session/logout")
@@ -392,7 +397,7 @@ class SessionApiTest {
         Session session = login("alice", PASSWORD);
         String index = sessionIndexSnapshot(ALICE);
         String operations = scalar("SELECT COUNT(*) FROM admin_operation_log");
-        executeSql("RENAME TABLE sys_role_permission TO session_test_unavailable_permission");
+        executeSql("RENAME TABLE sys_user_security TO session_test_unavailable_security");
         try {
             MvcResult result =
                     mockMvc.perform(
@@ -410,7 +415,7 @@ class SessionApiTest {
                             .andExpect(header().string("X-Content-Type-Options", "nosniff"))
                             .andExpect(header().exists("X-Request-Id"))
                             .andReturn();
-            assertFalse(result.getResponse().getContentAsString().contains("sys_role_permission"));
+            assertFalse(result.getResponse().getContentAsString().contains("sys_user_security"));
             assertFalse(result.getResponse().getContentAsString().contains("SQLException"));
             assertEquals(
                     "0",
@@ -419,24 +424,9 @@ class SessionApiTest {
             assertEquals(operations, scalar("SELECT COUNT(*) FROM admin_operation_log"));
             assertEquals(index, sessionIndexSnapshot(ALICE));
         } finally {
-            executeSql("RENAME TABLE session_test_unavailable_permission TO sys_role_permission");
+            executeSql("RENAME TABLE session_test_unavailable_security TO sys_user_security");
         }
         assertSessionScope(session, true, null);
-    }
-
-    private void assertScopeRevokedBy(String mutation) throws Exception {
-        seedPortal();
-        Session session = login("alice", PASSWORD);
-        String expiresAt = assertSessionScope(session, true, null);
-        String index = sessionIndexSnapshot(ALICE);
-        executeSql(mutation);
-        assertSessionScope(session, false, expiresAt);
-        assertEquals(index, sessionIndexSnapshot(ALICE));
-        mockMvc.perform(
-                        post("/api/v1/session/logout")
-                                .cookie(session.cookie())
-                                .header("X-CSRF-Token", session.csrf()))
-                .andExpect(status().isOk());
     }
 
     @Test
@@ -506,19 +496,14 @@ class SessionApiTest {
                         .andExpect(header().doesNotExist("Set-Cookie"))
                         .andReturn();
         JsonNode data = json(me);
-        assertEquals(
-                expected, data.get("permissions").toString().contains("\"ptmcp:platform:scope\""));
+        // platformAdmin is column-driven in S1, independent of the permission-code list.
         String expiresAt = data.get("expiresAt").asString();
         if (originalExpiresAt != null) {
             assertEquals(originalExpiresAt, expiresAt);
         }
-        MvcResult management =
-                mockMvc.perform(get("/api/v1/admin/roles").cookie(session.cookie()))
-                        .andExpect(expected ? status().isOk() : status().isForbidden())
-                        .andReturn();
-        if (!expected) {
-            assertEquals("MANAGEMENT_SCOPE_DENIED", json(management).get("code").asString());
-        }
+        // Management-endpoint capability is still code-gated until S2 and is not a proxy for the
+        // column-driven platformAdmin, so it is not asserted here; adminActionUsesCurrentCookie*
+        // covers that boundary separately.
         return expiresAt;
     }
 
@@ -1272,6 +1257,7 @@ class SessionApiTest {
         addRolePermission(roleId, "ptmcp:user:reset-password");
         addUser(ALICE, "alice", "爱丽丝", PASSWORD, deptId);
         addUser(BOB, "bob", "鲍勃", PASSWORD, deptId);
+        makePlatformAdmin(ALICE);
         addUserRole(ALICE, roleId);
 
         long platformId = addPlatform("portal", 3, "DISCOVER", "NONE");
@@ -1553,6 +1539,16 @@ class SessionApiTest {
                 insert.setLong(1, userId);
                 insert.executeUpdate();
             }
+        }
+    }
+
+    private static void makePlatformAdmin(long userId) throws SQLException {
+        try (Connection connection = connect();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "UPDATE sys_user_security SET platform_admin=1 WHERE user_id=?")) {
+            statement.setLong(1, userId);
+            statement.executeUpdate();
         }
     }
 

@@ -283,8 +283,8 @@ class AdminApiTest {
                                         + " VALUES (?,?,'测试管理员','external','ACTIVE',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))");
                 PreparedStatement authority =
                         connection.prepareStatement(
-                                "INSERT INTO sys_user_security (user_id,auth_version,identity_version,identity_state,create_time,update_time)"
-                                        + " VALUES (?,1,1,'READY',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))")) {
+                                "INSERT INTO sys_user_security (user_id,auth_version,identity_version,identity_state,platform_admin,create_time,update_time)"
+                                        + " VALUES (?,1,1,'READY',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))")) {
             department.setLong(1, ADMIN_ID);
             department.executeUpdate();
             profile.setLong(1, ADMIN_ID);
@@ -3635,6 +3635,19 @@ class AdminApiTest {
                         permissions.stream().filter(code -> !revoked.equals(code)).toList(),
                         1,
                         ADMIN_ID);
+                boolean columnRevocation = "ptmcp:platform:scope".equals(revoked);
+                if (columnRevocation) {
+                    // S1: the store's requalification reads the independent platform_admin column,
+                    // so revoking the legacy scope code must be paired with flipping the column.
+                    try (Connection connection = connect();
+                            PreparedStatement flip =
+                                    connection.prepareStatement(
+                                            "UPDATE sys_user_security SET platform_admin=0"
+                                                    + " WHERE user_id=?")) {
+                        flip.setLong(1, ADMIN_ID);
+                        assertEquals(1, flip.executeUpdate());
+                    }
+                }
                 String afterRevocation = roleCreateWriteEffects();
                 finishAction.countDown();
                 MvcResult denied = original.get(15, TimeUnit.SECONDS);
@@ -3660,6 +3673,16 @@ class AdminApiTest {
                     restore.setLong(1, actorRole);
                     restore.setString(2, revoked);
                     assertEquals(1, restore.executeUpdate());
+                }
+                if (columnRevocation) {
+                    try (Connection connection = connect();
+                            PreparedStatement unflip =
+                                    connection.prepareStatement(
+                                            "UPDATE sys_user_security SET platform_admin=1"
+                                                    + " WHERE user_id=?")) {
+                        unflip.setLong(1, ADMIN_ID);
+                        assertEquals(1, unflip.executeUpdate());
+                    }
                 }
                 String beforeRetry = roleCreateWriteEffects();
                 isolatedMvc
@@ -6067,18 +6090,17 @@ class AdminApiTest {
                             "SELECT status FROM sys_user_profile WHERE user_id=" + ADMIN_ID));
         }
 
-        // A second usable platform admin unlocks both operations.
+        // A second usable platform admin unlocks both operations. S1: admin status is granted by
+        // the independent platform_admin column, not by any capability code.
         long deptId = createDepartment("末位管理员部");
         long second = createUser("second-admin", "第二管理员", deptId);
         try (Connection connection = connect();
                 PreparedStatement ready =
                         connection.prepareStatement(
-                                "UPDATE sys_user_security SET identity_state='READY' WHERE user_id=?")) {
+                                "UPDATE sys_user_security SET identity_state='READY',"
+                                        + " platform_admin=1 WHERE user_id=?")) {
             ready.setLong(1, second);
             ready.executeUpdate();
-        }
-        try (Connection connection = connect()) {
-            AdminActionTestSupport.grant(connection, second, "ptmcp:platform:scope");
         }
         mockMvc.perform(
                         delete("/api/v1/admin/users/" + ADMIN_ID)

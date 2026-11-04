@@ -237,7 +237,7 @@ public final class AdminSessionService {
                 roles,
                 permissions,
                 managedScopes(session.userId()),
-                permissions.contains(PLATFORM_SCOPE_PERMISSION),
+                platformAdmin(session.userId()),
                 session.expiresAt());
     }
 
@@ -365,14 +365,10 @@ public final class AdminSessionService {
         try (Connection connection = primary.getConnection();
                 PreparedStatement statement =
                         connection.prepareStatement(
-                                "SELECT 1 FROM sys_user_role ur"
-                                        + " JOIN sys_role r ON r.role_id = ur.role_id"
-                                        + " JOIN sys_role_permission rp ON rp.role_id = r.role_id"
-                                        + " WHERE ur.user_id = ? AND r.status = '0'"
-                                        + " AND r.del_flag = '0' AND rp.permission_code = ? LIMIT 1")) {
+                                "SELECT 1 FROM sys_user_security WHERE user_id = ?"
+                                        + " AND platform_admin = 1 LIMIT 1")) {
             statement.setQueryTimeout(5);
             statement.setLong(1, userId);
-            statement.setString(2, PLATFORM_SCOPE_PERMISSION);
             try (ResultSet result = statement.executeQuery()) {
                 return result.next();
             }

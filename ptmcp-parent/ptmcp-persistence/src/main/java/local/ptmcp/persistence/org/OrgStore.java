@@ -857,16 +857,11 @@ public final class OrgStore {
     private static long activePlatformAdmins(Connection connection, Long excluded)
             throws SQLException {
         String sql =
-                "SELECT COUNT(DISTINCT ur.user_id) FROM sys_user_role ur"
-                        + " JOIN sys_role r ON r.role_id = ur.role_id"
-                        + " AND r.status = '0' AND r.del_flag = '0'"
-                        + " JOIN sys_role_permission rp ON rp.role_id = r.role_id"
-                        + " JOIN sys_user_profile p ON p.user_id = ur.user_id AND p.status = 'ACTIVE'"
-                        + " JOIN sys_user_security s ON s.user_id = ur.user_id"
-                        + " AND s.identity_state = 'READY'"
-                        + " WHERE rp.permission_code = 'ptmcp:platform:scope'";
+                "SELECT COUNT(DISTINCT s.user_id) FROM sys_user_security s"
+                        + " JOIN sys_user_profile p ON p.user_id = s.user_id AND p.status = 'ACTIVE'"
+                        + " WHERE s.platform_admin = 1 AND s.identity_state = 'READY'";
         if (excluded != null) {
-            sql += " AND ur.user_id <> ?";
+            sql += " AND s.user_id <> ?";
         }
         try (PreparedStatement statement = OrgSql.statement(connection, sql)) {
             if (excluded != null) {
@@ -1212,7 +1207,7 @@ public final class OrgStore {
             throw new DomainException(ErrorCode.TOKEN_REVOKED);
         }
         UserSecurityStore.requireActiveProfile(connection, actorId);
-        boolean platform = false;
+        boolean platform = UserSecurityStore.isPlatformAdmin(connection, actorId);
         boolean permitted = false;
         try (PreparedStatement statement =
                 OrgSql.statement(
@@ -1221,15 +1216,12 @@ public final class OrgStore {
                                 + " JOIN sys_role r ON r.role_id = ur.role_id"
                                 + " JOIN sys_role_permission rp ON rp.role_id = r.role_id"
                                 + " WHERE ur.user_id = ? AND r.status = '0' AND r.del_flag = '0'"
-                                + " AND rp.permission_code IN (?, ?)")) {
+                                + " AND rp.permission_code = ?")) {
             statement.setLong(1, actorId);
-            statement.setString(2, "ptmcp:platform:scope");
-            statement.setString(3, action);
+            statement.setString(2, action);
             try (ResultSet result = statement.executeQuery()) {
                 while (result.next()) {
-                    String code = result.getString(1);
-                    platform |= "ptmcp:platform:scope".equals(code);
-                    permitted |= action.equals(code);
+                    permitted |= action.equals(result.getString(1));
                 }
             }
         }
