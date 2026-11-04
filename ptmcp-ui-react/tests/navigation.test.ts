@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ME_HOME_PATH, filterNavGroups, firstAccessibleNavPath, resolveRoute, safeReturnTo, type PermissionedNavGroup } from '../src/navigation.ts';
+import {
+  ME_HOME_PATH,
+  filterNavGroups,
+  firstAccessibleNavPath,
+  navItemAllowed,
+  resolveRoute,
+  routeAllowed,
+  safeReturnTo,
+  type PermissionedNavGroup,
+} from '../src/navigation.ts';
 import { ADMIN_ROUTE_PERMISSIONS } from '../src/navigation.ts';
 
 const groups: PermissionedNavGroup[] = [
@@ -53,6 +62,46 @@ test('firstAccessibleNavPath follows nav order and skips denied or path-less ite
   );
   assert.equal(firstAccessibleNavPath([], paths, all), null);
   assert.equal(ME_HOME_PATH, '/me/dictionary');
+});
+
+test('any-of permissions open the merged org entry for either directory', () => {
+  const org = { permissions: ['ptmcp:department:list', 'ptmcp:user:list'] };
+  assert.equal(
+    navItemAllowed(org, (code) => code === 'ptmcp:user:list'),
+    true,
+  );
+  assert.equal(
+    navItemAllowed(org, (code) => code === 'ptmcp:department:list'),
+    true,
+  );
+  assert.equal(
+    navItemAllowed(org, () => false),
+    false,
+  );
+  assert.equal(
+    routeAllowed(org, (code) => code === 'ptmcp:department:list'),
+    true,
+  );
+  assert.equal(
+    routeAllowed(org, () => false),
+    false,
+  );
+
+  const merged: PermissionedNavGroup[] = [{ title: '组织与接入', items: [{ key: 'admin-org', label: '人员组织', ...org }] }];
+  assert.equal(
+    firstAccessibleNavPath(merged, { 'admin-org': '/admin/org' }, (code) => code === 'ptmcp:user:list'),
+    '/admin/org',
+  );
+
+  // 单个 permission 仍是「必须具备」：any-of 不改变原有语义。
+  assert.equal(
+    navItemAllowed({ permission: 'ptmcp:user:list' }, (code) => code === 'ptmcp:department:list'),
+    false,
+  );
+  assert.equal(
+    routeAllowed({}, () => false),
+    true,
+  );
 });
 
 test('resolveRoute prefers exact, then prefix with decoded id, else none', () => {

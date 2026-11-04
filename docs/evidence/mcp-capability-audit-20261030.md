@@ -99,7 +99,7 @@ OPERATION_UNKNOWN 的原 key/body，未知错误码优先于 HTTP 状态分类�
 | OAuth 客户端新增/编辑 | 原先仅发 name/type/authMethods，缺必需 status/allowedScopes，未提供 redirectUris/jwksUri | 已发送完整 ClientWrite 并保留编辑值；提供精确回调、scope、JWKS 和状态，校验 PUBLIC 仅 none、CONFIDENTIAL 禁 none、纯 private_key_jwt 必需 HTTPS JWKS；真实注册→授权组合仍待验 |
 | 有效权限预览 | 原先发送 subjectType/subjectId 和原始对象 ID；后端只收 subjectUserId、编码资源 ID 且上限100 | 已只对 USER 开放计算，发送 subjectUserId，用 BigInt 编码并解码结果、归一化 sourceGrantIds；最多取前100个并明确提示，非法 ID 阻断；角色/部门主体预览仍未实现 |
 
-依据为 [UsersPage](../../ptmcp-ui-react/src/views/admin/UsersPage.tsx)、
+依据为 `ptmcp-ui-react/src/views/admin/UsersPage.tsx`（该页已在 2026-11 的人员组织改版中并入 [OrgPage](../../ptmcp-ui-react/src/views/admin/OrgPage.tsx)）、
 [PlatformsPage](../../ptmcp-ui-react/src/views/admin/PlatformsPage.tsx)、
 [ClientWrite 服务类型](../../ptmcp-ui-react/src/services/access.ts)、
 [UserAdminController](../../ptmcp-parent/ptmcp-admin/src/main/java/local/ptmcp/admin/api/UserAdminController.java) 和

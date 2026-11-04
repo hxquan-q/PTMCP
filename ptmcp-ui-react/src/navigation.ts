@@ -1,12 +1,20 @@
 import type { NavGroup, NavItem } from './layouts/AppShell';
 
-/** 带权限标记的导航模型：item.permission 缺省表示无需权限（个人门户）。 */
-export type PermissionedNavGroup = Omit<NavGroup, 'items'> & { items: (NavItem & { permission?: string })[] };
+/** 带权限标记的导航模型：无 permission/permissions 表示无需权限（个人门户）；
+ *  permissions 为任一命中即可（用于「人员组织」同时覆盖部门与用户两类管理员）。 */
+export type PermissionedNavItem = NavItem & { permission?: string; permissions?: string[] };
+export type PermissionedNavGroup = Omit<NavGroup, 'items'> & { items: PermissionedNavItem[] };
+
+/** 导航项是否可见：permissions 优先按「任一命中」，否则看单个 permission。 */
+export function navItemAllowed(item: { permission?: string; permissions?: string[] }, can: (code: string) => boolean): boolean {
+  if (item.permissions && item.permissions.length > 0) return item.permissions.some(can);
+  return !item.permission || can(item.permission);
+}
 
 /** 按会话权限过滤导航：移除无权项，丢弃因此变空的分组。 */
 export function filterNavGroups(groups: PermissionedNavGroup[], can: (code: string) => boolean): NavGroup[] {
   return groups
-    .map((group) => ({ ...group, items: group.items.filter((item) => !item.permission || can(item.permission)) }))
+    .map((group) => ({ ...group, items: group.items.filter((item) => navItemAllowed(item, can)) }))
     .filter((group) => group.items.length > 0);
 }
 
@@ -18,7 +26,7 @@ export function firstAccessibleNavPath(groups: PermissionedNavGroup[], paths: Re
   for (const group of groups) {
     for (const item of group.items) {
       const path = paths[item.key];
-      if (path && (!item.permission || can(item.permission))) return path;
+      if (path && navItemAllowed(item, can)) return path;
     }
   }
   return null;
@@ -28,6 +36,13 @@ export interface ResolvableRoute {
   path: string;
   prefix?: boolean;
   permission?: string;
+  permissions?: string[];
+}
+
+/** 路由是否放行：permissions 为任一命中；与导航项同一语义。 */
+export function routeAllowed(route: { permission?: string; permissions?: string[] }, can: (code: string) => boolean): boolean {
+  if (route.permissions && route.permissions.length > 0) return route.permissions.some(can);
+  return !route.permission || can(route.permission);
 }
 
 export type RouteResolution<R extends ResolvableRoute> =

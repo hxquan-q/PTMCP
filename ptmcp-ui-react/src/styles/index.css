@@ -2920,3 +2920,418 @@ textarea:focus-visible {
     flex: 1;
   }
 }
+
+/* ─── 人员组织：左部门树 + 右成员表 ───
+   两块面板同高、各自滚动：树再深也不会把表格顶出视口，成员再多也不会把树撑长。 */
+.org-layout {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  gap: 16px;
+  min-height: 480px;
+}
+.org-tree-panel {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 288px;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--ptmcp-surface);
+  border: 1px solid var(--ptmcp-border);
+  border-radius: var(--ptmcp-radius-panel);
+  box-shadow: var(--ptmcp-shadow);
+}
+.org-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 12px 8px;
+}
+.org-panel-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.org-panel-title h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ptmcp-heading);
+}
+.org-panel-title span {
+  font-size: 12px;
+  color: var(--ptmcp-text-muted);
+}
+.org-tree-search {
+  padding: 0 12px 8px;
+}
+.org-tree-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 0 8px 8px;
+  overflow: auto;
+}
+.org-tree-scroll:focus-visible {
+  outline: 2px solid var(--ptmcp-blue);
+  outline-offset: -2px;
+}
+.org-tree-state {
+  margin: 0;
+  padding: 16px 12px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ptmcp-text-muted);
+}
+.org-tree-state .link {
+  margin-top: 6px;
+}
+.org-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 6px;
+  border-radius: var(--ptmcp-radius-control);
+  color: var(--ptmcp-text);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+.org-tree-row[draggable='true'] {
+  cursor: grab;
+}
+.org-tree-row:hover {
+  background: var(--ptmcp-hover);
+}
+.org-tree-row:focus-visible {
+  outline: 2px solid var(--ptmcp-blue);
+  outline-offset: -2px;
+}
+.org-tree-row.is-selected {
+  background: var(--ptmcp-selected);
+  color: var(--ptmcp-blue-text);
+}
+.org-tree-row.is-selected .org-tree-name {
+  font-weight: 600;
+}
+.org-tree-row.is-selected .org-tree-icon {
+  color: var(--ptmcp-blue);
+}
+.org-tree-row.is-dragging {
+  opacity: 0.5;
+}
+/* 拖放目标用内描边而不是位移或缩放：树行位置稳定，落点判断才不会被动画误导。 */
+.org-tree-row.is-drop-target {
+  background: var(--ptmcp-blue-soft);
+  box-shadow: inset 0 0 0 2px var(--ptmcp-blue);
+}
+.org-tree-all {
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--ptmcp-border-row);
+  border-radius: var(--ptmcp-radius-control) var(--ptmcp-radius-control) 0 0;
+}
+.org-tree-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ptmcp-radius-xs);
+  background: none;
+  color: var(--ptmcp-text-muted);
+  cursor: pointer;
+}
+.org-tree-toggle svg {
+  width: 12px;
+  height: 12px;
+  transition: transform 120ms ease;
+}
+.org-tree-toggle.is-open svg {
+  transform: rotate(90deg);
+}
+.org-tree-toggle--empty {
+  pointer-events: none;
+}
+.org-tree-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--ptmcp-text-faint);
+}
+.org-tree-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.org-tree-row--flat .org-tree-name {
+  flex: 0 1 auto;
+  max-width: 50%;
+}
+.org-tree-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--ptmcp-text-muted);
+}
+.org-tree-off {
+  flex: none;
+  padding: 0 4px;
+  border-radius: var(--ptmcp-radius-xs);
+  background: var(--ptmcp-hover);
+  color: var(--ptmcp-text-muted);
+  font-size: 10px;
+  line-height: 16px;
+}
+.org-tree-count {
+  flex: none;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: var(--ptmcp-radius-circle);
+  background: var(--ptmcp-bg-neutral);
+  color: var(--ptmcp-text-muted);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+.org-tree-row.is-selected .org-tree-count {
+  background: var(--ptmcp-surface);
+  color: var(--ptmcp-blue-text);
+}
+/* 悬停 / 选中 / 键盘进入时露出行内动作；触屏没有 hover，选中行常显。 */
+.org-tree-actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.org-tree-row:hover .org-tree-actions,
+.org-tree-row:focus-within .org-tree-actions,
+.org-tree-row.is-selected .org-tree-actions {
+  opacity: 1;
+}
+.org-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ptmcp-radius-sm);
+  background: none;
+  color: var(--ptmcp-text-muted);
+  cursor: pointer;
+}
+.org-icon-btn svg {
+  width: 13px;
+  height: 13px;
+}
+.org-icon-btn:hover {
+  background: var(--ptmcp-blue-soft);
+  color: var(--ptmcp-blue-text);
+}
+.org-icon-btn:focus-visible {
+  outline: 2px solid var(--ptmcp-blue);
+  outline-offset: -2px;
+}
+.org-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.org-icon-btn--danger:hover {
+  background: #fef3f2;
+  color: var(--ptmcp-red);
+}
+.org-tree-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--ptmcp-border-row);
+  background: var(--ptmcp-band);
+  font-size: 11.5px;
+  color: var(--ptmcp-text-muted);
+}
+.org-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.org-table-toolbar {
+  gap: 12px;
+}
+.org-scope {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.org-scope strong {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ptmcp-heading);
+}
+.org-scope span {
+  max-width: 280px;
+  overflow: hidden;
+  font-size: 11.5px;
+  color: var(--ptmcp-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.org-alert {
+  padding: 8px 14px 0;
+}
+.org-table {
+  min-width: 720px;
+}
+.org-table tbody tr[draggable='true'] {
+  cursor: grab;
+}
+.org-table tbody tr.is-dragging {
+  opacity: 0.5;
+}
+.org-table th:last-child,
+.org-table td:last-child {
+  text-align: right;
+}
+.org-account {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.org-avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--ptmcp-radius-circle);
+  background: var(--ptmcp-blue-soft);
+  color: var(--ptmcp-blue-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.org-avatar--lg {
+  width: 40px;
+  height: 40px;
+  font-size: 16px;
+}
+.org-username {
+  padding: 2px 6px;
+  border-radius: var(--ptmcp-radius-xs);
+  background: var(--ptmcp-hover);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--ptmcp-text-strong);
+}
+.org-member-name {
+  font-weight: 500;
+  color: var(--ptmcp-text-strong);
+}
+.org-member-dept {
+  font-size: 11.5px;
+  color: var(--ptmcp-text-muted);
+}
+.org-muted {
+  font-size: 12px;
+  color: var(--ptmcp-text-muted);
+}
+.org-role-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 100%;
+}
+.org-row-actions {
+  justify-content: flex-end;
+  gap: 12px;
+}
+.org-dialog-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ptmcp-text);
+}
+.org-reset {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ptmcp-border-row);
+}
+.org-reset-head {
+  margin-bottom: 12px;
+}
+.org-reset-head h3 {
+  margin: 0 0 4px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ptmcp-heading);
+}
+.org-reset-head p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ptmcp-text-muted);
+}
+.org-role-key {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--ptmcp-text-muted);
+}
+.org-retained-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 6px 6px;
+}
+
+@media (max-width: 900px) {
+  .org-layout {
+    flex-direction: column;
+    min-height: 0;
+  }
+  .org-tree-panel {
+    width: 100%;
+    max-height: 320px;
+  }
+  .org-main {
+    min-height: 420px;
+  }
+  .org-scope span {
+    max-width: none;
+  }
+}
+@media (max-width: 620px) {
+  .org-tree-panel {
+    max-height: 280px;
+  }
+  .org-table-toolbar {
+    align-items: stretch;
+  }
+  .org-table-toolbar .input-wrap {
+    width: 100% !important;
+  }
+  .org-scope span {
+    white-space: normal;
+  }
+}

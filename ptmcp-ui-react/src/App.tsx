@@ -11,7 +11,6 @@ import {
   MonitorIcon,
   ShieldIcon,
   TagIcon,
-  UserIcon,
   UsersIcon,
   BoltIcon,
   LinkIcon,
@@ -19,8 +18,7 @@ import {
 import { IntegrationsPage } from './views/me/IntegrationsPage';
 import { DatasourcesPage } from './views/admin/DatasourcesPage';
 import { PermissionsPage } from './views/admin/PermissionsPage';
-import { DepartmentsPage } from './views/admin/DepartmentsPage';
-import { UsersPage } from './views/admin/UsersPage';
+import { OrgPage } from './views/admin/OrgPage';
 import { RolesPage } from './views/admin/RolesPage';
 import { PlatformsPage } from './views/admin/PlatformsPage';
 import { DelegationsPage } from './views/admin/DelegationsPage';
@@ -53,6 +51,7 @@ import {
   filterNavGroups,
   firstAccessibleNavPath,
   resolveRoute,
+  routeAllowed,
   safeReturnTo,
   type PermissionedNavGroup,
 } from './navigation';
@@ -83,6 +82,8 @@ interface RouteDef {
   path: string;
   navKey: string;
   permission?: string;
+  /** 任一命中即可访问（与导航项同一语义），用于合并后的「人员组织」。 */
+  permissions?: string[];
   breadcrumb: Crumb[];
   realm: 'me' | 'admin';
   /* element(id?) — detail routes receive the trailing path segment */
@@ -191,20 +192,29 @@ const ROUTES: RouteDef[] = [
     element: () => <DelegationsPage />,
   },
   {
-    path: '/admin/departments',
-    permission: 'ptmcp:department:list',
-    navKey: 'admin-departments',
-    breadcrumb: [{ label: '管理控制台' }, { label: '部门' }],
+    path: '/admin/org',
+    permissions: ['ptmcp:department:list', 'ptmcp:user:list'],
+    navKey: 'admin-org',
+    breadcrumb: [{ label: '管理控制台' }, { label: '人员组织' }],
     realm: 'admin',
-    element: () => <DepartmentsPage />,
+    element: () => <OrgPage />,
+  },
+  /* 旧地址保留为别名：书签和外部链接仍能落到合并后的页面。 */
+  {
+    path: '/admin/departments',
+    permissions: ['ptmcp:department:list', 'ptmcp:user:list'],
+    navKey: 'admin-org',
+    breadcrumb: [{ label: '管理控制台' }, { label: '人员组织', navKey: 'admin-org' }],
+    realm: 'admin',
+    element: () => <OrgPage />,
   },
   {
     path: '/admin/users',
-    permission: 'ptmcp:user:list',
-    navKey: 'admin-users',
-    breadcrumb: [{ label: '管理控制台' }, { label: '用户' }],
+    permissions: ['ptmcp:department:list', 'ptmcp:user:list'],
+    navKey: 'admin-org',
+    breadcrumb: [{ label: '管理控制台' }, { label: '人员组织', navKey: 'admin-org' }],
     realm: 'admin',
-    element: () => <UsersPage />,
+    element: () => <OrgPage />,
   },
   {
     path: '/admin/roles',
@@ -224,10 +234,10 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/users',
-    navKey: 'admin-users',
+    navKey: 'admin-org',
     prefix: true,
     permission: ADMIN_ROUTE_PERMISSIONS['/admin/users'].read,
-    breadcrumb: [{ label: '管理控制台' }, { label: '用户', navKey: 'admin-users' }, { label: '用户详情' }],
+    breadcrumb: [{ label: '管理控制台' }, { label: '人员组织', navKey: 'admin-org' }, { label: '用户详情' }],
     realm: 'admin',
     element: (id?: string) => <UserDetailPage id={decodeURIComponent(id ?? '')} />,
   },
@@ -329,8 +339,7 @@ const ADMIN_GROUPS: PermissionedNavGroup[] = [
   {
     title: '组织与接入',
     items: [
-      { key: 'admin-departments', permission: 'ptmcp:department:list', label: '部门', icon: <UsersIcon /> },
-      { key: 'admin-users', permission: 'ptmcp:user:list', label: '用户', icon: <UserIcon /> },
+      { key: 'admin-org', permissions: ['ptmcp:department:list', 'ptmcp:user:list'], label: '人员组织', icon: <UsersIcon /> },
       { key: 'admin-roles', permission: 'ptmcp:role:list', label: '角色管理', icon: <TagIcon /> },
       { key: 'admin-platforms', permission: 'ptmcp:platform:list', label: '平台与客户端', icon: <MonitorIcon /> },
     ],
@@ -344,7 +353,11 @@ const ADMIN_GROUPS: PermissionedNavGroup[] = [
   },
 ];
 
-const NAV_TO_PATH: Record<string, string> = Object.fromEntries(ROUTES.map((r) => [r.navKey, r.path]));
+/* 同一 navKey 可挂多个地址（规范地址 + 旧别名 + 详情前缀）：只取第一个精确路由作为导航目标。 */
+const NAV_TO_PATH: Record<string, string> = {};
+for (const route of ROUTES) {
+  if (!route.prefix && !NAV_TO_PATH[route.navKey]) NAV_TO_PATH[route.navKey] = route.path;
+}
 
 export function App() {
   const [session, setSession] = useState<SessionInfo | null>(null);
@@ -427,7 +440,7 @@ export function App() {
 
   const resolved = useMemo(() => resolveRoute(path, ROUTES), [path]);
   const { route } = resolved;
-  const denied = !!route?.permission && !can(route.permission);
+  const denied = !!route && !routeAllowed(route, can);
   const baseGroups = route?.realm === 'me' ? ME_GROUPS : ADMIN_GROUPS;
   const groups = useMemo(() => filterNavGroups(baseGroups, can), [baseGroups, can]);
   const onNavigate = useCallback(
@@ -463,7 +476,7 @@ export function App() {
       <StaticErrorCard
         code="403"
         title="无权访问"
-        description={`当前账号缺少 ${route.permission} 权限，无法访问该页面。如需开通请联系平台管理员。`}
+        description={`当前账号缺少 ${route.permissions?.length ? route.permissions.join(' 或 ') : route.permission} 权限，无法访问该页面。如需开通请联系平台管理员。`}
         onBack={() => navigate(homePath)}
       />
     );
