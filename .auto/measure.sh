@@ -32,8 +32,14 @@ RE_PASS=${RE_PASS:-0}; RE_FAIL=${RE_FAIL:-0}
 echo "REACT_TESTS re_pass=$RE_PASS re_fail=$RE_FAIL"
 
 # --- 后端测试（本机 PTMCP-Dev；需 Docker） ---
+# PTMCP_BE_REUSE=1 时复用 .auto/be-result.txt 的上次后端结果：仅用于本切片未改后端代码时
+# 快速迭代前端；切片涉及 ptmcp-parent 时不要设这个开关。
+BE_CACHE=.auto/be-result.txt
 if [ "${PTMCP_SKIP_BE:-0}" = "1" ]; then
   echo "BE_TESTS be_pass=0 be_fail=0 mvn_exit=skipped_by_env"
+elif [ "${PTMCP_BE_REUSE:-0}" = "1" ] && [ -s "$BE_CACHE" ]; then
+  read -r BE_PASS BE_FAIL < "$BE_CACHE"
+  echo "BE_TESTS be_pass=$BE_PASS be_fail=$BE_FAIL mvn_exit=reused_cache"
 elif docker info > /dev/null 2>&1; then
   be_log=.auto/last-be.log
   ( cd ptmcp-parent && \
@@ -50,6 +56,7 @@ elif docker info > /dev/null 2>&1; then
   BE_ER=$(printf '%s' "$summary" | sed -n 's/.*Errors: \([0-9]*\).*/\1/p' | awk '{s+=$1} END{print s+0}')
   BE_PASS=$((BE_RUN - BE_FL - BE_ER)); BE_FAIL=$((BE_FL + BE_ER))
   echo "BE_TESTS be_pass=$BE_PASS be_fail=$BE_FAIL mvn_exit=$BE_EXIT"
+  if [ "$BE_EXIT" = "0" ]; then echo "$BE_PASS $BE_FAIL" > "$BE_CACHE"; fi
 else
   echo "BE_TESTS be_pass=0 be_fail=0 mvn_exit=skipped_no_docker"
 fi

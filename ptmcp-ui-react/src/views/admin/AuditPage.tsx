@@ -247,7 +247,7 @@ export function AuditPage({
             </button>
           </div>
         ) : null}
-        <div className="table-scroll" ref={tableScrollRef}>
+        <div className="table-scroll" role="region" aria-label="审计记录列表" tabIndex={0} ref={tableScrollRef}>
           {tab === 'audit' ? (
             <table className="data-table">
               <thead>
@@ -343,12 +343,14 @@ export function AuditPage({
           )}
           {!loading && tab === 'jobs' && operations.length === 0 ? (
             opsUnavailable ? (
-              <EmptyState title="操作日志端点不可用" description="管理操作日志接口暂时不可用，请稍后重试或联系管理员。" />
+              <EmptyState kind="unavailable" title="操作日志端点不可用" description="管理操作日志接口暂时不可用，请稍后重试或联系管理员。" />
             ) : (
-              <EmptyState title="暂无操作记录" description="调整聚合类型筛选后重试。" />
+              <EmptyState kind="filtered" title="暂无操作记录" description="调整聚合类型筛选后重试。" />
             )
           ) : null}
-          {!loading && tab === 'audit' && audit.length === 0 ? <EmptyState title="暂无审计记录" description="调整筛选条件后重试。" /> : null}
+          {!loading && tab === 'audit' && audit.length === 0 ? (
+            <EmptyState kind="filtered" title="暂无审计记录" description="调整筛选条件后重试。" />
+          ) : null}
         </div>
         {tab === 'audit' ? (
           <div className="table-footer" style={{ justifyContent: 'space-between' }}>

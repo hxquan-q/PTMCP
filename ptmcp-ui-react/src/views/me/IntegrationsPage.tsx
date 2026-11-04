@@ -301,6 +301,7 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
                 width={240}
               />
               <Select
+                ariaLabel="平台筛选"
                 value={platformFilter}
                 onChange={(v) => {
                   setPlatformFilter(v);
@@ -310,6 +311,7 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
                 options={PLATFORM_FILTER_OPTIONS}
               />
               <Select
+                ariaLabel="状态筛选"
                 value={statusFilter}
                 onChange={(v) => {
                   setStatusFilter(v);
@@ -641,7 +643,7 @@ function Wizard({ onExit }: { onExit: () => void }) {
                 <span className="step-dot">{i + 1}</span>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 600, color: 'var(--ptmcp-heading)' }}>{s.title}</div>
-                  <div style={{ color: 'var(--ptmcp-text-muted)', fontSize: 12, marginTop: 3 }}>
+                  <div style={{ color: 'var(--ptmcp-text-muted)', fontSize: 12, marginTop: 4 }}>
                     {s.desc}
                     {s.linkLabel ? (
                       <>
@@ -946,14 +948,14 @@ function StepHeading({ n, title, desc }: { n: number; title: string; desc: strin
           display: 'inline-flex',
           width: 24,
           height: 24,
-          borderRadius: '50%',
+          borderRadius: 'var(--ptmcp-radius-circle)',
           background: 'var(--ptmcp-blue)',
           color: '#fff',
           fontSize: 12.5,
           fontWeight: 700,
           alignItems: 'center',
           justifyContent: 'center',
-          marginTop: 1,
+          marginTop: 2,
         }}
       >
         {n}

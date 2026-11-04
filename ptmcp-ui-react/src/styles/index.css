@@ -30,6 +30,10 @@ select {
 }
 
 :root {
+  /* 白字填充按钮的底色：--ptmcp-blue(#1677ff) 对白字只有 4.1:1，不达 WCAG 2.2 AA 4.5:1；
+     填充面改用更深的 --ptmcp-blue-dark(5.6:1)，浅色描边/焦点环仍用 --ptmcp-blue。 */
+  --ptmcp-blue-strong: #0f62d6;
+  --ptmcp-blue-strong-hover: #0a53c4;
   --ptmcp-blue: #1677ff;
   --ptmcp-blue-dark: #0f62d6;
   /* 着色面（选中态、浅蓝底）上的蓝文本：#0958d9 在白底 6.2:1、浅蓝底 5.6:1。 */
@@ -65,9 +69,30 @@ select {
   --ptmcp-code-gutter: #7f93b5;
   --ptmcp-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.03);
   --ptmcp-shadow-pop: 0 4px 12px rgba(16, 24, 40, 0.08), 0 18px 40px rgba(16, 24, 40, 0.12);
+  /* 圆角刻度：只允许这 6 档。新增控件先复用，不引入第 7 个半径。 */
+  --ptmcp-radius-xs: 4px;
+  --ptmcp-radius-sm: 6px;
   --ptmcp-radius-control: 8px;
   --ptmcp-radius-panel: 12px;
   --ptmcp-radius-pill: 999px;
+  --ptmcp-radius-circle: 50%;
+  /* 间距刻度：2px 步进的偶数网格。禁止 1/3/5/7/9/11/13px 等奇数值。 */
+  --ptmcp-space-1: 2px;
+  --ptmcp-space-2: 4px;
+  --ptmcp-space-3: 6px;
+  --ptmcp-space-4: 8px;
+  --ptmcp-space-5: 10px;
+  --ptmcp-space-6: 12px;
+  --ptmcp-space-7: 14px;
+  --ptmcp-space-8: 16px;
+  --ptmcp-space-9: 20px;
+  --ptmcp-space-10: 24px;
+  --ptmcp-space-11: 28px;
+  --ptmcp-space-12: 32px;
+  --ptmcp-space-13: 40px;
+  --ptmcp-space-14: 48px;
+  /* 触控热区：WCAG 2.2 AAA 2.5.5 的 44px。视觉尺寸可以更小，热区不得更小。 */
+  --ptmcp-hit: 44px;
 }
 
 /* ── 滚动条：细型、低对比，避免表格内的横/纵条抢走内容注意力 ── */
@@ -81,7 +106,7 @@ select {
 }
 *::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--ptmcp-radius-control);
   background-clip: content-box;
   background-color: #cfd6e0;
 }
@@ -100,7 +125,7 @@ select {
   width: 32px;
   height: 32px;
   flex: none;
-  border-radius: 8px;
+  border-radius: var(--ptmcp-radius-control);
   background: var(--ptmcp-wash);
   color: var(--ptmcp-blue);
   font-size: 16px;
@@ -109,7 +134,7 @@ select {
   width: 40px;
   height: 40px;
   font-size: 20px;
-  border-radius: 10px;
+  border-radius: var(--ptmcp-radius-control);
 }
 .cell-icon[data-engine='MYSQL'] {
   background: #fff7ed;
@@ -144,9 +169,9 @@ select {
 .cell-stack {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
-  line-height: 1.3;
+  line-height: 1.25;
 }
 .cell-stack > strong {
   color: var(--ptmcp-text-strong);
@@ -188,7 +213,7 @@ select {
   content: '';
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--ptmcp-radius-circle);
   background: currentColor;
 }
 .pill--plain::before {
@@ -222,7 +247,7 @@ select {
   content: '';
   width: 7px;
   height: 7px;
-  border-radius: 50%;
+  border-radius: var(--ptmcp-radius-circle);
   background: var(--ptmcp-text-faint);
 }
 .status-dot.is-success::before {
@@ -248,8 +273,8 @@ select {
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 2px 9px;
+  gap: 4px;
+  padding: 2px 8px;
   border-radius: var(--ptmcp-radius-pill);
   font-size: 12px;
   font-weight: 600;
@@ -277,12 +302,16 @@ select {
 }
 
 /* ── 控件 ── */
+/* 触控热区：视觉高度 36px（企业级密度），但热区抬到 44px（WCAG 2.2 AAA 2.5.5）。
+   ::after 只扩热区、不改布局，所以表格与工具栏的间距不会被推大。 */
 .btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 7px 16px;
+  min-height: 36px;
+  padding: 0 16px;
   border: 1px solid transparent;
   border-radius: var(--ptmcp-radius-control);
   font-size: 13px;
@@ -294,15 +323,24 @@ select {
     border-color 0.15s ease,
     color 0.15s ease;
 }
+.btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: max(100%, var(--ptmcp-hit));
+  transform: translateY(-50%);
+}
 .btn--primary {
-  background: var(--ptmcp-blue);
+  background: var(--ptmcp-blue-strong);
   color: #fff;
 }
 .btn--primary:hover {
-  background: var(--ptmcp-blue-dark);
+  background: var(--ptmcp-blue-strong-hover);
 }
 .btn--primary:active {
-  background: var(--ptmcp-blue-dark);
+  background: var(--ptmcp-blue-strong-hover);
   filter: brightness(0.96);
 }
 .btn--secondary {
@@ -318,7 +356,8 @@ select {
   background: var(--ptmcp-band);
 }
 .btn--link {
-  padding: 0;
+  min-height: 24px;
+  padding: 0 2px;
   border: none;
   background: none;
   color: var(--ptmcp-blue-text);
@@ -327,15 +366,22 @@ select {
 .btn--link:hover {
   text-decoration: underline;
 }
-/* 图标按钮：把 17px 的字形撑成 32×32 可点区域（WCAG 2.2 AA 目标尺寸）。 */
+/* 图标按钮：字形 17px → 视觉 36×36 → 热区 44×44（::after 继承 .btn 的规则）。 */
 .btn--icon {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: none;
   background: none;
   color: var(--ptmcp-text-muted);
   border-radius: var(--ptmcp-radius-control);
+}
+/* 图标按钮横向也要到 44px：只在按钮自身范围内外扩，不侵占邻按钮的热区。 */
+.btn--icon::after {
+  right: auto;
+  left: 50%;
+  width: max(100%, var(--ptmcp-hit));
+  transform: translate(-50%, -50%);
 }
 .btn--icon:hover {
   background: var(--ptmcp-hover);
@@ -434,8 +480,8 @@ input[type='checkbox'] {
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: 0 16px;
-  height: 44px;
+  padding: 0 14px;
+  height: 40px;
   background: var(--ptmcp-surface);
   border-bottom: 1px solid var(--ptmcp-border);
   color: var(--ptmcp-text-muted);
@@ -445,7 +491,7 @@ input[type='checkbox'] {
   white-space: nowrap;
 }
 .data-table tbody td {
-  padding: 10px 16px;
+  padding: 8px 14px;
   border-bottom: 1px solid var(--ptmcp-border-row);
   vertical-align: middle;
   white-space: nowrap;
@@ -498,7 +544,7 @@ input[type='checkbox'] {
   justify-content: center;
   width: 42px;
   height: 42px;
-  border-radius: 12px;
+  border-radius: var(--ptmcp-radius-panel);
   background: var(--ptmcp-blue-soft);
   color: var(--ptmcp-blue);
   font-size: 20px;
@@ -519,7 +565,7 @@ input[type='checkbox'] {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 .stat-card-value {
   font-size: 24px;
@@ -558,7 +604,7 @@ input[type='checkbox'] {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 10px 14px;
   border-top: 1px solid var(--ptmcp-border);
   color: var(--ptmcp-text-muted);
   font-size: 12.5px;
@@ -571,7 +617,7 @@ input[type='checkbox'] {
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 10px 14px;
   margin-bottom: 12px;
 }
 .filter-card > * {
@@ -604,7 +650,7 @@ input[type='checkbox'] {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px 10px;
+  padding: 10px 14px 8px;
 }
 .table-caption strong {
   font-size: 14px;
@@ -631,7 +677,7 @@ input[type='checkbox'] {
   border-color: var(--ptmcp-blue);
 }
 .btn--ghost {
-  padding: 7px 10px;
+  padding: 6px 10px;
   border-color: transparent;
   background: none;
   color: var(--ptmcp-text-muted);
@@ -661,6 +707,71 @@ input[type='checkbox'] {
   text-align: center;
   font-size: 13px;
   color: var(--ptmcp-text-muted);
+}
+
+/* ─── 空态：图标容器 + 标题 + 说明 + 可选操作。四种 kind 用颜色区分语气，
+   尺寸随容器走（表格内 24px 图标、整页 40px），不写死高度。 ─── */
+.empty-state {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  /* 靠上放置而不是垂直居中：空表格卡会撑满整页，居中会让图标漂在大片空白中间。 */
+  justify-content: flex-start;
+  gap: 6px;
+  min-height: 200px;
+  padding: 48px 20px 32px;
+  text-align: center;
+}
+.empty-state-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 4px;
+  border-radius: var(--ptmcp-radius-circle);
+  background: var(--ptmcp-bg-neutral);
+  color: var(--ptmcp-text-faint);
+  font-size: 22px;
+}
+.empty-state--filtered .empty-state-mark {
+  background: var(--ptmcp-bg-accent);
+  color: var(--ptmcp-blue-text);
+}
+.empty-state--error .empty-state-mark {
+  background: var(--ptmcp-bg-danger);
+  color: var(--ptmcp-red);
+}
+.empty-state--unavailable .empty-state-mark {
+  background: var(--ptmcp-bg-warning);
+  color: var(--ptmcp-orange);
+}
+.empty-state-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ptmcp-text-strong);
+}
+.empty-state-desc {
+  margin: 0;
+  max-width: 400px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ptmcp-text-muted);
+}
+.empty-state-hint {
+  margin: 0;
+  max-width: 400px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ptmcp-text-faint);
+}
+.empty-state-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
 }
 .footer-note {
   font-size: 12px;
@@ -713,7 +824,7 @@ input[type='checkbox'] {
   max-height: 220px;
   overflow-y: auto;
   border: 1px solid var(--ptmcp-border);
-  border-radius: 8px;
+  border-radius: var(--ptmcp-radius-control);
   padding: 6px;
 }
 .check-list:focus-visible {
@@ -725,7 +836,7 @@ input[type='checkbox'] {
   align-items: center;
   gap: 8px;
   padding: 4px 6px;
-  border-radius: 6px;
+  border-radius: var(--ptmcp-radius-sm);
   cursor: pointer;
   font-size: 12.5px;
 }
@@ -761,7 +872,7 @@ input[type='checkbox'] {
   height: 28px;
   padding: 0 4px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--ptmcp-radius-control);
   background: none;
   color: var(--ptmcp-text-muted);
   font-size: 12px;
@@ -805,7 +916,7 @@ input[type='checkbox'] {
   padding: 0 12px;
   margin: 2px 0;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--ptmcp-radius-control);
   background: none;
   color: var(--ptmcp-text);
   font-weight: 500;
@@ -893,9 +1004,9 @@ input[type='checkbox'] {
 }
 .search-trigger kbd {
   margin-left: 8px;
-  padding: 1px 6px;
+  padding: 2px 6px;
   border: 1px solid var(--ptmcp-border-strong);
-  border-radius: 4px;
+  border-radius: var(--ptmcp-radius-xs);
   background: var(--ptmcp-surface);
   font-family: inherit;
   font-size: 11px;
@@ -926,7 +1037,7 @@ input[type='checkbox'] {
 .tab-btn:hover {
   color: var(--ptmcp-text-strong);
   background: var(--ptmcp-hover);
-  border-radius: 6px 6px 0 0;
+  border-radius: var(--ptmcp-radius-sm) var(--ptmcp-radius-sm) 0 0;
 }
 .tab-btn.is-active {
   border-bottom-color: var(--ptmcp-blue);
@@ -945,7 +1056,7 @@ input[type='checkbox'] {
   margin-bottom: 0;
 }
 .card-tabs .tab-btn {
-  padding: 10px 18px 12px;
+  padding: 8px 16px 10px;
 }
 .card-toolbar {
   display: flex;
@@ -961,7 +1072,7 @@ input[type='checkbox'] {
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 13px 16px;
+  padding: 12px 16px;
   text-align: left;
   background: var(--ptmcp-surface);
   border: 1px solid var(--ptmcp-border);
@@ -1049,16 +1160,16 @@ input[type='checkbox'] {
   display: inline-flex;
   gap: 2px;
   margin-left: 6px;
-  padding: 3px;
+  padding: 4px;
   border: 1px solid var(--ptmcp-border);
-  border-radius: 10px;
+  border-radius: var(--ptmcp-radius-control);
   background: var(--ptmcp-chrome);
 }
 .realm-switch-btn {
   height: 30px;
   padding: 0 14px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--ptmcp-radius-control);
   background: transparent;
   color: var(--ptmcp-text-muted);
   font-size: 13px;
@@ -1097,7 +1208,7 @@ input[type='checkbox'] {
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: 50%;
+  border-radius: var(--ptmcp-radius-circle);
   background: var(--ptmcp-blue-soft);
   color: var(--ptmcp-blue-text);
   font-size: 15px;
@@ -1118,9 +1229,9 @@ input[type='checkbox'] {
   right: 0;
   z-index: 50;
   min-width: 156px;
-  padding: 5px;
+  padding: 4px;
   border: 1px solid var(--ptmcp-border);
-  border-radius: 10px;
+  border-radius: var(--ptmcp-radius-panel);
   background: var(--ptmcp-surface);
   box-shadow: var(--ptmcp-shadow-pop);
 }
@@ -1131,7 +1242,7 @@ input[type='checkbox'] {
   height: 34px;
   padding: 0 10px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--ptmcp-radius-control);
   background: none;
   color: var(--ptmcp-text);
   font-size: 13px;
@@ -1159,10 +1270,10 @@ input[type='checkbox'] {
 }
 .nav-workspace {
   margin-top: auto;
-  padding: 12px 12px 11px;
+  padding: 12px;
   border: 1px solid #e4eefb;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+  border-radius: var(--ptmcp-radius-panel);
+  background: #f7faff;
 }
 .nav-workspace strong {
   display: block;
@@ -1171,7 +1282,7 @@ input[type='checkbox'] {
 }
 .nav-workspace span {
   display: block;
-  margin-top: 3px;
+  margin-top: 2px;
   font-size: 11.5px;
   line-height: 1.4;
   color: var(--ptmcp-text-muted);
@@ -1238,9 +1349,9 @@ input[type='checkbox'] {
   display: inline-flex;
   min-height: 24px;
   align-items: center;
-  padding: 0 5px;
+  padding: 0 6px;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--ptmcp-radius-sm);
   background: none;
   font: inherit;
   color: var(--ptmcp-text-muted);
@@ -1349,7 +1460,7 @@ textarea:focus-visible {
   padding: 10px 12px;
   margin: 6px 0;
   border: 1px solid var(--ptmcp-border);
-  border-radius: 12px;
+  border-radius: var(--ptmcp-radius-panel);
   background: var(--ptmcp-surface);
   text-align: left;
   transition:
@@ -1369,7 +1480,7 @@ textarea:focus-visible {
 }
 /* 主体行用圆形头像，与稿面一致；资源树仍用方形引擎色块。 */
 .subject-row .cell-icon {
-  border-radius: 50%;
+  border-radius: var(--ptmcp-radius-circle);
 }
 /* 三栏里的表格比全页表格更密，否则 8~9 列会把状态列挤到横向滚动之外。 */
 .perm-workspace .data-table thead th {
@@ -1397,9 +1508,9 @@ textarea:focus-visible {
   gap: 6px;
   width: 100%;
   min-height: 28px;
-  padding: 5px 8px;
+  padding: 4px 8px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--ptmcp-radius-sm);
   background: none;
   color: var(--ptmcp-text);
   font-size: 13px;
@@ -1450,7 +1561,7 @@ textarea:focus-visible {
 .perm-resizer:focus-visible {
   outline: 2px solid var(--ptmcp-blue);
   outline-offset: -1px;
-  border-radius: 3px;
+  border-radius: var(--ptmcp-radius-xs);
 }
 .perm-resizer:hover > span,
 .perm-resizer:focus-visible > span {
@@ -1489,7 +1600,7 @@ textarea:focus-visible {
   max-width: calc(100vw - 24px);
   background: var(--ptmcp-surface);
   border: 1px solid var(--ptmcp-border);
-  border-radius: 16px;
+  border-radius: var(--ptmcp-radius-panel);
   box-shadow: var(--ptmcp-shadow-pop);
 }
 /* 三栏工作台的分栏头部：图标 + 标题 + 副标题（稿面里三栏顶一致） */
@@ -1503,7 +1614,7 @@ textarea:focus-visible {
 .pane-head .cell-icon {
   width: 32px;
   height: 32px;
-  border-radius: 9px;
+  border-radius: var(--ptmcp-radius-control);
 }
 .pane-head-copy {
   min-width: 0;
@@ -1671,7 +1782,7 @@ textarea:focus-visible {
   width: 56px;
   height: 56px;
   margin-bottom: 12px;
-  border-radius: 50%;
+  border-radius: var(--ptmcp-radius-circle);
   background: var(--ptmcp-bg-success);
   color: var(--ptmcp-green);
   font-size: 30px;
@@ -1689,7 +1800,7 @@ textarea:focus-visible {
   justify-content: center;
   width: 20px;
   height: 20px;
-  border-radius: 50%;
+  border-radius: var(--ptmcp-radius-circle);
   background: var(--ptmcp-blue-bg);
   color: var(--ptmcp-blue-text);
   font-size: 11px;
@@ -1698,7 +1809,7 @@ textarea:focus-visible {
 .code-block {
   margin: 0;
   padding: 16px 18px;
-  border-radius: 10px;
+  border-radius: var(--ptmcp-radius-panel);
   background: var(--ptmcp-code-bg);
   color: var(--ptmcp-code-fg);
   font-size: 12.5px;
@@ -1722,7 +1833,7 @@ textarea:focus-visible {
 .seg-group {
   display: inline-flex;
   gap: 4px;
-  padding: 3px;
+  padding: 4px;
   border: 1px solid var(--ptmcp-border);
   border-radius: var(--ptmcp-radius-control);
   background: var(--ptmcp-canvas);
@@ -1732,7 +1843,7 @@ textarea:focus-visible {
   align-items: center;
   min-height: 28px;
   padding: 4px 14px;
-  border-radius: 6px;
+  border-radius: var(--ptmcp-radius-sm);
   font-size: 12.5px;
   font-weight: 500;
   color: var(--ptmcp-text-muted);
@@ -1767,7 +1878,7 @@ textarea:focus-visible {
   align-items: center;
   justify-content: center;
   padding: 24px 16px;
-  background: linear-gradient(180deg, var(--ptmcp-canvas) 0%, var(--ptmcp-blue-bg) 100%);
+  background: var(--ptmcp-canvas);
 }
 .login-card {
   display: flex;
@@ -1860,7 +1971,7 @@ textarea:focus-visible {
 }
 .toast-icon {
   flex: none;
-  margin-top: 1px;
+  margin-top: 2px;
   font-size: 15px;
 }
 .toast--success .toast-icon {
@@ -1921,7 +2032,7 @@ textarea:focus-visible {
   height: 26px;
   border: 2px solid var(--ptmcp-border-strong);
   border-top-color: var(--ptmcp-blue);
-  border-radius: 50%;
+  border-radius: var(--ptmcp-radius-circle);
   animation: ptmcp-spin 0.9s linear infinite;
 }
 @keyframes ptmcp-spin {
@@ -2069,7 +2180,7 @@ textarea:focus-visible {
   .stat-card-icon {
     width: 34px;
     height: 34px;
-    border-radius: 10px;
+    border-radius: var(--ptmcp-radius-control);
     font-size: 17px;
   }
   .stat-card-value {

@@ -163,7 +163,7 @@ export function DictionaryPage() {
           <SearchInput value={keyword} onChange={setKeyword} placeholder="搜索对象名…" width={220} />
           <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>已加载 {rows.length} 个对象</span>
         </div>
-        <div className="table-scroll">
+        <div className="table-scroll" role="region" aria-label="我的数据字典对象列表" tabIndex={0}>
           <table className="data-table">
             <thead>
               <tr>
@@ -299,7 +299,7 @@ export function TokensPage() {
           />
           <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>已加载 {rows.length} 个令牌</span>
         </div>
-        <div className="table-scroll">
+        <div className="table-scroll" role="region" aria-label="个人令牌列表" tabIndex={0}>
           <table className="data-table">
             <thead>
               <tr>
@@ -468,7 +468,7 @@ function TokenDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
               padding: '10px 12px',
               background: 'var(--ptmcp-canvas)',
               border: '1px solid var(--ptmcp-border)',
-              borderRadius: 8,
+              borderRadius: 'var(--ptmcp-radius-control)',
               fontSize: 12.5,
               wordBreak: 'break-all',
               userSelect: 'all',
@@ -490,7 +490,13 @@ function TokenDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
         <TextInput value={name} onChange={setName} placeholder="如：Cursor 接入专用" />
       </Field>
       <Field label="所属平台">
-        <Select value={platformId} onChange={setPlatformId} width={240} options={platforms.map((p) => ({ value: p.id, label: p.name }))} />
+        <Select
+          ariaLabel="所属平台"
+          value={platformId}
+          onChange={setPlatformId}
+          width={240}
+          options={platforms.map((p) => ({ value: p.id, label: p.name }))}
+        />
       </Field>
       <Field label={`范围（已选 ${scopes.length}）`} hint="catalog 目录 / schema 结构 / query 查询">
         <div style={{ display: 'flex', gap: 16 }}>
@@ -571,7 +577,7 @@ export function AuthorizationsPage() {
         >
           <span style={{ fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>共 {rows.length} 条授权</span>
         </div>
-        <div className="table-scroll">
+        <div className="table-scroll" role="region" aria-label="授权列表" tabIndex={0}>
           <table className="data-table">
             <thead>
               <tr>
@@ -717,9 +723,9 @@ export function HistoryPage() {
             flexWrap: 'wrap',
           }}
         >
-          <TextInput value={from} onChange={setFrom} type="date" />
+          <TextInput label="开始日期" value={from} onChange={setFrom} type="date" />
           <span style={{ color: 'var(--ptmcp-text-faint)' }}>→</span>
-          <TextInput value={to} onChange={setTo} type="date" />
+          <TextInput label="结束日期" value={to} onChange={setTo} type="date" />
           <Select
             value={tool}
             onChange={setTool}
@@ -769,7 +775,7 @@ export function HistoryPage() {
             重置
           </button>
         </div>
-        <div className="table-scroll">
+        <div className="table-scroll" role="region" aria-label="查询历史列表" tabIndex={0}>
           <table className="data-table">
             <thead>
               <tr>
@@ -788,7 +794,7 @@ export function HistoryPage() {
                     <button
                       className="link"
                       onClick={() => (window.location.hash = `/me/history/${encodeURIComponent(r.requestId)}`)}
-                      aria-label={`查看请求 ${r.requestId} 详情`}
+                      aria-label={`查看请求 ${r.requestId} 详情：${fmt(r.startedAt)}`}
                     >
                       {fmt(r.startedAt)}
                     </button>
@@ -997,7 +1003,7 @@ export function HistoryDetailPage({ requestId }: { requestId: string }) {
                   padding: '12px 14px',
                   background: 'var(--ptmcp-chrome)',
                   border: '1px solid var(--ptmcp-border)',
-                  borderRadius: 8,
+                  borderRadius: 'var(--ptmcp-radius-control)',
                   fontSize: 12.5,
                   lineHeight: 1.6,
                   whiteSpace: 'pre-wrap',
@@ -1091,7 +1097,7 @@ export function DictionaryDetailPage({ objectId }: { objectId: string }) {
               列结构{' '}
               <span style={{ color: 'var(--ptmcp-text-faint)', fontWeight: 400 }}>{obj.columns?.length ? `${obj.columns.length} 列` : ''}</span>
             </div>
-            <div className="table-scroll">
+            <div className="table-scroll" role="region" aria-label="列结构" tabIndex={0}>
               {obj.columns?.length ? (
                 <table className="data-table">
                   <thead>

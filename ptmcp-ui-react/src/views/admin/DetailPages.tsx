@@ -140,13 +140,13 @@ export function JobDetailPage({ id }: { id: string }) {
           </div>
           {job.progress ? (
             <div style={{ marginBottom: 14 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ptmcp-text-muted)', marginBottom: 5 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ptmcp-text-muted)', marginBottom: 4 }}>
                 <span>处理进度</span>
                 <span>
                   {job.progress.processed}/{job.progress.total}
                 </span>
               </div>
-              <div style={{ height: 6, borderRadius: 3, background: 'var(--ptmcp-chrome)', overflow: 'hidden' }}>
+              <div style={{ height: 6, borderRadius: 'var(--ptmcp-radius-xs)', background: 'var(--ptmcp-chrome)', overflow: 'hidden' }}>
                 <div
                   style={{
                     height: '100%',
@@ -339,7 +339,7 @@ export function AuditDetailPage({ id }: { id: string }) {
             ].map((m) => (
               <div key={m.label} className="table-card" style={{ padding: '10px 12px' }}>
                 <div style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>{m.label}</div>
-                <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--ptmcp-heading)', marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>
+                <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--ptmcp-heading)', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
                   {m.value}
                 </div>
               </div>
@@ -429,7 +429,7 @@ export function MetadataDetailPage({ id }: { id: string }) {
               列结构{' '}
               <span style={{ color: 'var(--ptmcp-text-faint)', fontWeight: 400 }}>{obj.columns?.length ? `${obj.columns.length} 列` : ''}</span>
             </div>
-            <div className="table-scroll">
+            <div className="table-scroll" role="region" aria-label="列结构" tabIndex={0}>
               {obj.columns?.length ? (
                 <table className="data-table">
                   <thead>
@@ -832,7 +832,7 @@ export function DatasourceDetailPage({ id }: { id: string }) {
           {conflict ? (
             <>
               {conflictRows.length ? (
-                <div className="table-scroll" style={{ marginBottom: 12 }}>
+                <div className="table-scroll" role="region" aria-label="字段冲突对比" tabIndex={0} style={{ marginBottom: 12 }}>
                   <table className="data-table">
                     <thead>
                       <tr>
@@ -942,7 +942,7 @@ export function DatasourceDetailPage({ id }: { id: string }) {
                 <input className="input" style={{ width: '100%' }} value={form.engine} disabled />
               </Field>
               <Field label="状态" hint={fieldErrors.status}>
-                <Select value={form.status} onChange={(v) => !formDisabled && update({ status: v })} options={DATASOURCE_STATUSES} />
+                <Select ariaLabel="状态" value={form.status} onChange={(v) => !formDisabled && update({ status: v })} options={DATASOURCE_STATUSES} />
               </Field>
               <Field label="主机" hint={fieldErrors.host}>
                 <TextInput value={form.host} onChange={(v) => !formDisabled && update({ host: v })} />
@@ -996,7 +996,9 @@ export function DatasourceDetailPage({ id }: { id: string }) {
           </div>
         </>
       ) : null}
-      {!loading && !datasource && !error ? <EmptyState title="数据源不存在或你已失去访问权限" /> : null}
+      {!loading && !datasource && !error ? (
+        <EmptyState kind="error" title="数据源不存在或你已失去访问权限" description="链接可能已过期，或该数据源已被删除／收窄授权。" />
+      ) : null}
       {confirm ? (
         <Dialog
           open
@@ -1162,7 +1164,7 @@ export function AuditDecryptDialog({
                     padding: '12px 14px',
                     background: 'var(--ptmcp-chrome)',
                     border: '1px solid var(--ptmcp-border)',
-                    borderRadius: 8,
+                    borderRadius: 'var(--ptmcp-radius-control)',
                     fontSize: 12.5,
                     lineHeight: 1.6,
                     whiteSpace: 'pre-wrap',
@@ -1268,7 +1270,7 @@ function DictionaryEditor({
             该对象的字典在你编辑期间已被他人修改（结构或注释可能已变化）。可采纳服务端最新结构并保留你的注释（变基），或放弃本地修改。
           </Alert>
           {conflictRows.length ? (
-            <div className="table-scroll" style={{ marginTop: 10 }}>
+            <div className="table-scroll" role="region" aria-label="字段冲突对比" tabIndex={0} style={{ marginTop: 10 }}>
               <table className="data-table">
                 <thead>
                   <tr>
@@ -1325,7 +1327,7 @@ function DictionaryEditor({
             </Field>
           </div>
           {draft.columns.length ? (
-            <div className="table-scroll" style={{ marginBottom: 12, maxHeight: 320 }}>
+            <div className="table-scroll" role="region" aria-label="字典列编辑" tabIndex={0} style={{ marginBottom: 12, maxHeight: 320 }}>
               <table className="data-table">
                 <thead>
                   <tr>
@@ -1532,7 +1534,7 @@ export function PlatformDetailPage({ id }: { id: string }) {
                 { label: '平台 ID', value: platform.id },
                 { label: '层级', value: `Tier ${platform.tier}` },
                 { label: '目录模式', value: platform.catalogMode },
-                { label: '凭证模式', value: `${platform.proofMode}${platform.proofConfigured ? ' ✓' : ''}` },
+                { label: '凭证模式', value: platform.proofConfigured ? `${platform.proofMode}（已配置）` : platform.proofMode },
                 {
                   label: '状态',
                   value: (

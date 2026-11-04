@@ -118,7 +118,7 @@ export function PlatformsPage() {
             onChange={setTab}
           />
         </div>
-        <div className="table-scroll">
+        <div className="table-scroll" role="region" aria-label="平台列表" tabIndex={0}>
           {tab === 'platforms' ? (
             <table className="data-table">
               <thead>
@@ -149,10 +149,7 @@ export function PlatformsPage() {
                       <Badge tone="neutral">{TIER_LABEL[p.tier] ?? `T${p.tier}`}</Badge>
                     </td>
                     <td style={{ color: 'var(--ptmcp-text-muted)' }}>{p.catalogMode}</td>
-                    <td style={{ color: 'var(--ptmcp-text-muted)' }}>
-                      {p.proofMode}
-                      {p.proofConfigured ? ' ✓' : ''}
-                    </td>
+                    <td style={{ color: 'var(--ptmcp-text-muted)' }}>{p.proofConfigured ? `${p.proofMode}（已配置）` : p.proofMode}</td>
                     <td>
                       <Badge tone="accent">{clientCount.get(p.id) ?? 0}</Badge>
                     </td>
@@ -164,7 +161,7 @@ export function PlatformsPage() {
                         className="link"
                         onClick={() => can('platformScope') && setScopePlatform(p)}
                         disabled={!can('platformScope')}
-                        aria-label={`管理 ${p.name} 授权范围`}
+                        aria-label={`Scope 授权范围：${p.name}`}
                       >
                         Scope
                       </button>
@@ -339,7 +336,7 @@ export function PlatformsPage() {
               padding: '10px 12px',
               background: 'var(--ptmcp-canvas)',
               border: '1px solid var(--ptmcp-border)',
-              borderRadius: 8,
+              borderRadius: 'var(--ptmcp-radius-control)',
               fontSize: 12.5,
               wordBreak: 'break-all',
               userSelect: 'all',
@@ -426,6 +423,7 @@ function PlatformDialog({
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <Field label="层级">
           <Select
+            ariaLabel="层级"
             value={values.tier}
             onChange={(v) => setValues((s) => ({ ...s, tier: v }))}
             options={[1, 2, 3].map((t) => ({ value: String(t), label: `Tier ${t}（${TIER_LABEL[t]}）` }))}
@@ -433,6 +431,7 @@ function PlatformDialog({
         </Field>
         <Field label="状态">
           <Select
+            ariaLabel="状态"
             value={values.status}
             onChange={(v) => setValues((s) => ({ ...s, status: v }))}
             options={[
@@ -443,6 +442,7 @@ function PlatformDialog({
         </Field>
         <Field label="目录模式">
           <Select
+            ariaLabel="目录模式"
             value={values.catalogMode}
             onChange={(v) => setValues((s) => ({ ...s, catalogMode: v }))}
             options={CATALOG_MODES.map((m) => ({ value: m, label: m }))}
@@ -450,6 +450,7 @@ function PlatformDialog({
         </Field>
         <Field label="平台证明模式" hint="Tier1 必须配置 MTLS 或代理密钥；OAuth PKCE 不是平台证明">
           <Select
+            ariaLabel="平台证明模式"
             value={values.proofMode}
             onChange={(v) => setValues((s) => ({ ...s, proofMode: v, certificateFingerprint: '', proxyNetwork: '', secret: '' }))}
             options={PROOF_MODES.map((m) => ({ value: m, label: m }))}
@@ -605,6 +606,7 @@ function ClientDialog({
       ) : null}
       <Field label="所属平台" hint={editing ? '所属平台不可修改' : undefined}>
         <Select
+          ariaLabel="所属平台"
           value={values.platformId}
           onChange={(v) => setValues((s) => ({ ...s, platformId: v }))}
           disabled={!!editing}
@@ -615,10 +617,17 @@ function ClientDialog({
         <TextInput value={values.name} onChange={(v) => setValues((s) => ({ ...s, name: v }))} placeholder="如：WorkBuddy 接入端" />
       </Field>
       <Field label="客户端类型" hint={editing ? '服务端不允许修改类型与认证方式' : 'CONFIDENTIAL 类型创建后会一次性发放 client secret'}>
-        <Select value={values.type} onChange={changeType} disabled={!!editing} options={CLIENT_TYPES.map((t) => ({ value: t, label: t }))} />
+        <Select
+          ariaLabel="客户端类型"
+          value={values.type}
+          onChange={changeType}
+          disabled={!!editing}
+          options={CLIENT_TYPES.map((t) => ({ value: t, label: t }))}
+        />
       </Field>
       <Field label="状态">
         <Select
+          ariaLabel="状态"
           value={values.status}
           onChange={(v) => setValues((s) => ({ ...s, status: v }))}
           options={CLIENT_STATUSES.map((t) => ({ value: t, label: t === 'ACTIVE' ? '启用' : '停用' }))}
@@ -628,11 +637,28 @@ function ClientDialog({
         label={`认证方式（已选 ${values.authMethods.length}）`}
         hint={editing ? '服务端不允许修改类型与认证方式' : 'PUBLIC 仅支持 none；private_key_jwt 需要 JWKS 地址'}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, border: '1px solid var(--ptmcp-border)', borderRadius: 8, padding: 6 }}>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+            border: '1px solid var(--ptmcp-border)',
+            borderRadius: 'var(--ptmcp-radius-control)',
+            padding: 6,
+          }}
+        >
           {CLIENT_AUTH_METHODS.map((method) => (
             <label
               key={method}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px', borderRadius: 6, cursor: 'pointer', fontSize: 12.5 }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '4px 6px',
+                borderRadius: 'var(--ptmcp-radius-sm)',
+                cursor: 'pointer',
+                fontSize: 12.5,
+              }}
             >
               <input
                 type="checkbox"
@@ -646,11 +672,28 @@ function ClientDialog({
         </div>
       </Field>
       <Field label={`授权 Scope（已选 ${values.allowedScopes.length}）`} hint="服务端要求至少一个；决定该客户端可访问的 MCP 能力">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, border: '1px solid var(--ptmcp-border)', borderRadius: 8, padding: 6 }}>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+            border: '1px solid var(--ptmcp-border)',
+            borderRadius: 'var(--ptmcp-radius-control)',
+            padding: 6,
+          }}
+        >
           {CLIENT_SCOPES.map((scope) => (
             <label
               key={scope}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px', borderRadius: 6, cursor: 'pointer', fontSize: 12.5 }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '4px 6px',
+                borderRadius: 'var(--ptmcp-radius-sm)',
+                cursor: 'pointer',
+                fontSize: 12.5,
+              }}
             >
               <input type="checkbox" checked={values.allowedScopes.includes(scope)} onChange={() => toggleList('allowedScopes', scope)} />
               <code>{scope}</code>
@@ -753,7 +796,7 @@ function ScopeDialog({ platform, onClose, onSaved }: { platform: PlatformRow; on
           <p style={{ margin: '0 0 10px', fontSize: 12.5, color: 'var(--ptmcp-text-muted)' }}>
             平台 Scope 与用户有效权限取交集后才生效；整组替换保存（scopeVersion v{scopeVersion} → 保存后递增）。
           </p>
-          <div className="table-scroll" style={{ maxHeight: 280, marginBottom: 12 }}>
+          <div className="table-scroll" role="region" aria-label="平台授权范围规则" tabIndex={0} style={{ maxHeight: 280, marginBottom: 12 }}>
             <table className="data-table">
               <thead>
                 <tr>
@@ -770,6 +813,7 @@ function ScopeDialog({ platform, onClose, onSaved }: { platform: PlatformRow; on
                   <tr key={`${r.resourceType}:${r.resourceId}:${r.action}`}>
                     <td>
                       <Select
+                        ariaLabel="授权范围资源类型"
                         value={r.resourceType}
                         onChange={(v) => updateRule(i, { resourceType: v })}
                         options={[
@@ -787,6 +831,7 @@ function ScopeDialog({ platform, onClose, onSaved }: { platform: PlatformRow; on
                     </td>
                     <td>
                       <Select
+                        ariaLabel="授权范围动作"
                         value={r.action}
                         onChange={(v) => updateRule(i, { action: v })}
                         options={[
@@ -842,7 +887,7 @@ function ScopeDialog({ platform, onClose, onSaved }: { platform: PlatformRow; on
               <Alert kind="warning" title="确认整组替换">
                 即将保存：新增 {changes.added.length} · 移除 {changes.removed.length} · 修改 {changes.modified.length} 条规则。
               </Alert>
-              <div className="table-scroll" style={{ marginTop: 8, maxHeight: 160 }}>
+              <div className="table-scroll" role="region" aria-label="授权范围变更对比" tabIndex={0} style={{ marginTop: 8, maxHeight: 160 }}>
                 <table className="data-table">
                   <tbody>
                     {changes.added.map((r) => (

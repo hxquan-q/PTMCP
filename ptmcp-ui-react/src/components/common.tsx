@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode, type Ref } from 'react';
 import { createPortal } from 'react-dom';
-import { CheckIcon, ChevronRightIcon, CloseIcon, InfoIcon, SearchIcon, WarningIcon } from './Icons';
+import { CheckIcon, ChevronRightIcon, CloseIcon, DocumentIcon, InfoIcon, SearchIcon, WarningIcon } from './Icons';
 import type { IconComponent } from './Icons';
 
 export function Dialog({
@@ -63,7 +63,7 @@ export function Dialog({
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
-    <label style={{ display: 'grid', gap: 5, fontSize: 13, color: 'var(--ptmcp-text)' }}>
+    <label style={{ display: 'grid', gap: 4, fontSize: 13, color: 'var(--ptmcp-text)' }}>
       <span style={{ fontWeight: 600 }}>{label}</span>
       {children}
       {hint ? <span style={{ fontSize: 12, color: 'var(--ptmcp-text-faint)', fontWeight: 400 }}>{hint}</span> : null}
@@ -210,32 +210,43 @@ export function SearchInput({
   );
 }
 
-export function Select({
-  value,
-  onChange,
-  options,
-  width,
-  label,
-  disabled,
-}: {
+/* 下拉框必须有可访问名：要么给可见 label（标签在控件前），要么给 ariaLabel（仅读屏可见）。
+   两者都不给会让 axe 报 select-name（critical）——纯靠第一个 option 文字不算名字。 */
+type SelectBaseProps = {
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
   width?: number | string;
-  label?: string;
   disabled?: boolean;
-}) {
+};
+type SelectNameProps = { label: string; ariaLabel?: string } | { label?: undefined; ariaLabel: string };
+
+export function Select({ value, onChange, options, width, label, ariaLabel, disabled }: SelectBaseProps & SelectNameProps) {
   const autoId = useId();
+  const select = (
+    <select
+      id={autoId}
+      className="select"
+      style={{ width }}
+      value={value}
+      disabled={disabled}
+      aria-label={label ? undefined : ariaLabel}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
+  // 只有给了可见 label 才包一层 <label>；否则直接输出 <select>，
+  // 避免嵌套 label 把外层 <Field label> 的文字挡在可访问名之外。
+  if (!label) return select;
   return (
     <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--ptmcp-text)' }}>
       {label}
-      <select id={autoId} className="select" style={{ width }} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
+      {select}
     </label>
   );
 }
@@ -294,7 +305,7 @@ export function Tabs({
   );
 }
 
-/** 步骤指示条:已完成✓ / 当前蓝点编号 / 后续灰 */
+/** 步骤指示条：已完成用勾选图标、当前用编号、后续置灰。 */
 export function Stepper({ steps, current }: { steps: string[]; current: number }) {
   return (
     <ol
@@ -313,10 +324,10 @@ export function Stepper({ steps, current }: { steps: string[]; current: number }
                 justifyContent: 'center',
                 width: 24,
                 height: 24,
-                borderRadius: '50%',
+                borderRadius: 'var(--ptmcp-radius-circle)',
                 fontSize: 12,
                 fontWeight: 700,
-                background: done || active ? 'var(--ptmcp-blue)' : 'var(--ptmcp-surface)',
+                background: done || active ? 'var(--ptmcp-blue-strong)' : 'var(--ptmcp-surface)',
                 color: done || active ? '#fff' : 'var(--ptmcp-text-faint)',
                 border: done || active ? 'none' : '1px solid var(--ptmcp-border-strong)',
               }}
@@ -328,7 +339,7 @@ export function Stepper({ steps, current }: { steps: string[]; current: number }
                 marginLeft: 8,
                 fontSize: 13,
                 fontWeight: active ? 700 : 500,
-                color: active ? 'var(--ptmcp-blue)' : done ? 'var(--ptmcp-text)' : 'var(--ptmcp-text-faint)',
+                color: active ? 'var(--ptmcp-blue-text)' : done ? 'var(--ptmcp-text)' : 'var(--ptmcp-text-faint)',
               }}
             >
               {label}
@@ -378,9 +389,11 @@ export function OptionCard({
         {description ? <span>{description}</span> : null}
       </span>
       {selected ? (
-        <span style={{ width: 20, height: 20, borderRadius: '50%', border: '6px solid var(--ptmcp-blue)', flex: 'none' }} />
+        <span style={{ width: 20, height: 20, borderRadius: 'var(--ptmcp-radius-circle)', border: '6px solid var(--ptmcp-blue)', flex: 'none' }} />
       ) : (
-        <span style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid var(--ptmcp-border-strong)', flex: 'none' }} />
+        <span
+          style={{ width: 20, height: 20, borderRadius: 'var(--ptmcp-radius-circle)', border: '2px solid var(--ptmcp-border-strong)', flex: 'none' }}
+        />
       )}
     </button>
   );
@@ -407,9 +420,9 @@ export function Alert({ kind, title, id, children }: { kind: 'info' | 'warning' 
         margin: '14px 0',
       }}
     >
-      <styles.Icon style={{ color: styles.fg, flex: 'none', fontSize: 17, marginTop: 1 }} />
+      <styles.Icon style={{ color: styles.fg, flex: 'none', fontSize: 17, marginTop: 2 }} />
       <div>
-        {title ? <strong style={{ display: 'block', color: styles.fg, marginBottom: 3 }}>{title}</strong> : null}
+        {title ? <strong style={{ display: 'block', color: styles.fg, marginBottom: 4 }}>{title}</strong> : null}
         {children}
       </div>
     </div>
@@ -458,7 +471,8 @@ export function Drawer({
   if (!open) return null;
   return createPortal(
     <>
-      <div className="overlay-scrim" onClick={onClose} />
+      {/* 遮罩只是鼠标便捷路径：键盘用户走 Esc，读屏不该把它当可操作元素。 */}
+      <div className="overlay-scrim" aria-hidden="true" onClick={onClose} />
       <div ref={trapRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="overlay-drawer" style={{ width }}>
         <header className="overlay-header overlay-header--start">
           {icon}
@@ -540,35 +554,46 @@ function pageNums(page: number, pages: number): (number | 'gap')[] {
   return out;
 }
 
-export function EmptyState({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
+/**
+ * 空态/错误态。四种 kind 走四套图标与语气：
+ * `empty` 真的没有数据、`filtered` 被筛选条件挡住、`error` 读取失败、`unavailable` 端点不可用。
+ * 读取失败必须用 `error`/`unavailable`，不能画成「暂无数据」——否则用户会以为数据被删了。
+ */
+export type EmptyKind = 'empty' | 'filtered' | 'error' | 'unavailable';
+
+const EMPTY_ICON: Record<EmptyKind, IconComponent> = {
+  empty: DocumentIcon,
+  filtered: SearchIcon,
+  error: WarningIcon,
+  unavailable: InfoIcon,
+};
+
+export function EmptyState({
+  title,
+  description,
+  hint,
+  action,
+  kind = 'empty',
+}: {
+  title: string;
+  description?: string;
+  hint?: string;
+  action?: ReactNode;
+  kind?: EmptyKind;
+}) {
+  const Icon = EMPTY_ICON[kind];
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        padding: '48px 20px',
-        textAlign: 'center',
-        flex: 1,
-      }}
-    >
-      <DocumentSvg />
-      <strong style={{ color: 'var(--ptmcp-text-strong)', fontSize: 15, marginTop: 6 }}>{title}</strong>
-      {description ? <span style={{ color: 'var(--ptmcp-text-muted)', fontSize: 13, maxWidth: 380 }}>{description}</span> : null}
-      {action}
+    <div className={`empty-state empty-state--${kind}`}>
+      <span className="empty-state-mark" aria-hidden="true">
+        <Icon />
+      </span>
+      <p className="empty-state-title">{title}</p>
+      {description ? <p className="empty-state-desc">{description}</p> : null}
+      {hint ? <p className="empty-state-hint">{hint}</p> : null}
+      {action ? <div className="empty-state-actions">{action}</div> : null}
     </div>
   );
 }
-const DocumentSvg = () => (
-  <svg width="64" height="64" viewBox="0 0 64 64" fill="none" aria-hidden>
-    <rect x="14" y="10" width="30" height="40" rx="4" fill="var(--ptmcp-bg-neutral)" stroke="var(--ptmcp-border-strong)" />
-    <path d="M21 21h16M21 28h16M21 35h10" stroke="var(--ptmcp-text-faint)" strokeWidth="2" strokeLinecap="round" />
-    <circle cx="46" cy="44" r="11" fill="var(--ptmcp-blue)" />
-    <path d="M46 39v10M41 44h10" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" />
-  </svg>
-);
 
 /** ⌘K 风格全局搜索输入(纯 UI,数据源由调用方注入) */
 export function GlobalSearch({ onOpen }: { onOpen: () => void }) {

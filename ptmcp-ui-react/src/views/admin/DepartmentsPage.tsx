@@ -176,9 +176,10 @@ export function DepartmentsPage() {
                 <tr>
                   <td colSpan={5}>
                     {loadError ? (
-                      <EmptyState title="部门加载失败" description="上方已给出失败原因与重新读取入口；读取失败不等于没有部门。" />
+                      <EmptyState kind="error" title="部门加载失败" description="上方已给出失败原因与重新读取入口；读取失败不等于没有部门。" />
                     ) : (
                       <EmptyState
+                        kind={debounced.trim() ? 'filtered' : 'empty'}
                         title={debounced.trim() ? `没有匹配「${debounced.trim()}」的部门` : '暂无部门'}
                         description={debounced.trim() ? '搜索在当前列表内筛选；清空关键字可看到全部部门。' : '点击右上角「新建部门」创建第一个部门'}
                         action={
@@ -330,6 +331,7 @@ function DeptDialog({ dept, all, onClose, onSaved }: { dept: DepartmentRow | nul
       </Field>
       <Field label="上级部门" hint="不能选择自己或自己的下级，避免成环">
         <Select
+          ariaLabel="上级部门"
           value={values.parentId ?? ''}
           onChange={(v) => setValues((s) => ({ ...s, parentId: v || null }))}
           width={240}
@@ -342,6 +344,7 @@ function DeptDialog({ dept, all, onClose, onSaved }: { dept: DepartmentRow | nul
       </Field>
       <Field label="状态">
         <Select
+          ariaLabel="状态"
           value={values.enabled ? '1' : '0'}
           onChange={(v) => setValues((s) => ({ ...s, enabled: v === '1' }))}
           width={160}

@@ -124,7 +124,7 @@ export function DatasourcesPage() {
             </button>
           </span>
         </div>
-        <div className="table-scroll">
+        <div className="table-scroll" role="region" aria-label="数据源列表" tabIndex={0}>
           <table className="data-table">
             <thead>
               <tr>
@@ -216,7 +216,9 @@ export function DatasourcesPage() {
               })}
             </tbody>
           </table>
-          {!loading && pageRows.length === 0 ? <EmptyState title="暂无数据源" description="调整筛选条件，或新建一个数据源连接。" /> : null}
+          {!loading && pageRows.length === 0 ? (
+            <EmptyState kind="filtered" title="暂无数据源" description="调整筛选条件，或新建一个数据源连接。" />
+          ) : null}
         </div>
         <div className="table-footer">
           <span>{selected.size > 0 ? `已选择 ${selected.size} 项` : ' '}</span>
@@ -369,6 +371,7 @@ function DsCreateDialog({ onClose, onCreated }: { onClose: () => void; onCreated
         </Field>
         <Field label="引擎">
           <Select
+            ariaLabel="引擎"
             value={form.engine}
             onChange={(v) => set('engine', v)}
             options={ENGINE_OPTIONS.filter((o) => o.value).map((o) => ({ value: o.value, label: o.label }))}
@@ -376,6 +379,7 @@ function DsCreateDialog({ onClose, onCreated }: { onClose: () => void; onCreated
         </Field>
         <Field label="状态" hint="草稿可先保存，验证后再启用">
           <Select
+            ariaLabel="状态"
             value={form.status}
             onChange={(v) => set('status', v)}
             options={[

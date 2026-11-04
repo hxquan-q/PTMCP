@@ -21,3 +21,14 @@ dist/
 .github/skills/
 .claude/settings.local.json
 .pi/
+
+# 本地 axe-core 审计脚本（仅本机无障碍扫描，不入库）
+ptmcp-ui-react/public/axe.min.js
+
+# 本机度量产物与临时联调脚本（不入库）
+.auto/be-result.txt
+.auto/measure-out.txt
+.auto/debug-login.sh
+.auto/probe-session.sh
+.auto/smoke-clients.sh
+.auto/start-dbg-mysql.sh

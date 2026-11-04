@@ -452,7 +452,7 @@ export function PermissionsPage() {
                 ))
               )}
               {!subjectsError && filteredSubjects.length === 0 ? (
-                <EmptyState title="没有匹配的主体" description="清除搜索词，或到用户、角色、部门页面确认目录内容。" />
+                <EmptyState kind="filtered" title="没有匹配的主体" description="清除搜索词，或到用户、角色、部门页面确认目录内容。" />
               ) : null}
             </div>
           </Pane>
@@ -475,6 +475,7 @@ export function PermissionsPage() {
             <div style={{ padding: '0 14px 10px', flex: 'none', display: 'grid', gap: 8 }}>
               <label style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>数据源</label>
               <Select
+                ariaLabel="数据源"
                 value={datasourceId}
                 onChange={setDatasourceId}
                 width="100%"
@@ -985,7 +986,7 @@ function Resizer({
       }}
       style={{ cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
     >
-      <span style={{ width: 3, height: 36, borderRadius: 2, background: 'var(--ptmcp-border-strong)' }} />
+      <span style={{ width: 3, height: 36, borderRadius: 'var(--ptmcp-radius-xs)', background: 'var(--ptmcp-border-strong)' }} />
     </div>
   );
 }

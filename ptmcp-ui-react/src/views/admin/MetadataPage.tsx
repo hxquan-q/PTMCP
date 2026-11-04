@@ -137,6 +137,7 @@ export function MetadataPage() {
           {datasourceId && !loading && !failure && rows.length === 0 ? (
             debounced.trim() ? (
               <EmptyState
+                kind="filtered"
                 title={`没有匹配「${debounced.trim()}」的元数据对象`}
                 description="搜索在服务端按对象名或表名过滤；清空关键字可回到该数据源的完整列表。"
                 action={

@@ -255,7 +255,7 @@ export function UsersPage() {
                       <button className="link" onClick={() => setEditing(r)} aria-label={`编辑 ${r.displayName || r.username}`}>
                         <EditIcon /> 编辑
                       </button>
-                      <button className="link" onClick={() => setResetting(r)} aria-label={`重置 ${r.displayName || r.username} 的密码`}>
+                      <button className="link" onClick={() => setResetting(r)} aria-label={`重置密码：${r.displayName || r.username}`}>
                         重置密码
                       </button>
                       <button
@@ -287,9 +287,10 @@ export function UsersPage() {
                 <tr>
                   <td colSpan={5}>
                     {usersFailure ? (
-                      <EmptyState title="用户加载失败" description="请按上方的重新读取重试；失败时不显示为空列表。" />
+                      <EmptyState kind="error" title="用户加载失败" description="请按上方的重新读取重试；失败时不显示为空列表。" />
                     ) : debounced ? (
                       <EmptyState
+                        kind="filtered"
                         title="没有匹配的用户"
                         description={`没有用户名或显示名包含「${debounced}」的记录。`}
                         action={
@@ -522,6 +523,7 @@ function UserDialog({
       </Field>
       <Field label="所属部门">
         <Select
+          ariaLabel="所属部门"
           value={values.deptId}
           onChange={(v) => setValues((s) => ({ ...s, deptId: v }))}
           width={240}
@@ -567,6 +569,7 @@ function UserDialog({
       </Field>
       <Field label="状态">
         <Select
+          ariaLabel="状态"
           value={values.enabled ? '1' : '0'}
           onChange={(v) => setValues((s) => ({ ...s, enabled: v === '1' }))}
           width={160}

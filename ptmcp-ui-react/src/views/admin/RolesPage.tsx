@@ -211,9 +211,10 @@ export function RolesPage() {
                 <tr>
                   <td colSpan={5}>
                     {loadError ? (
-                      <EmptyState title="角色加载失败" description="请按上方的「重新读取」重试；失败时不显示为空列表。" />
+                      <EmptyState kind="error" title="角色加载失败" description="请按上方的「重新读取」重试；失败时不显示为空列表。" />
                     ) : debounced ? (
                       <EmptyState
+                        kind="filtered"
                         title="没有匹配的角色"
                         description={`没有名称或编码包含「${debounced}」的角色。`}
                         action={

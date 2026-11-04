@@ -122,7 +122,7 @@ export function DelegationsPage() {
           />
           <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>已加载 {rows.length} 条委派</span>
         </div>
-        <div className="table-scroll">
+        <div className="table-scroll" role="region" aria-label="委派列表" tabIndex={0}>
           <table className="data-table">
             <thead>
               <tr>
@@ -180,7 +180,9 @@ export function DelegationsPage() {
               })}
             </tbody>
           </table>
-          {!loading && rows.length === 0 ? <EmptyState title="暂无委派" description="调整筛选条件，或点击右上角「新建委派」。" /> : null}
+          {!loading && rows.length === 0 ? (
+            <EmptyState kind="filtered" title="暂无委派" description="调整筛选条件，或点击右上角「新建委派」。" />
+          ) : null}
         </div>
         <div className="table-footer" style={{ justifyContent: 'space-between' }}>
           <span style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
@@ -304,6 +306,7 @@ function DelegationDialog({
       </Alert>
       <Field label="受委派管理员" hint="不能选择自己">
         <Select
+          ariaLabel="受委派管理员"
           value={values.userId}
           onChange={(v) => setValues((s) => ({ ...s, userId: v }))}
           width={240}
@@ -316,6 +319,7 @@ function DelegationDialog({
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <Field label="部门根">
           <Select
+            ariaLabel="部门根"
             value={values.departmentRootId}
             onChange={(v) => setValues((s) => ({ ...s, departmentRootId: v }))}
             options={[{ value: '', label: '请选择' }, ...depts.map((d) => ({ value: d.id, label: d.name }))]}
@@ -323,6 +327,7 @@ function DelegationDialog({
         </Field>
         <Field label="资源（数据源）">
           <Select
+            ariaLabel="资源（数据源）"
             value={values.resourceId}
             onChange={(v) => setValues((s) => ({ ...s, resourceId: v }))}
             options={[{ value: '', label: '请选择' }, ...datasources.map((d) => ({ value: d.id, label: `${d.name}（${d.code}）` }))]}
@@ -330,11 +335,27 @@ function DelegationDialog({
         </Field>
       </div>
       <Field label={`允许的操作（已选 ${values.allowedActions.length}）`} hint="仅限用户/部门/角色/授权矩阵域">
-        <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid var(--ptmcp-border)', borderRadius: 8, padding: 6 }}>
+        <div
+          style={{
+            maxHeight: 160,
+            overflowY: 'auto',
+            border: '1px solid var(--ptmcp-border)',
+            borderRadius: 'var(--ptmcp-radius-control)',
+            padding: 6,
+          }}
+        >
           {ACTION_OPTIONS.map((action) => (
             <label
               key={action}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 6px', borderRadius: 6, cursor: 'pointer', fontSize: 12.5 }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '4px 6px',
+                borderRadius: 'var(--ptmcp-radius-sm)',
+                cursor: 'pointer',
+                fontSize: 12.5,
+              }}
             >
               <input
                 type="checkbox"
