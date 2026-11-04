@@ -41,7 +41,7 @@ UI 改动涵盖 App、PageState、useCursorPage、styles、权限/审计/数据�
 | --- | --- | --- | --- |
 | G1 资源发现 | T19/T13/T14 | 真实 HTTP 401 能发现受信资源与 AS，URI 配置严格验证，预注册路径明确 | completed |
 | G2 审计恢复 | T09/T20 | 唯一目录 owner、仅回放关闭段、幂等恢复/损坏告警/UNKNOWN 收敛与故障测试 | completed |
-| G3 候选与健康 | T15-c S4 | 错候选不替换 active、CAS 发布、健康绑定版本与目标 | pending |
+| G3 候选与健康 | T15-c S4 | 错候选不替换 active、CAS 发布、健康绑定版本与目标 | verifying；定向 PASS（2026-11-04，真实 MySQL），候选保留/清理策略待密钥运维切片 |
 | G4 取消与容量 | T15-c S5/T19-d | 主体隔离取消、执行清理后归还额度、部署预算语义明确且有边界测试 | pending |
 | G5 密钥兼容 | T15-c S6 | 新旧钥兼容、对象绑定与迁移格式、日志不泄漏、恢复仍可读 | in_progress；G5a、G5b 定向 PASS（含只读评审修复），恢复组合验收待 G7 |
 | G6 字典上下文 | T15-c S7 | 三工具契约说明、授权后字典/关系/预算、撤权与恶意注释测试 | [verifying；定向 PASS](DEV-20261030-schema-context.md) |
@@ -817,3 +817,25 @@ React 源码由该窗口所有，本窗口待稳定后只读复核并运行适�
 - PLAUSIBLE 残余风险：`0x01`/legacy 旧行未绑定对象身份（见上），属升级兼容取舍，不阻塞提交。
 - 测试缺口：缺少服务/集成级的跨行复制 `0x02` 密文反例；`readHead` 判空无 reader 级单测，
   由 API 级 `SCHEMA_STALE` 测试覆盖。
+
+## G3 候选与健康验收（2026-11-04）
+
+实现沿用 [数据源候选验证与 CAS 发布](../../.agents/notes/implemented/architecture/2026-10-28-datasource-candidate-publication.md)：
+候选表追加式保存目标与加密凭据，发布按 `If-Match` 版本 CAS 并在同一事务内复制配置、升版本、
+退役旧目标授权；健康只采信当前 `configVersion`、当前目标且未过期的 `ACTIVE_PROBE` 证据。
+本轮未改实现，只补跑真实数据库验收。
+
+验证（WSL PTMCP-Dev / JDK 21.0.12.1 / Maven 3.9.9，真实 MySQL 8.4 容器）：
+
+- `DatasourceTargetIsolationTest` 14 项通过，0 失败/错误/跳过：失败/过期/陈旧/已发布候选均被拒绝、
+  并发发布仅一个成功、失败或事件异常整体回滚、`lost commit ack` 收敛为 UNKNOWN 且不重放、
+  host/port/database 切换不继承旧目标授权、同平台其他数据源授权保留、凭据轮换保留资源身份与授权、
+  同目标发布使旧 `configVersion` 快照立即不可用、健康只取当前目标最新有效探针。
+- `DatasourceApiTest` 12 项通过，0 失败/错误/跳过：`publishRequiresIfMatchReplaysIdempotentlyAndRejectsStaleCandidates`、
+  `probeFailsClosedOnUnverifiedTlsAndNeverPersistsDraftCredential`、`syncEnqueuesOnceAndFailsClosedWithoutPublishingSnapshot`、
+  `expiredOrMissingSnapshotReturnsSchemaStale` 等覆盖 API 契约与健康/快照边界。
+- `python scripts/check.py` 74 项 OK；`git diff --check` exit 0。
+
+未完成：`datasource_candidate` 仍无保留/清理策略，会持续保存加密凭据历史；`metadata_sync_job.candidate_id`
+外键使删除需先确定任务保留边界，需与密钥轮换、运维清理一起设计，不在本切片实现。G3 工程验证通过，
+人工验收仍待确认。
