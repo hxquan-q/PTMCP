@@ -132,6 +132,7 @@ pnpm test
 ## OAuth、Gateway 与安全边界
 
 - `authz` 的 OAuth 默认在本地启用，签名私钥位于 `.local/dev/oauth-signing.pem`。本地脚本没有注册 OAuth 客户端，因此后台登录可用，但完整客户端授权/刷新链路仍需另行配置。
+- React 登录/同意页由 `ptmcp-ui-react` 独立构建：`cd ptmcp-ui-react && pnpm build:oauth` 生成 `dist-oauth/`。`scripts/Dev-Linux.sh` 在产物存在时自动为 authz 导出 `PTMCP_AUTHZ_OAUTH_PAGES_DIR`；未构建时沿用服务端渲染回退页，不影响启动。
 - `gateway` 默认 `PTMCP_GATEWAY_ENABLED=false`，启动后 MCP 工具保持关闭。启用它需要业务库 TLS 信任材料（MySQL truststore、PostgreSQL 根证书）和客户端配置；不要为了本地方便引入非 TLS 执行旁路。
 - 所有数据库/缓存端口只发布到 `127.0.0.1`，不监听公网。
 - 应用端口（28080/28081/28082）默认也只绑定回环；仅在显式设置 `SERVER_ADDRESS='0.0.0.0'` 时才对外监听。

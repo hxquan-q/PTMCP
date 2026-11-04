@@ -9,7 +9,16 @@ pnpm install
 pnpm dev:preview   # 127.0.0.1:25175，合成后端（src/preview/server.ts，无需 Java）
 pnpm dev           # 真实后端模式：代理 /backend/admin→28080、/backend/authz→28081、/backend/gateway→28082
 pnpm test          # node --experimental-strip-types --test tests/*.test.ts（契约 + 纯函数）
-pnpm check         # eslint + prettier + tsc + vite build
+pnpm check         # eslint + prettier + tsc + vite build + vite build:oauth
+pnpm build:oauth   # 单独构建 AS 托管的登录/同意页到 dist-oauth/
+```
+
+OAuth 登录/同意页由 `ptmcp-authz` 在 AS 同源托管。构建后在仓库根启动 authz 时指向产物目录；未设置或未构建时 authz 使用服务端渲染回退页。Windows PowerShell 示例：
+
+```powershell
+cd ptmcp-ui-react; pnpm build:oauth; cd ..
+$env:PTMCP_AUTHZ_OAUTH_PAGES_DIR = "$PWD/ptmcp-ui-react/dist-oauth"
+# 再按 docs/ops/development-environment.md 的方式启动 ptmcp-authz
 ```
 
 Node 版本随根仓 [开发环境](../docs/ops/development-environment.md)（当前 pin 24）。Windows 下若 WSL 内无 node，测试用 `pnpm exec node --experimental-strip-types --test tests/`。

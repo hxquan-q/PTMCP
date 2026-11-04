@@ -5,6 +5,7 @@ node_modules/
 config/dev/secrets/
 target/
 dist/
+dist-oauth/
 .local/
 .playwright-mcp/
 .env

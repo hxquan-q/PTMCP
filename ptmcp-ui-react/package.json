@@ -10,7 +10,8 @@
     "preview": "vite preview --host 127.0.0.1 --port 24173 --strictPort",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && vite build",
-    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm build",
+    "build:oauth": "tsc --noEmit && vite build --config vite.oauth.config.ts",
+    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm build && pnpm build:oauth",
     "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "devDependencies": {

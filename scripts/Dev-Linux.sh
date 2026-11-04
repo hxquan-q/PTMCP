@@ -475,6 +475,10 @@ run_backend() {
     if [ ! -d "$ROOT/ptmcp-parent/$module/target/classes" ]; then
         warn "$module has not been built; run: $0 build"
     fi
+    if [ "$module" = "ptmcp-authz" ] && [ -f "$ROOT/ptmcp-ui-react/dist-oauth/oauth/login.html" ]; then
+        # React 登录/同意页产物存在时启用；未构建时沿用服务端渲染回退。
+        export PTMCP_AUTHZ_OAUTH_PAGES_DIR="$ROOT/ptmcp-ui-react/dist-oauth"
+    fi
     cd "$ROOT/ptmcp-parent"
     export JAVA_HOME="$JAVA21_HOME"
     export PATH="$JAVA21_HOME/bin:$PATH"
@@ -520,6 +524,15 @@ set +a
 export JAVA_HOME="$JAVA21_HOME"
 export PATH="$JAVA21_HOME/bin:\$PATH"
 cd "$ROOT/ptmcp-parent"
+EOF
+            if [ "$name" = "authz" ]; then
+                cat >>"$launcher" <<EOF
+if [ -f "$ROOT/ptmcp-ui-react/dist-oauth/oauth/login.html" ]; then
+    export PTMCP_AUTHZ_OAUTH_PAGES_DIR="$ROOT/ptmcp-ui-react/dist-oauth"
+fi
+EOF
+            fi
+            cat >>"$launcher" <<EOF
 if command -v mvn >/dev/null 2>&1; then
     exec mvn -s "$MAVEN_SETTINGS" -pl ptmcp-$name spring-boot:run
 else

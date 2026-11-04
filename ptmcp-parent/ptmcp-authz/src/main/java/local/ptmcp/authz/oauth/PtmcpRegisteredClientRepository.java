@@ -23,12 +23,13 @@ import java.util.Set;
  */
 public final class PtmcpRegisteredClientRepository implements RegisteredClientRepository {
     static final String PLATFORM_ID_SETTING = "ptmcp.platform-id";
+    static final String PLATFORM_NAME_SETTING = "ptmcp.platform-name";
     private static final String SELECT_CLIENT =
             "SELECT c.id, c.client_id, c.client_id_issued_at, c.client_secret, "
                     + "c.client_secret_expires_at, c.client_name, c.client_authentication_methods, "
                     + "c.authorization_grant_types, c.redirect_uris, c.post_logout_redirect_uris, "
                     + "c.scopes, c.client_settings, c.platform_id, c.client_type, "
-                    + "p.status AS platform_status "
+                    + "p.name AS platform_name, p.status AS platform_status "
                     + "FROM oauth2_registered_client c "
                     + "LEFT JOIN platform_registry p ON p.id = c.platform_id "
                     + "WHERE c.client_id = ? AND c.status = 'ACTIVE'";
@@ -37,7 +38,7 @@ public final class PtmcpRegisteredClientRepository implements RegisteredClientRe
                     + "c.client_secret_expires_at, c.client_name, c.client_authentication_methods, "
                     + "c.authorization_grant_types, c.redirect_uris, c.post_logout_redirect_uris, "
                     + "c.scopes, c.client_settings, c.platform_id, c.client_type, "
-                    + "p.status AS platform_status "
+                    + "p.name AS platform_name, p.status AS platform_status "
                     + "FROM oauth2_registered_client c "
                     + "LEFT JOIN platform_registry p ON p.id = c.platform_id "
                     + "WHERE c.id = ? AND c.status = 'ACTIVE'";
@@ -73,6 +74,7 @@ public final class PtmcpRegisteredClientRepository implements RegisteredClientRe
 
     private RegisteredClient map(ResultSet rs) throws SQLException {
         Long platformId = rs.getObject("platform_id", Long.class);
+        String platformName = rs.getString("platform_name");
         String platformStatus = rs.getString("platform_status");
         String clientType = rs.getString("client_type");
         if (platformId == null || !"ACTIVE".equals(platformStatus)) {
@@ -126,6 +128,9 @@ public final class PtmcpRegisteredClientRepository implements RegisteredClientRe
                         .requireAuthorizationConsent(
                                 requiresConsent(rs.getString("client_settings")))
                         .setting(PLATFORM_ID_SETTING, platformId);
+        if (platformName != null && !platformName.isBlank()) {
+            clientSettings.setting(PLATFORM_NAME_SETTING, platformName);
+        }
         TokenSettings tokenSettings =
                 TokenSettings.builder()
                         .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED)

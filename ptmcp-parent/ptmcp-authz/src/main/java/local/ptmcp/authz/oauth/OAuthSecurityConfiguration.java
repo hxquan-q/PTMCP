@@ -38,6 +38,10 @@ import java.util.List;
 public class OAuthSecurityConfiguration {
     static final String LOGIN_PAGE = "/login";
     static final String CONSENT_PAGE = "/oauth2/consent";
+    static final String LOGIN_CONTEXT = "/oauth2/ui/login";
+    static final String CONSENT_CONTEXT = "/oauth2/ui/consent";
+    static final String CONSENT_DENY = "/oauth2/ui/consent/deny";
+    static final String ASSETS_PATTERN = "/oauth/assets/**";
     static final String SESSION_COOKIE = "PTMCP_AS_SESSION";
 
     private static final List<String> CLOSED_ENDPOINTS =
@@ -150,7 +154,11 @@ public class OAuthSecurityConfiguration {
                                 authorize
                                         .dispatcherTypeMatchers(DispatcherType.ERROR)
                                         .permitAll()
-                                        .requestMatchers(LOGIN_PAGE, "/actuator/health")
+                                        .requestMatchers(
+                                                LOGIN_PAGE,
+                                                LOGIN_CONTEXT,
+                                                ASSETS_PATTERN,
+                                                "/actuator/health")
                                         .permitAll()
                                         .anyRequest()
                                         .authenticated())
@@ -232,7 +240,16 @@ public class OAuthSecurityConfiguration {
 
     private static RequestMatcher pageMatcher() {
         return new OrRequestMatcher(
-                anyPath(List.of(LOGIN_PAGE, CONSENT_PAGE, "/logout", "/actuator/health")),
+                anyPath(
+                        List.of(
+                                LOGIN_PAGE,
+                                LOGIN_CONTEXT,
+                                CONSENT_PAGE,
+                                CONSENT_CONTEXT,
+                                CONSENT_DENY,
+                                ASSETS_PATTERN,
+                                "/logout",
+                                "/actuator/health")),
                 new DispatcherTypeRequestMatcher(DispatcherType.ERROR));
     }
 

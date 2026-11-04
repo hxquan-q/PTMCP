@@ -41,5 +41,6 @@ ptmcp:
       issuer: ${PTMCP_OAUTH_ISSUER:http://127.0.0.1:8081}
       audience: ${PTMCP_OAUTH_AUDIENCE:http://127.0.0.1:8082/mcp}
       signing-key-file: ${PTMCP_OAUTH_SIGNING_KEY_FILE:}
+      pages-directory: ${PTMCP_AUTHZ_OAUTH_PAGES_DIR:}
       authorization-code-ttl: ${PTMCP_OAUTH_CODE_TTL:5m}
       access-token-ttl: ${PTMCP_OAUTH_ACCESS_TTL:10m}

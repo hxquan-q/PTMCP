@@ -62,11 +62,14 @@ public class PtmcpOAuth2AuthorizationService implements OAuth2AuthorizationServi
                     + COLUMNS
                     + " FROM oauth2_authorization "
                     + "WHERE authorization_code_hash = ? AND status = 'ACTIVE'";
+    // The consent state addresses only an in-flight authorization: once a code is issued the
+    // same state must not reopen the consent page or let a replayed consent POST replace the code.
     private static final String SELECT_BY_STATE =
             "SELECT "
                     + COLUMNS
                     + " FROM oauth2_authorization "
-                    + "WHERE state = ? AND status = 'ACTIVE' ORDER BY create_time DESC LIMIT 1";
+                    + "WHERE state = ? AND status = 'ACTIVE' AND authorization_code_hash IS NULL "
+                    + "ORDER BY create_time DESC LIMIT 1";
     private static final String INSERT =
             "INSERT INTO oauth2_authorization (id, registered_client_id, principal_name, "
                     + "authorization_grant_type, authorized_scopes, attributes, state, "

@@ -2211,6 +2211,175 @@ textarea:focus-visible {
   text-align: center;
 }
 
+/* ─── OAuth 登录/授权页：沿用 P-01 的卡片与光斑，授权信息按「客户端 →
+   权限 → 回调目标 → 有效期」分段，拒绝与允许并排。 ─── */
+.oauth-card {
+  gap: 16px;
+  max-width: 460px;
+  padding: 32px;
+}
+.oauth-card::before {
+  right: 32px;
+  left: 32px;
+}
+.oauth-card .login-brand {
+  margin-bottom: 0;
+}
+.oauth-input {
+  width: 100%;
+}
+.oauth-loading {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--ptmcp-text-muted);
+}
+.oauth-heading {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ptmcp-heading);
+  overflow-wrap: anywhere;
+}
+.oauth-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.oauth-meta dt {
+  color: var(--ptmcp-text-faint);
+}
+.oauth-meta dd {
+  margin: 0;
+  color: var(--ptmcp-text);
+  overflow-wrap: anywhere;
+}
+.oauth-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.oauth-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.oauth-section-title {
+  margin: 0;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--ptmcp-heading);
+}
+.oauth-section-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ptmcp-text-muted);
+}
+.oauth-scope-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.oauth-scope {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 12px;
+  background: var(--ptmcp-surface);
+  border: 1px solid var(--ptmcp-border);
+  border-radius: var(--ptmcp-radius-control);
+  cursor: pointer;
+}
+.oauth-scope:focus-within {
+  outline: 2px solid var(--ptmcp-blue);
+  outline-offset: 1px;
+}
+.oauth-scope input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--ptmcp-blue);
+}
+.oauth-scope-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.oauth-scope-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--ptmcp-heading);
+}
+.oauth-scope-badge {
+  padding: 2px 6px;
+  border: 1px solid var(--ptmcp-border);
+  border-radius: var(--ptmcp-radius-pill);
+  background: var(--ptmcp-canvas);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ptmcp-text-muted);
+}
+.oauth-scope-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ptmcp-text-muted);
+}
+.oauth-scope-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ptmcp-text-faint);
+  overflow-wrap: anywhere;
+}
+.oauth-callback {
+  display: block;
+  padding: 10px 12px;
+  background: var(--ptmcp-canvas);
+  border: 1px solid var(--ptmcp-border);
+  border-radius: var(--ptmcp-radius-control);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ptmcp-text);
+  overflow-wrap: anywhere;
+}
+.oauth-policy {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ptmcp-text);
+}
+.oauth-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+}
+.oauth-actions form {
+  flex: 1;
+  min-width: 0;
+}
+
 /* ── 通知栈：失败常驻需手动关闭，其余自动消失；悬停/聚焦冻结计时 ── */
 .toast-stack {
   position: fixed;

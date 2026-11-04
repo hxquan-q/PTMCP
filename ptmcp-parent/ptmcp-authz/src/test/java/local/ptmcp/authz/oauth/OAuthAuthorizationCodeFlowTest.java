@@ -116,6 +116,9 @@ class OAuthAuthorizationCodeFlowTest {
     private static final String USERNAME = "alice";
     private static final long USER_ID = 42L;
     private static final String PASSWORD = randomToken(32);
+    private static final String OTHER_USERNAME = "bob";
+    private static final long OTHER_USER_ID = 43L;
+    private static final String OTHER_PASSWORD = randomToken(32);
     private static final String CLIENT_SECRET = randomToken(32);
     private static final int PORT = freePort();
     private static final String ISSUER = "http://127.0.0.1:" + PORT;
@@ -1267,26 +1270,8 @@ class OAuthAuthorizationCodeFlowTest {
     }
 
     @Test
-    void consentPageEscapesMetadataAndDenyDoesNotIssueACode() {
+    void consentPageEscapesMetadataAndDenyDoesNotIssueACode() throws Exception {
         HttpSession session = login();
-        Response page =
-                session.get(
-                        "/oauth2/consent?client_id="
-                                + ESCAPE_CLIENT_ID
-                                + "&scope=mcp:query&state=page-state");
-        assertEquals(200, page.status());
-        assertTrue(page.body().contains("&lt;script&gt;"));
-        assertFalse(page.body().contains("<script>"));
-        assertEquals(
-                OAuthPageController.CONTENT_SECURITY_POLICY, page.first("Content-Security-Policy"));
-        assertTrue(page.body().contains("action=\"/oauth2/authorize\""));
-        assertTrue(page.first("Cache-Control").contains("no-store"));
-
-        assertEquals(400, session.get("/oauth2/consent?client_id=" + ESCAPE_CLIENT_ID).status());
-        assertEquals(
-                400,
-                session.get("/oauth2/consent?client_id=unknown-client&state=page-state").status());
-
         String state = state();
         Response begin =
                 session.get(
@@ -1300,18 +1285,57 @@ class OAuthAuthorizationCodeFlowTest {
                                 AUDIENCE));
         assertEquals(302, begin.status());
         assertTrue(begin.first("Location").contains("/oauth2/consent"));
-        Response consentPage = session.get(begin.first("Location"));
-        assertEquals(200, consentPage.status());
         String consentState = first(query(begin.first("Location")), "state");
         assertNotNull(consentState);
+
+        Response page = session.get(begin.first("Location"));
+        assertEquals(200, page.status());
+        assertTrue(page.body().contains("&lt;script&gt;"));
+        assertFalse(page.body().contains("<script>"));
+        assertEquals(
+                OAuthPageController.CONTENT_SECURITY_POLICY, page.first("Content-Security-Policy"));
+        assertTrue(page.body().contains("action=\"/oauth2/authorize\""));
+        assertTrue(
+                page.body().contains("action=\"" + OAuthSecurityConfiguration.CONSENT_DENY + "\""));
+        assertTrue(page.first("Cache-Control").contains("no-store"));
+
+        // An unbacked consent page is refused instead of rendered from the query string.
+        assertEquals(
+                400,
+                session.get(
+                                "/oauth2/consent?client_id="
+                                        + ESCAPE_CLIENT_ID
+                                        + "&scope="
+                                        + encode(PUBLIC_SCOPES)
+                                        + "&state=page-state")
+                        .status());
+        assertEquals(
+                400,
+                session.get(
+                                "/oauth2/consent?client_id=unknown-client&scope="
+                                        + encode(PUBLIC_SCOPES)
+                                        + "&state="
+                                        + encode(consentState))
+                        .status());
+        // A page opened without a scope can only deny; it must not offer a grant form.
+        Response noScope =
+                session.get(
+                        "/oauth2/consent?client_id="
+                                + ESCAPE_CLIENT_ID
+                                + "&state="
+                                + encode(consentState));
+        assertEquals(200, noScope.status());
+        assertTrue(noScope.body().contains("只能拒绝"));
+        assertFalse(noScope.body().contains("action=\"/oauth2/authorize\""));
+
         Response denied =
                 session.postForm(
-                        "/oauth2/authorize",
+                        OAuthSecurityConfiguration.CONSENT_DENY,
                         form(
                                 Map.of(
                                         "client_id", ESCAPE_CLIENT_ID,
                                         "state", consentState,
-                                        "_csrf", csrf(consentPage.body()))),
+                                        "_csrf", csrf(page.body()))),
                         Map.of());
         assertEquals(302, denied.status());
         String location = denied.first("Location");
@@ -1320,6 +1344,392 @@ class OAuthAuthorizationCodeFlowTest {
         assertEquals("access_denied", first(parameters, "error"));
         assertEquals(List.of(state), parameters.get("state"));
         assertFalse(parameters.containsKey("code"));
+        try (Connection connection = db()) {
+            assertEquals(0, scalar(connection, "SELECT COUNT(*) FROM oauth2_authorization"));
+        }
+        // The pending authorization is gone, so the consent page cannot be reopened.
+        assertSecurityError(
+                session.get(
+                        "/oauth2/ui/consent?client_id="
+                                + ESCAPE_CLIENT_ID
+                                + "&scope="
+                                + encode(PUBLIC_SCOPES)
+                                + "&state="
+                                + encode(consentState)));
+    }
+
+    @Test
+    void denyAfterAnEarlierConsentStillDeniesAndKeepsTheStoredConsent() throws Exception {
+        HttpSession session = login();
+        issueCode(
+                session,
+                CONFIDENTIAL_CLIENT_ID,
+                CONFIDENTIAL_REDIRECT,
+                PUBLIC_SCOPES,
+                state(),
+                verifier(),
+                true);
+        try (Connection connection = db()) {
+            assertEquals(
+                    1,
+                    scalar(
+                            connection,
+                            "SELECT COUNT(*) FROM oauth2_authorization_consent "
+                                    + "WHERE principal_name = ?",
+                            USERNAME));
+        }
+
+        // A second request with an additional scope must still be deniable. SAS's own deny branch
+        // would merge the earlier grant back and issue a code, so the page posts to its endpoint.
+        String state = state();
+        Response begin =
+                session.get(
+                        authorizeUrl(
+                                CONFIDENTIAL_CLIENT_ID,
+                                CONFIDENTIAL_REDIRECT,
+                                SCOPES,
+                                state,
+                                verifier(),
+                                "S256",
+                                AUDIENCE));
+        assertEquals(302, begin.status());
+        assertTrue(begin.first("Location").contains("/oauth2/consent"));
+        String consentState = first(query(begin.first("Location")), "state");
+        Response page = session.get(begin.first("Location"));
+        assertEquals(200, page.status());
+        assertTrue(page.body().contains("mcp:query（已授权）"));
+        assertTrue(page.body().contains("value=\"mcp:query\" checked disabled"));
+
+        Response denied =
+                session.postForm(
+                        OAuthSecurityConfiguration.CONSENT_DENY,
+                        form(
+                                Map.of(
+                                        "client_id", CONFIDENTIAL_CLIENT_ID,
+                                        "state", consentState,
+                                        "_csrf", csrf(page.body()))),
+                        Map.of());
+        assertEquals(302, denied.status());
+        Map<String, List<String>> parameters = query(denied.first("Location"));
+        assertEquals("access_denied", first(parameters, "error"));
+        assertEquals(List.of(state), parameters.get("state"));
+        assertFalse(parameters.containsKey("code"));
+        try (Connection connection = db()) {
+            // Denial refuses this request only; the earlier grant stays stored and usable.
+            assertEquals(
+                    1,
+                    scalar(
+                            connection,
+                            "SELECT COUNT(*) FROM oauth2_authorization_consent "
+                                    + "WHERE principal_name = ?",
+                            USERNAME));
+            assertEquals(
+                    0,
+                    scalar(
+                            connection,
+                            "SELECT COUNT(*) FROM oauth2_authorization WHERE state = ?",
+                            consentState));
+        }
+    }
+
+    @Test
+    void denyRequiresCsrfAndRejectsAnotherUsersPendingRequest() {
+        HttpSession session = login();
+        Response begin =
+                session.get(
+                        authorizeUrl(
+                                PUBLIC_CLIENT_ID,
+                                PUBLIC_REDIRECT,
+                                PUBLIC_SCOPES,
+                                state(),
+                                verifier(),
+                                "S256",
+                                AUDIENCE));
+        assertEquals(302, begin.status());
+        String consentState = first(query(begin.first("Location")), "state");
+
+        Response noCsrf =
+                session.postForm(
+                        OAuthSecurityConfiguration.CONSENT_DENY,
+                        form(
+                                Map.of(
+                                        "client_id", PUBLIC_CLIENT_ID,
+                                        "state", consentState)),
+                        Map.of());
+        assertEquals(403, noCsrf.status());
+
+        // The state is bound to its registered client: another registered client cannot use it.
+        String sessionCsrf =
+                JSON.readTree(session.get("/oauth2/ui/login").body()).get("csrfToken").asString();
+        Response crossClient =
+                session.postForm(
+                        OAuthSecurityConfiguration.CONSENT_DENY,
+                        form(
+                                Map.of(
+                                        "client_id", ESCAPE_CLIENT_ID,
+                                        "state", consentState,
+                                        "_csrf", sessionCsrf)),
+                        Map.of());
+        assertEquals(400, crossClient.status());
+        assertTrue(crossClient.body().contains("授权请求无效或已过期"));
+
+        HttpSession other = login(OTHER_USERNAME, OTHER_PASSWORD);
+        Response page =
+                other.get(
+                        "/oauth2/consent?client_id="
+                                + PUBLIC_CLIENT_ID
+                                + "&scope="
+                                + encode(PUBLIC_SCOPES)
+                                + "&state="
+                                + encode(consentState));
+        assertEquals(400, page.status());
+        String otherCsrf =
+                JSON.readTree(other.get("/oauth2/ui/login").body()).get("csrfToken").asString();
+        Response denied =
+                other.postForm(
+                        OAuthSecurityConfiguration.CONSENT_DENY,
+                        form(
+                                Map.of(
+                                        "client_id", PUBLIC_CLIENT_ID,
+                                        "state", consentState,
+                                        "_csrf", otherCsrf)),
+                        Map.of());
+        assertEquals(400, denied.status());
+        assertTrue(denied.body().contains("授权请求无效或已过期"));
+    }
+
+    @Test
+    void loginContextExposesOnlyCsrfAndGenericNoticeFlags() {
+        HttpSession session = new HttpSession();
+        Response response = session.get("/oauth2/ui/login");
+        assertEquals(200, response.status());
+        assertPageHeaders(response);
+        JsonNode body = JSON.readTree(response.body());
+        assertFalse(body.get("csrfToken").asString().isEmpty());
+        assertFalse(body.get("failed").asBoolean());
+        assertFalse(body.get("loggedOut").asBoolean());
+        // The token is masked per response, so only its usability is a property worth asserting.
+        Response submitted =
+                session.postForm(
+                        "/login",
+                        form(
+                                Map.of(
+                                        "username", USERNAME,
+                                        "password", PASSWORD,
+                                        "_csrf", body.get("csrfToken").asString())),
+                        Map.of());
+        assertEquals(302, submitted.status());
+        assertFalse(submitted.first("Location").contains("error"));
+
+        JsonNode failed = JSON.readTree(session.get("/oauth2/ui/login?error=bad").body());
+        assertTrue(failed.get("failed").asBoolean());
+        assertFalse(failed.get("loggedOut").asBoolean());
+        JsonNode loggedOut = JSON.readTree(session.get("/oauth2/ui/login?logout").body());
+        assertTrue(loggedOut.get("loggedOut").asBoolean());
+        assertFalse(loggedOut.get("failed").asBoolean());
+    }
+
+    @Test
+    void consentContextExposesOnlyServerValidatedValues() {
+        HttpSession session = login();
+        String state = state();
+        Response begin =
+                session.get(
+                        authorizeUrl(
+                                CONFIDENTIAL_CLIENT_ID,
+                                CONFIDENTIAL_REDIRECT,
+                                SCOPES,
+                                state,
+                                verifier(),
+                                "S256",
+                                AUDIENCE));
+        assertEquals(302, begin.status());
+        URI consent = URI.create(begin.first("Location"));
+        assertEquals("/oauth2/consent", consent.getPath());
+
+        Response response = session.get("/oauth2/ui/consent?" + consent.getRawQuery());
+        assertEquals(200, response.status());
+        assertPageHeaders(response);
+        JsonNode body = JSON.readTree(response.body());
+        assertEquals(CONFIDENTIAL_CLIENT_ID, body.get("clientId").asString());
+        assertEquals("Confidential client", body.get("clientName").asString());
+        assertEquals("OAuth flow platform", body.get("platform").asString());
+        List<String> scopes = new ArrayList<>();
+        body.get("scopes").forEach(scope -> scopes.add(scope.get("value").asString()));
+        assertEquals(List.of("mcp:query", "mcp:catalog"), scopes);
+        assertEquals(CONFIDENTIAL_REDIRECT, body.get("redirectUri").asString());
+        // The form must echo SAS's own consent state, never the client's OAuth state.
+        String consentState = first(query(begin.first("Location")), "state");
+        assertEquals(consentState, body.get("state").asString());
+        assertNotEquals(state, body.get("state").asString());
+        assertEquals("/oauth2/authorize", body.get("authorizationEndpoint").asString());
+        assertEquals(OAuthSecurityConfiguration.CONSENT_DENY, body.get("denyEndpoint").asString());
+        assertEquals(0, body.get("grantedScopes").size());
+        assertTrue(body.get("accessTokenTtlSeconds").asLong() > 0);
+        assertTrue(body.get("refreshTokenTtlSeconds").asLong() > 0);
+        assertTrue(body.get("refreshTokenRotation").asBoolean());
+        assertFalse(body.get("csrfToken").asString().isEmpty());
+    }
+
+    @Test
+    void consentContextRejectsUnvalidatedOrForeignRequests() {
+        HttpSession session = login();
+        assertSecurityError(session.get("/oauth2/ui/consent"));
+        assertSecurityError(
+                session.get(
+                        "/oauth2/ui/consent?client_id="
+                                + CONFIDENTIAL_CLIENT_ID
+                                + "&scope="
+                                + encode(SCOPES)));
+        assertSecurityError(
+                session.get(
+                        "/oauth2/ui/consent?client_id=unknown-client&scope="
+                                + encode(SCOPES)
+                                + "&state="
+                                + state()));
+        assertSecurityError(
+                session.get(
+                        "/oauth2/ui/consent?client_id="
+                                + CONFIDENTIAL_CLIENT_ID
+                                + "&scope="
+                                + encode("mcp:query mcp:admin")
+                                + "&state="
+                                + state()));
+        // A state that names no pending authorization cannot borrow another request's target.
+        assertSecurityError(
+                session.get(
+                        "/oauth2/ui/consent?client_id="
+                                + CONFIDENTIAL_CLIENT_ID
+                                + "&scope="
+                                + encode(SCOPES)
+                                + "&state="
+                                + state()));
+        // The pending authorization is bound to the signed-in principal: another user's session
+        // cannot read its callback target even when it holds the consent state.
+        Response begin =
+                session.get(
+                        authorizeUrl(
+                                ESCAPE_CLIENT_ID,
+                                ESCAPE_REDIRECT,
+                                PUBLIC_SCOPES,
+                                state(),
+                                verifier(),
+                                "S256",
+                                AUDIENCE));
+        assertEquals(302, begin.status());
+        String consentState = first(query(begin.first("Location")), "state");
+        assertSecurityError(
+                login(OTHER_USERNAME, OTHER_PASSWORD)
+                        .get(
+                                "/oauth2/ui/consent?client_id="
+                                        + ESCAPE_CLIENT_ID
+                                        + "&scope="
+                                        + encode(PUBLIC_SCOPES)
+                                        + "&state="
+                                        + encode(consentState)));
+        // A pending authorization only vouches for its own client's registered redirect URI.
+        assertSecurityError(
+                session.get(
+                        "/oauth2/ui/consent?client_id="
+                                + CONFIDENTIAL_CLIENT_ID
+                                + "&scope="
+                                + encode(SCOPES)
+                                + "&state="
+                                + encode(consentState)));
+    }
+
+    @Test
+    void consentContextReportsGrantedScopesAndRejectsReplayAfterIssuance() throws Exception {
+        HttpSession session = login();
+        issueCode(
+                session,
+                CONFIDENTIAL_CLIENT_ID,
+                CONFIDENTIAL_REDIRECT,
+                PUBLIC_SCOPES,
+                state(),
+                verifier(),
+                true);
+
+        Response begin =
+                session.get(
+                        authorizeUrl(
+                                CONFIDENTIAL_CLIENT_ID,
+                                CONFIDENTIAL_REDIRECT,
+                                SCOPES,
+                                state(),
+                                verifier(),
+                                "S256",
+                                AUDIENCE));
+        assertEquals(302, begin.status());
+        assertTrue(begin.first("Location").contains("/oauth2/consent"));
+        String consentState = first(query(begin.first("Location")), "state");
+        String query = URI.create(begin.first("Location")).getRawQuery();
+
+        Response context = session.get("/oauth2/ui/consent?" + query);
+        assertEquals(200, context.status());
+        JsonNode body = JSON.readTree(context.body());
+        List<String> granted = new ArrayList<>();
+        body.get("grantedScopes").forEach(scope -> granted.add(scope.asString()));
+        assertEquals(List.of("mcp:query"), granted);
+
+        Response page = session.get(begin.first("Location"));
+        Response allowed =
+                session.postForm(
+                        "/oauth2/authorize",
+                        consentForm(
+                                CONFIDENTIAL_CLIENT_ID, consentState, SCOPES, csrf(page.body())),
+                        Map.of());
+        assertEquals(302, allowed.status());
+        assertNotNull(query(allowed.first("Location")).get("code"));
+
+        // Once the code is issued the consent state is no longer pending: the context and a
+        // replayed consent POST both fail instead of reopening or replacing the authorization.
+        assertSecurityError(session.get("/oauth2/ui/consent?" + query));
+        Response replay =
+                session.postForm(
+                        "/oauth2/authorize",
+                        consentForm(
+                                CONFIDENTIAL_CLIENT_ID, consentState, SCOPES, csrf(page.body())),
+                        Map.of());
+        assertEquals(400, replay.status());
+        assertFalse(replay.body().contains("code="));
+
+        // Denial reads the same pending lookup, so it cannot be replayed after issuance either:
+        // no redirect and no access_denied, just the security error page.
+        Response denyReplay =
+                session.postForm(
+                        OAuthSecurityConfiguration.CONSENT_DENY,
+                        form(
+                                Map.of(
+                                        "client_id", CONFIDENTIAL_CLIENT_ID,
+                                        "state", consentState,
+                                        "_csrf", csrf(page.body()))),
+                        Map.of());
+        assertEquals(400, denyReplay.status());
+        assertTrue(denyReplay.body().contains("授权请求无效或已过期"));
+        assertFalse(denyReplay.body().contains("access_denied"));
+    }
+
+    private static void assertPageHeaders(Response response) {
+        assertTrue(response.contentType().startsWith("application/json"), response.contentType());
+        assertTrue(
+                response.first("Cache-Control").contains("no-store"),
+                response.first("Cache-Control"));
+        assertEquals("no-cache", response.first("Pragma"));
+        assertEquals("DENY", response.first("X-Frame-Options"));
+        assertEquals("no-referrer", response.first("Referrer-Policy"));
+    }
+
+    private static void assertSecurityError(Response response) {
+        assertEquals(400, response.status());
+        assertPageHeaders(response);
+        JsonNode body = JSON.readTree(response.body());
+        assertEquals("invalid_authorization_request", body.get("error").asString());
+        assertEquals("授权请求无效或已过期，请从客户端重新发起授权。", body.get("message").asString());
+        assertFalse(body.get("requestId").asString().isEmpty());
+        assertFalse(body.has("redirectUri"));
+        assertFalse(body.has("clientId"));
+        assertFalse(body.has("scopes"));
     }
 
     private void assertAnonymousAuthorizeIsSentToLogin(HttpSession session) {
@@ -1339,6 +1749,10 @@ class OAuthAuthorizationCodeFlowTest {
     }
 
     private HttpSession login() {
+        return login(USERNAME, PASSWORD);
+    }
+
+    private HttpSession login(String username, String password) {
         HttpSession session = new HttpSession();
         Response page = session.get("/login");
         assertEquals(200, page.status());
@@ -1347,8 +1761,8 @@ class OAuthAuthorizationCodeFlowTest {
                         "/login",
                         form(
                                 Map.of(
-                                        "username", USERNAME,
-                                        "password", PASSWORD,
+                                        "username", username,
+                                        "password", password,
                                         "_csrf", csrf(page.body()))),
                         Map.of());
         assertEquals(302, response.status());
@@ -1771,6 +2185,30 @@ class OAuthAuthorizationCodeFlowTest {
                     "0");
             execute(
                     connection,
+                    "INSERT INTO sys_user (user_id, user_name, nick_name, password, status, del_flag) "
+                            + "VALUES (?, ?, ?, ?, ?, ?)",
+                    OTHER_USER_ID,
+                    OTHER_USERNAME,
+                    "Bob",
+                    new BCryptPasswordEncoder().encode(OTHER_PASSWORD),
+                    "0",
+                    "0");
+            execute(
+                    connection,
+                    "INSERT INTO sys_user_login_name (user_id, normalized_name, create_time, "
+                            + "update_time) VALUES (?, ?, ?, ?)",
+                    OTHER_USER_ID,
+                    OTHER_USERNAME,
+                    now,
+                    now);
+            execute(
+                    connection,
+                    "INSERT INTO sys_user_security (user_id, auth_version, identity_version, identity_state, version, create_time, update_time) VALUES (?, 1, 1, 'READY', 1, ?, ?)",
+                    OTHER_USER_ID,
+                    now,
+                    now);
+            execute(
+                    connection,
                     "INSERT INTO sys_user_login_name (user_id, normalized_name, create_time, "
                             + "update_time) VALUES (?, ?, ?, ?)",
                     USER_ID,
@@ -1793,6 +2231,13 @@ class OAuthAuthorizationCodeFlowTest {
                     "INSERT INTO sys_user_profile (user_id, dept_id, display_name, password_hash, status, create_time, update_time) VALUES (?, 42, 'Alice', ?, 'ACTIVE', ?, ?)",
                     USER_ID,
                     new BCryptPasswordEncoder().encode(PASSWORD),
+                    now,
+                    now);
+            execute(
+                    connection,
+                    "INSERT INTO sys_user_profile (user_id, dept_id, display_name, password_hash, status, create_time, update_time) VALUES (?, 42, 'Bob', ?, 'ACTIVE', ?, ?)",
+                    OTHER_USER_ID,
+                    new BCryptPasswordEncoder().encode(OTHER_PASSWORD),
                     now,
                     now);
             insertClient(
