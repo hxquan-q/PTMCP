@@ -298,6 +298,22 @@ test('下拉框都有可访问名（label 或 ariaLabel）', () => {
   assert.deepEqual(bad, [], `无名字的下拉框：${bad.join(', ')}`);
 });
 
+// ── 文件体量预算：防止再出现「单文件 2000+ 行」 ─────────────────────────
+
+test('视图/组件单文件不超过 900 行（超出就先拆分，不再继续堆）', () => {
+  const BUDGET = 900;
+  const scopes = ['views', 'components', 'layouts'].map((d) => join(SRC, d));
+  const over: string[] = [];
+  for (const dir of scopes) {
+    for (const file of walk(dir)) {
+      if (!file.endsWith('.tsx') && !file.endsWith('.ts')) continue;
+      const lines = readFileSync(file, 'utf8').split('\n').length;
+      if (lines > BUDGET) over.push(`${rel(file)}: ${lines} 行`);
+    }
+  }
+  assert.deepEqual(over, [], `超出体量预算：${over.join(' | ')}`);
+});
+
 // ── 空态语义：读取失败不得画成「暂无数据」 ─────────────────────────────────
 
 test('加载失败用 error/unavailable 空态，不用「暂无数据」冒充', () => {
