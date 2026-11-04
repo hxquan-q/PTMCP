@@ -42,7 +42,7 @@ test('admin journey: login → browse → role+user CRUD → operations trail �
     // ─── 1. 登录与会话 ───
     const info = await session.getSession();
     assert.equal(info.username, 'preview-admin');
-    assert.ok(info.permissions.includes('ptmcp:datasource:list'));
+    assert.equal(info.platformAdmin, true, 'admin journey requires the platformAdmin boolean');
 
     // ─── 2. 浏览数据源与元数据 ───
     const dsPage = await data.listDatasources({ pageSize: 10 });
@@ -53,21 +53,12 @@ test('admin journey: login → browse → role+user CRUD → operations trail �
     const metaPage = await data.listMetadata({ datasourceId: mysql.id, pageSize: 10 });
     assert.ok(metaPage.data.items.length > 0, `datasource ${mysql.id} must have metadata objects`);
 
-    // ─── 3. 创建角色（带权限码）───
-    const role = await org.createRole({
-      key: 'JOURNEY_ROLE',
-      name: '旅程联测角色',
-      enabled: true,
-      permissionCodes: ['ptmcp:datasource:list', 'ptmcp:metadata:read'],
-    });
+    // ─── 3. 创建角色（纯数据权限模板）───
+    const role = await org.createRole({ key: 'JOURNEY_ROLE', name: '旅程联测角色', enabled: true });
     assert.equal(role.version, '1');
 
     // ─── 4. 更新角色（链式 version）───
-    const updatedRole = await org.updateRole(
-      role.id,
-      { name: '旅程改名角色', enabled: true, permissionCodes: role.permissionCodes ?? [] },
-      role.version,
-    );
+    const updatedRole = await org.updateRole(role.id, { name: '旅程改名角色', enabled: true }, role.version);
     assert.equal(updatedRole.name, '旅程改名角色');
     assert.ok(Number(updatedRole.version) > Number(role.version), 'version must advance');
 

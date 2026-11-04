@@ -7,7 +7,6 @@ import {
   DatabaseIcon,
   DocumentIcon,
   KeyIcon,
-  ListIcon,
   MonitorIcon,
   ShieldIcon,
   TagIcon,
@@ -21,7 +20,6 @@ import { PermissionsPage } from './views/admin/PermissionsPage';
 import { OrgPage } from './views/admin/OrgPage';
 import { RolesPage } from './views/admin/RolesPage';
 import { PlatformsPage } from './views/admin/PlatformsPage';
-import { DelegationsPage } from './views/admin/DelegationsPage';
 import { AuditPage } from './views/admin/AuditPage';
 import { MetadataPage } from './views/admin/MetadataPage';
 import {
@@ -45,17 +43,8 @@ import {
 import { LoginPage } from './views/auth/LoginPage';
 import { getSession, logout, type SessionInfo } from './services/session';
 import { onSessionExpired } from './services/http';
-import {
-  ADMIN_ROUTE_PERMISSIONS,
-  ME_HOME_PATH,
-  filterNavGroups,
-  firstAccessibleNavPath,
-  resolveRoute,
-  routeAllowed,
-  safeReturnTo,
-  type PermissionedNavGroup,
-} from './navigation';
-import { PermissionsContext, createPermissionsValue } from './permissionsContext';
+import { firstAccessibleNavPath, ME_HOME_PATH, resolveRoute, routeAllowed, safeReturnTo } from './navigation';
+import { AdminGateContext, createAdminGateValue } from './adminGateContext';
 import { ToastContainer } from './components/Toast';
 
 /* 轻量 hash 路由:#/me/integrations、#/admin/datasources …；空 hash 视为 `/`，由会话权限决定落地页。 */
@@ -81,9 +70,6 @@ interface Crumb {
 interface RouteDef {
   path: string;
   navKey: string;
-  permission?: string;
-  /** 任一命中即可访问（与导航项同一语义），用于合并后的「人员组织」。 */
-  permissions?: string[];
   breadcrumb: Crumb[];
   realm: 'me' | 'admin';
   /* element(id?) — detail routes receive the trailing path segment */
@@ -152,7 +138,6 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/datasources',
-    permission: 'ptmcp:datasource:list',
     navKey: 'admin-datasources',
     breadcrumb: [{ label: '管理控制台' }, { label: '数据源' }],
     realm: 'admin',
@@ -160,7 +145,6 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/datasources',
-    permission: ADMIN_ROUTE_PERMISSIONS['/admin/datasources'].read,
     navKey: 'admin-datasources',
     prefix: true,
     breadcrumb: [{ label: '管理控制台' }, { label: '数据源', navKey: 'admin-datasources' }, { label: '详情' }],
@@ -169,7 +153,6 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/metadata',
-    permission: 'ptmcp:metadata:list',
     navKey: 'admin-metadata',
     breadcrumb: [{ label: '管理控制台' }, { label: '元数据与字典' }],
     realm: 'admin',
@@ -177,23 +160,13 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/permissions',
-    permission: 'ptmcp:acl:list',
     navKey: 'admin-permissions',
     breadcrumb: [{ label: '管理控制台' }, { label: '权限矩阵' }],
     realm: 'admin',
     element: () => <PermissionsPage />,
   },
   {
-    path: '/admin/delegations',
-    permission: 'ptmcp:delegation:list',
-    navKey: 'admin-delegations',
-    breadcrumb: [{ label: '管理控制台' }, { label: '管理委派' }],
-    realm: 'admin',
-    element: () => <DelegationsPage />,
-  },
-  {
     path: '/admin/org',
-    permissions: ['ptmcp:department:list', 'ptmcp:user:list'],
     navKey: 'admin-org',
     breadcrumb: [{ label: '管理控制台' }, { label: '人员组织' }],
     realm: 'admin',
@@ -202,7 +175,6 @@ const ROUTES: RouteDef[] = [
   /* 旧地址保留为别名：书签和外部链接仍能落到合并后的页面。 */
   {
     path: '/admin/departments',
-    permissions: ['ptmcp:department:list', 'ptmcp:user:list'],
     navKey: 'admin-org',
     breadcrumb: [{ label: '管理控制台' }, { label: '人员组织', navKey: 'admin-org' }],
     realm: 'admin',
@@ -210,7 +182,6 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/users',
-    permissions: ['ptmcp:department:list', 'ptmcp:user:list'],
     navKey: 'admin-org',
     breadcrumb: [{ label: '管理控制台' }, { label: '人员组织', navKey: 'admin-org' }],
     realm: 'admin',
@@ -218,7 +189,6 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/roles',
-    permission: 'ptmcp:role:list',
     navKey: 'admin-roles',
     breadcrumb: [{ label: '管理控制台' }, { label: '角色管理' }],
     realm: 'admin',
@@ -226,7 +196,6 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/platforms',
-    permission: 'ptmcp:platform:list',
     navKey: 'admin-platforms',
     breadcrumb: [{ label: '管理控制台' }, { label: '平台与客户端' }],
     realm: 'admin',
@@ -236,7 +205,6 @@ const ROUTES: RouteDef[] = [
     path: '/admin/users',
     navKey: 'admin-org',
     prefix: true,
-    permission: ADMIN_ROUTE_PERMISSIONS['/admin/users'].read,
     breadcrumb: [{ label: '管理控制台' }, { label: '人员组织', navKey: 'admin-org' }, { label: '用户详情' }],
     realm: 'admin',
     element: (id?: string) => <UserDetailPage id={decodeURIComponent(id ?? '')} />,
@@ -245,7 +213,6 @@ const ROUTES: RouteDef[] = [
     path: '/admin/roles',
     navKey: 'admin-roles',
     prefix: true,
-    permission: ADMIN_ROUTE_PERMISSIONS['/admin/roles'].read,
     breadcrumb: [{ label: '管理控制台' }, { label: '角色管理', navKey: 'admin-roles' }, { label: '角色详情' }],
     realm: 'admin',
     element: (id?: string) => <RoleDetailPage id={decodeURIComponent(id ?? '')} />,
@@ -254,14 +221,12 @@ const ROUTES: RouteDef[] = [
     path: '/admin/platforms',
     navKey: 'admin-platforms',
     prefix: true,
-    permission: ADMIN_ROUTE_PERMISSIONS['/admin/platforms'].read,
     breadcrumb: [{ label: '管理控制台' }, { label: '平台与客户端', navKey: 'admin-platforms' }, { label: '平台详情' }],
     realm: 'admin',
     element: (id?: string) => <PlatformDetailPage id={decodeURIComponent(id ?? '')} />,
   },
   {
     path: '/admin/audit',
-    permission: 'ptmcp:audit:list',
     navKey: 'admin-audit',
     breadcrumb: [{ label: '管理控制台' }, { label: '审计记录' }],
     realm: 'admin',
@@ -269,7 +234,6 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/audit',
-    permission: ADMIN_ROUTE_PERMISSIONS['/admin/audit'].read,
     navKey: 'admin-audit',
     prefix: true,
     breadcrumb: [{ label: '管理控制台' }, { label: '审计记录', navKey: 'admin-audit' }, { label: '详情' }],
@@ -278,7 +242,6 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/jobs',
-    permission: 'ptmcp:audit:list',
     navKey: 'admin-jobs',
     breadcrumb: [{ label: '管理控制台' }, { label: '操作日志' }],
     realm: 'admin',
@@ -286,7 +249,6 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/jobs',
-    permission: ADMIN_ROUTE_PERMISSIONS['/admin/jobs'].read,
     navKey: 'admin-jobs',
     prefix: true,
     breadcrumb: [{ label: '管理控制台' }, { label: '操作日志', navKey: 'admin-jobs' }, { label: '任务详情' }],
@@ -295,7 +257,6 @@ const ROUTES: RouteDef[] = [
   },
   {
     path: '/admin/metadata',
-    permission: ADMIN_ROUTE_PERMISSIONS['/admin/metadata'].read,
     navKey: 'admin-metadata',
     prefix: true,
     breadcrumb: [{ label: '管理控制台' }, { label: '元数据与字典', navKey: 'admin-metadata' }, { label: '详情' }],
@@ -321,34 +282,31 @@ const ME_GROUPS: NavGroup[] = [
   },
 ];
 
-const ADMIN_GROUPS: PermissionedNavGroup[] = [
+const ADMIN_GROUPS: NavGroup[] = [
   {
     title: '数据管理',
     items: [
-      { key: 'admin-datasources', permission: 'ptmcp:datasource:list', label: '数据源', icon: <DatabaseIcon /> },
-      { key: 'admin-metadata', permission: 'ptmcp:metadata:list', label: '元数据与字典', icon: <DocumentIcon /> },
+      { key: 'admin-datasources', label: '数据源', icon: <DatabaseIcon /> },
+      { key: 'admin-metadata', label: '元数据与字典', icon: <DocumentIcon /> },
     ],
   },
   {
     title: '访问控制',
-    items: [
-      { key: 'admin-permissions', permission: 'ptmcp:acl:list', label: '授权矩阵', icon: <CheckboxIcon /> },
-      { key: 'admin-delegations', permission: 'ptmcp:delegation:list', label: '管理委派', icon: <ListIcon /> },
-    ],
+    items: [{ key: 'admin-permissions', label: '授权矩阵', icon: <CheckboxIcon /> }],
   },
   {
     title: '组织与接入',
     items: [
-      { key: 'admin-org', permissions: ['ptmcp:department:list', 'ptmcp:user:list'], label: '人员组织', icon: <UsersIcon /> },
-      { key: 'admin-roles', permission: 'ptmcp:role:list', label: '角色管理', icon: <TagIcon /> },
-      { key: 'admin-platforms', permission: 'ptmcp:platform:list', label: '平台与客户端', icon: <MonitorIcon /> },
+      { key: 'admin-org', label: '人员组织', icon: <UsersIcon /> },
+      { key: 'admin-roles', label: '角色管理', icon: <TagIcon /> },
+      { key: 'admin-platforms', label: '平台与客户端', icon: <MonitorIcon /> },
     ],
   },
   {
     title: '安全与追踪',
     items: [
-      { key: 'admin-audit', permission: 'ptmcp:audit:list', label: '审计记录', icon: <BarChartIcon /> },
-      { key: 'admin-jobs', permission: 'ptmcp:audit:list', label: '操作日志', icon: <BoltIcon /> },
+      { key: 'admin-audit', label: '审计记录', icon: <BarChartIcon /> },
+      { key: 'admin-jobs', label: '操作日志', icon: <BoltIcon /> },
     ],
   },
 ];
@@ -364,7 +322,6 @@ export function App() {
   const [sessionState, setSessionState] = useState<'probing' | 'anonymous' | 'signed-in'>('probing');
   const [expiredNote, setExpiredNote] = useState('');
   const [returnTo, setReturnTo] = useState('/');
-  const permissionsValue = useMemo(() => createPermissionsValue(session?.permissions), [session]);
   const pendingReturnRef = useRef<string | null>(null);
 
   const probe = useCallback(() => {
@@ -384,9 +341,9 @@ export function App() {
 
   const [path, navigate] = useHashRoute();
 
-  const can = useCallback((code: string) => !!session?.permissions.includes(code), [session]);
-  /* 管理视角入口：首个有权访问的管理页；没有则为 null（个人门户用户不显示管理视角）。 */
-  const adminHomePath = useMemo(() => firstAccessibleNavPath(ADMIN_GROUPS, NAV_TO_PATH, can), [can]);
+  /* S5：管理控制台整体由 platformAdmin 把关，不再逐项判权限码。 */
+  const isAdmin = session?.platformAdmin === true;
+  const adminHomePath = useMemo(() => firstAccessibleNavPath(ADMIN_GROUPS, NAV_TO_PATH, isAdmin), [isAdmin]);
   const homePath = adminHomePath ?? ME_HOME_PATH;
 
   /* 登录确认后再回跳：避免在登录请求与 hash 变更之间竞态。 */
@@ -440,9 +397,8 @@ export function App() {
 
   const resolved = useMemo(() => resolveRoute(path, ROUTES), [path]);
   const { route } = resolved;
-  const denied = !!route && !routeAllowed(route, can);
-  const baseGroups = route?.realm === 'me' ? ME_GROUPS : ADMIN_GROUPS;
-  const groups = useMemo(() => filterNavGroups(baseGroups, can), [baseGroups, can]);
+  const denied = !!route && !routeAllowed(route, isAdmin);
+  const groups = route?.realm === 'me' ? ME_GROUPS : ADMIN_GROUPS;
   const onNavigate = useCallback(
     (key: string) => {
       const target = NAV_TO_PATH[key];
@@ -476,7 +432,7 @@ export function App() {
       <StaticErrorCard
         code="403"
         title="无权访问"
-        description={`当前账号缺少 ${route.permissions?.length ? route.permissions.join(' 或 ') : route.permission} 权限，无法访问该页面。如需开通请联系平台管理员。`}
+        description="管理控制台仅对平台管理员开放。如需访问请联系平台管理员。"
         onBack={() => navigate(homePath)}
       />
     );
@@ -484,7 +440,7 @@ export function App() {
 
   return (
     <>
-      <PermissionsContext.Provider value={permissionsValue}>
+      <AdminGateContext.Provider value={createAdminGateValue(isAdmin)}>
         <AppShell
           groups={groups}
           active={route?.navKey ?? ''}
@@ -505,7 +461,7 @@ export function App() {
         >
           {route ? route.element(resolved.match === 'prefix' ? resolved.id : undefined) : null}
         </AppShell>
-      </PermissionsContext.Provider>
+      </AdminGateContext.Provider>
       <ToastContainer />
     </>
   );

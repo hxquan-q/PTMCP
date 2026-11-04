@@ -6,8 +6,7 @@ export interface SessionInfo {
   displayName: string;
   department?: { id: string; name: string } | null;
   roles?: { id: string; name: string }[];
-  permissions: string[];
-  platformAdmin?: boolean;
+  platformAdmin: boolean;
   expiresAt?: string;
 }
 

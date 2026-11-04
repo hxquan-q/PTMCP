@@ -114,19 +114,6 @@ export interface ClientRow {
   version: string;
 }
 
-export interface DelegationRow {
-  id: string;
-  userId: string;
-  departmentRootId: string;
-  resourceType: string;
-  resourceId: string;
-  allowedActions: string[];
-  validFrom: string;
-  validTo: string | null;
-  status: string;
-  version: string;
-}
-
 export interface AuditRow {
   requestId: string;
   userId: string;
@@ -264,42 +251,6 @@ export function updateClient(id: string, body: ClientWrite, version: string | nu
 
 export function deleteClient(id: string, version: string | number): Promise<void> {
   return writeRow<void>(`/api/v1/admin/clients/${encodeURIComponent(id)}`, { method: 'DELETE', kind: 'delete', version });
-}
-
-export function listDelegations(
-  params: { userId?: string; status?: string; resourceType?: string; cursor?: string; pageSize?: number; signal?: AbortSignal } = {},
-): Promise<Page<DelegationRow>> {
-  const q = new URLSearchParams({ pageSize: String(params.pageSize ?? 20) });
-  if (params.userId) q.set('userId', params.userId);
-  if (params.status) q.set('status', params.status);
-  if (params.resourceType) q.set('resourceType', params.resourceType);
-  if (params.cursor) q.set('cursor', params.cursor);
-  return getPage(`/api/v1/admin/delegations?${q}`, params.signal);
-}
-
-export interface DelegationWrite {
-  userId: string;
-  departmentRootId: string;
-  resourceType: string;
-  resourceId: string;
-  allowedActions: string[];
-  validFrom: string;
-  validTo: string;
-}
-
-export async function createDelegation(body: DelegationWrite, signal?: AbortSignal): Promise<DelegationRow> {
-  const { data } = await request<DelegationRow>('/api/v1/admin/delegations', {
-    method: 'POST',
-    body,
-    headers: { 'Idempotency-Key': idempotencyKey() },
-    signal,
-  });
-  return data;
-}
-
-export async function revokeDelegation(id: string, signal?: AbortSignal): Promise<void> {
-  const { etag } = await request(`/api/v1/admin/delegations/${id}`, { signal });
-  await request(`/api/v1/admin/delegations/${id}`, { method: 'DELETE', signal, headers: etag ? { 'If-Match': etag } : undefined });
 }
 
 export function listAllGrants(params?: { resourceId?: string; pageSize?: number; signal?: AbortSignal }): Promise<Grant[]> {

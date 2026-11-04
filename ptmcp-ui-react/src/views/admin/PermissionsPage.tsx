@@ -32,7 +32,7 @@ import { createGrant, deleteGrant, listGrants, previewAccess, type Grant, type P
 import { decodeResourceId, encodeObjectIds } from '../../services/resourceIds';
 import { listDatasources, listMetadata, type DatasourceRead, type MetadataObject } from '../../services/data';
 import { buildTree, type ResourceNode } from './resourceTree';
-import { useSensitivePermissions } from '../../permissionsContext';
+import { useAdminGate } from '../../adminGateContext';
 import { resizeColumns } from './columnResize';
 import { mePortalApi, type PlatformItem } from '../../services/mePortalApi';
 import { listDepartments, listRoles, listUsers, type DepartmentRow, type RoleRow, type UserRow } from '../../services/orgPortalApi';
@@ -42,8 +42,8 @@ import { SUBJECT_TABS, type SubjectItem } from './permissions/shared';
 /* ─── 资源树 ─── */
 
 export function PermissionsPage() {
-  const { can } = useSensitivePermissions();
-  const [subjectType, setSubjectType] = useState<SubjectType>('USER');
+  const isAdmin = useAdminGate();
+  const [subjectType, setSubjectType] = useState<SubjectType>('ROLE');
   const [subjects, setSubjects] = useState<SubjectItem[]>([]);
   const [subjectId, setSubjectId] = useState('');
   const [subjectKeyword, setSubjectKeyword] = useState('');
@@ -384,7 +384,7 @@ export function PermissionsPage() {
         actions={
           <button
             className="btn btn--primary"
-            disabled={!subjectId || !!metadataError || !can('aclGrant')}
+            disabled={!subjectId || !!metadataError || !isAdmin}
             title={metadataError ? '资源树读取失败，重新读取成功后才能提交规则' : undefined}
             onClick={openGrantDialog}
           >

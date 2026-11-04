@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import {
   Alert,
-  Badge,
   Dialog,
   EmptyState,
   Field,
@@ -13,35 +12,21 @@ import {
   useDebounced,
 } from '../../components/common';
 import { CloseIcon, EditIcon, PlusIcon } from '../../components/Icons';
-import { readFailure, request, idempotencyKey, type Failure } from '../../services/http';
+import { idempotencyKey, readFailure, type Failure } from '../../services/http';
 import { createRole, deleteRole, listRoles, updateRole, type RoleRow } from '../../services/orgPortalApi';
 import { createIntent } from './createIntent';
 import { classifySubmitError, shouldPreserveIntent, submitErrorMessage, uncertainActionLabel, uncertainNotice } from './submitError';
 import { validateRoleForm, type RoleFormValues } from './roleForm';
-import { useSensitivePermissions } from '../../permissionsContext';
+import { useAdminGate } from '../../adminGateContext';
 import { showToast } from '../../toast';
 
-interface SessionInfo {
-  userId: string;
-  displayName: string;
-  permissions: string[];
-  platformAdmin: boolean;
-}
-
-async function getSession(signal?: AbortSignal): Promise<SessionInfo> {
-  const { data } = await request<SessionInfo>('/api/v1/session/me', { signal });
-  return data;
-}
-
 export function RolesPage() {
-  const { can } = useSensitivePermissions();
+  const isAdmin = useAdminGate();
   const [rows, setRows] = useState<RoleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<Failure | null>(null);
   const [retryTick, setRetryTick] = useState(0);
   const [keyword, setKeyword] = useState('');
-  const [permissionOptions, setPermissionOptions] = useState<string[]>([]);
-  const [permsFailure, setPermsFailure] = useState<Failure | null>(null);
   const [editing, setEditing] = useState<RoleRow | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<RoleRow | null>(null);
@@ -65,22 +50,6 @@ export function RolesPage() {
     };
   }, [retryTick]);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    getSession(controller.signal)
-      .then((s) => {
-        setPermissionOptions([...new Set(s.permissions ?? [])].sort());
-        setPermsFailure(null);
-      })
-      .catch((e) => {
-        if (controller.signal.aborted) return;
-        /* 原先静默置空：对话框只显示「无匹配权限码」，管理员无从知道是会话读取失败。 */
-        setPermissionOptions([]);
-        setPermsFailure(readFailure(e, '权限码目录读取失败'));
-      });
-    return () => controller.abort();
-  }, [retryTick]);
-
   const reload = () => setRetryTick((t) => t + 1);
 
   const filtered = useMemo(
@@ -101,9 +70,9 @@ export function RolesPage() {
     <>
       <PageHeader
         title="角色管理"
-        description="角色定义、成员数与权限码。"
+        description="角色是挂到用户的数据权限模板；具体资源授权在「授权管理」维护。"
         actions={
-          <button className="btn btn--primary" onClick={() => can('roleCreate') && setCreating(true)} disabled={!can('roleCreate')}>
+          <button className="btn btn--primary" onClick={() => isAdmin && setCreating(true)} disabled={!isAdmin}>
             <PlusIcon /> 新建角色
           </button>
         }
@@ -129,24 +98,12 @@ export function RolesPage() {
             </Alert>
           </div>
         ) : null}
-        {permsFailure && !loadError ? (
-          <div style={{ padding: '10px 14px 0' }}>
-            <Alert kind="warning" title="权限码目录读取失败">
-              {permsFailure.message}：新建或编辑角色时无法勾选权限码。
-              <RequestIdText requestId={permsFailure.requestId} />
-              <button className="link" style={{ display: 'inline-flex', marginLeft: 8 }} onClick={reload}>
-                重新读取
-              </button>
-            </Alert>
-          </div>
-        ) : null}
         <div className="table-scroll" role="region" aria-label="角色列表" tabIndex={0}>
           <table className="data-table">
             <thead>
               <tr>
                 <th scope="col">角色</th>
                 <th scope="col">编码</th>
-                <th scope="col">成员</th>
                 <th scope="col">状态</th>
                 <th scope="col" style={{ width: 150 }}>
                   操作
@@ -156,7 +113,7 @@ export function RolesPage() {
             <tbody>
               {loading && rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5}>
+                  <td colSpan={4}>
                     <p className="table-state">正在加载角色…</p>
                   </td>
                 </tr>
@@ -177,13 +134,6 @@ export function RolesPage() {
                     <code style={{ fontSize: 12 }}>{r.key}</code>
                   </td>
                   <td>
-                    {r.memberCount ?? (
-                      <span title="契约未返回成员数" style={{ color: 'var(--ptmcp-text-muted)' }}>
-                        未知
-                      </span>
-                    )}
-                  </td>
-                  <td>
                     <StatusDot tone={r.enabled ? 'success' : 'neutral'}>{r.enabled ? '启用' : '停用'}</StatusDot>
                   </td>
                   <td>
@@ -193,8 +143,8 @@ export function RolesPage() {
                       </button>
                       <button
                         className="link link--danger"
-                        disabled={!can('roleDelete')}
-                        title={can('roleDelete') ? undefined : '缺少角色删除权限'}
+                        disabled={!isAdmin}
+                        title={isAdmin ? undefined : '缺少角色删除权限'}
                         onClick={() => {
                           setDeleteFailure(null);
                           setDeleting(r);
@@ -209,7 +159,7 @@ export function RolesPage() {
               ))}
               {filtered.length === 0 && !loading ? (
                 <tr>
-                  <td colSpan={5}>
+                  <td colSpan={4}>
                     {loadError ? (
                       <EmptyState kind="error" title="角色加载失败" description="请按上方的「重新读取」重试；失败时不显示为空列表。" />
                     ) : debounced ? (
@@ -237,8 +187,6 @@ export function RolesPage() {
       {creating || editing ? (
         <RoleDialog
           role={editing}
-          permissionOptions={permissionOptions}
-          permsFailure={permsFailure}
           onClose={() => {
             setCreating(false);
             setEditing(null);
@@ -270,7 +218,7 @@ export function RolesPage() {
             <button
               className="btn btn--primary"
               style={{ background: 'var(--ptmcp-red)' }}
-              disabled={busy || !can('roleDelete')}
+              disabled={busy || !isAdmin}
               onClick={async () => {
                 if (!deleting) return;
                 setBusy(true);
@@ -306,26 +254,12 @@ export function RolesPage() {
     </>
   );
 }
-function RoleDialog({
-  role,
-  permissionOptions,
-  permsFailure,
-  onClose,
-  onSaved,
-}: {
-  role: RoleRow | null;
-  permissionOptions: string[];
-  permsFailure: Failure | null;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
+function RoleDialog({ role, onClose, onSaved }: { role: RoleRow | null; onClose: () => void; onSaved: () => void }) {
   const [values, setValues] = useState<RoleFormValues>(() => ({
     key: role?.key ?? '',
     name: role?.name ?? '',
     enabled: role?.enabled ?? true,
-    permissionCodes: role?.permissionCodes ? [...role.permissionCodes] : [],
   }));
-  const [codeFilter, setCodeFilter] = useState('');
   const [saving, setSaving] = useState(false);
   const [uncertain, setUncertain] = useState(false);
   const idemKeyRef = useRef<string>('');
@@ -333,22 +267,7 @@ function RoleDialog({
   const [formError, setFormError] = useState<Failure | null>(null);
   const [conflict, setConflict] = useState<string | null>(null);
 
-  const retainedCodes = useMemo(() => (role?.permissionCodes ?? []).filter((code) => !permissionOptions.includes(code)), [role, permissionOptions]);
-  const visibleOptions = useMemo(() => {
-    const kw = codeFilter.trim().toLowerCase();
-    return kw ? permissionOptions.filter((c) => c.toLowerCase().includes(kw)) : permissionOptions;
-  }, [permissionOptions, codeFilter]);
-  const selected = new Set(values.permissionCodes);
   const errors = validateRoleForm(values, !role);
-  /* 目录为空多半是会话读取失败，而非系统真的没有权限码；此时保存会产出无权限角色。 */
-  const catalogUnavailable = !!permsFailure || (permissionOptions.length === 0 && retainedCodes.length > 0);
-
-  const toggleCode = (code: string) => {
-    setValues((v) => ({
-      ...v,
-      permissionCodes: v.permissionCodes.includes(code) ? v.permissionCodes.filter((c) => c !== code) : [...v.permissionCodes, code],
-    }));
-  };
 
   const submit = async () => {
     setFormError(null);
@@ -360,28 +279,23 @@ function RoleDialog({
       setFormError({ message: err, requestId: '' });
       return;
     }
-    if (catalogUnavailable) {
-      setFormError({ message: '权限码目录不可用，已阻止保存，避免创建或覆盖出一个没有任何权限的角色。', requestId: permsFailure?.requestId ?? '' });
-      return;
-    }
     setSaving(true);
     try {
       const body = {
         name: values.name.trim(),
         enabled: values.enabled,
-        permissionCodes: [...new Set([...values.permissionCodes, ...retainedCodes])].sort(),
       };
       if (role) {
         await updateRole(role.id, body, role.version);
       } else if (uncertain && snapshotRef.current) {
         // OPERATION_UNKNOWN 重试：复用冻结快照+原 key（不改 body）
-        await createRole({ ...snapshotRef.current, permissionCodes: [...snapshotRef.current.permissionCodes] }, idemKeyRef.current);
+        await createRole({ ...snapshotRef.current }, idemKeyRef.current);
       } else {
         // 首次提交：生成 key + 冻结 body 快照
         const intent = createIntent({ ...body, key: values.key.trim() }, idempotencyKey());
         idemKeyRef.current = intent.key;
         snapshotRef.current = intent.body;
-        await createRole({ ...snapshotRef.current, permissionCodes: [...snapshotRef.current.permissionCodes] }, idemKeyRef.current);
+        await createRole({ ...snapshotRef.current }, idemKeyRef.current);
       }
       onSaved();
       showToast(role ? '角色已更新' : '角色已创建');
@@ -439,38 +353,6 @@ function RoleDialog({
           <option value="0">停用</option>
         </select>
       </Field>
-      <Field label={`权限码（已选 ${values.permissionCodes.length + retainedCodes.length}）`} hint="保留角色中已有但当前会话不可见的权限码">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {retainedCodes.length ? (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {retainedCodes.map((code) => (
-                <Badge key={code} tone="neutral">
-                  {code}（保留）
-                </Badge>
-              ))}
-            </div>
-          ) : null}
-          <TextInput value={codeFilter} onChange={setCodeFilter} label="筛选权限码" placeholder="筛选权限码，如 datasource" disabled={saving} />
-          <div className="check-list" role="group" aria-label="可选权限码" tabIndex={0}>
-            {visibleOptions.length === 0 ? (
-              <span className="check-empty">
-                {permsFailure
-                  ? `权限码目录读取失败：${permsFailure.message}。已阻止保存，请先重新读取。`
-                  : permissionOptions.length === 0
-                    ? '当前会话没有任何可分配的权限码。'
-                    : `没有权限码包含「${codeFilter.trim()}」。`}
-              </span>
-            ) : (
-              visibleOptions.map((code) => (
-                <label key={code} className="check-row">
-                  <input type="checkbox" checked={selected.has(code)} disabled={uncertain || saving} onChange={() => toggleCode(code)} />
-                  <code style={{ fontSize: 12 }}>{code}</code>
-                </label>
-              ))
-            )}
-          </div>
-        </div>
-      </Field>
       {uncertain ? (
         <Alert kind="warning" title="操作结果未知">
           {uncertainNotice(role ? 'edit' : 'create')}
@@ -489,14 +371,8 @@ function RoleDialog({
         <button
           className="btn btn--primary"
           onClick={submit}
-          disabled={saving || !!errors || (uncertain && !!role) || catalogUnavailable}
-          title={
-            uncertain && role
-              ? '编辑不是幂等写：请关闭对话框并刷新列表核对最新版本后再操作'
-              : catalogUnavailable
-                ? '权限码目录不可用，禁止保存'
-                : undefined
-          }
+          disabled={saving || !!errors || (uncertain && !!role)}
+          title={uncertain && role ? '编辑不是幂等写：请关闭对话框并刷新列表核对最新版本后再操作' : undefined}
         >
           {saving ? '保存中…' : uncertain ? (role ? '请关闭并刷新核对' : uncertainActionLabel('create')) : role ? '保存修改' : '创建角色'}
         </button>

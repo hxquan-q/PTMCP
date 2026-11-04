@@ -10,7 +10,7 @@ import {
   type ClientRow,
   type PlatformRow,
 } from '../../services/access';
-import { useSensitivePermissions } from '../../permissionsContext';
+import { useAdminGate } from '../../adminGateContext';
 import { showToast } from '../../toast';
 import { PlatformDialog } from './platforms/PlatformDialog';
 import { ClientDialog } from './platforms/ClientDialog';
@@ -18,7 +18,7 @@ import { ScopeDialog } from './platforms/ScopeDialog';
 import { TIER_LABEL } from './platforms/shared';
 
 export function PlatformsPage() {
-  const { can } = useSensitivePermissions();
+  const isAdmin = useAdminGate();
   const [platforms, setPlatforms] = useState<PlatformRow[]>([]);
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -137,8 +137,8 @@ export function PlatformsPage() {
                     <td style={{ whiteSpace: 'nowrap' }}>
                       <button
                         className="link"
-                        onClick={() => can('platformScope') && setScopePlatform(p)}
-                        disabled={!can('platformScope')}
+                        onClick={() => isAdmin && setScopePlatform(p)}
+                        disabled={!isAdmin}
                         aria-label={`Scope 授权范围：${p.name}`}
                       >
                         Scope

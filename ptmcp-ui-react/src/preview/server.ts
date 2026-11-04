@@ -67,19 +67,6 @@ interface PreviewOptions {
 
 export function createPreviewServer() {
   const now = new Date().toISOString();
-  const permissions = Object.entries({
-    datasource: 'list read create update delete test sync',
-    metadata: 'list read dictionary',
-    job: 'read',
-    department: 'list read create update delete',
-    user: 'list read create update delete status reset-password assign-role move',
-    role: 'list read create update delete',
-    platform: 'list read create update delete scope',
-    client: 'list read create update delete',
-    delegation: 'list create delete',
-    acl: 'list read create update delete preview effective',
-    audit: 'list read decrypt',
-  }).flatMap(([resource, actions]) => actions.split(' ').map((action) => `ptmcp:${resource}:${action}`));
   const tables: Record<string, Row[]> = {
     departments: [
       { id: '1', name: '演示总部', parentId: null, enabled: true, ancestors: '0', version: 1 },
@@ -90,8 +77,8 @@ export function createPreviewServer() {
       { id: '2', username: 'preview-analyst', displayName: '合成分析员', deptId: '2', enabled: true, roleIds: ['2'], version: 1 },
     ],
     roles: [
-      { id: '1', key: 'PREVIEW_ADMIN', name: '演示管理员', enabled: true, permissionCodes: permissions, version: 1 },
-      { id: '2', key: 'PREVIEW_READER', name: '演示分析员', enabled: true, permissionCodes: [], version: 1 },
+      { id: '1', key: 'PREVIEW_ADMIN', name: '演示管理员', enabled: true, version: 1 },
+      { id: '2', key: 'PREVIEW_READER', name: '演示分析员', enabled: true, version: 1 },
     ],
     platforms: [
       {
@@ -135,20 +122,6 @@ export function createPreviewServer() {
         status: 'ACTIVE',
         version: '1',
         secretConfigured: false,
-      },
-    ],
-    delegations: [
-      {
-        id: '1',
-        userId: '2',
-        departmentRootId: '2',
-        resourceType: 'DATASOURCE',
-        resourceId: '1',
-        allowedActions: ['ptmcp:acl:list'],
-        validFrom: now,
-        validTo: new Date(Date.now() + 7 * 86400000).toISOString(),
-        status: 'ACTIVE',
-        version: '1',
       },
     ],
     datasources: [
@@ -609,7 +582,6 @@ export function createPreviewServer() {
     users: { type: 'USER', create: 'USER_CREATE', update: 'USER_UPDATE', delete: 'USER_DELETE' },
     departments: { type: 'DEPARTMENT', create: 'DEPARTMENT_CREATE', update: 'DEPARTMENT_UPDATE', delete: 'DEPARTMENT_DELETE' },
     roles: { type: 'ROLE', create: 'ROLE_CREATE', update: 'ROLE_UPDATE', delete: 'ROLE_DELETE' },
-    delegations: { type: 'ADMIN_DELEGATION', create: 'DELEGATION_CREATE', update: '', delete: 'DELEGATION_REVOKE' },
   };
   function recordOperation(action: string, aggregateType: string, aggregateId: string, before?: unknown, after?: unknown): void {
     tables.operations.push({
@@ -729,7 +701,6 @@ export function createPreviewServer() {
         displayName: '前端演示管理员',
         department: { id: '1', name: '演示总部' },
         roles: [{ id: '1', name: '演示管理员' }],
-        permissions,
         platformAdmin: true,
         managedScopes: ['PREVIEW_ONLY'],
         expiresAt: '2099-01-01T00:00:00Z',
@@ -919,7 +890,7 @@ export function createPreviewServer() {
     const expectedVersion = table === 'objects' ? (row.dictionary as Row)?.version : row.version;
     if (expectedVersion && new Headers(options.headers).get('If-Match') !== `"${expectedVersion}"`) return fail(412, 'VERSION_CONFLICT');
     if (method === 'DELETE') {
-      if (['delegations', 'grants', 'tokens', 'authorizations'].includes(table)) {
+      if (['grants', 'tokens', 'authorizations'].includes(table)) {
         row.status = 'REVOKED';
         row.version = String(Number(row.version ?? 0) + 1);
       } else rows.splice(rows.indexOf(row), 1);

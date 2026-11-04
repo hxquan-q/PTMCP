@@ -20,9 +20,6 @@ export interface RoleRow {
   key: string;
   name: string;
   enabled: boolean;
-  memberCount?: number;
-  permissionCodes?: string[];
-  managedDepartmentIds?: string[];
   version: string;
 }
 
@@ -67,7 +64,6 @@ export function listRoles(signal?: AbortSignal): Promise<RoleRow[]> {
 export interface RoleWrite {
   name: string;
   enabled: boolean;
-  permissionCodes: string[];
 }
 
 export function createRole(body: RoleWrite & { key: string }, idempotencyKey?: string): Promise<RoleRow> {

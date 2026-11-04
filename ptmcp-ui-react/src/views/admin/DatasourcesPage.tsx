@@ -21,7 +21,7 @@ import { CheckboxIcon, DatabaseIcon, DotsIcon, EditIcon, PlusIcon } from '../../
 import { fmtTime as fmt, healthOf, statusOf } from './datasourceStatus';
 import { DATASOURCE_ENGINES, DATASOURCE_STATUSES, dsCreateValidate, emptyDsForm, type DsForm } from './dsForm';
 import { createDatasource } from '../../services/data';
-import { useSensitivePermissions } from '../../permissionsContext';
+import { useAdminGate } from '../../adminGateContext';
 import { showToast } from '../../toast';
 import { listDatasources, type DatasourceRead } from '../../services/data';
 
@@ -32,7 +32,7 @@ const ENGINE_OPTIONS = [{ value: '', label: '全部引擎' }, ...DATASOURCE_ENGI
 const STATUS_OPTIONS = [{ value: '', label: '全部状态' }, ...DATASOURCE_STATUSES];
 
 export function DatasourcesPage() {
-  const { can } = useSensitivePermissions();
+  const isAdmin = useAdminGate();
   const [rows, setRows] = useState<DatasourceRead[]>([]);
   const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
@@ -88,7 +88,7 @@ export function DatasourcesPage() {
         title="数据源"
         description="管理受控数据连接、健康状态和元数据同步。"
         actions={
-          <button className="btn btn--primary" onClick={() => can('datasourceCreate') && setCreating(true)} disabled={!can('datasourceCreate')}>
+          <button className="btn btn--primary" onClick={() => isAdmin && setCreating(true)} disabled={!isAdmin}>
             <PlusIcon /> 新建数据源
           </button>
         }

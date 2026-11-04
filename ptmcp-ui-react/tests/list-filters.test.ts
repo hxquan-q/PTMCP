@@ -52,23 +52,13 @@ test('users list filters by department and keyword server-side', async () => {
   });
 });
 
-test('delegations list filters by user/status and pages by cursor', async () => {
+test('roles list filters by keyword client-side over the fetched catalog', async () => {
   await withPreviewServer(async () => {
-    const all = await access.listDelegations({ pageSize: 100 });
-    assert.ok(all.items.length > 0);
-    const first = all.items[0]!;
-    const byUser = await access.listDelegations({ userId: first.userId, pageSize: 100 });
-    assert.ok(byUser.items.every((d) => d.userId === first.userId));
-    assert.ok(byUser.items.some((d) => d.id === first.id));
-
-    const active = await access.listDelegations({ status: 'ACTIVE', pageSize: 100 });
-    assert.ok(active.items.every((d) => (d.status ?? 'ACTIVE') === 'ACTIVE'));
-
-    const paged = await access.listDelegations({ pageSize: 1 });
-    if (paged.nextCursor) {
-      const next = await access.listDelegations({ pageSize: 1, cursor: paged.nextCursor });
-      assert.notEqual(next.items[0]?.id, paged.items[0]?.id);
-    }
+    const all = await org.listRoles();
+    assert.ok(all.length >= 1, 'seed must contain roles');
+    const first = all[0]!;
+    const hit = all.filter((r) => r.name.toLowerCase().includes(first.name.toLowerCase()) || r.key.toLowerCase().includes(first.key.toLowerCase()));
+    assert.ok(hit.some((r) => r.id === first.id));
   });
 });
 

@@ -1,9 +1,8 @@
-/** 角色表单纯校验 — 与页面解耦，供测试覆盖。 */
+/** 角色表单纯校验 — 与页面解耦，供测试覆盖。角色是纯数据权限模板，无功能码。 */
 export interface RoleFormValues {
   key: string;
   name: string;
   enabled: boolean;
-  permissionCodes: string[];
 }
 
 const KEY_PATTERN = /^[a-z][a-z0-9_]{0,99}$/;

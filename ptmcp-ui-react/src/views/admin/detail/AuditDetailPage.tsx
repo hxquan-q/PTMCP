@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Badge, DrawerFields, PageHeader, StatusDot } from '../../../components/common';
 import { getAudit, listSensitiveAccess, type AuditRow, type SensitiveAccessRow } from '../../../services/access';
 import { LockIcon } from '../../../components/Icons';
-import { useSensitivePermissions } from '../../../permissionsContext';
+import { useAdminGate } from '../../../adminGateContext';
 
 import { AuditDecryptDialog } from './AuditDecryptDialog';
 import { BackBar, errorText, useDatasources } from './shared';
@@ -10,7 +10,7 @@ import { formatTaipeiTime as fmt } from '../../../services/dateTime';
 
 export function AuditDetailPage({ id }: { id: string }) {
   const [decryptOpen, setDecryptOpen] = useState(false);
-  const { can } = useSensitivePermissions();
+  const isAdmin = useAdminGate();
   const [trail, setTrail] = useState<SensitiveAccessRow[]>([]);
   const [trailLoading, setTrailLoading] = useState(false);
   const [trailError, setTrailError] = useState('');
@@ -88,7 +88,7 @@ export function AuditDetailPage({ id }: { id: string }) {
             <div style={{ marginTop: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                 <strong style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>SQL（脱敏）</strong>
-                {can('auditDecrypt') ? (
+                {isAdmin ? (
                   <button className="btn btn--secondary" onClick={() => setDecryptOpen(true)}>
                     <LockIcon /> 解密查看
                   </button>

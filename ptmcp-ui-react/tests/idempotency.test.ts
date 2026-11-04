@@ -35,7 +35,7 @@ async function withHeaderCapture(fn: (headers: Headers[]) => Promise<void>): Pro
   }
 }
 
-const body = { key: 'IDEM_TEST', name: '幂等联测', enabled: true, permissionCodes: ['ptmcp:user:list'] };
+const body = { key: 'IDEM_TEST', name: '幂等联测', enabled: true };
 
 test('createRole with explicit key sends that Idempotency-Key; without key generates a UUID', async () => {
   await withHeaderCapture(async (headers) => {

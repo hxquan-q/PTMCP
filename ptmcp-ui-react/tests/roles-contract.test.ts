@@ -38,7 +38,7 @@ async function withPreviewServer(fn: () => Promise<void>): Promise<void> {
   }
 }
 
-const base = { name: '数据专员', enabled: true, permissionCodes: ['ptmcp:datasource:list', 'ptmcp:datasource:read'] };
+const base = { name: '数据专员', enabled: true };
 
 test('role CRUD against the synthetic backend honours versioning and echoes writes', async () => {
   await withPreviewServer(async () => {
@@ -46,7 +46,6 @@ test('role CRUD against the synthetic backend honours versioning and echoes writ
     assert.equal(created.key, 'data_steward');
     assert.equal(created.version, '1');
     assert.equal(created.enabled, true);
-    assert.deepEqual(created.permissionCodes?.slice().sort(), base.permissionCodes);
 
     // stale version must 412, not silently overwrite
     await assert.rejects(
@@ -80,7 +79,7 @@ test('create is idempotent per Idempotency-Key and never leaks write-only fields
 });
 
 test('validateRoleForm enforces key format only on create and name length always', () => {
-  const valid: RoleFormValues = { key: 'data_steward', name: '数据专员', enabled: true, permissionCodes: [] };
+  const valid: RoleFormValues = { key: 'data_steward', name: '数据专员', enabled: true };
   assert.equal(validateRoleForm(valid, true), null);
   assert.equal(validateRoleForm(valid, false), null);
 

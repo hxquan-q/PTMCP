@@ -3,19 +3,12 @@ import type { RoleWrite } from '../../services/orgPortalApi';
 
 export interface CreateIntent {
   readonly key: string;
-  readonly body: Readonly<Omit<RoleWrite & { key: string }, 'permissionCodes'>> & { readonly permissionCodes: readonly string[] };
+  readonly body: Readonly<RoleWrite & { key: string }>;
 }
 
 /** 首次提交：生成新 key + 冻结 body 快照（不可变）。 */
 export function createIntent(body: RoleWrite & { key: string }, key: string): CreateIntent {
-  return {
-    key,
-    body: Object.freeze({
-      ...body,
-      // 数组复制：外部改原数组不影响意图；父级 freeze 阻止属性重赋值
-      permissionCodes: Object.freeze([...body.permissionCodes]),
-    }),
-  };
+  return { key, body: Object.freeze({ ...body }) };
 }
 
 /** UNKNOWN 重试：返回原意图（同 key 同 body），不生成新意图。 */
@@ -25,10 +18,5 @@ export function retryIntent(intent: CreateIntent): CreateIntent {
 
 /** 判断 body 是否与意图一致（用于检测用户是否在 UNKNOWN 后改了表单——理论上 UI 冻结了但作防御）。 */
 export function intentMatches(intent: CreateIntent, currentBody: RoleWrite & { key: string }): boolean {
-  return (
-    intent.body.name === currentBody.name &&
-    intent.body.enabled === currentBody.enabled &&
-    intent.body.key === currentBody.key &&
-    JSON.stringify([...intent.body.permissionCodes].sort()) === JSON.stringify([...currentBody.permissionCodes].sort())
-  );
+  return intent.body.name === currentBody.name && intent.body.enabled === currentBody.enabled && intent.body.key === currentBody.key;
 }

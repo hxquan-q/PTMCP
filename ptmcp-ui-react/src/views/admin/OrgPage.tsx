@@ -15,7 +15,7 @@ import {
   type UserRow,
 } from '../../services/orgPortalApi';
 import { readFailure, type Failure } from '../../services/http';
-import { useSensitivePermissions } from '../../permissionsContext';
+import { useAdminGate } from '../../adminGateContext';
 import { showToast } from '../../toast';
 import { canDeleteDepartment, departmentDescendants } from './orgForms';
 import { buildDepartmentTree, departmentPath, type DepartmentTreeNode } from './orgTree';
@@ -34,13 +34,13 @@ const initialOf = (u: UserRow) => memberName(u).slice(0, 1).toUpperCase();
  * 拖动是鼠标快捷路径，键盘用户仍可通过部门编辑框和成员抽屉完成同样的移动。
  */
 export function OrgPage() {
-  const { can, has } = useSensitivePermissions();
-  const canCreateUser = can('userCreate');
-  const canDeleteUser = can('userDelete');
-  const canCreateDept = has('ptmcp:department:create');
-  const canUpdateDept = has('ptmcp:department:update');
-  const canDeleteDept = has('ptmcp:department:delete');
-  const canMoveUser = has('ptmcp:user:move');
+  const isAdmin = useAdminGate();
+  const canCreateUser = isAdmin;
+  const canDeleteUser = isAdmin;
+  const canCreateDept = isAdmin;
+  const canUpdateDept = isAdmin;
+  const canDeleteDept = isAdmin;
+  const canMoveUser = isAdmin;
 
   const [departments, setDepartments] = useState<DepartmentRow[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);

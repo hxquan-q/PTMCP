@@ -274,10 +274,23 @@ Updated: 2026-11-05
 - 全仓 `clean test-compile` 通过；`python scripts/check.py` 门禁 PASS。
 - 评审类型：自审（单 Agent 实施）。
 
+### S5（2026-11-05）
+
+- 前端全链路（直跑 node_modules/.bin 绕过 pnpm deps 校验）：
+  eslint `--max-warnings 0` 通过；prettier 全量通过；`tsc --noEmit` 通过；
+  `vite build` 与 `vite build --config vite.oauth.config.ts` 均成功。
+- 测试：`node --experimental-strip-types --test tests/*.test.ts` → `tests 198, pass 198, fail 0`。
+- 预览截图核对（vite frontend-preview :25175）：桌面 1440×900 与移动 390×844 —— 侧栏无「管理委派」；
+  角色表 4 列（角色/编码/状态/操作），新建角色对话框仅编码/名称/状态，无功能码区块；
+  授权矩阵页签「角色|用户|部门」默认选中角色；preview mock 会话契约同步（去 `permissions`、
+  角色种子去 `permissionCodes`/`memberCount`）。
+- 评审类型：自审（单 Agent 实施）。浏览器层未验证非管理员 403（preview mock 固定
+  platformAdmin=true）；对应逻辑由 `routeAllowed`/`firstAccessibleNavPath` 单测覆盖。
+
 ## 交接
 
-当前焦点：S5 前端主路径化 + platformAdmin 过滤（去「管理委派」路由、授权矩阵默认主体=角色、
-角色页去功能码呈现、前端权限过滤改用 platformAdmin）。S4 已提交推送 `dev`。
+当前焦点：S6 文档契约同步（PRD「单管理员 + 角色=纯数据模板」、api-spec 去 `permissions`/
+`permissionCodes`/委派面、test-case 权限用例、总体方案与架构文档对齐）。S5 已提交推送 `dev`。
 
 已有授权与待决定事项：
 

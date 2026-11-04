@@ -1,48 +1,32 @@
 import type { NavGroup, NavItem } from './layouts/AppShell';
 
-/** 带权限标记的导航模型：无 permission/permissions 表示无需权限（个人门户）；
- *  permissions 为任一命中即可（用于「人员组织」同时覆盖部门与用户两类管理员）。 */
-export type PermissionedNavItem = NavItem & { permission?: string; permissions?: string[] };
-export type PermissionedNavGroup = Omit<NavGroup, 'items'> & { items: PermissionedNavItem[] };
+/** S5：管理控制台整体由 platformAdmin 布尔把关，导航模型不再逐项携带权限码。 */
+export type AdminNavItem = NavItem;
+export type AdminNavGroup = NavGroup;
 
-/** 导航项是否可见：permissions 优先按「任一命中」，否则看单个 permission。 */
-export function navItemAllowed(item: { permission?: string; permissions?: string[] }, can: (code: string) => boolean): boolean {
-  if (item.permissions && item.permissions.length > 0) return item.permissions.some(can);
-  return !item.permission || can(item.permission);
-}
-
-/** 按会话权限过滤导航：移除无权项，丢弃因此变空的分组。 */
-export function filterNavGroups(groups: PermissionedNavGroup[], can: (code: string) => boolean): NavGroup[] {
-  return groups
-    .map((group) => ({ ...group, items: group.items.filter((item) => navItemAllowed(item, can)) }))
-    .filter((group) => group.items.length > 0);
-}
-
-/** 个人视角首页：无任何管理权限时的兜底落地页（docs/frontend/dev-guide.md §4）。 */
+/** 个人视角首页：非管理员的兜底落地页（docs/frontend/dev-guide.md §4）。 */
 export const ME_HOME_PATH = '/me/dictionary';
 
-/** 按给定导航顺序返回首个有权访问且有对应路径的导航项；全部无权时返回 null。 */
-export function firstAccessibleNavPath(groups: PermissionedNavGroup[], paths: Record<string, string>, can: (code: string) => boolean): string | null {
+/** 管理员视角按给定导航顺序返回首个有对应路径的导航项；列表为空时回退个人首页。 */
+export function firstAccessibleNavPath(groups: AdminNavGroup[], paths: Record<string, string>, isAdmin: boolean): string | null {
+  if (!isAdmin) return ME_HOME_PATH;
   for (const group of groups) {
     for (const item of group.items) {
       const path = paths[item.key];
-      if (path && navItemAllowed(item, can)) return path;
+      if (path) return path;
     }
   }
-  return null;
+  return ME_HOME_PATH;
 }
 
 export interface ResolvableRoute {
   path: string;
   prefix?: boolean;
-  permission?: string;
-  permissions?: string[];
 }
 
-/** 路由是否放行：permissions 为任一命中；与导航项同一语义。 */
-export function routeAllowed(route: { permission?: string; permissions?: string[] }, can: (code: string) => boolean): boolean {
-  if (route.permissions && route.permissions.length > 0) return route.permissions.some(can);
-  return !route.permission || can(route.permission);
+/** 路由是否放行：管理控制台路由整体要求平台管理员。 */
+export function routeAllowed(_route: ResolvableRoute, isAdmin: boolean): boolean {
+  return isAdmin;
 }
 
 export type RouteResolution<R extends ResolvableRoute> =
@@ -63,14 +47,3 @@ export function resolveRoute<R extends ResolvableRoute>(path: string, routes: R[
 export function safeReturnTo(path: string, fallback = '/'): string {
   return /^\/(?:admin|me)(?:\/|\?|$)/.test(path) && !path.includes('\\') && [...path].every((ch) => ch.charCodeAt(0) >= 32) ? path : fallback;
 }
-
-/** 详情/列表路由的读权限（App 路由定义消费同源常量，防漂移）。 */
-export const ADMIN_ROUTE_PERMISSIONS = {
-  '/admin/datasources': { list: 'ptmcp:datasource:list', read: 'ptmcp:datasource:read' },
-  '/admin/metadata': { list: 'ptmcp:metadata:list', read: 'ptmcp:metadata:read' },
-  '/admin/jobs': { list: 'ptmcp:audit:list', read: 'ptmcp:job:read' },
-  '/admin/users': { list: 'ptmcp:user:list', read: 'ptmcp:user:read' },
-  '/admin/roles': { list: 'ptmcp:role:list', read: 'ptmcp:role:read' },
-  '/admin/platforms': { list: 'ptmcp:platform:list', read: 'ptmcp:platform:read' },
-  '/admin/audit': { list: 'ptmcp:audit:list', read: 'ptmcp:audit:read' },
-} as const;

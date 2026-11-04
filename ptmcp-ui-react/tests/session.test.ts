@@ -38,7 +38,7 @@ test('session lifecycle: logout gates admin calls with 401, login restores acces
     // 初始已登录：探测与列表可用
     const info = await session.getSession();
     assert.equal(info.username, 'preview-admin');
-    assert.ok(Array.isArray(info.permissions) && info.permissions.length > 0);
+    assert.equal(info.platformAdmin, true, 'admin session must carry the platformAdmin boolean');
     await data.listDatasources({ pageSize: 5 });
 
     // 退出后：管理面 401，探测也 401（App 据此切登录页）

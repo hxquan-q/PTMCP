@@ -3,8 +3,6 @@
  * 未知码回退原码，避免静默吞掉新增动作。
  */
 const OPERATION_ACTION_TEXT: Record<string, string> = {
-  DELEGATION_CREATE: '创建委派',
-  DELEGATION_REVOKE: '撤销委派',
   PLATFORM_CREATE: '创建平台',
   PLATFORM_UPDATE: '修改平台',
   PLATFORM_DELETE: '删除平台',
@@ -27,7 +25,6 @@ const OPERATION_ACTION_TEXT: Record<string, string> = {
 };
 
 const OPERATION_AGGREGATE_TEXT: Record<string, string> = {
-  ADMIN_DELEGATION: '委派',
   PLATFORM: '平台',
   OAUTH_CLIENT: '客户端',
   USER: '用户',
@@ -36,7 +33,7 @@ const OPERATION_AGGREGATE_TEXT: Record<string, string> = {
 };
 
 /** 聚合类型筛选下拉的取值顺序，与后端已知聚合类型一致。 */
-export const OPERATION_AGGREGATE_TYPES: readonly string[] = ['ADMIN_DELEGATION', 'PLATFORM', 'OAUTH_CLIENT', 'USER', 'DEPARTMENT', 'ROLE'];
+export const OPERATION_AGGREGATE_TYPES: readonly string[] = ['PLATFORM', 'OAUTH_CLIENT', 'USER', 'DEPARTMENT', 'ROLE'];
 
 export function operationActionText(action: string): string {
   return OPERATION_ACTION_TEXT[action] ?? action;

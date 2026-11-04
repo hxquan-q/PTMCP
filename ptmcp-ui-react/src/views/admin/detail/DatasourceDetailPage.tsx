@@ -12,14 +12,14 @@ import {
 } from '../../../services/data';
 import { datasourceDifferences, isVersionConflict } from '../../../adapters/edit-conflict';
 import { DATASOURCE_STATUSES, dsForm, dsValidate, type DsForm } from '../dsForm';
-import { useSensitivePermissions } from '../../../permissionsContext';
+import { useAdminGate } from '../../../adminGateContext';
 import { newUuid } from '../../../services/uuid';
 
 import { BackBar, dsHealthLabel, dsStatusLabel, dsStatusTone } from './shared';
 import { formatTaipeiTime as fmt } from '../../../services/dateTime';
 
 export function DatasourceDetailPage({ id }: { id: string }) {
-  const { can } = useSensitivePermissions();
+  const isAdmin = useAdminGate();
   const [datasource, setDatasource] = useState<DatasourceRead | null>(null);
   const [etag, setEtag] = useState('');
   const [form, setForm] = useState<DsForm | null>(null);
@@ -284,14 +284,14 @@ export function DatasourceDetailPage({ id }: { id: string }) {
             <div style={{ display: 'flex', gap: 10 }}>
               <button
                 className="btn btn--secondary"
-                disabled={saving || actionLoading || conflictRequired || !can('datasourceTest')}
-                onClick={() => can('datasourceTest') && void runTest()}
+                disabled={saving || actionLoading || conflictRequired || !isAdmin}
+                onClick={() => isAdmin && void runTest()}
               >
                 {actionLoading ? '处理中…' : '测试连接'}
               </button>
               <button
                 className="btn btn--primary"
-                disabled={datasource.status !== 'ACTIVE' || saving || actionLoading || conflictRequired || !can('datasourceSync')}
+                disabled={datasource.status !== 'ACTIVE' || saving || actionLoading || conflictRequired || !isAdmin}
                 onClick={() => void runSync()}
               >
                 同步元数据
@@ -482,8 +482,8 @@ export function DatasourceDetailPage({ id }: { id: string }) {
               <button
                 className="btn btn--secondary"
                 style={{ color: 'var(--ptmcp-red)' }}
-                disabled={formDisabled || !can('datasourceDelete')}
-                onClick={can('datasourceDelete') ? remove : undefined}
+                disabled={formDisabled || !isAdmin}
+                onClick={isAdmin ? remove : undefined}
               >
                 删除数据源
               </button>

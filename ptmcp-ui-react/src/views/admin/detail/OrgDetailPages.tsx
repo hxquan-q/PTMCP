@@ -59,7 +59,7 @@ export function UserDetailPage({ id }: { id: string }) {
   );
 }
 
-/* ─── 角色详情（只读；权限码全量展示） ─── */
+/* ─── 角色详情（只读） ─── */
 export function RoleDetailPage({ id }: { id: string }) {
   const [role, setRole] = useState<RoleRow | null>(null);
   const [error, setError] = useState('');
@@ -81,7 +81,7 @@ export function RoleDetailPage({ id }: { id: string }) {
   return (
     <>
       <BackBar to="/admin/roles" label="返回角色管理" />
-      <PageHeader title={role ? role.name : '角色详情'} description="角色定义与权限码；编辑在角色列表进行。" />
+      <PageHeader title={role ? role.name : '角色详情'} description="角色定义与状态；编辑在角色列表进行。" />
       {error ? (
         <Alert kind="danger" title="角色详情读取失败">
           {error}
@@ -95,22 +95,10 @@ export function RoleDetailPage({ id }: { id: string }) {
               fields={[
                 { label: '编码', value: <code>{role.key}</code> },
                 { label: '角色 ID', value: role.id },
-                { label: '成员数', value: role.memberCount ?? '—' },
                 { label: '状态', value: <StatusDot tone={role.enabled ? 'success' : 'neutral'}>{role.enabled ? '启用' : '停用'}</StatusDot> },
                 { label: '版本', value: `v${role.version}` },
               ]}
             />
-          </div>
-          <div className="table-card" style={{ padding: '16px 18px', maxWidth: 720 }}>
-            <strong style={{ fontSize: 14, color: 'var(--ptmcp-heading)' }}>权限码（{role.permissionCodes?.length ?? 0}）</strong>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-              {(role.permissionCodes ?? []).map((code) => (
-                <Badge key={code} tone="neutral">
-                  <code style={{ fontSize: 11 }}>{code}</code>
-                </Badge>
-              ))}
-              {(role.permissionCodes ?? []).length === 0 ? <span style={{ fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>无权限码。</span> : null}
-            </div>
           </div>
         </>
       ) : null}

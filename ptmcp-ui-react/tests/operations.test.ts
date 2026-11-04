@@ -17,14 +17,13 @@ const { createPreviewServer } = await import('../src/preview/server.ts');
 sourceImports.deregister();
 
 test('operation labels map known codes and fall back to raw code for new ones', () => {
-  assert.equal(operationActionText('DELEGATION_CREATE'), '创建委派');
+  assert.equal(operationActionText('PLATFORM_CREATE'), '创建平台');
   assert.equal(operationActionText('USER_PASSWORD_RESET'), '重置用户密码');
   assert.equal(operationActionText('PASSWORD_CHANGED'), '修改本人密码');
   assert.equal(operationActionText('FUTURE_NEW_ACTION'), 'FUTURE_NEW_ACTION', '未知动作码必须原样透出，不能静默吞掉');
-  assert.equal(operationAggregateText('ADMIN_DELEGATION'), '委派');
   assert.equal(operationAggregateText('NEW_AGGREGATE'), 'NEW_AGGREGATE');
   // 筛选下拉取值与已知聚合类型一致且有序
-  assert.deepEqual(OPERATION_AGGREGATE_TYPES, ['ADMIN_DELEGATION', 'PLATFORM', 'OAUTH_CLIENT', 'USER', 'DEPARTMENT', 'ROLE']);
+  assert.deepEqual(OPERATION_AGGREGATE_TYPES, ['PLATFORM', 'OAUTH_CLIENT', 'USER', 'DEPARTMENT', 'ROLE']);
 });
 
 test('operations are recorded on CRUD and filterable by aggregate type', async () => {
@@ -124,7 +123,7 @@ test('scope save and role CRUD generate operations with correct aggregate types'
     );
 
     // Role CRUD records ROLE_CREATE / ROLE_DELETE
-    const role = await org.createRole({ name: '操作联测角色', enabled: true, permissionCodes: ['ptmcp:user:list'] });
+    const role = await org.createRole({ name: '操作联测角色', enabled: true });
     await org.deleteRole(role.id, role.version).catch(() => undefined);
     const roleOps = await access.listOperations({ aggregateType: 'ROLE', pageSize: 100 });
     assert.ok(roleOps.items.some((o) => o.action === 'ROLE_CREATE' && o.aggregateId === role.id));

@@ -66,34 +66,19 @@ test('user create/update DTOs carry only write fields, never id/version/credenti
 
 test('role create/update DTOs carry only write fields; update never includes the immutable key', async () => {
   await withBodyCapture(async (bodies) => {
-    await org.createRole({ key: 'DTO_TEST', name: 'DTO角色', enabled: true, permissionCodes: ['ptmcp:user:list'] });
-    assertExactKeys(bodies[0]!, ['key', 'name', 'enabled', 'permissionCodes'], 'createRole');
+    await org.createRole({ key: 'DTO_TEST', name: 'DTO角色', enabled: true });
+    assertExactKeys(bodies[0]!, ['key', 'name', 'enabled'], 'createRole');
 
-    await org.updateRole('1', { name: '改名', enabled: false, permissionCodes: [] }, '1');
-    assertExactKeys(bodies[1]!, ['name', 'enabled', 'permissionCodes'], 'updateRole');
+    await org.updateRole('1', { name: '改名', enabled: false }, '1');
+    assertExactKeys(bodies[1]!, ['name', 'enabled'], 'updateRole');
     assert.ok(!('key' in bodies[1]!), 'updateRole must not include the immutable key');
   });
 });
 
-test('delegation create DTO carries only domain fields; sensitive ops DTOs are audit-shaped', async () => {
+test('sensitive ops DTOs are audit-shaped', async () => {
   await withBodyCapture(async (bodies) => {
-    await access.createDelegation({
-      userId: '2',
-      departmentRootId: '1',
-      resourceType: 'DATASOURCE',
-      resourceId: '1',
-      allowedActions: ['ptmcp:user:list'],
-      validFrom: '2026-11-01T09:00:00Z',
-      validTo: '2026-12-01T09:00:00Z',
-    });
-    assertExactKeys(
-      bodies[0]!,
-      ['userId', 'departmentRootId', 'resourceType', 'resourceId', 'allowedActions', 'validFrom', 'validTo'],
-      'createDelegation',
-    );
-
     await access.decryptAudit('preview-request-1', '排查工单 123 需要核对执行语句', ['sqlRaw']);
-    assertExactKeys(bodies[1]!, ['reason', 'fields'], 'decryptAudit');
+    assertExactKeys(bodies[0]!, ['reason', 'fields'], 'decryptAudit');
   });
 });
 
