@@ -36,6 +36,22 @@ class ExecutionCancellationRegistryTest {
     }
 
     @Test
+    void cancelIsScopedToTheCredentialNotJustItsUserAndPlatform() {
+        ExecutionCancellationRegistry registry = new ExecutionCancellationRegistry();
+        ReadOnlyCancellation mine = new ReadOnlyCancellation();
+        registry.register(ExecutionCancellationRegistry.Key.of(identity(1, 1, "pat:7"), "9"), mine);
+
+        assertFalse(
+                registry.cancel(ExecutionCancellationRegistry.Key.of(identity(1, 1, "pat:8"), "9")),
+                "another credential of the same user and platform owns a different id stream");
+        assertFalse(mine.isCancelled());
+        assertTrue(
+                registry.cancel(
+                        ExecutionCancellationRegistry.Key.of(identity(1, 1, "pat:7"), "9")));
+        assertTrue(mine.isCancelled());
+    }
+
+    @Test
     void unknownIdIsIgnoredAndUnregisterOnlyRemovesOwnsHandle() {
         ExecutionCancellationRegistry registry = new ExecutionCancellationRegistry();
         ReadOnlyCancellation first = new ReadOnlyCancellation();

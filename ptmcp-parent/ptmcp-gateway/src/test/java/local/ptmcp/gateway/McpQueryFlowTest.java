@@ -13,6 +13,7 @@ import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.mockingDetails;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
@@ -80,6 +81,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 /** Real HTTP, real metadata primary, real TLS business database and real guard/executor/audit. */
@@ -800,6 +802,39 @@ class McpQueryFlowTest {
             assertTerminal(content.path("requestId").asText(), "ERROR", "ALLOW");
             assertEquals(executedBefore + 1, businessExecutionCount());
         } finally {
+            doCallRealMethod().when(businessExecutor).execute(anyLong(), any(), any());
+        }
+    }
+
+    @Test
+    void cancelDoesNotReturnCapacityBeforeTheExecutorHasFinished() throws Exception {
+        CountDownLatch executing = new CountDownLatch(1);
+        CountDownLatch finish = new CountDownLatch(1);
+        doAnswer(
+                        invocation -> {
+                            executing.countDown();
+                            assertTrue(finish.await(10, TimeUnit.SECONDS), "test must unblock");
+                            return invocation.callRealMethod();
+                        })
+                .when(businessExecutor)
+                .execute(anyLong(), any(), any());
+        try (HttpClient client = noProxyClient()) {
+            clearInvocations(quotas);
+            CompletableFuture<HttpResponse<String>> pending =
+                    client.sendAsync(
+                            request(96, "SELECT id FROM orders", PAT),
+                            HttpResponse.BodyHandlers.ofString());
+            assertTrue(executing.await(10, TimeUnit.SECONDS), "execution must start");
+            HttpResponse<String> notice = rpc(cancelledNotification(96), PAT);
+            assertEquals(202, notice.statusCode(), notice.body());
+            verify(quotas, never()).release(any(QuotaLimiter.ExecutionPermit.class));
+            finish.countDown();
+            HttpResponse<String> response = pending.get(10, TimeUnit.SECONDS);
+            assertToolError(response, "CLIENT_CANCELLED");
+            verify(quotas, timeout(10_000).times(1))
+                    .release(any(QuotaLimiter.ExecutionPermit.class));
+        } finally {
+            finish.countDown();
             doCallRealMethod().when(businessExecutor).execute(anyLong(), any(), any());
         }
     }

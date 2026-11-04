@@ -42,7 +42,7 @@ UI 改动涵盖 App、PageState、useCursorPage、styles、权限/审计/数据�
 | G1 资源发现 | T19/T13/T14 | 真实 HTTP 401 能发现受信资源与 AS，URI 配置严格验证，预注册路径明确 | completed |
 | G2 审计恢复 | T09/T20 | 唯一目录 owner、仅回放关闭段、幂等恢复/损坏告警/UNKNOWN 收敛与故障测试 | completed |
 | G3 候选与健康 | T15-c S4 | 错候选不替换 active、CAS 发布、健康绑定版本与目标 | verifying；定向 PASS（2026-11-04，真实 MySQL），候选保留/清理策略待密钥运维切片 |
-| G4 取消与容量 | T15-c S5/T19-d | 主体隔离取消、执行清理后归还额度、部署预算语义明确且有边界测试 | pending |
+| G4 取消与容量 | T15-c S5/T19-d | 主体隔离取消、执行清理后归还额度、部署预算语义明确且有边界测试 | completed；定向 PASS（2026-11-04，真实 MySQL）；多副本共享配额与取消寻址未实现，T15-c S5 仍 pending |
 | G5 密钥兼容 | T15-c S6 | 新旧钥兼容、对象绑定与迁移格式、日志不泄漏、恢复仍可读 | in_progress；G5a、G5b 定向 PASS（含只读评审修复），恢复组合验收待 G7 |
 | G6 字典上下文 | T15-c S7 | 三工具契约说明、授权后字典/关系/预算、撤权与恶意注释测试 | [verifying；定向 PASS](DEV-20261030-schema-context.md) |
 | G7 组合验收 | T19-e/T20 | 双引擎、OAuth、恢复、前后端适用门禁；真实客户端与部署证据单列 | pending；审计修复续接 [DEV-20261031-audit-fixes](DEV-20261031-audit-fixes.md) |
@@ -839,3 +839,41 @@ React 源码由该窗口所有，本窗口待稳定后只读复核并运行适�
 未完成：`datasource_candidate` 仍无保留/清理策略，会持续保存加密凭据历史；`metadata_sync_job.candidate_id`
 外键使删除需先确定任务保留边界，需与密钥轮换、运维清理一起设计，不在本切片实现。G3 工程验证通过，
 人工验收仍待确认。
+
+## G4 取消与容量验收（2026-11-04）
+
+实现核对：取消键由 `(userId, platformId, credentialId, rpcId)` 构成，只从已认证 `McpIdentity`
+构造；客户端通知只携带 rpcId，不存在跨主体寻址路径。`cancellations.register` 在等待容量前开始，
+`unregister` 在请求结束时条件注销；取消 handler 只置取消标志，不接触配额。`quotas.release(permit)`
+只在 `adapter.execute(...)` 同步返回后的 `finally` 执行一次；MySQL/PostgreSQL 执行器在返回前完成
+cleanup 或 abort+evict，因此额度归还发生在连接清理之后。`InMemoryQuotaLimiter.acquireExecution`
+原先在 userId/datasourceId 非正时未归还已取得的队列许可，评审确认后改为先 `release(queuedAt)`
+再抛 `INVALID_ARGUMENT`。
+
+验证（WSL PTMCP-Dev / JDK 21.0.12.1 / Maven 3.9.9，真实 MySQL 8.4 Testcontainers）：
+
+- `ExecutionCancellationRegistryTest` 4 项通过，0 失败/错误/跳过：用户、平台、rpcId 隔离，新增
+  同用户同平台不同 credential 不可互取消；条件注销不会删除新注册句柄。
+- `McpQueryFlowTest` 5 项通过，0 失败/错误/跳过：排队限流与拒绝、排队中取消提前结束并归还容量、
+  跨平台取消无效、取消到达执行 handle、取消到达后在 executor 完成前不释放 `ExecutionPermit`，
+  完成清理后仅释放一次。
+- `SecurityStateTest` 5 项通过，0 失败/错误/跳过：用户/数据源/gateway/队列上限不超卖、过期队列转
+  `GATEWAY_BUSY` 并释放槽位、拒绝时回滚部分许可并归还队列槽、非法参数不得滞留队列许可、并发获取
+  不超卖。
+- `spotless:check`（persistence）exit 0；`python scripts/check.py` 74 项 OK；`git diff --check` exit 0。
+
+部署语义：`docs/ops/deploy.md` §4/§8 写明单副本时用户 3 并发即全局上限；多副本时用户、gateway、
+队列计数按副本放大，取消通知可能落到非执行副本而被忽略（不会跨主体误取消），且被忽略的取消不提前
+释放执行许可、连接或用户/数据源槽位；32 个队列槽为每副本全局共享、不按用户划分，单个主体可占满。
+共享租约（如 Redis）与共享或粘性取消寻址未实现，多副本上线前须落地并重新验收。
+
+评审（子 Agent 独立只读评审，独立上下文；非人工评审）：结论通过，无阻断缺陷。确认 1 处当前网关
+路径不可达的契约级缺陷——`InMemoryQuotaLimiter.acquireExecution` 对非法 userId/datasourceId 未释放
+非空 `QueuePermit`，重复 32 次可永久占满每副本队列；已修复并补边界测试，复审确认无双重释放、跨用户
+释放或其它回归。非阻塞残余：同凭证并发重复 rpcId 时 `put` 覆盖先注册句柄（仅限同凭证，不影响主体
+隔离）；`ExecutionPermit.release` 无一次性守卫（当前唯一释放点）；取消通知在 HTTP 线程同步执行；
+新增流程测试以 spy 调用观察释放，不覆盖“取消后异步延迟释放”的路径。`SecurityStateTest` 属
+Testcontainers 类，无 Docker 的 CI 不提供这些配额证据。
+
+未完成：多副本共享配额、跨副本取消寻址与取消 handler 的驱动级看门狗；T15-c S5 仍 pending。
+G4 工程验证通过，人工验收仍待确认。

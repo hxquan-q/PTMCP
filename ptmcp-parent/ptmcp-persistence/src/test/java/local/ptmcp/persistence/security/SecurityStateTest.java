@@ -543,6 +543,35 @@ class SecurityStateTest {
     }
 
     @Test
+    void invalidExecutionArgumentsReleaseTheQueuePermitTheyConsumed() {
+        QuotaLimiter limiter = new InMemoryQuotaLimiter();
+
+        for (int attempt = 0; attempt < QuotaLimiter.QUEUED_MAX; attempt++) {
+            QuotaLimiter.QueuePermit queued = limiter.acquireQueue(7L);
+            assertEquals(
+                    ErrorCode.INVALID_ARGUMENT,
+                    assertThrows(
+                                    DomainException.class,
+                                    () -> limiter.acquireExecution(0L, 1L, queued))
+                            .errorCode(),
+                    "an invalid user must not strand the queue slot");
+        }
+        for (int attempt = 0; attempt < QuotaLimiter.QUEUED_MAX; attempt++) {
+            QuotaLimiter.QueuePermit queued = limiter.acquireQueue(7L);
+            assertEquals(
+                    ErrorCode.INVALID_ARGUMENT,
+                    assertThrows(
+                                    DomainException.class,
+                                    () -> limiter.acquireExecution(7L, 0L, queued))
+                            .errorCode(),
+                    "an invalid datasource must not strand the queue slot");
+        }
+
+        QuotaLimiter.ExecutionPermit admitted = acquire(limiter, 7L, 1L);
+        limiter.release(admitted);
+    }
+
+    @Test
     void concurrentAcquirersNeverOversellUserOrDatasourceSlots() throws Exception {
         QuotaLimiter limiter = new InMemoryQuotaLimiter();
         assertEquals(

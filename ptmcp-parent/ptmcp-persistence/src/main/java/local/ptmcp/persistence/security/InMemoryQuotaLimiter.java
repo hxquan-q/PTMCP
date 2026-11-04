@@ -43,7 +43,11 @@ public final class InMemoryQuotaLimiter implements QuotaLimiter {
 
     @Override
     public ExecutionPermit acquireExecution(long userId, long datasourceId, QueuePermit queuedAt) {
-        if (userId <= 0 || datasourceId <= 0 || queuedAt == null) {
+        if (queuedAt == null) {
+            throw new DomainException(ErrorCode.INVALID_ARGUMENT);
+        }
+        if (userId <= 0 || datasourceId <= 0) {
+            release(queuedAt);
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
         if (queuedAt.userId() != userId || monotonicClock.getAsLong() > queuedAt.expiresAtNanos()) {
