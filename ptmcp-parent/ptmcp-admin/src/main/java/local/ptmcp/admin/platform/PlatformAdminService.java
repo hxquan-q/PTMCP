@@ -1,6 +1,7 @@
 package local.ptmcp.admin.platform;
 
 import local.ptmcp.admin.datasource.CredentialCipher;
+import local.ptmcp.common.crypto.SecretBindings;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.common.platform.CidrRange;
@@ -77,7 +78,7 @@ public final class PlatformAdminService {
         if (write.status() == null || !STATUSES.contains(write.status())) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
-        SealedConfig sealed = sealConfig(fields.proofMode(), write.proofConfig());
+        SealedConfig sealed = sealConfig(fields.code(), fields.proofMode(), write.proofConfig());
         try (Connection connection = tx()) {
             try {
                 requireCodeFree(connection, fields.code());
@@ -547,7 +548,7 @@ public final class PlatformAdminService {
         return new Fields(code, name, tier, catalogMode, proofMode);
     }
 
-    private SealedConfig sealConfig(String proofMode, ProofConfig config) {
+    private SealedConfig sealConfig(String code, String proofMode, ProofConfig config) {
         if ("NONE".equals(proofMode)) {
             if (hasMaterial(config)) {
                 throw new DomainException(ErrorCode.INVALID_ARGUMENT);
@@ -571,7 +572,8 @@ public final class PlatformAdminService {
             CredentialCipher.Sealed sealed =
                     cipher.encrypt(
                             JSON.writeValueAsString(
-                                    new MtlsPolicy("MTLS", List.of(fingerprint), List.of())));
+                                    new MtlsPolicy("MTLS", List.of(fingerprint), List.of())),
+                            SecretBindings.platform(code));
             return new SealedConfig(sealed.ciphertext(), sealed.keyId());
         }
         if (config == null
@@ -595,7 +597,8 @@ public final class PlatformAdminService {
                                 new ProxySecretPolicy(
                                         "PROXY_SECRET",
                                         Base64.getEncoder().encodeToString(secret),
-                                        List.of(network))));
+                                        List.of(network))),
+                        SecretBindings.platform(code));
         return new SealedConfig(sealed.ciphertext(), sealed.keyId());
     }
 
@@ -631,7 +634,8 @@ public final class PlatformAdminService {
             return new ProofMaterial(null, false, current.proofConfigured() || modeChanged, false);
         }
         if (hasMaterial(config)) {
-            return new ProofMaterial(sealConfig(fields.proofMode(), config), true, false, false);
+            return new ProofMaterial(
+                    sealConfig(fields.code(), fields.proofMode(), config), true, false, false);
         }
         if (modeChanged || !current.proofConfigured()) {
             // A new mode or a not-yet-configured platform needs fresh material to run.

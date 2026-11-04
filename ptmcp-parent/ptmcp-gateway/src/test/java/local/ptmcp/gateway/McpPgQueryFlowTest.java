@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
+import local.ptmcp.common.crypto.SecretBindings;
 import local.ptmcp.common.resource.DatabaseEngine;
 import local.ptmcp.datasource.DataSourcePoolRegistry;
 import local.ptmcp.datasource.connection.CredentialCipher;
@@ -352,7 +353,8 @@ class McpPgQueryFlowTest {
                     "INSERT INTO platform_registry (id,code,name,tier,status,catalog_mode,proof_mode,create_time,update_time,created_by,updated_by) VALUES (1,'test','test',3,'ACTIVE','DISCOVER','NONE',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),1,1)");
         }
         CredentialCipher.Sealed credential =
-                new CredentialCipher(KEY).encrypt(BUSINESS.getPassword());
+                new CredentialCipher(KEY)
+                        .encrypt(BUSINESS.getPassword(), SecretBindings.datasource("pg-test"));
         try (Connection meta = PRIMARY.getConnection();
                 PreparedStatement sql =
                         meta.prepareStatement(

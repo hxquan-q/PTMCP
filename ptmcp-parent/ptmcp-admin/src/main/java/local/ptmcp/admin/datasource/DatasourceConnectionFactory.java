@@ -43,7 +43,8 @@ public final class DatasourceConnectionFactory {
             String databaseName,
             String username,
             byte[] credentialCipher,
-            String keyId) {}
+            String keyId,
+            String credentialBinding) {}
 
     public Connection open(Spec spec) throws SQLException {
         if (spec == null) {
@@ -59,7 +60,9 @@ public final class DatasourceConnectionFactory {
                 new ConnectionProfile(
                         engine, spec.host(), spec.port(), spec.databaseName(), spec.username());
         destinations.validate(profile.host(), profile.port());
-        char[] credential = cipher.decrypt(spec.credentialCipher(), spec.keyId()).toCharArray();
+        char[] credential =
+                cipher.decrypt(spec.credentialCipher(), spec.keyId(), spec.credentialBinding())
+                        .toCharArray();
         try {
             return physical.openManagement(profile, credential);
         } finally {

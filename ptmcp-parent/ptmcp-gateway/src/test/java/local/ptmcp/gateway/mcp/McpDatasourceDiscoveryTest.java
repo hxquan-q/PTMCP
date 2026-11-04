@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
+import local.ptmcp.common.crypto.SecretBindings;
 import local.ptmcp.datasource.connection.CredentialCipher;
 import local.ptmcp.persistence.org.AuthorizationReader;
 import local.ptmcp.persistence.schema.PublishedSnapshotReader;
@@ -77,7 +78,6 @@ class McpDatasourceDiscoveryTest {
      * assertions below isolate usability and per-user visibility.
      */
     private static void seed() throws Exception {
-        CredentialCipher.Sealed credential = new CredentialCipher(KEY).encrypt("unused");
         String[][] datasources = {
             {"1", "orders", "Orders DB", "MYSQL", "orders_db"},
             {"2", "ledger", "Ledger DB", "POSTGRESQL", "ledger_db"},
@@ -85,6 +85,9 @@ class McpDatasourceDiscoveryTest {
             {"4", "stale", "Stale DB", "MYSQL", "stale_db"}
         };
         for (String[] datasource : datasources) {
+            CredentialCipher.Sealed credential =
+                    new CredentialCipher(KEY)
+                            .encrypt("unused", SecretBindings.datasource(datasource[1]));
             try (Connection meta = PRIMARY.getConnection();
                     PreparedStatement sql =
                             meta.prepareStatement(

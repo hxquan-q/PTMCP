@@ -43,7 +43,7 @@ UI 改动涵盖 App、PageState、useCursorPage、styles、权限/审计/数据�
 | G2 审计恢复 | T09/T20 | 唯一目录 owner、仅回放关闭段、幂等恢复/损坏告警/UNKNOWN 收敛与故障测试 | completed |
 | G3 候选与健康 | T15-c S4 | 错候选不替换 active、CAS 发布、健康绑定版本与目标 | pending |
 | G4 取消与容量 | T15-c S5/T19-d | 主体隔离取消、执行清理后归还额度、部署预算语义明确且有边界测试 | pending |
-| G5 密钥兼容 | T15-c S6 | 新旧钥兼容、对象绑定与迁移格式、日志不泄漏、恢复仍可读 | in_progress；G5a 定向 PASS（含只读评审修复） |
+| G5 密钥兼容 | T15-c S6 | 新旧钥兼容、对象绑定与迁移格式、日志不泄漏、恢复仍可读 | in_progress；G5a、G5b 定向 PASS（含只读评审修复），恢复组合验收待 G7 |
 | G6 字典上下文 | T15-c S7 | 三工具契约说明、授权后字典/关系/预算、撤权与恶意注释测试 | [verifying；定向 PASS](DEV-20261030-schema-context.md) |
 | G7 组合验收 | T19-e/T20 | 双引擎、OAuth、恢复、前后端适用门禁；真实客户端与部署证据单列 | pending；审计修复续接 [DEV-20261031-audit-fixes](DEV-20261031-audit-fixes.md) |
 
@@ -754,8 +754,7 @@ React 源码由该窗口所有，本窗口待稳定后只读复核并运行适�
   （74 项）与 `git diff --check` 均 exit 0。
 - 未运行：`AdminApiTest`、`McpQueryFlowTest` 等真实 MySQL/Testcontainers 组合；
   两处测试已改为带 `requestId + ":" + field` 解密，但本机无 Docker，属未验证。
-- 未完成（G5b）：数据源凭据与平台 proof 的对象绑定需新增 `credential_binding` 列及迁移；
-  日志不泄漏与恢复可读仍待组合验收。
+- 未完成（G5b）：数据源凭据与平台 proof 的对象绑定、日志不泄漏与恢复可读仍待组合验收。
 - 部署顺序：网关写入方与审计 reveal 读取方须同版本发布；旧读取方对 `0x02` 行失败关闭，不会误读。
   管理端回滚到旧版本后无法 reveal 新 `0x02` 行，失败关闭且不丢数据。
 
@@ -772,3 +771,49 @@ React 源码由该窗口所有，本窗口待稳定后只读复核并运行适�
   只能前向改善。混合版本滚动期间旧网关节点继续写 `0x01` 行，排空后窗口关闭。
 - 接受残留：`AdminApiTest` 的路径 requestId 与库内值相同，无法判别是否使用 canonical 值；
   该列使用 binary collation，路径大小写不同本就不会命中，代码审查确认读取端使用库内值。
+
+## G5b 数据源凭据与平台 proof 的对象绑定（2026-11-04）
+
+原计划新增 `credential_binding` 列及迁移；实施时改为按不可变 `code` 派生绑定，不新增列、不做迁移。
+理由：与密文同行的绑定列可被同一数据库写权限一起改写，不构成独立信任锚；`datasource.code` 与
+`platform_registry.code` 唯一，更新 SQL 不含 code，draft/发布校验拒绝改 code，软删保留行且唯一约束
+覆盖 DELETED，行自身的 `code` 才是可信身份。绑定由 `SecretBindings.datasource(code)` →
+`datasource:<code>`、`SecretBindings.platform(code)` → `platform:<code>` 生成；新写入为
+`PTMC | 0x02`，传 binding 时旧 `0x01` 与 legacy 行仍按原格式可读。
+
+写入点：`DatasourceAdminService.create/update/resolveTarget`（update 以库内行 code 而非请求体加密）、
+`PlatformAdminService.sealConfig` 的 MTLS 与 PROXY_SECRET 分支及 proof 材料轮换。
+读取点：`DatasourceConnectionFactory.open`、`DatasourceStore.connectionSpec`、
+`McpToolService.activatePool`（`PublishedSnapshotReader.Published` 携带行 code）、
+`AuthorizationReader.loadPlatformProofConfig` + `Tier1ProofVerifier`。候选路径沿用父行 code；
+`publishCandidate` 校验候选 code 等于当前 code 后复制密文，发布后仍可读。
+`PublishedSnapshotReader.unusable` 的空 code 不进入解密路径：`SecretBindings` 对 null/blank 抛
+`INTERNAL_ERROR`，fail-closed 且无 NPE。
+
+验证（WSL PTMCP-Dev / JDK 21.0.12.1 / Maven 3.9.9，真实 MySQL 8.4 与 PostgreSQL 18 容器）：
+
+- ptmcp-admin 20 项通过，0 失败/错误/跳过：`CredentialCipherTest` 5 项（同身份往返、异
+  datasource code 拒绝、跨 kind 拒绝、0x01 与 legacy 兼容）、`DatasourceConnectionFactoryTest`
+  1 项（TLS fixture）、`DatasourceTargetIsolationTest` 14 项。
+- ptmcp-gateway 69 项通过，0 失败/错误/跳过：`PlatformProofRoundTripTest` 7、
+  `McpTier1ProofTest` 2、`McpDatasourceDiscoveryTest` 3、`ToolPermissionDenyTest` 12、
+  `McpAuditResilienceTest` 1、`McpQueryFlowTest` 38、`McpPgQueryFlowTest` 6。
+- `DatasourceApiTest#expiredOrMissingSnapshotReturnsSchemaStale` 1 项通过，覆盖
+  `active_snapshot_id IS NULL` 的读取路径。
+- `python scripts/check.py` 74 项 OK；`git diff --check` exit 0。
+- 未验证：未在真实库上复现“把 0x02 密文复制到另一 datasource 行后 `activatePool` 必失败”的
+  服务级反例，仅有 `CredentialCipherTest` 包装层反例；未实现旧格式行的一键重封或盘点告警；
+  G5 的恢复可读组合验收留待 G7。
+
+兼容与部署：管理端与网关须同版本发布；旧读取方对 `0x02` 行失败关闭，回滚不丢数据。
+升级前已写入且尚未重封的 `0x01`/legacy 行不校验对象身份，具备数据库写能力者仍可跨行复制密文；
+该窗口在对应行下次更新凭据或 proof 时关闭，属接受的残余风险，G5b 相对升级前严格收敛。
+
+评审（子 Agent 独立只读评审，独立上下文；非人工评审）：
+
+- CONFIRMED 低危缺陷：`readHead` 的 `wasNull()` 判空守卫被新增的 `code` 读取挤后，
+  `active_snapshot_id IS NULL` 不再早退，改为查询 `schema_snapshot id=0` 后才未命中；结果仍
+  fail-closed，但守卫失效。已把 `code` 读取移到判空之后，并用上述 API 测试复核。
+- PLAUSIBLE 残余风险：`0x01`/legacy 旧行未绑定对象身份（见上），属升级兼容取舍，不阻塞提交。
+- 测试缺口：缺少服务/集成级的跨行复制 `0x02` 密文反例；`readHead` 判空无 reader 级单测，
+  由 API 级 `SCHEMA_STALE` 测试覆盖。

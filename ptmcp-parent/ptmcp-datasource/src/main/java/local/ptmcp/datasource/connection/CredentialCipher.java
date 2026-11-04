@@ -17,7 +17,7 @@ public final class CredentialCipher {
         this.envelope = new SealedEnvelope(base64Keys, "ptmcp.admin.credential-key");
     }
 
-    public Sealed encrypt(String plaintext) {
+    public Sealed encrypt(String plaintext, String binding) {
         if (plaintext == null || plaintext.isBlank()) {
             throw new DomainException(ErrorCode.INVALID_ARGUMENT);
         }
@@ -25,15 +25,17 @@ public final class CredentialCipher {
                 envelope.seal(
                         plaintext,
                         SealedEnvelope.PURPOSE_MANAGEMENT_SECRET,
+                        binding,
                         ErrorCode.INTERNAL_ERROR),
                 envelope.keyId());
     }
 
-    public String decrypt(byte[] sealed, String storedKeyId) {
+    public String decrypt(byte[] sealed, String storedKeyId, String binding) {
         return envelope.decrypt(
                 sealed,
                 storedKeyId,
                 SealedEnvelope.PURPOSE_MANAGEMENT_SECRET,
+                binding,
                 ErrorCode.DEPENDENCY_UNAVAILABLE);
     }
 

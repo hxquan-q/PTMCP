@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import local.ptmcp.common.crypto.SecretBindings;
 import local.ptmcp.common.resource.DatabaseEngine;
 import local.ptmcp.datasource.connection.DestinationPolicy;
 import local.ptmcp.datasource.testing.TlsDatabaseFixture;
@@ -23,7 +24,8 @@ class DatasourceConnectionFactoryTest {
         int globalTimeout = DriverManager.getLoginTimeout();
         for (DatabaseEngine engine : DatabaseEngine.values()) {
             try (TlsDatabaseFixture fixture = new TlsDatabaseFixture(engine)) {
-                CredentialCipher.Sealed sealed = cipher.encrypt(fixture.password);
+                CredentialCipher.Sealed sealed =
+                        cipher.encrypt(fixture.password, SecretBindings.datasource("factory-test"));
                 DestinationPolicy policy =
                         new DestinationPolicy("127.0.0.0/8", Integer.toString(fixture.port()));
                 DatasourceConnectionFactory factory =
@@ -46,7 +48,8 @@ class DatasourceConnectionFactoryTest {
                                 TlsDatabaseFixture.DATABASE,
                                 TlsDatabaseFixture.USER,
                                 sealed.ciphertext(),
-                                sealed.keyId());
+                                sealed.keyId(),
+                                SecretBindings.datasource("factory-test"));
                 try (Connection connection = factory.open(spec)) {
                     assertTrue(connection.isReadOnly());
                     assertTrue(connection.isValid(2));

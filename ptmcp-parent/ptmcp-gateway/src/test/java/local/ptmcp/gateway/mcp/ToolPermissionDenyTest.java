@@ -9,6 +9,7 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
 import local.ptmcp.common.authz.PermissionEvaluator;
+import local.ptmcp.common.crypto.SecretBindings;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.datasource.connection.CredentialCipher;
@@ -78,7 +79,8 @@ class ToolPermissionDenyTest {
             sql.execute(
                     "INSERT INTO platform_registry (id,code,name,tier,status,catalog_mode,proof_mode,create_time,update_time,created_by,updated_by) VALUES (1,'test','test',3,'ACTIVE','DISCOVER','NONE',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),1,1)");
         }
-        CredentialCipher.Sealed credential = new CredentialCipher(KEY).encrypt("unused");
+        CredentialCipher.Sealed credential =
+                new CredentialCipher(KEY).encrypt("unused", SecretBindings.datasource("test"));
         try (Connection meta = PRIMARY.getConnection();
                 PreparedStatement sql =
                         meta.prepareStatement(

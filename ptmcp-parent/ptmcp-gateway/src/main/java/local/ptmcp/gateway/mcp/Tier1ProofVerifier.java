@@ -2,6 +2,7 @@ package local.ptmcp.gateway.mcp;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+import local.ptmcp.common.crypto.SecretBindings;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.common.platform.CidrRange;
@@ -69,7 +70,12 @@ final class Tier1ProofVerifier {
         }
         Policy policy;
         try {
-            policy = parse(cipher.decrypt(stored.configCipher(), stored.configKeyId()));
+            policy =
+                    parse(
+                            cipher.decrypt(
+                                    stored.configCipher(),
+                                    stored.configKeyId(),
+                                    SecretBindings.platform(stored.code())));
         } catch (DomainException failure) {
             throw new DomainException(ErrorCode.SECURITY_STATE_UNAVAILABLE);
         }

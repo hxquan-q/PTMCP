@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
+import local.ptmcp.common.crypto.SecretBindings;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.persistence.schema.PublishedSnapshotReader;
@@ -190,7 +191,14 @@ class DatasourceTargetIsolationTest {
                 current.id(),
                 current.configVersion(),
                 new DatasourceConnectionFactory.Spec(
-                        "MYSQL", host, 3306, database, "reader", sealed, "synthetic"),
+                        "MYSQL",
+                        host,
+                        3306,
+                        database,
+                        "reader",
+                        sealed,
+                        "synthetic",
+                        SecretBindings.datasource("synthetic")),
                 fields,
                 sealed,
                 "synthetic",

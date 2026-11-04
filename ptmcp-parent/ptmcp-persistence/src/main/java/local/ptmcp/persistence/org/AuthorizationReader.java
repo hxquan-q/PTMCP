@@ -76,7 +76,8 @@ public final class AuthorizationReader {
             long id, int tier, String catalogMode, String proofMode, boolean active) {}
 
     /** Encrypted Tier1 proof policy; plaintext is never returned by the read path. */
-    public record PlatformProofConfig(String proofMode, byte[] configCipher, String configKeyId) {
+    public record PlatformProofConfig(
+            String proofMode, String code, byte[] configCipher, String configKeyId) {
         public PlatformProofConfig {
             configCipher = configCipher == null ? null : configCipher.clone();
         }
@@ -160,7 +161,7 @@ public final class AuthorizationReader {
                 PreparedStatement statement =
                         statement(
                                 connection,
-                                "SELECT proof_mode, proof_config_cipher, proof_key_id FROM"
+                                "SELECT proof_mode, code, proof_config_cipher, proof_key_id FROM"
                                         + " platform_registry WHERE id = ? AND status = 'ACTIVE'")) {
             statement.setLong(1, platformId);
             try (ResultSet result = statement.executeQuery()) {
@@ -168,7 +169,10 @@ public final class AuthorizationReader {
                     throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
                 }
                 return new PlatformProofConfig(
-                        result.getString(1), result.getBytes(2), result.getString(3));
+                        result.getString(1),
+                        result.getString(2),
+                        result.getBytes(3),
+                        result.getString(4));
             }
         } catch (SQLException error) {
             throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);

@@ -1,5 +1,6 @@
 package local.ptmcp.gateway.mcp;
 
+import local.ptmcp.common.crypto.SecretBindings;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.common.resource.DatabaseEngine;
@@ -1134,7 +1135,11 @@ final class McpToolService {
     private PoolHandle activatePool(
             PublishedSnapshotReader.Published published, DatabaseEngine engine) {
         char[] credential =
-                cipher.decrypt(published.credentialCipher(), published.keyId()).toCharArray();
+                cipher.decrypt(
+                                published.credentialCipher(),
+                                published.keyId(),
+                                SecretBindings.datasource(published.code()))
+                        .toCharArray();
         try {
             return pools.activate(
                     new PoolKey(

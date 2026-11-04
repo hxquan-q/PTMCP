@@ -15,6 +15,7 @@ import local.ptmcp.admin.platform.PlatformAdminService;
 import local.ptmcp.admin.platform.PlatformAdminService.PlatformView;
 import local.ptmcp.admin.platform.PlatformAdminService.ProofConfig;
 import local.ptmcp.admin.platform.PlatformAdminService.Write;
+import local.ptmcp.common.crypto.SecretBindings;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.datasource.connection.CredentialCipher;
@@ -259,7 +260,9 @@ class PlatformProofRoundTripTest {
                 create("PROXY_SECRET", new ProofConfig(null, "127.0.0.0/8", "synthetic-only"));
         var legacy =
                 new local.ptmcp.admin.datasource.CredentialCipher(KEY)
-                        .encrypt("proxy:127.0.0.0/8\u0000synthetic-only");
+                        .encrypt(
+                                "proxy:127.0.0.0/8\u0000synthetic-only",
+                                SecretBindings.platform(platform.code()));
         try (Connection connection = PRIMARY.getConnection();
                 PreparedStatement statement =
                         connection.prepareStatement(
@@ -351,7 +354,11 @@ class PlatformProofRoundTripTest {
             try (ResultSet result = statement.executeQuery()) {
                 assertTrue(result.next());
                 return JSON.readTree(
-                        new CredentialCipher(KEY).decrypt(result.getBytes(1), result.getString(2)));
+                        new CredentialCipher(KEY)
+                                .decrypt(
+                                        result.getBytes(1),
+                                        result.getString(2),
+                                        SecretBindings.platform(platform.code())));
             }
         }
     }

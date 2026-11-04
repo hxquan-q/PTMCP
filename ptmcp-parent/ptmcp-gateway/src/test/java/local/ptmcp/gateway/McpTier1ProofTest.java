@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
+import local.ptmcp.common.crypto.SecretBindings;
 import local.ptmcp.datasource.connection.CredentialCipher;
 
 import org.flywaydb.core.Flyway;
@@ -197,7 +198,8 @@ class McpTier1ProofTest {
 
     private static void insertPlatform(
             long id, String code, String mode, String configJson, String token) throws Exception {
-        CredentialCipher.Sealed sealed = new CredentialCipher(KEY).encrypt(configJson);
+        CredentialCipher.Sealed sealed =
+                new CredentialCipher(KEY).encrypt(configJson, SecretBindings.platform(code));
         try (Connection connection = PRIMARY.getConnection();
                 PreparedStatement statement =
                         connection.prepareStatement(

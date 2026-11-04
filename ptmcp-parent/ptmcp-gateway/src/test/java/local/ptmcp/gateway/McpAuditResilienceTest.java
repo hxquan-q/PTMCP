@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
+import local.ptmcp.common.crypto.SecretBindings;
 import local.ptmcp.datasource.connection.CredentialCipher;
 import local.ptmcp.datasource.metadata.MysqlMetadataCollector;
 import local.ptmcp.persistence.schema.SchemaSnapshotStore;
@@ -131,7 +132,9 @@ class McpAuditResilienceTest {
             sql.execute(
                     "INSERT INTO platform_registry (id,code,name,tier,status,catalog_mode,proof_mode,create_time,update_time,created_by,updated_by) VALUES (1,'test','test',3,'ACTIVE','DISCOVER','NONE',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),1,1)");
         }
-        CredentialCipher.Sealed credential = new CredentialCipher(KEY).encrypt(BUSINESS.password);
+        CredentialCipher.Sealed credential =
+                new CredentialCipher(KEY)
+                        .encrypt(BUSINESS.password, SecretBindings.datasource("test"));
         try (Connection meta = OWNER.getConnection();
                 PreparedStatement sql =
                         meta.prepareStatement(

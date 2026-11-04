@@ -1,5 +1,6 @@
 package local.ptmcp.admin.datasource;
 
+import local.ptmcp.common.crypto.SecretBindings;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.datasource.connection.DestinationPolicy;
@@ -74,7 +75,8 @@ public final class DatasourceAdminService {
         DatasourceStore.Fields fields = requireFields(write);
         String credential = requireCredential(write.credential());
         destinationPolicy.validate(fields.host(), fields.port());
-        CredentialCipher.Sealed sealed = cipher.encrypt(credential);
+        CredentialCipher.Sealed sealed =
+                cipher.encrypt(credential, SecretBindings.datasource(fields.code()));
         return toRead(store.create(fields, sealed.ciphertext(), sealed.keyId(), actorId));
     }
 
@@ -88,7 +90,10 @@ public final class DatasourceAdminService {
         CredentialCipher.Sealed sealed =
                 write.credential() == null || write.credential().isBlank()
                         ? null
-                        : cipher.encrypt(requireCredential(write.credential()));
+                        : cipher.encrypt(
+                                requireCredential(write.credential()),
+                                // The authenticated code, not the request body, names the object.
+                                SecretBindings.datasource(store.get(id).code()));
         return toRead(
                 store.update(
                         id,
@@ -123,6 +128,7 @@ public final class DatasourceAdminService {
      */
     public DraftTarget resolveTarget(long id, Write draft) {
         DatasourceStore.Row row = store.get(id);
+        String binding = SecretBindings.datasource(row.code());
         if (draft == null) {
             destinationPolicy.validate(row.host(), row.port());
             return new DraftTarget(
@@ -135,7 +141,8 @@ public final class DatasourceAdminService {
                             row.databaseName(),
                             row.username(),
                             row.credentialCipher(),
-                            row.keyId()),
+                            row.keyId(),
+                            binding),
                     fields(row),
                     row.credentialCipher(),
                     row.keyId(),
@@ -184,13 +191,15 @@ public final class DatasourceAdminService {
                             databaseName,
                             username,
                             row.credentialCipher(),
-                            row.keyId()),
+                            row.keyId(),
+                            binding),
                     fields,
                     row.credentialCipher(),
                     row.keyId(),
                     true);
         }
-        CredentialCipher.Sealed sealed = cipher.encrypt(requireCredential(draft.credential()));
+        CredentialCipher.Sealed sealed =
+                cipher.encrypt(requireCredential(draft.credential()), binding);
         return new DraftTarget(
                 row.id(),
                 row.configVersion(),
@@ -201,7 +210,8 @@ public final class DatasourceAdminService {
                         databaseName,
                         username,
                         sealed.ciphertext(),
-                        sealed.keyId()),
+                        sealed.keyId(),
+                        binding),
                 fields,
                 sealed.ciphertext(),
                 sealed.keyId(),

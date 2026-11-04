@@ -1,5 +1,6 @@
 package local.ptmcp.admin.datasource;
 
+import local.ptmcp.common.crypto.SecretBindings;
 import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.common.resource.DatabaseEngine;
@@ -797,7 +798,8 @@ public final class DatasourceStore {
                 row.databaseName(),
                 row.username(),
                 row.credentialCipher(),
-                row.keyId());
+                row.keyId(),
+                SecretBindings.datasource(row.code()));
     }
 
     private static final String COLUMNS =

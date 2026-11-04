@@ -37,6 +37,7 @@ public final class PublishedSnapshotReader {
     /** One datasource's publishable state; {@code snapshotId} is null when nothing is usable. */
     public record Published(
             long datasourceId,
+            String code,
             Long snapshotId,
             long configVersion,
             long resourceVersion,
@@ -289,6 +290,7 @@ public final class PublishedSnapshotReader {
         }
         return new Published(
                 datasourceId,
+                head.code(),
                 head.snapshotId(),
                 head.configVersion(),
                 head.resourceVersion(),
@@ -304,13 +306,15 @@ public final class PublishedSnapshotReader {
     }
 
     private static Published unusable(long datasourceId) {
-        return new Published(datasourceId, null, 1, 1, "", "", 0, "", "", null, "", 1, List.of());
+        return new Published(
+                datasourceId, "", null, 1, 1, "", "", 0, "", "", null, "", 1, List.of());
     }
 
     private record Head(
             long snapshotId,
             long configVersion,
             long resourceVersion,
+            String code,
             String engine,
             String host,
             int port,
@@ -406,13 +410,14 @@ public final class PublishedSnapshotReader {
         int poolMax;
         long configVersion;
         long resourceVersion;
+        String code;
         try (PreparedStatement statement =
                 statement(
                         connection,
                         "SELECT engine, host, port, database_name, username, credential_cipher,"
                                 + " key_id, pool_max, config_version, resource_version,"
-                                + " active_snapshot_id FROM datasource WHERE id = ? AND status ="
-                                + " 'ACTIVE'")) {
+                                + " active_snapshot_id, code FROM datasource WHERE id = ? AND status"
+                                + " = 'ACTIVE'")) {
             statement.setLong(1, datasourceId);
             try (ResultSet result = statement.executeQuery()) {
                 if (!result.next()) {
@@ -432,6 +437,7 @@ public final class PublishedSnapshotReader {
                 if (result.wasNull()) {
                     return null;
                 }
+                code = result.getString(12);
             }
         }
         try (PreparedStatement statement =
@@ -456,6 +462,7 @@ public final class PublishedSnapshotReader {
                 snapshotId,
                 configVersion,
                 resourceVersion,
+                code,
                 engine,
                 host,
                 port,
