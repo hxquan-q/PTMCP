@@ -6,9 +6,9 @@
 
 ## 1. 通用页面协议
 
-所有受保护页面先获取会话和权限。管理 API 前缀为 `/api/v1/admin`，个人 API 为 `/api/v1/me`，会话为 `/api/v1/session`。下文接口省略这些前缀时会明确标注。个人页强制本人，无 userId 选择器；所有管理接口由服务端再校验委派范围。
+所有受保护页面先获取会话。管理 API 前缀为 `/api/v1/admin`，个人 API 为 `/api/v1/me`，会话为 `/api/v1/session`。下文接口省略这些前缀时会明确标注。个人页强制本人，无 userId 选择器；所有管理接口由服务端再校验平台管理员资格。
 
-使用边界见 [PRD](../product/PRD.md)：管理员负责 MCP 服务／工具配置、管理侧调试、发布、停启用、回滚及在获准范围内维护授权；员工仅接入和使用已获授权的 MCP，不参与服务创建、工具编辑、发布或再授权。个人页可以完成本人 OAuth 同意、本人授权族撤销和本人 PAT，这些动作不是面向其他主体的再授权。管理路由仍按功能码和委派逐项校验。可发布 MCP 服务（草稿、发布、停用、回滚）是目标模型，当前规格没有该对象的独立页面；落地前不得把个人路由做成服务生命周期入口。
+使用边界见 [PRD](../product/PRD.md)：管理员（唯一平台管理员）负责 MCP 服务／工具配置、管理侧调试、发布、停启用、回滚及授权矩阵维护；员工仅接入和使用已获授权的 MCP，不参与服务创建、工具编辑、发布或再授权。个人页可以完成本人 OAuth 同意、本人授权族撤销和本人 PAT，这些动作不是面向其他主体的再授权。管理路由由服务端按 `platformAdmin` 布尔二元校验（S2/S5），前端导航与路由同源消费该布尔，不再逐项携带权限码。可发布 MCP 服务（草稿、发布、停用、回滚）是目标模型，当前规格没有该对象的独立页面；落地前不得把个人路由做成服务生命周期入口。
 
 共用状态：首次请求显示结构化 skeleton；刷新保留已有非敏感内容并标记刷新；空状态解释“没有记录/没有可见资源/筛选无匹配”的区别；错误内联给出原因、requestId 和允许动作。401清空敏感内容后登录；403说明权限不足；404对象已删除或不可访问；409重新读取差异，不能静默覆盖；429/503不自动重放写操作。加载中不允许重复提交。
 
@@ -60,11 +60,11 @@
 
 ## 6. P-05 部门
 
-**路由**：`/admin/departments`。**权限**：`ptmcp:department:list/read/create/update/delete`及有效委派。**关联**：FR-02、08。
+**路由**：`/admin/departments`。**角色**：平台管理员。**关联**：FR-02、08。
 
 左侧部门树按parentId加载，右侧展示id/name/parentId/orderNum/status/pathIds/childrenCount。新建/编辑字段parentId、name≤30、orderNum、status；CRUD /departments。树移动为明确编辑动作，提交前显示旧/新路径和影响子树；禁止成环、跨范围移动。前端不写ancestors/pathIds。
 
-删除有子部门/用户时409，转到关联列表处理；不提供递归一键删除。无委派范围时显示“尚无管理范围”，不把空树理解为无组织；委派到期后清空已失权树。
+删除有子部门/用户时409，转到关联列表处理；不提供递归一键删除。无部门数据时显示空树状态，不把空树理解为无组织。
 
 ## 7. P-06 用户
 
@@ -78,19 +78,16 @@
 
 ## 8. P-07 角色
 
-**路由**：`/admin/roles`、`/admin/roles/:id`。**权限**：`ptmcp:role:list/read/create/update/delete`及委派。**关联**：FR-02、07、08。
+**路由**：`/admin/roles`、`/admin/roles/:id`。**角色**：平台管理员。**关联**：FR-02、07、08。
 
-展示key/name/status/memberCount/managedDepartmentIds。字段key≤100（创建后不可改）、name≤30、status、permissionCodes；CRUD /roles。功能码选择仅显示调用者可委派子集；数据权限通过独立授权矩阵编辑，不把菜单勾选转换为READ。
+展示key/name/enabled。字段key≤100（创建后不可改）、name≤30、enabled；CRUD /roles。角色是纯数据权限模板，无功能码/成员数字段（S3/S5）；数据权限通过独立授权矩阵按 ROLE 主体编辑，不把菜单勾选转换为READ。
 
-组织授权管理员查看跨范围共享角色时为只读并解释原因；平台管理员持相应功能码可修改。有关成员/ACL的角色删除409。停用提示有效权限重算。初次加载/空/错遵守通用状态；功能码加载失败不能默认“全选/全不选”覆盖。
+仅平台管理员可写。有关成员/ACL的角色删除409。停用提示有效权限重算。初次加载/空/错遵守通用状态。
 
-## 9. P-08 管理委派
+## 9. P-08 管理委派（已删除）
 
-**路由**：`/admin/delegations`。**角色**：平台管理员。**权限**：`ptmcp:delegation:list/create/delete`。**关联**：FR-02、07、08。
-
-GET /delegations按userId筛选；展示被委派管理员、departmentRootId、resourceType/resourceId、allowedActions、validFrom/validTo、状态/version。POST同字段创建，DELETE /delegations/{id}撤销。无编辑端点，变更范围先撤销再新建并明确期间影响；不能假装PUT已经存在。
-
-创建先选管理人，再选部门根和资源范围、可委派动作、期限，显示组合边界：“部门子树 ∩ 资源范围 ∩ 动作 ∩ 有效期”。禁止目标本人自我操作；超出操作者能力/期限拒绝。到期按服务器时间计算，空状态提示尚未委派；撤销提示组织授权管理员将失去对应操作权。
+2026-11-05 权限模型收敛（S4/S5）：管理委派面整体移除——`/admin/delegations` 路由、委派 API 与
+`admin_delegation` 表均已删除，本页不再存在。管理职责由唯一平台管理员直接承担。
 
 ## 10. P-09 平台与客户端
 
@@ -106,13 +103,13 @@ Scope页：GET/PUT /platforms/{id}/scopes，资源树项resourceType/resourceId/
 
 ## 11. P-10 授权矩阵与有效权限
 
-**路由**：`/admin/permissions`、`/admin/permissions/preview`。**权限**：acl:list/read/create/update/delete/preview/effective及委派。**关联**：FR-07、08。
+**路由**：`/admin/permissions`、`/admin/permissions/preview`。**角色**：平台管理员；入口默认主体为角色（S5），用户/部门为次级页签。**关联**：FR-07、08。
 
 主体面板以用户/角色/部门 Tab 切换目录，支持按名称或字符串 ID 搜索；资源树与规则/预览分成独立面板，桌面三栏、窄屏纵向。公式解释“平台 Scope ∩ 用户规则（含继承）= 最终权限”，DENY 优先，结论只由后端返回。主体选择USER/ROLE/DEPT+subjectId；资源树datasource/catalog/schema/object；PG catalog为无授权勾选框的分组节点，NAMESPACE对应实际catalog+schema，只提交DATASOURCE/NAMESPACE/OBJECT目标。规则表effect/action/includeDescendants/validFrom/validTo/reason、来源和staleResource。GET /acl/grants查询，POST/PUT/DELETE单条规则；一次变更最多100条，页面不伪造不存在的无界批量接口。多条提交需逐条显示结果和未提交项，部分失败不得显示整批成功。
 
-规则输入resourceType/resourceId/resourceGeneration，版本由服务端快照给出；过期或已重建资源禁止复用旧generation。READ/META及DENY优先级见开发规范。时间为左闭右开，validTo须晚于validFrom；开放结束日期仅完整委派可选。每次保存说明新查询最大5秒生效。
+规则输入resourceType/resourceId/resourceGeneration，版本由服务端快照给出；过期或已重建资源禁止复用旧generation。READ/META及DENY优先级见开发规范。时间为左闭右开，validTo须晚于validFrom；开放结束日期直接可选。每次保存说明新查询最大5秒生效。
 
-组织授权管理员不能以本人/所在角色或部门grant、成员调整或移除命中本人DENY增加自身META/READ，委派内也不例外。页面解释自增权拒绝并指引由平台管理员另行操作；不能仅隐藏本人用户节点而放开间接路径，服务端比较变更前后本人有效权限。此规则也适用于用户角色/部门与角色成员操作。
+任何主体（含平台管理员本人）不能以本人/所在角色或部门grant、成员调整或移除命中本人DENY增加自身META/READ。页面解释自增权拒绝（403 SELF_PRIVILEGE_ESCALATION）；不能仅隐藏本人用户节点而放开间接路径，服务端比较变更前后本人有效权限。此规则也适用于用户角色/部门与角色成员操作。
 
 预览输入subjectUserId、platformId、resourceIds（1～100）、at可选；POST /acl/preview展示meta/read、reasonCodes/sourceGrantIds、versions/evaluatedAt/nextBoundaryAt。未来时点标“模拟，不可执行”；GET /acl/effective可读当前资源与来源。无权主体不出现在选择器；预览不接受SQL、不借业务连接。不用预览成功替代员工真实调用验证。
 
@@ -120,7 +117,7 @@ Scope页：GET/PUT /platforms/{id}/scopes，资源树项resourceType/resourceId/
 
 ## 12. P-11 全局审计
 
-**路由**：`/admin/audit`、`/admin/audit/:requestId`。**权限**：audit:list/read；解密另需独立 `ptmcp:audit:decrypt`、受控审计范围与理由，任何角色默认无权。**角色**：获授范围的安全审计员/管理员。**关联**：FR-16、19。
+**路由**：`/admin/audit`、`/admin/audit/:requestId`。**权限**：audit:list/read；解密另需独立授权、受控审计范围与理由，默认无人持有。**角色**：平台管理员。**关联**：FR-16、19。
 
 GET /audit筛选from/to≤31天、userId/platformId/datasourceId/tool/result/verdict/errorCode；列表列时间、员工、平台、工具、目标、脱敏SQL摘要、result/verdict/error、耗时、行数、requestId。数据源选项仅来自其受控审计范围；不能把权限DENY计为系统故障。
 
@@ -196,4 +193,4 @@ GET me/history筛选from/to≤31天、tool/result/verdict；无用户筛选。�
 
 ## 20. 页面完成定义
 
-每页交付需有实际路由/操作码映射、字段校验、权限与委派校验的网络证据、加载空错与409截图、键盘/焦点验收以及相关FR用例记录。所有凭证页面检查浏览器存储/日志/错误上报不泄漏。UI低保真走查不能代替端到端验收；18组页面的实现与验收须分别核对，不能把部分页面存在等同于全部完成。
+每页交付需有实际路由/操作映射、字段校验、权限校验的网络证据、加载空错与409截图、键盘/焦点验收以及相关FR用例记录。所有凭证页面检查浏览器存储/日志/错误上报不泄漏。UI低保真走查不能代替端到端验收；18组页面的实现与验收须分别核对，不能把部分页面存在等同于全部完成。

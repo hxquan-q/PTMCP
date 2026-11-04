@@ -34,9 +34,8 @@ import java.util.List;
 /**
  * /api/v1/admin/roles CRUD; response bodies are explicit DTOs (R<T> wrapper pending).
  *
- * <p>Roles are shared across management scopes (PRD: a delegated admin must not modify them), so
- * writes stay platform-admin only. Delegated admins keep read access to the catalog — assigning
- * existing roles to their subtree users needs it — gated on holding any effective delegation.
+ * <p>Roles are pure data-permission templates (S3: no capability codes; the delegation surface was
+ * removed in S4), so every write stays platform-admin only via the binary management gate.
  */
 @RestController
 @ConditionalOnProperty("ptmcp.admin.datasource.url")
@@ -67,7 +66,7 @@ public class RoleAdminController {
     @AdminAction("ptmcp:role:list")
     @GetMapping
     public List<RoleRead> list(HttpServletRequest request) {
-        requireCatalogAccess(request);
+        ManagementScope.requirePlatformAdmin(request);
         return orgStore.listRoles().stream().map(RoleAdminController::toRead).toList();
     }
 
@@ -105,7 +104,7 @@ public class RoleAdminController {
     @AdminAction("ptmcp:role:read")
     @GetMapping("/{id}")
     public RoleRead get(@PathVariable long id, HttpServletRequest request) {
-        requireCatalogAccess(request);
+        ManagementScope.requirePlatformAdmin(request);
         return toRead(orgStore.getRole(id));
     }
 
@@ -141,10 +140,6 @@ public class RoleAdminController {
 
     /** Catalog read: platform admins, or delegated admins with any effective delegation. */
     /** S4: 目录读取面收敛到唯一平台管理员，委派读取路径已删除。 */
-    private void requireCatalogAccess(HttpServletRequest request) {
-        ManagementScope.requirePlatformAdmin(request);
-    }
-
     private static long actorId(HttpServletRequest request) {
         return AdminPrincipal.require(request).userId();
     }

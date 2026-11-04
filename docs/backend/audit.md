@@ -73,7 +73,7 @@ SQL来源原文可能超64KiB/含NUL，仅对预算内安全字节计算hash长�
 
 ## 5. 访问控制与解密审计
 
-全局审计列表/详情分别audit:list/read，且受管理审计范围；安全审计员默认不含decrypt。个人历史服务器以当前userId过滤，不接受前端传userId，不提供个人原SQL解密。分页查询在SQL层做scope/owner限制，不能先取全局再前端裁剪。
+全局审计列表/详情分别audit:list/read，且仅平台管理员可见（S2/S4：审计面不再设独立安全审计员角色）；原文解密默认无人持有。个人历史服务器以当前userId过滤，不接受前端传userId，不提供个人原SQL解密。分页查询在SQL层做scope/owner限制，不能先取全局再前端裁剪。
 
 POST /api/v1/admin/audit/{requestId}/decrypt需独立ptmcp:audit:decrypt、明确授权范围、操作理由、CSRF、幂等键；可加部署审批策略，但不是默认凭空要求人工确认。解密访问事件先持久化（审计DB或加密fsync WAL）再返回明文；未获确认拒绝。明文响应no-store、不可写日志/追踪/缓存，用户关闭弹窗/离开页面立即清内存，不能把decrypt明文保存在服务端session。读取失败/越权尝试同样记录决策但不回显密文。
 

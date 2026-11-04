@@ -101,8 +101,9 @@ V11/V12/V13 升级需停旧写方，禁止旧新混跑；已备份的旧恢复�
 | resource_column | snapshot_id；object_id；ordinal INT；column_raw VARCHAR(128)；column_norm VARCHAR(128) binary；quoted BOOL；data_type VARCHAR(128)；jdbc_type INT；nullable BOOL；precision_value INT N；scale_value INT N；max_length BIGINT N；comment TEXT N；is_primary_key BOOL；foreign_key JSON N | PK(snapshot_id,object_id,ordinal)；UNIQUE(snapshot_id,object_id,column_norm)；非公开系统类型不标成可执行类型 |
 | business_dictionary | object_id；column_norm VARCHAR(128) binary（空串为表级）；title VARCHAR(128)；description TEXT；owner_user_id BIGINT N；version；更新时间/人 | PK(object_id,column_norm)；内容不含可执行指令；版本跨快照保留，删除重建需重新确认 |
 | metadata_sync_job | id；datasource_id；requested_by；config_version；state QUEUED/RUNNING/SUCCEEDED/FAILED/CANCELLED；started_at N；finished_at N；snapshot_id N；error_code VARCHAR(64) N；lease_owner VARCHAR(128) N；lease_until N | INDEX(state,lease_until,id)；每源仅一个 RUNNING（事务占用租约，MySQL无条件部分唯一索引） |
-| acl_grant | id；subject_type USER/ROLE/DEPT；subject_id；resource_type DATASOURCE/NAMESPACE/OBJECT；resource_id；resource_generation；action META/READ；effect ALLOW/DENY；include_descendants BOOL；valid_from DATETIME(6)；valid_to DATETIME(6) N；status ACTIVE/REVOKED；reason VARCHAR(500)；version | INDEX(subject_type,subject_id,status,valid_from,valid_to)；INDEX(resource_type,resource_id,resource_generation,status)；valid_to > valid_from；目标/主体不存在拒绝写入 |
-| admin_delegation | id；user_id；department_root_id；resource_type DATASOURCE/NAMESPACE/OBJECT；resource_id；resource_generation；allowed_actions JSON；valid_from；valid_to N；status ACTIVE/REVOKED；version | INDEX(user_id,status,valid_from,valid_to)；平台管理员可写；命令须有一个完整委派覆盖主体子树+资源+动作+期限，不能跨委派拼接 |
+| acl_grant | id；subject_type USER/ROLE/DEPT；subject_id；resource_type DATASOURCE/NAMESPACE/OBJECT；resource_id；resource_generation；action META/READ；effect ALLOW/DENY；include_descendants BOOL；valid_from DATETIME(6)；valid_to DATETIME(6) N；status ACTIVE/REVOKED；reason VARCHAR(500)；version | INDEX(subject_type,subject_id,status,valid_from,valid_to)；INDEX(resource_type,resource_id,resource_generation,status)；valid_to > valid_from；目标/主体不存在拒绝写入；主授权主体是 ROLE（USER/DEPT 为次级覆盖） |
+
+旧 `admin_delegation` 表已在 V20 迁移删除（S4：管理委派面整体移除，管理写仅平台管理员）。
 
 视图一期只能在依赖图可完整解析、定义哈希一致、依赖表 READ 全通过时启用；视图 DEFINER/SECURITY 语义不能绕过依赖 ACL。未知视图/外部表/跨库链接对象不发布为可执行对象。命名空间/对象身份生命周期与同步策略见 [datasource](datasource.md)。schema_snapshot 的到期策略未通过双引擎DDL竞争测试前，相关路径保持关闭；不能用长 TTL 宣称对象绑定始终可靠。
 
@@ -144,7 +145,6 @@ Refresh 事务统一先锁sys_security_state单行，再锁sys_user_security，�
 | --- | --- | --- |
 | 用户改密/停用/删除 | 组织行+auth_version+会话族/PAT撤销标志+epoch+事件+管理操作记录 | 发布事件、清理Redis；失败补扫 |
 | 角色/部门/成员变更 | 组织行、成员表、相关主体version、global epoch、事件 | 清有效权限缓存；部门移动重算父链 |
-| 管理委派创建/撤销 | delegation行/version、操作日志、global epoch、DELEGATION_CHANGED事件 | 管理范围重算；不自动撤销业务grant/token |
 | ACL/平台范围变更 | grant/scope行、聚合version、global epoch、事件 | 广播失效；不等待广播才返回提交成功 |
 | 数据源启停/凭证变化 | config_version/status、resource_version按需、epoch、事件 | 池先DRAIN旧代再建立新代；事务内不连业务库 |
 | 快照发布 | 复核配置version，发布快照、更新active_snapshot_id/resource_version，世代变更标旧授权stale、epoch+事件 | 旧快照保留供在途解释；新查询只用新版本 |
@@ -164,17 +164,15 @@ HTTP包装在action分派后失败保留请求键，尽力仅RUNNING→UNKNOWN�
 全表锁快照的成本随部门数量增加，尚无容量结论；用户创建/换部门等其他写方未共用此围栏，
 不能据此推断部门删除的引用完整性或提交前操作者授权重验已完成。实际验证见[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
 
-委派create/revoke也复用SecurityChangeTransaction.executeReturning：全局安全锁先于委派聚合，
-创建的重叠检查/INSERT和撤销的同连接FOR UPDATE/版本CAS均在锁内；行、日志、epoch、事件同事务。
-DELEGATION_CHANGED的aggregate_type为ADMIN_DELEGATION，payload沿用schemaVersion=1与ID/version-only结构，
-新增事件无需修改历史迁移。创建与撤销均从同连接取得返回快照，commit后不再读取，丢确认不重放。
-并发保证依赖所有委派写方遵守该围栏；旧直写代码混跑、事件广播/消费者及提交前授权重验未由此实现。
+委派事务段（DELEGATION_CHANGED/ADMIN_DELEGATION 事件）随 S4 委派面删除；`admin_delegation`
+表已在 V20 迁移 DROP，管理写仅平台管理员。
 
 角色定义create/update/delete使用同一安全事务，锁序sys_security_state→sys_role，
-角色行/version、sys_role_permission、操作日志、epoch及ROLE_CHANGED原子提交。
+角色行/version、操作日志、epoch及ROLE_CHANGED原子提交（S3 起 sys_role_permission 已删除，
+角色不再携带权限码）。
 事件aggregate_type=ROLE，使用实际生成ID/version1或锁内递增后的版本，无需修改旧迁移。
 update/delete先在锁内核对If-Match，再检查BIGINT版本耗尽，并保留UPDATE CAS。
-create/update同连接读取行与排序后的权限码，返回本事务不可变快照；commit后不另借连接，丢确认不重放。
+create/update同连接读取行，返回本事务不可变快照；commit后不另借连接，丢确认不重放。
 成员/ACL引用写方尚未统一该锁序，不支持与旧直写版本混跑，不能把此片升级为引用并发或授权重验完成。
 
 ## 8. 生命周期、归档和迁移验收

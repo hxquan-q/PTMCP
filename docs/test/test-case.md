@@ -90,19 +90,19 @@
 | TC-AUD-003 | P0 / FR-16,R9 | 结局DB不可用、WAL可写；fsync后崩溃 | 恢复并多次重放同一WAL事件 | 成功只在结局有持久确认后返回；request_id幂等，audit_log不重复、不篡改已有结局 |
 | TC-AUD-004 | P0 / FR-16,FR-19,R9 | 队列满、WAL磁盘满/只读、元库不可写 | 持续新SQL及在途SQL | 停新SQL并告警；在途尽力终止；不静默丢日志或删除未确认WAL |
 | TC-AUD-005 | P0 / FR-16,R9 | SQL含姓名/证件/数字，另有语法错误SQL | 查日志中心/列表/导出/数据库/WAL | 常规只见脱敏指纹；raw/final加密；解析失败默认哈希/长度；无token/结果/明文SQL |
-| TC-AUD-006 | P0 / FR-16,R9 | U-AUD无解密权限，另授特权安全账号 | 列表→尝试解密→授权后解密→查解密审计 | 列表可见不等于可解密；未授权403；授权解密行为单独审计，保留180天策略覆盖归档 |
+| TC-AUD-006 | P0 / FR-16,R9 | 平台管理员默认无解密权限，另授特权安全账号 | 列表→尝试解密→授权后解密→查解密审计 | 列表可见不等于可解密；未授权403；授权解密行为单独审计，保留180天策略覆盖归档 |
 | TC-AUD-007 | P0 / FR-12,FR-13,FR-16,R9,R10 | 已认证且通过请求大小预算的目录/结构/execute调用，含guard语法/权限拒绝 | 观察工具入口→guard前最小START持久确认→guard拒绝或执行→TERMINAL；在guard中途杀进程，恢复核对 | guard前已有最小身份/哈希/长度START，不先存未脱敏SQL；拒绝也有同requestId的唯一terminal，0业务连接；中途崩溃留START并可恢复UNKNOWN；业务拒绝isError=true且verdict区分系统故障；未认证流量仅安全访问日志 |
 
 ## 6. UI与接口权限
 
 | ID | 级别 / 溯源 | 前置与输入 | 操作步骤 | 预期 |
 | --- | --- | --- | --- | --- |
-| TC-UI-001 | P0 / FR-01,FR-02,R5 | 普通用户与各管理角色 | 隐藏菜单后直接请求管理API、越级编辑他部门 | 服务端权限阻断；菜单隐藏不算鉴权；平台管理员也不自动获表READ |
+| TC-UI-001 | P0 / FR-01,FR-02,R5 | 普通用户与平台管理员 | 普通用户直接请求管理API、越级编辑他部门 | 服务端权限阻断（403 MANAGEMENT_SCOPE_DENIED）；菜单隐藏不算鉴权；平台管理员也不自动获表READ |
 | TC-UI-002 | P0 / FR-17,R9 | U-A/U-B均有查询记录 | U-A修改URL/请求中的userId、requestId、导出参数 | /me从安全上下文取用户；不能获取U-B历史、raw或结果 |
 | TC-UI-003 | P0 / FR-01,FR-11 | 管理/AS独立Cookie会话 | 跨站写请求、缺CSRF、会话过期、退出后后退 | HttpOnly/Secure/SameSite正确；写请求CSRF校验；过期拒绝；退出不残留PAT明文 |
 | TC-UI-004 | P1 / FR-03,FR-07,FR-18 | 新部门+数据源+平台+角色 | 管理员按手册完成配置；员工复制MCP配置 | 10分钟内闭环；配置无共享secret/URL token；元数据与有效权限预览一致 |
 | TC-UI-005 | P1 / FR-05,FR-12,FR-13 | 字典注释含脚本/特殊字符；键盘/小屏 | 查看表树、详情、拒绝提示与PAT弹窗 | 文本转义、无XSS；键盘可达、焦点明确；无READ不泄露列注释；时间显示Asia/Taipei |
-| TC-UI-006 | P0 / FR-02,FR-07,FR-08 | 组织管理员仅获D-A部门根、orders资源、META动作的限时admin_delegation；本人及所在role/dept有不同Allow/Deny | 尝试修改D-B、grant salary/READ、延长期限、自建委派；再给本人/所在role/dept增Allow、删改命中Deny、改成员/移部门使本人增权；到期瞬间操作 | 委派主体/部门根/资源/动作/时间逐项校验；越界和直接/间接自增META/READ全部拒绝且无副作用，需平台管理员另行操作；不能借移除Deny、共享角色或组织变化自提权 |
+| TC-UI-006 | P0 / FR-02,FR-07,FR-08 | 平台管理员与普通用户；本人及所在role/dept有不同Allow/Deny | 普通用户访问管理面（拦截器二元门）；平台管理员grant本人/所在role/dept增Allow、删改命中Deny、改成员/移部门使本人增权；非管理员建角色/改授权 | 管理门仅判platformAdmin布尔，非管理员一律403 MANAGEMENT_SCOPE_DENIED；直接/间接自增META/READ一律403 SELF_PRIVILEGE_ESCALATION且无副作用；角色页无功能码，主授权主体是角色 |
 
 ## 7. 管理API与元数据契约
 

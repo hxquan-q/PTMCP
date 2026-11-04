@@ -56,13 +56,9 @@ POST 创建/启动任务/撤销/解密动作使用 Idempotency-Key（客户端�
 
 只在 admin 的若依 Web 适配层引用实际 R<T>；common/guard/领域错误使用自己的稳定值类型，不反向依赖若依/Sa-Token。现有游标分页继续返回 `R<CursorPage<T>>`，不因复用 R 改成 TableDataInfo 或强制 total。设计取舍见[ADR0010](../architecture/adr/0010-REST响应复用R与模块错误码.md)。
 
-功能码采用 ptmcp:<resource>:<action>，每端点在下表声明；复用若依菜单机制只是功能入口校验。平台管理员也须显式业务表READ才能查询数据。
+管理动作不再按功能码判定：`ptmcp:<resource>:<action>` 仅作为方法级登记保留，供审计与文档对账。管理控制台是二元门（S2）：平台管理员全允，其余用户全拒，403 MANAGEMENT_SCOPE_DENIED。业务数据访问仍按平台 Scope 与用户授权交集（META/READ）判定，与管理门相互独立。
 
-当前58个管理handler以方法级`@AdminAction`显式登记功能码，由统一MVC拦截器在body绑定、控制器调用与幂等重放前
-从主库当前成员关系、启用且未删除角色读取精确码。未声明或缺码均403 MANAGEMENT_SCOPE_DENIED；
-平台管理员资格仅表达管理范围，不能替代端点动作，不支持通配符或相邻CRUD动作代替。
-动作权限依赖不可用时返回503 DEPENDENCY_UNAVAILABLE；若在Cookie身份附着阶段失败，则为上述会话资格的503映射。
-本入口检查不代替提交前事务内授权重验。当前审计控制器仍额外要求平台管理员范围，角色无关的解密资源范围尚待实现。
+当前全部管理 handler 以方法级 `@AdminAction` 显式登记动作码；统一 MVC 拦截器在 body 绑定、控制器调用与幂等重放前仅验证 `AdminPrincipal.platformAdmin()`，不做逐端点功能码比较，动作权限依赖不可用的 503 分支随功能码判定一并移除。本入口检查不代替提交前事务内授权重验；ACL 授权写另有提交前自增权防护（见 §5）。
 
 | resource | action |
 | --- | --- |
@@ -72,11 +68,10 @@ POST 创建/启动任务/撤销/解密动作使用 Idempotency-Key（客户端�
 | platform | list、read、create、update、delete、scope |
 | client | list、read、create、update、delete |
 | acl | list、read、create、update、delete、preview、effective |
-| delegation | list、create、delete |
 | audit | list、read、decrypt |
 | job | read |
 
-所有 /admin 路径先验证登录+功能码，再验证服务端管理范围。组织授权管理员必须有有效 admin_delegation（部门根子树 ∩ 资源范围 ∩ allowedActions ∩ 有效期）；对目标主体和目标资源同时检查。不能向自己扩大委派、不能管理跨范围共享角色、不能授予超出委派的动作/有效期；任何本人/本人所属角色部门/成员关系/删除命中DENY等变更须比较前后本人有效META/READ，产生本人增权一律403 SELF_PRIVILEGE_ESCALATION，需平台管理员另行操作。数据源凭证、平台信任、客户端secret、委派只能平台管理员持对应码执行。原SQL解密依独立ptmcp:audit:decrypt及审计资源范围判定，不限定某角色；所有角色默认无解密权，须明确另授。/me无需后台菜单码，强制当前用户所有权、平台上限及有效业务权限。
+所有 /admin 路径先验证登录与会话有效性，再验证平台管理员布尔（`sys_user_security.platform_admin` 且身份 READY）。唯一平台管理员以外的用户访问管理面一律 403 MANAGEMENT_SCOPE_DENIED。数据源凭证、平台信任、客户端 secret 等敏感管理操作同样仅平台管理员可执行。授权管理写（ACL 三写）在提交前以同一连接重验操作者安全状态并比较本人有效 META/READ，产生本人增权一律 403 SELF_PRIVILEGE_ESCALATION（防护保留，与旧委派机制无关）。原SQL解密依独立授权及审计资源范围判定，默认无人持有，须明确另授。/me 强制当前用户所有权、平台上限及有效业务权限。
 
 ## 3. Web 会话 API
 
@@ -84,14 +79,14 @@ POST 创建/启动任务/撤销/解密动作使用 Idempotency-Key（客户端�
 | --- | --- | --- |
 | GET /session/csrf | 可匿名，same-origin | {csrfToken,expiresAt}，绑定短期预会话Cookie；no-store，不通过可跨站脚本公开 |
 | POST /session/login | CSRF；{username,password} | {userId,displayName,expiresAt}；设置 PTMCP_ADMIN_SESSION HttpOnly/Secure/SameSite=Lax Cookie；失败不区分不存在/密码错误，401 AUTHENTICATION_FAILED；5次错误锁10分钟429 LOGIN_LOCKED；成功轮换session和CSRF |
-| GET /session/me | ADMIN Cookie | {userId,username,displayName,department:{id,name},roles:[{id,name}],permissions:[code],managedScopes:[...],platformAdmin,expiresAt}；不返回密码/token |
+| GET /session/me | ADMIN Cookie | {userId,username,displayName,department:{id,name},roles:[{id,name}],managedScopes:[...],platformAdmin,expiresAt}；不返回密码/token，不返回 permissions 功能码集（前端按 platformAdmin 布尔门控） |
 | POST /session/logout | Cookie+CSRF；{} | {loggedOut:true}；注销当前会话并清Cookie；无会话仍返回已退出，不可借此查询账户 |
 | PUT /session/password | Cookie+CSRF；{oldPassword,newPassword} | {reauthenticationRequired:true}；BCrypt校验旧密码，新密码12～64字符且UTF-8≤72字节，禁止与旧密码相同；提高auth_version并撤销本人全部ADMIN/AS/OAuth/PAT；完成后清Cookie |
 
 用户名1～30 ASCII字母数字下划线点横线，登录以规范小写查唯一索引；迁移已有账号需显式处理。创建/修改/重置密码统一12～64字符且UTF-8≤72字节，BCrypt沿用若依算法，不能静默截断或引入未定义预哈希。AS登录是独立页面/过滤链与 PTMCP_AS_SESSION，不共享以上cookie。
 
-ADMIN Cookie每次请求均在会话索引/权威版本通过后，从主库当前成员、有效角色及功能码重算平台管理员资格；
-资格解析只缓存本请求，不续期或轮换CSRF。`/session/me`返回的platformAdmin与其本次permissions一致。
+ADMIN Cookie每次请求均在会话索引/权威版本通过后，从主库 `sys_user_security.platform_admin` 与身份状态重算平台管理员资格；
+资格解析只缓存本请求，不续期或轮换CSRF。
 资格依赖不可用时，过滤器在管理操作前返回503 SECURITY_STATE_UNAVAILABLE，带no-store/nosniff。
 此请求入口核验不代替安全写入事务提交前的操作者授权重验。
 
@@ -104,12 +99,11 @@ ADMIN Cookie每次请求均在会话索引/权威版本通过后，从主库当�
 | DatasourceWrite | code(1..64,创建后不变)、name(1..128)、engine MYSQL/POSTGRESQL、host、port、databaseName、username、credential(仅创建/轮换时必填)、tlsMode=VERIFY_FULL、poolMax(1..8)、status DRAFT/ACTIVE/DISABLED | configVersion/resourceVersion/lastSyncAt/activeSnapshotId/credentialConfigured/health；无credential密文 |
 | UserWrite | username(仅创建)、displayName、departmentId、email≤50、phoneNumber≤11、remark≤500；创建initialPassword | status/roles；密码单独动作；不能写authVersion/menu权限 |
 | DepartmentWrite | parentId、name≤30、orderNum、status；移动不得成环/越界 | pathIds、childrenCount；不能写ancestors |
-| RoleWrite | key≤100(创建后不变)、name≤30、status、permissionCodes[]（仅调用者可委派子集） | memberCount、managedDepartmentIds；菜单权限与表ACL分别管理 |
+| RoleWrite | key≤100(创建后不变)、name≤30、enabled；角色是纯数据权限模板，无功能码/菜单字段（S3 起 sys_role_permission 已删除） | 资源授权经 ACL 挂到 ROLE 主体（授权矩阵） |
 | PlatformWrite | code/name、tier(1..3)、catalogMode DISCOVER/HIDE、proofMode MTLS/PROXY_SECRET/NONE、proofConfig（写入专用；证书指纹/代理约束）、status | scopeVersion/securityVersion/proofConfigured；Tier1不得NONE，降级要显式重新批准 |
 | ScopeWrite | items:[{resourceType:DATASOURCE/NAMESPACE/OBJECT,resourceId,resourceGeneration,action:META/READ,includeDescendants}]，≤100 | scopeVersion；取代整组，不能指向非活动对象 |
 | ClientWrite | name、type PUBLIC/CONFIDENTIAL、authMethods（PUBLIC 仅 none；CONFIDENTIAL 须 secret 方式，private_key_jwt 在密钥接线完成前创建/更新均拒绝，存量行 AS 侧 fail-closed）、redirectUris[]、allowedScopes[]、jwksUri(可选)、status；禁止PUBLIC secret | clientId/platformId/registrationSource；URI规则见认证设计 |
-| GrantWrite | subjectType USER/ROLE/DEPT、subjectId、resourceType/resourceId/resourceGeneration、action META/READ、effect ALLOW/DENY、includeDescendants、validFrom、validTo(nullable)、reason1..500 | status/effectiveNow/staleResource；validTo>validFrom；OPEN ended只有完整委派权限可设 |
-| DelegationWrite | userId、departmentRootId、resourceType/resourceId、allowedActions[]、validFrom、validTo | id/version/status；只有平台管理员能创建/撤销；不允许目标本人操作 |
+| GrantWrite | subjectType USER/ROLE/DEPT、subjectId、resourceType/resourceId/resourceGeneration、action META/READ、effect ALLOW/DENY、includeDescendants、validFrom、validTo(nullable)、reason1..500 | status/effectiveNow/staleResource；validTo>validFrom；主授权主体是 ROLE，USER/DEPT 为次级覆盖 |
 | DictionaryWrite | title≤128、description≤8000、ownerUserId可空、columns:[{columnName,title,description}]≤500 | schemaComment/业务说明分开；未知列拒绝，富文本一期禁用 |
 
 PlatformWrite 的 `proofConfig` 仅写：MTLS 提供 `certificateFingerprint`（32 字节十六进制，可带冒号）；PROXY_SECRET 提供 `proxyNetwork`（单个 IPv4/IPv6 字面 CIDR，≤256 字符）和 `secret`（非空白 UTF-8 原文，1～256 字节，不 trim）。同模式已配置且全部留空可保留；部分材料、模式错配和切模式无完整新材料均返回 `INVALID_ARGUMENT`，NONE 清除且 Tier1 不可用。管理端 JSON 持久化映射、代理 Header 编码、旧错误格式重配及回滚限制见[认证设计](authentication.md#3-平台tier与每请求来源证明)。轮换请求失败后材料清空，明确拒绝须重填或显式取消替换；网络结果未知、无效响应或 412 须关闭并重新读取后核对，不盲重试。
@@ -127,22 +121,22 @@ DatasourceDTO.health只取当前configVersion、当前host/port/database/usernam
 | /datasources CRUD | datasource对应动作 | DatasourceWrite→DatasourceDTO；列表筛选keyword/engine/status；停用/删除立即增安全版本，池DRAIN；仍有关联活动授权时删除409 REFERENCES_EXIST，先停用并处理依赖 |
 | POST /datasources/{id}/test | datasource:test，平台管理员 | {draft?:DatasourceWrite}→202 JobDTO（含candidateId）；draft不能改变id/engine/code；无测试SQL入参，只运行内建健康探针。无draft记录ACTIVE_PROBE，仅参与当前配置版本的诊断；有draft记录DRAFT_CANDIDATE，成功候选加密保存供发布，失败候选不保存凭据且不影响active健康 |
 | POST /datasources/{id}/sync | datasource:sync | {mode:FULL}→202 JobDTO；每源串行，不变更配置；重复运行409 SYNC_IN_PROGRESS |
-| POST /datasources/{id}/candidates/{candidateId}/publish | datasource:update，平台管理员 | 空body（非空400 INVALID_ARGUMENT）+If-Match及Idempotency-Key→DatasourceDTO+ETag；仅未过期VERIFIED DRAFT_CANDIDATE且baseConfigVersion=If-Match可发布。错误顺序：当前版本不符409 VERSION_CONFLICT→候选失败/过期/已发布/无凭据400 INVALID_ARGUMENT→候选基准陈旧409 VERSION_CONFLICT；目标host/port/database变化或停用时升resourceVersion、清快照并退役旧资源/撤grant/委派/平台范围，同事务发布；目标不变（凭据/名称轮换）时保留资源身份、授权与快照指针，但快照按旧configVersion绑定即刻不可用，须重新同步后才可查询（保守拒绝，见datasource.md一致性合同）；成功后候选PUBLISHED，幂等键重放首次响应 |
+| POST /datasources/{id}/candidates/{candidateId}/publish | datasource:update，平台管理员 | 空body（非空400 INVALID_ARGUMENT）+If-Match及Idempotency-Key→DatasourceDTO+ETag；仅未过期VERIFIED DRAFT_CANDIDATE且baseConfigVersion=If-Match可发布。错误顺序：当前版本不符409 VERSION_CONFLICT→候选失败/过期/已发布/无凭据400 INVALID_ARGUMENT→候选基准陈旧409 VERSION_CONFLICT；目标host/port/database变化或停用时升resourceVersion、清快照并退役旧资源/撤grant/平台范围，同事务发布；目标不变（凭据/名称轮换）时保留资源身份、授权与快照指针，但快照按旧configVersion绑定即刻不可用，须重新同步后才可查询（保守拒绝，见datasource.md一致性合同）；成功后候选PUBLISHED，幂等键重放首次响应 |
 | GET /jobs/{id} | job:read且任务源管理范围 | JobDTO={id,type,datasourceId,state,progress:{processed,total:null},startedAt,finishedAt,errorCode,snapshotId,candidateId}；total未知不伪造百分比 |
 | GET /metadata/objects | metadata:list | datasourceId必填、namespaceId/keyword/kind/cursor/pageSize→ObjectSummary[]；仅管理范围，不绕过用户门户READ |
 | GET /metadata/objects/{id} | metadata:read | →ObjectDetail（物理键、generation、快照version、列定义、字典）；含业务结构需显式管理元数据权限，菜单列举不自动授权查询 |
 | PUT /metadata/objects/{id}/dictionary | metadata:dictionary | DictionaryWrite+If-Match→ObjectDetail；不能修改真实数据库DDL |
 | /users CRUD | user对应动作 | UserWrite→UserDTO；筛选keyword/departmentId/status；不接受外部org树替换；删除逻辑删除并撤销令牌 |
-| PUT /users/{id} | user:update，加实际变更的status/assign-role/move | 完整 UserWrite+If-Match→UserDTO；授权分类快照版本必须等于If-Match，落库保留同版本CAS，冲突不自动重试；roleIds缺省保留、按集合比较；委派管理员须自身具备所需功能码，且同一有效委派覆盖全部动作与新旧部门；角色变化时最终整组功能码不得超过该委派，不能跨委派拼接 |
+| PUT /users/{id} | user:update，加实际变更的status/assign-role/move | 完整 UserWrite+If-Match→UserDTO；授权分类快照版本必须等于If-Match，落库保留同版本CAS，冲突不自动重试；roleIds缺省保留、按集合比较；仅平台管理员可执行 |
 | PUT /users/{id}/status | user:status | {status:ACTIVE/DISABLED}+If-Match→UserDTO；保留其他资料与角色；不能停用最后一个有效平台管理员 |
 | DELETE /users/{id} | user:delete | If-Match→UserDTO；逻辑删除（status=DELETED，列表隐藏，行留审计）；同一安全事务撤销全部会话/PAT/刷新族/授权并递增权威版本；重复删除按版本冲突拒绝；不能删除最后一个有效平台管理员（LAST_PLATFORM_ADMIN，与停用同守卫） |
 | GET /users/{id}/identity | user:read，平台管理员 | →IdentityState={userId,version,identityState:UNBOUND/READY/CHANGE_PENDING,recoveryRequired}；不返回摘要、目标或操作材料 |
 | PUT /users/{id}/password | user:reset-password，平台管理员 | {newPassword,reason}+If-Match+Idempotency-Key→200 IdentityState；UNBOUND用户签发首个凭证：元库先提交不可变供应意图，宿主仅在不存在同ID或同规范登录名（忽略大小写与首尾空白）账号时创建sys_user，确认后才转READY；宿主已有账号→422 RESOURCE_AMBIGUOUS，不接管既有账号；已有PENDING供应→409 OPERATION_IN_PROGRESS，只可走retry。READY/CHANGE_PENDING用户先提权威版本并撤销全部认证，跨库异常保持Pending，由管理员恢复 |
 | POST /users/{id}/password/retry | user:reset-password，平台管理员 | {}+If-Match+Idempotency-Key→200 IdentityState；只重试持久目标；完成重试不写宿主、不提版本/epoch；不接受新密码；版本与 body 一起绑定幂等摘要 |
-| PUT /users/{id}/roles | user:assign-role | {roleIds:[]}+If-Match→UserDTO；整组替换，最终整组功能码由同一有效委派覆盖，不能逐角色拼接不同委派 |
-| PUT /users/{id}/department | user:move | {departmentId,reason}+If-Match→UserDTO；新旧部门均可管理；更新身份版本与epoch |
+| PUT /users/{id}/roles | user:assign-role | {roleIds:[]}+If-Match→UserDTO；整组替换；角色是纯数据权限模板，挂角色即完成授权入口，资源授权在授权矩阵按角色主体维护 |
+| PUT /users/{id}/department | user:move | {departmentId,reason}+If-Match→UserDTO；更新身份版本与epoch |
 | /departments CRUD | department对应动作 | DepartmentWrite→DepartmentDTO；列表可parentId过滤；删除有子部门/用户409；完整PUT以一个If-Match在同一事务写父边、名称、状态、后代路径缓存及一条操作日志，目标版本只增一次，返回本次事务结果；PUT移动校验整棵子树无环且在范围 |
-| /roles CRUD | role对应动作 | RoleWrite→RoleDTO；共享范围外成员的角色仅平台管理员能改；删除有关联成员/ACL则409 |
+| /roles CRUD | role对应动作 | RoleWrite→RoleDTO；仅平台管理员可写；删除有关联成员/ACL则409 |
 | /platforms CRUD | platform对应动作，平台管理员 | PlatformWrite→PlatformDTO；删除前须停用/处理客户端及族；变更信任方式增securityVersion |
 | GET /platforms/{id}/scopes | platform:read | →ScopeRead={items,scopeVersion,version} |
 | PUT /platforms/{id}/scopes | platform:scope | ScopeWrite+If-Match→ScopeRead；主库事务+安全事件 |
@@ -152,19 +146,18 @@ DatasourceDTO.health只取当前configVersion、当前host/port/database/usernam
 | PUT /clients/{id} | client:update | ClientWrite+If-Match→ClientDTO；redirect/authMethod变化撤销关联授权族；authMethods拒绝private_key_jwt |
 | DELETE /clients/{id} | client:delete | If-Match→删除结果；撤销所有族；private_key_jwt存量行可禁用但不可再启用（重建为唯一出口） |
 | GET /acl/grants | acl:list | subjectType/subjectId/resourceType/resourceId/status/cursor/pageSize→GrantDTO列表 |
-| POST /acl/grants | acl:create | GrantWrite→201 GrantDTO；授予不能超委派，重复逻辑授权返回409 DUPLICATE_GRANT（数据库唯一键需按规范化内容实现） |
+| POST /acl/grants | acl:create | GrantWrite→201 GrantDTO；重复逻辑授权返回409 DUPLICATE_GRANT（数据库唯一键需按规范化内容实现） |
 | GET /acl/grants/{id} | acl:read | →GrantDTO及来源信息 |
 | PUT /acl/grants/{id} | acl:update | GrantWrite+If-Match→同一id的GrantDTO及递增version/ETag；一笔安全事务完整替换，保留创建人/创建时间及操作审计，失败不撤销旧行 |
 | DELETE /acl/grants/{id} | acl:delete | If-Match→撤销结果；记录REVOKED，不物理删除 |
 
 ACL 三写在全局安全锁之后，以同一主库连接重验当前 actor 的 READY/ACTIVE、
-合法权威版本与精确动作码；真实 ADMIN 请求另匹配入场会话 authVersion，不接受请求字段覆盖。
-平台资格从当前有效角色计算，组织管理员的整条更新必须由同一委派覆盖新旧主体部门、资源 type/id/generation，
-新授权有效期不超委派。检查与实际写集一致，仅移除当前被替换/撤销的 grant，而非同动作的其他规则。
+合法权威版本与平台管理员资格；真实 ADMIN 请求另匹配入场会话 authVersion，不接受请求字段覆盖。
+检查与实际写集一致，仅移除当前被替换/撤销的 grant，而非同动作的其他规则。
 本人 META/READ 比较覆盖现在与前后规则的全部未来生效/到期边界，包含移除 DENY 和 DENY 自然到期；
 增权统一403 SELF_PRIVILEGE_ESCALATION。行、操作日志、epoch 与 ACL_CHANGED 事件原子提交，
 事务/提交未知错误沿既有稳定码且不重做。重复已撤销在全局读围栏内验证身份/范围，返回原版本，不产生新 epoch。
-授权列表也由同一个委派同时覆盖主体与资源，不能只按部门过滤。
+授权列表按主体与资源过滤，平台管理员全量可见，不以部门范围收窄。
 本片不声称注销后的旧在途请求或所有成员/部门变更的间接自增权已完整闭环；实际证据见
 [九项修复工作项](../../tasks/work-items/DEV-20261101-backend-api-fixes.md)。
 
@@ -175,9 +168,6 @@ ACL 三写在全局安全锁之后，以同一主库连接重验当前 actor 的
 清理存量 SUCCEEDED 行（V15__idempotency_secret_scrub 一次性清理，仅隔离验证不涉生产）。
 | POST /acl/preview | acl:preview | {subjectUserId,platformId,resourceIds:[1..100],at?:UTC}→{decisions:[{resourceId,meta,read,reasonCodes,sourceGrantIds}],versions,evaluatedAt,nextBoundaryAt}；仅判定，不接受SQL/不借业务连接；未来时间只作模拟，不可执行 |
 | GET /acl/effective | acl:effective | userId/platformId必填、datasourceId/cursor/pageSize→有效资源与来源；管理范围外404；不能以此向普通用户泄露全部组织权限 |
-| GET /delegations | delegation:list，平台管理员 | userId/cursor/pageSize→委派列表 |
-| POST /delegations | delegation:create，平台管理员 | DelegationWrite→201委派DTO；同时检查管理员能力及期限 |
-| DELETE /delegations/{id} | delegation:delete，平台管理员 | If-Match→撤销结果+epoch事件 |
 | GET /audit | audit:list | from/to(单次≤31天)、userId/platformId/datasourceId/tool/result/verdict/errorCode/cursor/pageSize→AuditSummary[]；不能筛sql_raw，不返回密文 |
 | GET /audit/{requestId} | audit:read | →AuditDetail（脱敏SQL、对象、版本、阶段耗时、错误/截断），普通审计员无原文 |
 | GET /audit/{requestId}/sensitive-access | audit:read | →原文访问轨迹；不含解密内容，仍核当前审计范围 |
@@ -186,11 +176,10 @@ ACL 三写在全局安全锁之后，以同一主库连接重验当前 actor 的
 
 身份绑定：新建用户为 UNBOUND；登录、改密和发证均拒绝，普通资料编辑不改变绑定状态。平台管理员通过 PUT /users/{id}/password 为 UNBOUND 用户签发首个凭证：元库先提交不可变供应意图（PENDING，保存目标 BCrypt），宿主仅在不存在同 ID 且不存在同规范登录名（忽略大小写与首尾空白）账号时插入 sys_user，宿主确认后才把 UNBOUND 收敛为 READY 并清空目标 hash。宿主已有同 ID 或同名账号一律 422 RESOURCE_AMBIGUOUS，绝不自动接管；供应失败保持 UNBOUND，retry 只使用已持久目标。供应 PENDING 存在期间，用户资料、角色、部门、状态与删除写入返回 409 VERSION_CONFLICT，避免 profile version 脱离意图锚点使恢复不可达；签发动作在同一事务写 `USER_CREDENTIAL_ISSUED` 操作日志。已有 READY/Pending 也核对宿主 ID 与元库规范化登录名，不符时不自动重绑。
 
-专用status/roles/department接口始终核对应动作；委派管理员还须自身当前功能码与同一有效委派相交。
-这一份委派必须覆盖本条命令的全部动作、新旧部门及最终整组角色功能码，不从其他委派补足。
+专用status/roles/department接口始终核对应动作；写入仅平台管理员可执行。
 每个接口使用同一次用户快照核If-Match、授权及生成写参数，保留落库同版本CAS；冲突不追新快照重试。
 专用命令不额外要求user:update，URL、DTO、ETag保持兼容。平台管理员同样核对应动作；
-通用PUT还按实际变化组合status/assign-role/move。事务内actor/委派/角色定义重验仍待后续切片。
+通用PUT还按实际变化组合status/assign-role/move。
 
 启停实现：通用PUT与专用status共用OrgStore；ACTIVE/DISABLED实际变化与profile/roles、
 authVersion/identityVersion、ADMIN/AS/PAT/OAuth撤销、epoch、事件和操作日志在同一元库事务提交。

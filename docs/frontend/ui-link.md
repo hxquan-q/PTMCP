@@ -25,12 +25,12 @@
 | P-02 数据源 | /admin/datasources、/:id | 平台管理员及分动作码 | 只写密码、池预算、测试任务、409依赖/版本 | WF-02 |
 | P-03 异步任务 | /admin/jobs/:id | job:read+源范围 | 未知总量不造百分比、失败/恢复/重复同步 | WF-03 |
 | P-04 元数据 | /admin/metadata、/:objectId | 管理元数据功能码+范围 | 原始结构只读、业务字典、快照变化 | WF-04 |
-| P-05 部门 | /admin/departments | 部门码+委派 | 树移动、循环/越界、有用户不可删 | WF-05 |
-| P-06 用户 | /admin/users、/:id | 用户分动作码+委派 | 停用、改角色、迁部门、重置密码 | WF-05 |
-| P-07 角色 | /admin/roles、/:id | 角色码+委派 | 组织授权管理员对共享角色只读；平台管理员持码可改 | WF-05 |
-| P-08 委派 | /admin/delegations | 平台管理员 | 部门∩资源∩动作∩期限，不可自扩权 | WF-05/WF-06 |
+| P-05 部门 | /admin/departments | 平台管理员 | 树移动、循环/越界、有用户不可删 | WF-05 |
+| P-06 用户 | /admin/users、/:id | 平台管理员 | 停用、改角色、迁部门、重置密码 | WF-05 |
+| P-07 角色 | /admin/roles、/:id | 平台管理员 | 角色纯模板（key/name/enabled）；挂角色完成授权入口 | WF-05 |
+| P-08 委派 | （已删除） | — | S4/S5 移除：管理职责由唯一平台管理员直接承担 | — |
 | P-09 平台/客户端 | /admin/platforms、/:id | 平台管理员 | Tier证明、Scope、URI、公开端无secret | WF-02/WF-06 |
-| P-10 授权矩阵 | /admin/permissions、/preview | acl分动作码+委派 | META/READ、DENY、时间边界、模拟预览 | WF-06 |
+| P-10 授权矩阵 | /admin/permissions、/preview | 平台管理员；默认主体角色 | META/READ、DENY、时间边界、模拟预览 | WF-06 |
 | P-11 全局审计 | /admin/audit、/:requestId | audit:list/read，解密另授 | 数据源筛选、脱敏/UNKNOWN、范围+理由解密 | WF-07 |
 | P-12 我的字典 | /me/dictionary、/:objectId | 本人有效权限 | 目录可见无READ、平台切换、隐藏字段 | WF-04 |
 | P-13 接入配置 | /me/integrations | 本人可用平台 | 无真实域名/版本待验、OAuth或PAT说明 | WF-08 |
@@ -40,7 +40,7 @@
 | P-17 AS授权页 | authz /oauth2/authorize入口 | 授权中的员工 | 独立会话、精确回调、拒绝授权 | WF-01 |
 | P-18 错误/导航 | /403、/404、/ | 当前会话 | 安全返回路径、权限变化后刷新菜单 | 共用壳 |
 
-操作码不是角色硬编码的替代品，服务端仍需逐请求验证委派/所有权。每个异常应同时走查网络响应是否泄露字段，而不是只检查按钮是否隐藏。
+管理面按 platformAdmin 布尔二元校验，服务端仍逐请求验证所有权与授权交集。每个异常应同时走查网络响应是否泄露字段，而不是只检查按钮是否隐藏。
 
 ## 3. 视觉实施约束
 

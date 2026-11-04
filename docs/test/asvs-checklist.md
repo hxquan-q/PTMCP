@@ -76,4 +76,10 @@ actor权威READY、ACTIVE档案、有效角色并集中的平台码与命令固�
 | 8.3.2（L3） | 当前撤权有 ≤5 秒边界，不等于立即生效；可能发生信息披露 | 明确与更高等级要求的差距，安全决策前不声称 L3 达标 |
 | 16.4.3 | 未提供已验证的逻辑隔离日志分析/传输系统证据 | T20 验证独立收集、完整性、传输和告警；本地 outbox/WAL 不替代此项 |
 
+2026-11-05 权限模型收敛（S1–S5，[工作项](../../tasks/work-items/DEV-20261104-permission-simplification.md)）：管理门二元化——
+`AdminActionInterceptor` 只判 `platformAdmin` 布尔（S2），`sys_role_permission` 删除、角色收敛为纯数据模板（S3），
+委派面与 `admin_delegation` 表整体删除（S4）。上文历史阶段证据中「actor/委派重验」类待办随委派删除而消失，
+管理资格的事务内重验现状是 `requireCurrentRoleActor` 的 READY/ACTIVE/平台管理员布尔检查；
+自增权防护（SELF_PRIVILEGE_ESCALATION）与最后管理员保护状态不变，仍按本表逐条维持。
+
 每次安全变更更新受影响行，关联实际 TC/任务、版本/环境、命令、预期/实际、证据和评审者。结构校验或 Checkstyle/ESLint PASS 不能升级这里的状态。

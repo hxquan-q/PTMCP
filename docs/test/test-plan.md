@@ -42,7 +42,7 @@ Oracle、SQL Server、列级/行级权限、SSO、ERP 同步不在一期通过�
 
 ### 3.2 标准夹具
 
-- 身份：普通员工 U-A/U-B、组织授权管理员 U-ORG、安全审计员 U-AUD、平台管理员 U-ADM、停用用户 U-OFF；研发只用合成账号。
+- 身份：普通用户 U-A/U-B、平台管理员 U-ADM（唯一，2026-11-05 收敛后无组织授权管理员/安全审计员夹具）、停用用户 U-OFF；研发只用合成账号。
 - 组织：部门 D-PARENT、D-A、D-B；角色 R-READ、R-DENY、已停用角色 R-OFF；允许/禁止继承各一组。
 - 平台：P-DESKTOP（Tier2）、P-PERSONAL（Tier3）、P-SERVER（有mTLS/后端证明的Tier1）、P-OFF。新DCR客户端未绑定额外Scope。
 - 数据源：DS-MY-A 与 DS-MY-B 都有 catalog `erp`；DS-PG-A 的 catalog `ptmcp_fixture` 含 `sales`、`public` 两个schema，各有同名 `orders`，内容有不同标记。

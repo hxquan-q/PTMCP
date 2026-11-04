@@ -7,6 +7,9 @@ Acceptance: pending
 Verification: PASS
 Updated: 2026-11-05
 
+> S1–S6 全部切片已实施并通过适用检查、分别提交推送 `dev`；人工验收与生产化验证未发生，
+> Status 保持 in_progress、Acceptance 保持 pending，不能升为 done。
+
 ## 目标与边界
 
 来源：用户决定把权限模型彻底简化为「单管理员 + 角色=纯数据模板」：
@@ -127,6 +130,25 @@ Updated: 2026-11-05
 - 更新后端 `docs/backend/api-spec.md`（去委派、`/session/me` 去 `permissions`、角色去 `permissionCodes`）。
 - 更新 `docs/test/test-case.md` 权限相关用例。
 - 验证：`python scripts/check.py` 通过；文档断链不新增。
+
+### S6（2026-11-05）已实施
+
+- 契约/设计文档：`api-spec.md`（§2 功能码→二元门、`/session/me` 契约、RoleWrite/GrantWrite、
+  /delegations 三行删除、ACL 三写去委派锚定）、`authorization.md`（标题与 §1/§6/§7 重写，
+  §7 改「管理写与自增权防护」，保留部门写事务与自增权防护语义）、`db-design.md`（表清单
+  去委派行+V20 删除说明、事务清单）、`audit.md`（审计面归平台管理员）、`authentication.md` 无实质命中。
+- 产品/运营/前端文档：`PRD.md`（§2 角色分工重写+四角色表替换、FR-02/AC-02、FR-07/AC-07、FR-16）、
+  `总体方案.md`（角色模型与使用边界段）、`faq.md`、`user_flow.md`、`user-manual.md`（§2 角色表+§3.3
+  单操作流）、`operation-manual.md`、`page-spec.md`（P-05/07/08/10/11 与通用协议；P-08 整节保留编号
+  标注已删除，页面 ID 不重排）、`ui-link.md`、`dev-guide.md`（目录结构 adminGateContext、内存 store
+  契约）、`wireframes.md`、`business-coverage.md`（P-08 行历史标注）、`test-plan.md`（夹具身份清单）、
+  `test-case.md`（TC-UI-001/006、TC-AUD-006）。
+- 历史证据不重写：`evidence/mcp-capability-audit-2026102*.md`、`business-coverage.md` Vue 快照表、
+  `asvs-checklist.md` 阶段证据原文保留；`asvs-checklist.md` 末尾追加 2026-11-05 收敛现状说明
+  （actor/委派重验待办随 S4 消失，自增权防护与最后管理员状态不变）。
+- 待确认口径落地：授权矩阵 USER/DEPT 主体保留为次级、入口默认角色（S5 已实施，文档同口径）。
+- 验证：`python scripts/check.py` → `Ran 74 tests ... OK`，门禁 PASS，断链无新增。
+- 评审类型：自审（单 Agent 实施）。
 
 ## 验收标准与命令
 
@@ -289,13 +311,15 @@ Updated: 2026-11-05
 
 ## 交接
 
-当前焦点：S6 文档契约同步（PRD「单管理员 + 角色=纯数据模板」、api-spec 去 `permissions`/
-`permissionCodes`/委派面、test-case 权限用例、总体方案与架构文档对齐）。S5 已提交推送 `dev`。
+当前焦点：S1–S6 全部完成。S6 文档契约同步已提交推送 `dev`；剩余是人工验收（浏览器端到端
+对照真实后端、非管理员 403 门实测）与后续生产化事项，均未授权/未发生。
 
 已有授权与待决定事项：
 
 - 实施与适用检查在长期授权内；功能/修复切片通过检查后提交并推送当前分支。
 - 本项安全关键 + 破坏性 + 涉及数据模型，**每片提交前单独在切片内给出该片门禁证据**；不做一揽子提交。
 - 发布/生产操作、跨分支操作未授权。
-- 待确认口径（S6 收敛）：审计数据的读取面在委派删除后归属；授权矩阵 USER/DEPT 主体是保留为次级
-  还是同样收窄到仅角色。默认按「USER/DEPT 保留为可用次级、入口默认角色」推进，与用户单操作流目标一致。
+- 已落地口径：审计数据读取面归平台管理员（S2/S4 后无独立审计员角色）；授权矩阵 USER/DEPT 主体
+  保留为次级覆盖、入口默认角色（S5+文档同步完成）。
+- 遗留（不阻塞本项）：`RoleAdminController` javadoc 仍有 S3 前的委派注释残留（与新注释矛盾，
+  纯注释债）；后端业务连接的 ACL 执行面语义（管理员是否自动 READ）由执行器切片另行处理。

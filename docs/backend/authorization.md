@@ -1,12 +1,12 @@
-# 授权计算、委派与失效一致性设计
+# 授权计算与失效一致性设计
 
 版本：1.1-design · 2026-10-24 · 状态：T08-a 已实现单资源 Allow/Deny、时间窗与平台交集判定（纯函数）；继承/资源树展开、实库来源、缓存与 ≤5 秒撤销仍待实现。MySQL主库权威核验及5秒撤销目标须经M0多副本故障测试；Redis命中率不是授权正确性证据。
 
 ## 1. 两个独立权限平面
 
-控制台功能权限是ptmcp:*菜单/接口动作，管理范围是平台管理员显式委派的部门和资源范围；业务数据权限是主体对物理资源的META/READ。具有后台管理员、若依superadmin或audit:read并不自动READ业务表。组织授权管理员只能在委派交集内维护授权，不能修改自身委派、不能给范围外用户/角色授予权限。
+管理面是二元门：唯一平台管理员（`sys_user_security.platform_admin`）对管理控制台全允，其余用户一律 403 MANAGEMENT_SCOPE_DENIED；业务数据权限是主体对物理资源的 META/READ，按授权矩阵（以 ROLE 为主授权主体）计算。管理身份、若依superadmin或audit:read并不自动READ业务表。
 
-MCP 服务生命周期（创建、工具编辑、发布、停启用、回滚）和面向其他主体的再授权只属于获准范围内的管理功能权限，仍受功能码与委派共同约束。员工个人接口只承接已获授权 MCP 的接入与使用，包含本人 OAuth 同意、本人授权族撤销和本人 PAT，不提供上述生命周期或再授权。产品口径见 [PRD](../product/PRD.md)。可发布 MCP 服务对象尚未实现；本节的 META/READ 计算不因该分工改变。
+MCP 服务生命周期（创建、工具编辑、发布、停启用、回滚）和面向其他主体的再授权只属于平台管理员。员工个人接口只承接已获授权 MCP 的接入与使用，包含本人 OAuth 同意、本人授权族撤销和本人 PAT，不提供上述生命周期或再授权。产品口径见 [PRD](../product/PRD.md)。可发布 MCP 服务对象尚未实现；本节的 META/READ 计算不因该分工改变。
 
 一期动作仅META和READ，effect为ALLOW/DENY。列/行权限二期，仅预留不接受未生效规则。物理目标为数据源→命名空间→对象世代三级，include_descendants=true才向下展开。对象删除重建有新generation，旧授权stale不继承。平台scope为同样资源树的能力上限，但不等于用户grant。
 
@@ -14,7 +14,7 @@ MCP 服务生命周期（创建、工具编辑、发布、停启用、回滚）�
 
 主体集合S(user)包括：本人USER；sys_user_role中的有效ROLE（status=0、del_flag=0）；直属有效DEPT；配置明确启用部门继承时的所有有效上级DEPT。部门树从parent_id权威边重建/校验，无环；ancestors只能缓存。每个部门只在自身status=0、del_flag=0时贡献主体；停用/软删某节点只排除该节点，继续检查其上有效祖先，不能连同上级DENY截断。直属无效时deptId为空，USER与有效ROLE仍参与。继承开关变化提升policy_epoch。岗位不进入一期表ACL。
 
-业务授权读取以活动sys_user_profile为锚点，在单条有界递归查询内校验直属归属和parent_id链，statement超时5秒。最多64个实际节点（含直属），仅parent_id=0为正常根；自环、多节点环、缺直属、非零缺父、负父ID或需要第65节点均拒绝SECURITY_STATE_UNAVAILABLE，不能返回部分主体。继承关闭仍校验完整链，但只贡献有效直属部门，这是对旧读取路径的可用性收紧。当前AuthorizationReader和AclDirectory共用DepartmentSubjectReader；AclDirectory单参构造器及生产网关均默认继承，布尔构造器用于显式关闭且统一作用于scope、grants与preview。本片不提供部署开关/开关变更epoch，不证明角色、grants、平台范围等跨语句整体快照一致，也不代表管理委派或部门写树校验已完成。验证状态见[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
+业务授权读取以活动sys_user_profile为锚点，在单条有界递归查询内校验直属归属和parent_id链，statement超时5秒。最多64个实际节点（含直属），仅parent_id=0为正常根；自环、多节点环、缺直属、非零缺父、负父ID或需要第65节点均拒绝SECURITY_STATE_UNAVAILABLE，不能返回部分主体。继承关闭仍校验完整链，但只贡献有效直属部门，这是对旧读取路径的可用性收紧。当前AuthorizationReader和AclDirectory共用DepartmentSubjectReader；AclDirectory单参构造器及生产网关均默认继承，布尔构造器用于显式关闭且统一作用于scope、grants与preview。本片不提供部署开关/开关变更epoch，不证明角色、grants、平台范围等跨语句整体快照一致，也不代表部门写树校验已完成。验证状态见[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
 
 对每条grant先验证主体有效、目标世代有效、状态ACTIVE，按树展开include_descendants，再按UTC时刻t选择valid_from<=t且(valid_to为空或t<valid_to)。时间区间半开[valid_from,valid_to)，没有“当天结束”模糊语义。
 
@@ -53,7 +53,7 @@ DISCOVER：在平台允许META/READ范围和token catalog能力内可列表名�
 
 PolicySnapshot包括userId/authVersion/identityVersion、有效role/dept列表及版本、platformId/securityVersion/scopeVersion、datasourceId/configVersion/resourceVersion/snapshotId、globalPolicyEpoch、evaluatedAt、nextBoundaryAt、authoritativelyCheckedAt、effective META/READ及拒止原因。键至少包含用户、平台、数据源、相关版本，不能只按userId缓存跨平台权限。
 
-有效权限缓存最多300秒，TTL=min(300秒,最近未来时间边界-now)。边界从所有可能影响候选资源的相关grant的未来valid_from和valid_to计算，必须包括尚未生效的DENY、祖先范围grant以及主体/委派状态时间，不能先过滤成“当前有效grant”再求边界。边界到达即使Redis条目还存在也按nextBoundaryAt绝对时间拒用/重算，秒级TTL取整不会延长授权；边界小于1秒直接不缓存。缓存命中仍比较当前安全版本、状态与当前时刻，不能用滑动TTL无限续命。
+有效权限缓存最多300秒，TTL=min(300秒,最近未来时间边界-now)。边界从所有可能影响候选资源的相关grant的未来valid_from和valid_to计算，必须包括尚未生效的DENY、祖先范围grant以及主体状态时间，不能先过滤成“当前有效grant”再求边界。边界到达即使Redis条目还存在也按nextBoundaryAt绝对时间拒用/重算，秒级TTL取整不会延长授权；边界小于1秒直接不缓存。缓存命中仍比较当前安全版本、状态与当前时刻，不能用滑动TTL无限续命。
 
 Schema缓存只读已发布snapshot，过期/缺失拒绝；不能缓存不存在直到跨DROP/CREATE变同名对象。授权集合有资源generation，快照变化使相关条目失效。多对象权限查询必须来自同一一致性快照，不把分别命中的新旧角色/平台缓存拼起来。
 
@@ -81,45 +81,37 @@ gateway进入请求读取/核验安全快照；排队出队时和JDBC执行提�
 | 客户端停用/回调/认证方式变化 | client版本、族撤销、epoch、事件 | 旧token不能继续凭签名有效使用 |
 | PAT/family撤销/refresh重放 | status/version、epoch/安全事件 | PAT拒绝/整族JWT拒绝 |
 | 数据源停用/换凭证、Schema发布/删除重建/视图定义变化 | config/resource版本、epoch、事件 | 旧ApprovedQuery拒绝/重守门，旧池排空，旧对象grant不自动迁移 |
-| 委派创建/撤销 | delegation状态/version、操作日志、epoch、事件 | 后台写权限重算；不自动改变被委派者已依法授予的业务grant，需另行撤销策略 |
-| 委派自然生效/到期 | 无需后台写事件 | 请求按权威时间重判管理范围，不等待扫描或广播 |
+| 平台Scope/目录模式/Tier/proof变更 | platform版本、epoch、事件 | scope重新相交，proof重新验证；必要时撤销客户端族 |
+| 客户端停用/回调/认证方式变化 | client版本、族撤销、epoch、事件 | 旧token不能继续凭签名有效使用 |
+| PAT/family撤销/refresh重放 | status/version、epoch/安全事件 | PAT拒绝/整族JWT拒绝 |
+| 数据源停用/换凭证、Schema发布/删除重建/视图定义变化 | config/resource版本、epoch、事件 | 旧ApprovedQuery拒绝/重守门，旧池排空，旧对象grant不自动迁移 |
 
 外部脚本直接写若依表会跳过闭环，一期只允许经PTMCP管理域写入；数据库凭证禁止通用后台直接写组织表。已有若依接口必须包装/禁用，不能保留旁路。紧急运维SQL需同事务更新版本/outbox并有审核日志及恢复校验。
 
 角色create/update/delete复用SecurityChangeTransaction，先取得全局安全锁，再在同一连接锁actor权威行，
-要求合法正版本、READY与ACTIVE档案，并从当前启用且未删除角色的权限并集中读取平台码
-`ptmcp:platform:scope`及方法固定的精确create/update/delete动作；两码可来自不同有效角色。
-缺码返回MANAGEMENT_SCOPE_DENIED，非就绪/非活动返回TOKEN_REVOKED，缺失或损坏权威行返回
+要求合法正版本、READY与ACTIVE档案，且actor是平台管理员（`sys_user_security.platform_admin`）；
+非就绪/非活动返回TOKEN_REVOKED，非平台管理员返回MANAGEMENT_SCOPE_DENIED，缺失或损坏权威行返回
 SECURITY_STATE_UNAVAILABLE；SQL故障沿事务映射DEPENDENCY_UNAVAILABLE。资格检查先于目标读取，
-之后才锁角色并校验实际版本；
-角色行/version、权限码、操作日志、epoch与ROLE_CHANGED同事务。事件固定aggregate_type=ROLE，
+之后才锁角色并校验实际版本。
+角色行/version、操作日志、epoch与ROLE_CHANGED同事务。事件固定aggregate_type=ROLE，
 payload仅schemaVersion=1、实际数值角色ID和本次version，软删使用递增后的version。
-create/update在同连接读取行与权限码并返回不可变快照；权限码null保持、空集合清空，enabled=null保持。
+create/update在同连接读取行并返回不可变快照；enabled=null保持。
 版本不匹配先拒绝VERSION_CONFLICT，实际版本耗尽拒绝SECURITY_STATE_UNAVAILABLE；commit丢确认返回
-OPERATION_UNKNOWN且单次调用不重放。角色创建HTTP另接`roles.create`幂等包装，先做当前权限和输入校验，
+OPERATION_UNKNOWN且单次调用不重放。角色创建HTTP另接`roles.create`幂等包装，先做当前资格和输入校验，
 成功同键回放原正文/Location，未知结局保留占位；存储事务与HTTP验证分开记录，见[API幂等合同](api-spec.md#1-通用约定)。
 当前删除保留成员/活动授权引用检查，但成员/ACL写方尚未统一围栏，不能据此承诺并发引用完整性；
-这只重验当前账号与功能资格，没有绑定入场会话或authVersion，不能识别注销、过期、改密完成或停用后再启用的
-旧在途请求。其余写路径的事务内actor/委派重验、最后管理员、间接自扩权及事件广播仍未覆盖。
+这只重验当前账号与管理资格，没有绑定入场会话或authVersion，不能识别注销、过期、改密完成或停用后再启用的
+旧在途请求。其余写路径的事务内actor重验、最后管理员、间接自扩权及事件广播仍未覆盖。
 实际验证见[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
 
-## 7. 管理范围委派
+## 7. 管理写与自增权防护
 
-admin_delegation是平台管理员给组织授权管理员的管理授权，包含userId、departmentRootId、resourceType/resourceId/generation、allowedActions、validFrom/validTo、status/version。服务端把多个委派分别校验，不能把“委派A的部门”与“委派B的资源”交叉拼出没有授予的新组合。管理命令必须由至少一个完整委派覆盖该命令的所有目标及动作；批量多目标逐项校验，任一失败整个事务不提交。
+管理写（组织、角色、授权）仅平台管理员可执行；S3/S4 起不再存在委派授权（`admin_delegation` 表已删除），
+入口与事务内资格检查均只判平台管理员布尔。
 
-委派create/revoke复用SecurityChangeTransaction，先锁sys_security_state，再在同连接检查/写入委派；
-行、操作日志、epoch与DELEGATION_CHANGED原子提交。显式create/revoke事件固定aggregate_type=ADMIN_DELEGATION，
-payload仅schemaVersion=1、实际数值ID和本次version。创建在INSERT后同连接读取数据库微秒快照，
-撤销同连接FOR UPDATE校验旧版本/状态/自撤销限制并保留CAS，版本耗尽拒绝SECURITY_STATE_UNAVAILABLE。
-返回本事务快照，不在提交后另开连接读取；commit丢确认返回OPERATION_UNKNOWN且单次调用不重放。
-重叠检查受同一全局锁保护，要求所有委派写方使用此事务，不支持与旧直写代码混跑。
-数据源目标变更的批量撤销在数据源安全事务中执行，不产生本片定义的逐委派ID/version事件。
-此片只保证epoch/事件持久原子性，不代表广播、多副本消费或事务内actor/角色/委派授权重验完成；
-自然到期仍按时间判断，现有业务grant和业务token不随管理委派自动撤销。实际验证见[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
+部门和主体的范围归属从target的parent_id权威链判定，不使用ancestors缓存。单条有界查询读取完整链，含target最多64节点，只parent_id=0为正常根；缺父、负父、环或需第65节点拒绝SECURITY_STATE_UNAVAILABLE。未知target返回不覆盖；已存在target先校验完整链，再要求target和命中的根都未软删。停用但未删除的节点仍可管理以重新启用；中间节点停用/软删不改父边拓扑，不能套用业务DEPT主体过滤。SQL故障维持DEPENDENCY_UNAVAILABLE。这一片仅定义单目标范围读取，不代表完整PUT的提交前重验、写树或epoch闭环已实现；实际验证见[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
 
-部门和主体的范围归属从target的parent_id权威链判定，不使用ancestors缓存。单条有界查询读取完整链，含target最多64节点，只parent_id=0为正常根；缺父、负父、环或需第65节点拒绝SECURITY_STATE_UNAVAILABLE，匹配委派根或target等于根也不能提前结束。未知target返回不覆盖；已存在target先校验完整链，再要求target和命中的根都未软删。停用但未删除的节点仍可受委派管理以重新启用；中间节点停用/软删不改父边拓扑，不能套用业务DEPT主体过滤。SQL故障维持DEPENDENCY_UNAVAILABLE。这一片仅定义单目标范围读取，不代表完整PUT同一委派覆盖新旧父/子树、事务提交前重验、写树或epoch闭环已实现；实际验证见[网关收尾](../../tasks/work-items/DEV-20261028-gateway-completion.md)。
-
-部门完整PUT由同一条有效委派包含ptmcp:department:update且覆盖旧目标、移动后的新父部门，不能拼接不同委派。未移动只需覆盖旧目标，允许委派根自身改名/重新启用；实际提升为根仅平台管理员允许。目标读取快照先与If-Match相等，再判断父边变化，落库CAS仍保留。此入口切片已有真实MySQL/Servlet反例及组合通过证据；整子树委派和提交前授权重验仍待补，验证状态见网关收尾工作项。
+部门完整PUT仅平台管理员可执行，不能拼接其他管理身份。实际提升为根仅平台管理员允许——当前全部管理写都只允许平台管理员。目标读取快照先与If-Match相等，再判断父边变化，落库CAS仍保留。此入口切片已有真实MySQL/Servlet反例及组合通过证据；提交前授权重验仍待补，验证状态见网关收尾工作项。
 
 部门create/edit/update/move/delete的写命令统一经SecurityChangeTransaction：先锁sys_security_state，
 再按dept_id锁定部门快照，从parent_id构造权威拓扑；ancestors不参与防环或确定后代写集。
@@ -130,22 +122,22 @@ payload仅schemaVersion=1、实际数值ID和本次version。创建在INSERT后�
 目标、后代版本、操作日志、policy_epoch及DEPARTMENT_CHANGED事件原子提交；创建事件绑定真实生成ID/version1。
 丢失提交确认返回OPERATION_UNKNOWN，安全事务的单次调用不自动重放。HTTP包装分派后失败保留占位，
 UNKNOWN及过期RUNNING不重占，完成记录故障不得覆写SUCCEEDED；实际验证另记网关收尾工作项，
-不能从store级测试推断HTTP结果。该锁不替代事务内actor/角色/委派重验或整子树授权；
+不能从store级测试推断HTTP结果。该锁不替代事务内actor重验或整子树授权；
 删除的直接子部门/直属用户检查尚未与用户写入共用围栏，引用并发和容量仍待独立验证。
 
-创建Allow的动作/对象/主体范围与最长有效期不能超委派；DENY也需管理权，不允许范围外干扰。全局平台管理员分配委派可选READ/META管理动作并明确是否有撤销权。用户移动需旧/新部门均可管理，部门移动需整棵子树权限、无环；共享角色有范围外成员时禁止组织管理员修改角色授权/成员，以防间接扩权。委派授予管理权不自动给管理员本人业务READ。
+用户移动需平台管理员执行；部门移动需无环。角色是纯数据权限模板，挂到用户即完成授权入口，资源授权在授权矩阵按ROLE主体维护；共享角色不再有范围外成员概念（管理面只有平台管理员）。管理权不自动给管理员本人业务READ。
 
-组织授权管理员还受“不得自扩业务权限”约束。服务端在同一命令的提交前计算修改前/后本人EffectiveMeta/EffectiveRead，覆盖本人USER、本人所属ROLE/DEPT及上级、成员关系/部门树改变、移除本人命中DENY等间接路径；只要任一资源本人META或READ增加即拒SELF_PRIVILEGE_ESCALATION，不能靠先改role membership再改grant分步绕过。对不易有限展开的祖先范围规则，用策略差异证明或保守拒绝，不只检查subject_id==当前userId。需要给组织管理员自身增权时由平台管理员另行显式操作并审计；平台管理员菜单角色本身仍不自动READ。该检查与委派范围共同执行，不能用其中一项替代另一项。
+平台管理员本人同样受“不得自扩业务权限”约束（防护保留，与旧委派机制无关）。服务端在同一命令的提交前计算修改前/后本人EffectiveMeta/EffectiveRead，覆盖本人USER、本人所属ROLE/DEPT及上级、成员关系/部门树改变、移除本人命中DENY等间接路径；只要任一资源本人META或READ增加即拒SELF_PRIVILEGE_ESCALATION，不能靠先改role membership再改grant分步绕过。对不易有限展开的祖先范围规则，用策略差异证明或保守拒绝，不只检查subject_id==当前userId。平台管理员菜单/管理身份本身仍不自动READ。
 
 ## 8. 验收不变量
 
 2026-11-01 ACL 接线：create/update/revoke 复用主库安全事务，全局锁先于 actor 权威行和 grant 行；
-当前角色码、真实会话 authVersion、委派新旧范围、本人前后策略与写入均在同连接校验。
+当前平台管理员资格、真实会话 authVersion、本人前后策略与写入均在同连接校验。
 update 保留 ID/创建人并递增版本；操作日志、epoch、ACL_CHANGED 同事务，审计写失败也回滚旧授权。
 本人权限在现在及前后 grant 的未来有效期边界逐点比较，关系/主体展开不随每个时点重复执行。
 只删除实际写集中的当前 grant，不以“同主体/资源/动作”猜测其他 DENY 被移除。
 三写使用统一全局围栏，因此不支持与旧直写 ACL 进程混跑；部署时先退出旧管理写入器。
-重复已撤销是受围栏保护的只读结果，不提升 epoch。范围外的授权记录不因主体部门在委派内而披露。
+重复已撤销是受围栏保护的只读结果，不提升 epoch。授权记录不按部门范围收窄披露（平台管理员全量可见）。
 本片验证见[九项修复工作项](../../tasks/work-items/DEV-20261101-backend-api-fixes.md)，
 不能据此覆盖其他管理写路径、成员增权、广播或生产容量验收。
 
