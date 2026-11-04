@@ -402,6 +402,18 @@ export function App() {
     return () => window.removeEventListener('ptmcp:password-changed', onPasswordChanged);
   }, [path]);
 
+  /* 账号安全页主动退出：与顶栏退出同效，安静回到登录页。 */
+  useEffect(() => {
+    const onSignedOut = () => {
+      setReturnTo(safeReturnTo(path));
+      setSession(null);
+      setSessionState('anonymous');
+      setExpiredNote('');
+    };
+    window.addEventListener('ptmcp:signed-out', onSignedOut);
+    return () => window.removeEventListener('ptmcp:signed-out', onSignedOut);
+  }, [path]);
+
   useEffect(
     () =>
       onSessionExpired(() => {

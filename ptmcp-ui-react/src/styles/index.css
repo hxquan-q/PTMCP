@@ -2629,3 +2629,294 @@ textarea:focus-visible {
     margin-left: auto;
   }
 }
+
+/* ── 账号安全：账号概览带 + 设置双栏 ── */
+.security-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+/* 概览带用浅蓝底而不是白卡：账号身份是页面锚点，与下方可操作的设置卡分层。 */
+.security-account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px;
+  background: var(--ptmcp-blue-soft);
+  border: 1px solid rgba(22, 119, 255, 0.18);
+  border-radius: var(--ptmcp-radius-panel);
+}
+.security-account-main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+.security-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--ptmcp-radius-circle);
+  background: var(--ptmcp-surface);
+  color: var(--ptmcp-blue-text);
+  font-size: 20px;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(15, 98, 214, 0.12);
+}
+.security-avatar svg {
+  width: 24px;
+  height: 24px;
+}
+.security-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.security-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.security-name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ptmcp-heading);
+  letter-spacing: -0.01em;
+}
+.security-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ptmcp-text-muted);
+}
+.security-meta-sep {
+  color: var(--ptmcp-text-faint);
+}
+.security-roles {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.security-session {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  padding-left: 24px;
+  border-left: 1px solid rgba(9, 88, 217, 0.16);
+  text-align: right;
+}
+.security-session-label {
+  font-size: 12px;
+  color: var(--ptmcp-text-muted);
+}
+.security-session-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ptmcp-heading);
+  font-variant-numeric: tabular-nums;
+}
+.security-session-note {
+  font-size: 12px;
+  color: var(--ptmcp-text-faint);
+}
+.security-logout {
+  margin-top: 4px;
+}
+.security-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 20px;
+  align-items: start;
+}
+.security-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.security-card {
+  background: var(--ptmcp-surface);
+  border: 1px solid var(--ptmcp-border);
+  border-radius: var(--ptmcp-radius-panel);
+  box-shadow: var(--ptmcp-shadow);
+  overflow: hidden;
+}
+.security-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--ptmcp-border-row);
+}
+.security-card-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--ptmcp-radius-control);
+  background: var(--ptmcp-blue-soft);
+  color: var(--ptmcp-blue-text);
+}
+.security-card-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.security-card-title {
+  min-width: 0;
+}
+.security-card-title h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ptmcp-heading);
+}
+.security-card-title p {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ptmcp-text-muted);
+}
+.security-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 24px 24px;
+}
+.security-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 24px;
+  background: var(--ptmcp-band);
+  border-top: 1px solid var(--ptmcp-border-row);
+}
+.security-foot-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ptmcp-text-muted);
+}
+.security-foot-note svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--ptmcp-blue-text);
+}
+.security-platform-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.security-platform {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+}
+.security-platform + .security-platform {
+  border-top: 1px solid var(--ptmcp-border-row);
+}
+.security-platform-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--ptmcp-radius-circle);
+  background: var(--ptmcp-green);
+  box-shadow: 0 0 0 2px var(--ptmcp-bg-success);
+}
+.security-platform-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ptmcp-text-strong);
+}
+.security-platform-empty {
+  margin: 0;
+  padding: 20px 24px;
+  font-size: 13px;
+  color: var(--ptmcp-text-muted);
+}
+.security-card-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 20px;
+  border-top: 1px solid var(--ptmcp-border-row);
+  background: var(--ptmcp-band);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ptmcp-text-muted);
+}
+.security-card-note svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  color: var(--ptmcp-blue-text);
+}
+@media (max-width: 1080px) {
+  .security-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 760px) {
+  .security-account {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 20px;
+  }
+  .security-session {
+    align-items: flex-start;
+    padding-top: 16px;
+    padding-left: 0;
+    border-top: 1px solid rgba(9, 88, 217, 0.16);
+    border-left: none;
+    text-align: left;
+  }
+  .security-logout {
+    width: 100%;
+  }
+}
+@media (max-width: 620px) {
+  .security-account-main {
+    align-items: flex-start;
+  }
+  .security-card-head,
+  .security-card-body,
+  .security-card-foot {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .security-card-foot {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .security-card-foot .form-actions .btn {
+    flex: 1;
+  }
+}
