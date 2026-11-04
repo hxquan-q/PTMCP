@@ -43,9 +43,9 @@ UI 改动涵盖 App、PageState、useCursorPage、styles、权限/审计/数据�
 | G2 审计恢复 | T09/T20 | 唯一目录 owner、仅回放关闭段、幂等恢复/损坏告警/UNKNOWN 收敛与故障测试 | completed |
 | G3 候选与健康 | T15-c S4 | 错候选不替换 active、CAS 发布、健康绑定版本与目标 | verifying；定向 PASS（2026-11-04，真实 MySQL），候选保留/清理策略待密钥运维切片 |
 | G4 取消与容量 | T15-c S5/T19-d | 主体隔离取消、执行清理后归还额度、部署预算语义明确且有边界测试 | completed；定向 PASS（2026-11-04，真实 MySQL）；多副本共享配额与取消寻址未实现，T15-c S5 仍 pending |
-| G5 密钥兼容 | T15-c S6 | 新旧钥兼容、对象绑定与迁移格式、日志不泄漏、恢复仍可读 | in_progress；G5a、G5b 定向 PASS（含只读评审修复），恢复组合验收待 G7 |
+| G5 密钥兼容 | T15-c S6 | 新旧钥兼容、对象绑定与迁移格式、日志不泄漏、恢复仍可读 | completed；G5a/G5b 定向 PASS，G7 组合验收覆盖新旧钥、对象绑定、WAL 恢复可读与日志脱敏；旧行不重封/无盘点告警为已记录残余 |
 | G6 字典上下文 | T15-c S7 | 三工具契约说明、授权后字典/关系/预算、撤权与恶意注释测试 | [verifying；定向 PASS](DEV-20261030-schema-context.md) |
-| G7 组合验收 | T19-e/T20 | 双引擎、OAuth、恢复、前后端适用门禁；真实客户端与部署证据单列 | pending；审计修复续接 [DEV-20261031-audit-fixes](DEV-20261031-audit-fixes.md) |
+| G7 组合验收 | T19-e/T20 | 双引擎、OAuth、恢复、前后端适用门禁；真实客户端与部署证据单列 | verifying；7 模块 1375 项与前端 189 项 PASS（2026-11-04）；Windows 仓库 `--all` 在 925 项通过后被宿主内存压力终止，未获最终结果、不计通过；T19-e 仍 blocked，真实客户端/部署证据未取得 |
 
 G1 写入范围为 gateway 元数据/过滤器/测试、API 合同、相关工作项与笔记。
 资源元数据和 challenge 共享唯一受信配置，不从 Host/Forwarded 头生成 URI；
@@ -877,3 +877,44 @@ Testcontainers 类，无 Docker 的 CI 不提供这些配额证据。
 
 未完成：多副本共享配额、跨副本取消寻址与取消 handler 的驱动级看门狗；T15-c S5 仍 pending。
 G4 工程验证通过，人工验收仍待确认。
+
+## G7 组合验收（2026-11-04）
+
+范围：MySQL/PostgreSQL 双引擎真实查询、OAuth 授权码/刷新/撤销、审计恢复与 WAL 回放、凭据轮换与
+对象绑定、前后端适用门禁。真实 MCP 客户端（WorkBuddy/Cursor/Claude Code/VS Code）联调与部署
+证据不能由本轮测试替代，保持单列。
+
+后端组合（WSL PTMCP-Dev / JDK 21.0.12.1 / Maven 3.9.9，真实 MySQL 8.4 与 PostgreSQL 18
+Testcontainers；工作区 `/mnt/c/Users/xquan/Desktop/Datachat-mcp`，HEAD `7724e8e8`）：
+
+- `bash ./mvnw -B -pl ptmcp-admin,ptmcp-authz,ptmcp-gateway -am verify`：BUILD SUCCESS，exit 0，
+  完成于 2026-11-04T16:16:45+08:00；7 模块全部 SUCCESS，合计 1375 项测试，0 失败/0 错误/0 跳过
+  （common 241、persistence 410、guard 216、datasource 58、admin 245、authz 66、gateway 139）。
+- 关键类均 0 失败/0 错误/0 跳过：`McpQueryFlowTest` 39、`McpPgQueryFlowTest` 6、
+  `OAuthAuthorizationCodeFlowTest` 30、`AuditRecoveryWorkerTest` 5、`TerminalWalReplayTest` 10、
+  `WalOwnershipTest` 5、`WalKeyProviderRotationTest` 2、`SealedEnvelopeTest` 14、
+  `CredentialCipherTest` 5、`DatasourceApiTest` 12、`AdminApiTest` 140。
+- G5 恢复可读：`TerminalWalReplayTest` 覆盖 final ciphertext 与 legacy v1 帧往返；
+  `WalKeyProviderRotationTest` 证明退役 key 仍可解轮换前帧；`AuditRecoveryWorkerTest` 覆盖恢复结局入库。
+  结合 G5a/G5b，G5 判定 completed；旧 `0x01`/legacy 行未重封、无盘点告警与跨行复制服务级反例
+  仍为已记录残余。
+
+前端（Node 24.22.1 / pnpm 11.9.0，`PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false`）：
+
+- `pnpm check`（lint + format:check + typecheck + build）exit 0。
+- `pnpm test` 189 项通过，0 失败/0 取消/0 跳过，exit 0。
+
+仓库门禁（Windows，`scripts/Enter-Dev.ps1` 项目环境）：`python scripts/check.py --all` **未完成**。
+仓库级 docs/workflow/quality/commit/脚本 74 项检查通过；Maven 在 Windows 侧完成 common 241、
+persistence 410、guard 216、datasource 58（合计 925 项，0 失败/0 错误/0 跳过），进入 `ptmcp-admin`
+测试后宿主内存压力终止了整组后台任务，admin/authz/gateway 未运行且无最终 exit code，不能计为通过，
+不能由 WSL 组合结果替代 Windows 门禁事实。环境侧 Windows 直连 WSL dockerd `127.0.0.1:12376`
+的 TLS 被重置；WSL 内 dockerd 与证书链正常，改用 WSL 内 TCP 透传
+`127.0.0.1:12476 → 127.0.0.1:12376` 作为 `DOCKER_HOST` 后 Testcontainers 才可运行，未改测试、
+阈值或 TLS 校验。内存恢复后可按分模块前台方式补跑，不在内存紧张时重复启动整组任务。
+
+未完成：
+
+- T19-e 仍 blocked：缺外部输入，真实客户端 OAuth/PAT 联调未执行，不能由本地协议测试替代。
+- 部署证据（镜像/Compose/manifest/迁移包/恢复演练）未交付，见 [部署手册](../../docs/ops/deploy.md#3-发布包交付契约)。
+- 多副本共享配额与取消寻址未实现，T15-c S5 保持 pending；当前只按单副本声明并发与取消语义。
