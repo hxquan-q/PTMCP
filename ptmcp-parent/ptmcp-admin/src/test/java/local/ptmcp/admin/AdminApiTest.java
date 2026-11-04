@@ -5218,7 +5218,9 @@ class AdminApiTest {
         local.ptmcp.admin.datasource.AuditCipher cipher =
                 new local.ptmcp.admin.datasource.AuditCipher(
                         "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=");
-        byte[] rawSealed = cipher.encryptForTesting("SELECT card_number FROM payment WHERE id = 1");
+        byte[] rawSealed =
+                cipher.encryptForTesting(
+                        "SELECT card_number FROM payment WHERE id = 1", requestId, "sqlRaw");
         try (Connection connection = connect();
                 PreparedStatement statement =
                         connection.prepareStatement(

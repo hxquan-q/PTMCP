@@ -69,10 +69,11 @@ public final class AuditDecryptService {
                 byte[] rawCipher = null;
                 byte[] finalCipher = null;
                 String keyId = null;
+                String storedRequest = null;
                 try (PreparedStatement statement =
                         connection.prepareStatement(
-                                "SELECT sql_raw_cipher, sql_final_cipher, key_id FROM audit_log"
-                                        + " WHERE request_id = ?")) {
+                                "SELECT sql_raw_cipher, sql_final_cipher, key_id, request_id"
+                                        + " FROM audit_log WHERE request_id = ?")) {
                     statement.setString(1, normalizedRequest);
                     try (ResultSet result = statement.executeQuery()) {
                         if (!result.next()) {
@@ -81,15 +82,17 @@ public final class AuditDecryptService {
                         rawCipher = result.getBytes(1);
                         finalCipher = result.getBytes(2);
                         keyId = result.getString(3);
+                        // The stored canonical id, not the path text, is the seal-time binding.
+                        storedRequest = result.getString(4);
                     }
                 }
                 String sqlRaw =
                         wanted.contains("sqlRaw") && rawCipher != null
-                                ? cipher.decrypt(rawCipher, keyId)
+                                ? cipher.decrypt(rawCipher, keyId, storedRequest, "sqlRaw")
                                 : null;
                 String sqlFinal =
                         wanted.contains("sqlFinal") && finalCipher != null
-                                ? cipher.decrypt(finalCipher, keyId)
+                                ? cipher.decrypt(finalCipher, keyId, storedRequest, "sqlFinal")
                                 : null;
                 try (PreparedStatement statement =
                         connection.prepareStatement(

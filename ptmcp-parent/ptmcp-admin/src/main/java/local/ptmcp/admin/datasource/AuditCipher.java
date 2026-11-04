@@ -23,18 +23,30 @@ public final class AuditCipher {
         return envelope.keyId();
     }
 
-    /** Opens a stored cipher; fails closed on any mismatch, including an unknown key id. */
-    public String decrypt(byte[] sealed, String storedKeyId) {
+    /**
+     * Opens a stored cipher with the request id and field name bound at seal time; rows written
+     * before the binding existed still open through the same call. Fails closed on any mismatch,
+     * including an unknown key id.
+     */
+    public String decrypt(byte[] sealed, String storedKeyId, String requestId, String field) {
         String keyId = storedKeyId == null ? null : storedKeyId.trim();
         if (!envelope.enabled()) {
             throw new DomainException(ErrorCode.DEPENDENCY_UNAVAILABLE);
         }
         return envelope.decrypt(
-                sealed, keyId, SealedEnvelope.PURPOSE_AUDIT_SQL, ErrorCode.AUDIT_UNAVAILABLE);
+                sealed,
+                keyId,
+                SealedEnvelope.PURPOSE_AUDIT_SQL,
+                requestId + ":" + field,
+                ErrorCode.AUDIT_UNAVAILABLE);
     }
 
     /** Encryption for test and tooling paths only; production writes come from the gateway. */
-    public byte[] encryptForTesting(String plaintext) {
-        return envelope.seal(plaintext, SealedEnvelope.PURPOSE_AUDIT_SQL, ErrorCode.INTERNAL_ERROR);
+    public byte[] encryptForTesting(String plaintext, String requestId, String field) {
+        return envelope.seal(
+                plaintext,
+                SealedEnvelope.PURPOSE_AUDIT_SQL,
+                requestId + ":" + field,
+                ErrorCode.INTERNAL_ERROR);
     }
 }

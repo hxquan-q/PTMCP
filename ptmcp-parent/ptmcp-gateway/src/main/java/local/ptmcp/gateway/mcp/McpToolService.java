@@ -1215,7 +1215,7 @@ final class McpToolService {
         byte[] sealed = null;
         String keyId = null;
         if (auditSealer.enabled() && attemptedSql != null && !attemptedSql.isBlank()) {
-            sealed = auditSealer.seal(attemptedSql);
+            sealed = auditSealer.seal(attemptedSql, requestId.toString(), "sqlRaw");
             keyId = auditSealer.keyId();
         }
         audit.terminal(
@@ -1257,11 +1257,11 @@ final class McpToolService {
         byte[] sealedFinal = null;
         String keyId = null;
         if (auditSealer.enabled() && rawSql != null && !rawSql.isBlank()) {
-            sealedRaw = auditSealer.seal(rawSql);
+            sealedRaw = auditSealer.seal(rawSql, requestId.toString(), "sqlRaw");
             // The guard rewrite means the SQL that actually executed can differ from the raw
             // text; sealing both keeps the raw/execution pair readable behind one reason gate.
             if (finalSql != null && !finalSql.isBlank()) {
-                sealedFinal = auditSealer.seal(finalSql);
+                sealedFinal = auditSealer.seal(finalSql, requestId.toString(), "sqlFinal");
             }
             keyId = auditSealer.keyId();
         }

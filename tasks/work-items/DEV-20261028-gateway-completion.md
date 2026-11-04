@@ -5,7 +5,7 @@ Status: in_progress
 Owner: current-agent
 Acceptance: pending
 Verification: NOT_RUN
-Updated: 2026-10-30
+Updated: 2026-11-04
 
 ## 目标与边界
 
@@ -43,7 +43,7 @@ UI 改动涵盖 App、PageState、useCursorPage、styles、权限/审计/数据�
 | G2 审计恢复 | T09/T20 | 唯一目录 owner、仅回放关闭段、幂等恢复/损坏告警/UNKNOWN 收敛与故障测试 | completed |
 | G3 候选与健康 | T15-c S4 | 错候选不替换 active、CAS 发布、健康绑定版本与目标 | pending |
 | G4 取消与容量 | T15-c S5/T19-d | 主体隔离取消、执行清理后归还额度、部署预算语义明确且有边界测试 | pending |
-| G5 密钥兼容 | T15-c S6 | 新旧钥兼容、对象绑定与迁移格式、日志不泄漏、恢复仍可读 | pending |
+| G5 密钥兼容 | T15-c S6 | 新旧钥兼容、对象绑定与迁移格式、日志不泄漏、恢复仍可读 | in_progress；G5a 定向 PASS（含只读评审修复） |
 | G6 字典上下文 | T15-c S7 | 三工具契约说明、授权后字典/关系/预算、撤权与恶意注释测试 | [verifying；定向 PASS](DEV-20261030-schema-context.md) |
 | G7 组合验收 | T19-e/T20 | 双引擎、OAuth、恢复、前后端适用门禁；真实客户端与部署证据单列 | pending；审计修复续接 [DEV-20261031-audit-fixes](DEV-20261031-audit-fixes.md) |
 
@@ -729,3 +729,46 @@ React/Vue及其测试修改归另一窗口，后端证据和本轮授权边界�
 资源编码与 100 项上限问题。原 pi pane 已关闭，投递成功不等于修复或测试完成。
 React 源码由该窗口所有，本窗口待稳定后只读复核并运行适用 test/check，结果写回
 [增量能力核查](../../docs/evidence/mcp-capability-audit-20261030.md)。
+
+## G5a 审计 SQL 对象绑定（2026-11-04）
+
+`SealedEnvelope` 新增版本化对象上下文：`PTMC | 0x02 | iv | ciphertext || tag`，AAD 为
+`0x02 + purpose + 0x00 + context`；`0x01` 的 AAD 仍精确等于 `purpose`，无前缀 legacy 行继续无 AAD 读取。
+未知 `PTMC` 版本、上下文格式却未提供上下文、context 为空白均失败关闭。版本化解释无法成立或
+认证失败时，读取端再以 legacy 布局尝试一次：legacy 行的随机 IV 可能恰好以 `PTMC` 开头，否则
+该行会被格式探测误判而永久不可读。两次尝试都必须通过 GCM tag 校验，purpose/context 绑定的
+密文不可能以 legacy 打开。网关审计写入把 `requestId + ":" + field`（`sqlRaw` / `sqlFinal`）
+绑定进密文；管理端 reveal 以数据库中的 canonical `request_id` 与字段名重算绑定，旧
+`0x01`/legacy 行仍可读。
+
+验证（Windows/JDK21/Maven wrapper，`-DskipITs`）：
+
+- `SealedEnvelopeTest` 14 项，0 失败/错误/跳过；覆盖 context 往返、异 field 拒绝、
+  v2 无 context 拒绝、v1 带 context 仍可读、真实密文版本字节翻转失败关闭、空白 context 拒绝、
+  legacy IV 以 `PTMC` 开头时仍可读。
+- `AuditSealerTest` 8 项，0 失败/错误/跳过；覆盖 v2 版本字节、跨 field 拒绝、purpose 不匹配、
+  未知 keyId 失败关闭、篡改 tag 认证失败。
+- `AuditCipherTest` 新增 3 项通过：context 绑定往返与异 field 拒绝、v1 经生产读取包装层可读、
+  legacy 经同一带 context 调用可读。
+- `ptmcp-gateway -am test-compile`、`ptmcp-admin -am test-compile`、`python scripts/check.py`
+  （74 项）与 `git diff --check` 均 exit 0。
+- 未运行：`AdminApiTest`、`McpQueryFlowTest` 等真实 MySQL/Testcontainers 组合；
+  两处测试已改为带 `requestId + ":" + field` 解密，但本机无 Docker，属未验证。
+- 未完成（G5b）：数据源凭据与平台 proof 的对象绑定需新增 `credential_binding` 列及迁移；
+  日志不泄漏与恢复可读仍待组合验收。
+- 部署顺序：网关写入方与审计 reveal 读取方须同版本发布；旧读取方对 `0x02` 行失败关闭，不会误读。
+  管理端回滚到旧版本后无法 reveal 新 `0x02` 行，失败关闭且不丢数据。
+
+评审（子 Agent 独立只读评审，独立上下文；非人工评审）：
+
+- CONFIRMED 低概率兼容性回归：legacy IV 恰以 `PTMC` 开头时被误判为新格式而永久不可读
+  （约 2^-32）→ 已修复为认证失败后回退 legacy，并补 magic-IV 回归测试。
+- CONFIRMED 测试缺陷：`unknownVersionByteFailsClosed` 使用全零体，即使格式误判也会因 tag
+  失败而通过 → 改为翻转真实 v1 密文第 5 字节。
+- CONFIRMED 测试缺陷：原 `wrongKeyFailsClosed` 只触发 keyId 查找失败，未验证 AEAD →
+  改为未知 keyId 测试并新增篡改 tag 测试。
+- CONFIRMED 测试缺口：生产读取包装层未覆盖 `0x01`/legacy + context → 新增 `AuditCipherTest`。
+- 接受残留：升级前旧行无对象绑定，有 `audit_log` 写权限者仍可跨行搬移；迁移契约要求旧行可读，
+  只能前向改善。混合版本滚动期间旧网关节点继续写 `0x01` 行，排空后窗口关闭。
+- 接受残留：`AdminApiTest` 的路径 requestId 与库内值相同，无法判别是否使用 canonical 值；
+  该列使用 binary collation，路径大小写不同本就不会命中，代码审查确认读取端使用库内值。

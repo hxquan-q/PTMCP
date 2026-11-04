@@ -452,7 +452,8 @@ class McpQueryFlowTest {
         // The final form (post-rewrite SQL that actually reached JDBC) is sealed with the same
         // audit key; decrypting it must produce the executed statement.
         assertNotNull(sealedFinal, "final sql ciphertext missing");
-        String finalRevealed = openAuditCipher(rawKey, sealedFinal, expectedKeyId);
+        String finalRevealed =
+                openAuditCipher(rawKey, sealedFinal, expectedKeyId, requestId, "sqlFinal");
         // The final SQL is the guard-rewritten statement that actually reached JDBC — schema
         // qualified, alias renamed, safety LIMIT injected. Assert the rewrite fingerprints
         // instead of the raw text.
@@ -464,7 +465,7 @@ class McpQueryFlowTest {
         assertTrue(sealed.length > 5 + 12 + 16, "ciphertext shorter than prefix + iv + tag");
         assertEquals(expectedKeyId, keyId, "terminal key id must derive from the audit key");
 
-        String revealed = openAuditCipher(rawKey, sealed, expectedKeyId);
+        String revealed = openAuditCipher(rawKey, sealed, expectedKeyId, requestId, "sqlRaw");
         assertEquals(sql, revealed, "decrypted plaintext must match the executed query");
     }
 
@@ -525,17 +526,21 @@ class McpQueryFlowTest {
                                 .formatHex(MessageDigest.getInstance("SHA-256").digest(rawKey))
                                 .substring(0, 16);
         assertEquals(expectedKeyId, keyId);
-        String revealed = openAuditCipher(rawKey, sealed, expectedKeyId);
+        String revealed = openAuditCipher(rawKey, sealed, expectedKeyId, deniedRequestId, "sqlRaw");
         assertEquals(attempted, revealed);
     }
 
-    /** Opens an audit cipher the way the admin console does: same envelope, same purpose. */
-    private static String openAuditCipher(byte[] rawKey, byte[] sealed, String keyId) {
+    /**
+     * Opens an audit cipher as the admin console does: same envelope, request and field binding.
+     */
+    private static String openAuditCipher(
+            byte[] rawKey, byte[] sealed, String keyId, String requestId, String field) {
         return new SealedEnvelope(Base64.getEncoder().encodeToString(rawKey), "test-key")
                 .decrypt(
                         sealed,
                         keyId,
                         SealedEnvelope.PURPOSE_AUDIT_SQL,
+                        requestId + ":" + field,
                         local.ptmcp.common.error.ErrorCode.AUDIT_UNAVAILABLE);
     }
 

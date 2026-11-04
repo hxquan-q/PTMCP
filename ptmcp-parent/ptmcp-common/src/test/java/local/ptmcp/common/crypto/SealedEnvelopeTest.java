@@ -34,22 +34,104 @@ class SealedEnvelopeTest {
         assertTrue(envelope.enabled());
         assertEquals(envelope.keyId(), keyId(KEY_A));
         assertEquals("s3cret", envelope.decrypt(sealed, envelope.keyId(), PURPOSE, FAIL));
+        assertEquals(0x01, sealed[4], "purpose-only blobs keep the v1 version byte");
+    }
+
+    @Test
+    void contextBoundBlobRoundTripsAndRejectsAnotherContext() {
+        SealedEnvelope envelope = new SealedEnvelope(KEY_A, "test-key");
+        byte[] sealed =
+                envelope.seal("s3cret", SealedEnvelope.PURPOSE_AUDIT_SQL, "req-1:sqlRaw", FAIL);
+        assertEquals(0x02, sealed[4], "context-bound blobs use the v2 version byte");
+        assertEquals(
+                "s3cret",
+                envelope.decrypt(
+                        sealed,
+                        envelope.keyId(),
+                        SealedEnvelope.PURPOSE_AUDIT_SQL,
+                        "req-1:sqlRaw",
+                        FAIL));
+        assertThrows(
+                DomainException.class,
+                () ->
+                        envelope.decrypt(
+                                sealed,
+                                envelope.keyId(),
+                                SealedEnvelope.PURPOSE_AUDIT_SQL,
+                                "req-1:sqlFinal",
+                                FAIL));
+        assertThrows(
+                DomainException.class,
+                () ->
+                        envelope.decrypt(
+                                sealed, envelope.keyId(), SealedEnvelope.PURPOSE_AUDIT_SQL, FAIL),
+                "a context-bound blob must not open through the context-free overload");
+    }
+
+    @Test
+    void purposeOnlyBlobStillReadsWhenCallerPassesContext() {
+        SealedEnvelope envelope = new SealedEnvelope(KEY_A, "test-key");
+        byte[] sealed = envelope.seal("old-cipher", PURPOSE, FAIL);
+        assertEquals(
+                "old-cipher", envelope.decrypt(sealed, envelope.keyId(), PURPOSE, "req-1", FAIL));
+    }
+
+    @Test
+    void unknownVersionByteFailsClosed() {
+        SealedEnvelope envelope = new SealedEnvelope(KEY_A, "test-key");
+        // The version byte is not covered by the v1 AAD, so a real blob with byte 4 flipped must
+        // fail authentication rather than be reinterpreted as a known version.
+        byte[] sealed = envelope.seal("payload", PURPOSE, FAIL);
+        sealed[4] = 0x7f;
+        DomainException failure =
+                assertThrows(
+                        DomainException.class,
+                        () ->
+                                envelope.decrypt(
+                                        sealed,
+                                        envelope.keyId(),
+                                        PURPOSE,
+                                        ErrorCode.AUDIT_UNAVAILABLE));
+        assertEquals(ErrorCode.AUDIT_UNAVAILABLE, failure.errorCode());
+    }
+
+    @Test
+    void blankContextIsRejectedInsteadOfSilentlyDroppingBinding() {
+        SealedEnvelope envelope = new SealedEnvelope(KEY_A, "test-key");
+        DomainException failure =
+                assertThrows(
+                        DomainException.class, () -> envelope.seal("payload", PURPOSE, "  ", FAIL));
+        assertEquals(ErrorCode.INVALID_ARGUMENT, failure.errorCode());
     }
 
     @Test
     void readsLegacyBlobWithoutPrefixOrAad() throws Exception {
-        byte[] raw = Base64.getDecoder().decode(KEY_A);
         byte[] iv = new byte[12];
         new SecureRandom().nextBytes(iv);
-        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(
-                Cipher.ENCRYPT_MODE, new SecretKeySpec(raw, "AES"), new GCMParameterSpec(128, iv));
-        byte[] body = cipher.doFinal("old-row".getBytes(StandardCharsets.UTF_8));
-        byte[] legacy = new byte[iv.length + body.length];
-        System.arraycopy(iv, 0, legacy, 0, iv.length);
-        System.arraycopy(body, 0, legacy, iv.length, body.length);
+        SealedEnvelope envelope = new SealedEnvelope(KEY_A, "test-key");
+        assertEquals(
+                "old-row",
+                envelope.decrypt(legacySeal(iv, "old-row"), keyId(KEY_A), PURPOSE, FAIL));
+    }
+
+    @Test
+    void legacyBlobWhoseRandomIvLooksLikeAVersionHeaderStillReads() throws Exception {
+        byte[] iv = new byte[12];
+        iv[0] = 'P';
+        iv[1] = 'T';
+        iv[2] = 'M';
+        iv[3] = 'C';
+        iv[4] = 0x02;
+        byte[] tail = new byte[iv.length - 5];
+        new SecureRandom().nextBytes(tail);
+        System.arraycopy(tail, 0, iv, 5, tail.length);
+        byte[] legacy = legacySeal(iv, "old-row");
 
         SealedEnvelope envelope = new SealedEnvelope(KEY_A, "test-key");
+        assertEquals(
+                "old-row",
+                envelope.decrypt(legacy, keyId(KEY_A), PURPOSE, "req-1:sqlRaw", FAIL),
+                "the fallback must rescue a legacy row whose IV begins with the magic");
         assertEquals("old-row", envelope.decrypt(legacy, keyId(KEY_A), PURPOSE, FAIL));
     }
 
@@ -133,6 +215,20 @@ class SealedEnvelopeTest {
                         IllegalStateException.class,
                         () -> new SealedEnvelope("AAAA", "ptmcp.x.key"));
         assertTrue(wrongLength.getMessage().contains("ptmcp.x.key"), wrongLength.getMessage());
+    }
+
+    /** Seals in the pre-version layout: iv | ciphertext || tag, with no additional data. */
+    private static byte[] legacySeal(byte[] iv, String plaintext) throws Exception {
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(
+                Cipher.ENCRYPT_MODE,
+                new SecretKeySpec(Base64.getDecoder().decode(KEY_A), "AES"),
+                new GCMParameterSpec(128, iv));
+        byte[] body = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
+        byte[] legacy = new byte[iv.length + body.length];
+        System.arraycopy(iv, 0, legacy, 0, iv.length);
+        System.arraycopy(body, 0, legacy, iv.length, body.length);
+        return legacy;
     }
 
     private static String base64(int fill) {
