@@ -321,5 +321,8 @@ Updated: 2026-11-05
 - 发布/生产操作、跨分支操作未授权。
 - 已落地口径：审计数据读取面归平台管理员（S2/S4 后无独立审计员角色）；授权矩阵 USER/DEPT 主体
   保留为次级覆盖、入口默认角色（S5+文档同步完成）。
-- 遗留（不阻塞本项）：`RoleAdminController` javadoc 仍有 S3 前的委派注释残留（与新注释矛盾，
-  纯注释债）；后端业务连接的 ACL 执行面语义（管理员是否自动 READ）由执行器切片另行处理。
+- 遗留（不阻塞本项）：`RoleAdminController` javadoc 已随 S6 清理（requireCatalogAccess 死间接层
+  一并内联）；后端业务连接的 ACL 执行面语义（管理员是否自动 READ）由执行器切片另行处理。
+- 环境升级注意：V18 回填按旧 `ptmcp:platform:scope` 角色码命中；若某环境曾手工修数导致 admin
+  无该角色码（参考 dev 播种历史问题），迁移后 `platform_admin` 会保持 0、管理面 403——升级后需
+  核对 admin 行 `platform_admin=1`（属环境数据操作，须单独授权）。
