@@ -125,9 +125,10 @@ Given 管理员新建了一个 `UNBOUND` 用户且宿主不存在该身份，Whe
 剩余项与下一步：补充 UI 恢复入口（另行切片）；T19 真实客户端首登验收；网关整体人工验收；
 部署前核对真实宿主表形状与 PENDING 残留的运维处置流程。
 
-实际 git status / 提交：当前工作树含本切片源码、测试、V17、文档与工作项；
-未跟踪的 `research/`、`tasks/wayfinder/`、`docs/reference/enterprise-agent-foundation-20261104.md`、
-`tasks/work-items/DEV-20261104-enterprise-agent-foundation.md` 不属于本切片，不纳入提交。
+实际 git status / 提交：本切片已以 `296128f` 提交到 `dev` 并推送 origin（15 个文件，
+含源码、测试、V17、契约与工作项）；未跟踪的 `research/`、`tasks/wayfinder/`、
+`docs/reference/enterprise-agent-foundation-20261104.md`、
+`tasks/work-items/DEV-20261104-enterprise-agent-foundation.md` 不属于本切片，未纳入提交。
 
 已有授权与待决定事项：实施与适用检查在长期授权内；提交/推送当前分支在通过检查后进行。
 安全关键发布、生产操作未授权。
