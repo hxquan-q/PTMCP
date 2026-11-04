@@ -34,3 +34,21 @@
   建议单独 ADR 后再做，不要混进 UI 打磨片。
 - **preview 夹具与真实契约的漂移风险**：src/preview/server.ts 956 行手写夹具，
   tests/preview-server.test.ts 只覆盖部分端点；新端点容易出现「夹具通过、真实后端不通过」。
+
+## 2026-11-04 真实后端联调的阻塞（需用户决策）
+
+`scripts/Dev-Linux.sh up` 在本工作区无法直接跑通，两个原因都不是业务代码：
+
+1. `config/dev/secrets/` 丢失（gitignore），MySQL 数据卷 `ptmcp-dev_mysql_data` 仍在。
+   从 `/opt/ptmcp/secrets/`（10-23 的旧会话产物）恢复后，root 密码与卷内密码不一致
+   → 健康检查 `AccessDeniedException 1045`。
+2. 更根本：secrets 放在 `/mnt/c/...`（drvfs）上，文件权限恒为 777，MySQL 会忽略
+   world-writable 的 `--defaults-extra-file`，所以即使密码对，健康检查也过不了。
+
+可行方案（按代价排序）：
+- A. `scripts/Dev-Linux.sh reset --yes` 重建数据卷 + 重新生成 secrets（破坏性，需授权）。
+- B. 把 secrets 放到 WSL 原生路径（如 `~/.ptmcp/secrets`）并让 compose 指向它，再用
+  `--skip-grant-tables` 把卷内密码重置成新 secret（非破坏性，但要临时关认证）。
+- C. 不改环境，继续用 Vite frontend-preview 夹具验证 UI（当前做法）。
+
+建议 B：一次性解决 drvfs 权限问题，后续会话都能直接 `up`。
