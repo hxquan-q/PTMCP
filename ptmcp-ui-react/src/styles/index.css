@@ -470,6 +470,11 @@ input[type='checkbox'] {
   box-shadow: var(--ptmcp-shadow);
   overflow: hidden;
 }
+/* 空列表时卡片不再拉满剩余高度：只剩一行提示却占满视口，会被读成「页面坏了」。
+   各页的 flex:1 写在行内样式里，这里只能用 !important 覆盖。 */
+.table-card:has(.empty-state) {
+  flex: 0 0 auto !important;
+}
 .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -2112,6 +2117,23 @@ textarea:focus-visible {
     width: 100% !important;
     min-height: 220px;
     max-height: 340px;
+  }
+}
+
+/* ─── 触控设备：把导航行、视角切换、跳转链接抬到 44px 热区（WCAG 2.2 AAA 2.5.5）。
+   鼠标设备保留 38px 的行高，否则侧边栏在 720px 高的笔记本上会多出一屏。 ─── */
+@media (pointer: coarse) {
+  .nav-item,
+  .realm-switch-btn,
+  .skip-link,
+  .crumb-link,
+  .seg-item,
+  .tab-btn {
+    min-height: var(--ptmcp-hit);
+  }
+  .btn--icon {
+    width: var(--ptmcp-hit);
+    height: var(--ptmcp-hit);
   }
 }
 

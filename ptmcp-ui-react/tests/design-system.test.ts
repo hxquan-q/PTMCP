@@ -144,6 +144,16 @@ test('文字链接按钮不低于 24px 高（WCAG 2.2 AA 2.5.8）', () => {
   );
 });
 
+test('触控设备（pointer: coarse）把导航与切换控件抬到 44px 热区', () => {
+  const idx = cssCode.indexOf('@media (pointer: coarse)');
+  assert.ok(idx >= 0, '缺少 @media (pointer: coarse) 规则');
+  const block = cssCode.slice(idx, cssCode.indexOf('\n}\n', idx));
+  for (const sel of ['.nav-item', '.realm-switch-btn', '.skip-link', '.crumb-link']) {
+    assert.ok(block.includes(sel), `触控规则缺 ${sel}`);
+  }
+  assert.match(block, /min-height:\s*var\(--ptmcp-hit\)/, '触控规则必须用 --ptmcp-hit');
+});
+
 // ── 动效偏好 ────────────────────────────────────────────────────────────────
 
 test('尊重 prefers-reduced-motion，同时压掉 animation 与 transition', () => {
