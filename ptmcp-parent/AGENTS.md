@@ -8,13 +8,13 @@
 
 | 改动 | 契约 |
 | --- | --- |
-| SQL 解析、绑定、改写、审批 | [SQL 守门](../docs/backend/sql-guard.md) |
-| 会话、OAuth、JWT/PAT、平台证明 | [认证](../docs/backend/authentication.md) |
-| ACL、委派、有效权限、撤销 | [权限](../docs/backend/authorization.md) |
-| 连接池、元数据、执行、预算、取消 | [数据源与执行器](../docs/backend/datasource.md) |
-| 审计准入、WAL、恢复、解密 | [审计](../docs/backend/audit.md) |
-| Schema、仓储、事务、迁移 | [数据库设计](../docs/backend/db-design.md) |
-| REST/OAuth/MCP 输入输出与错误 | [API 契约](../docs/backend/api-spec.md)、[接口变更合同](../docs/standards/api-change-template.md) |
+| 公共资源身份、错误、权限值对象 | [common](ptmcp-common/AGENTS.md) |
+| SQL 解析、绑定、改写、审批 | [guard](ptmcp-guard/AGENTS.md) |
+| 连接、元数据、执行、预算、取消 | [datasource](ptmcp-datasource/AGENTS.md) |
+| Schema、仓储、安全事务、WAL | [persistence](ptmcp-persistence/AGENTS.md) |
+| 管理/个人 REST、会话、委派、数据源管理 | [admin](ptmcp-admin/AGENTS.md) |
+| OAuth、刷新、撤销、客户端注册 | [authz](ptmcp-authz/AGENTS.md) |
+| MCP 传输、工具、查询与审计接线 | [gateway](ptmcp-gateway/AGENTS.md) |
 
 涉及安全逻辑同时读[安全架构](../docs/architecture/security.md)与[测试计划](../docs/test/test-plan.md)；Web 鉴权、会话、日志自查按 [ASVS 清单](../docs/test/asvs-checklist.md)留证。
 

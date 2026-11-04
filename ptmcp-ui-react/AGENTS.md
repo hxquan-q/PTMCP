@@ -7,7 +7,8 @@
 | 改动 | 入口 |
 | --- | --- |
 | 页面、组件、样式、交互 | [视觉设计](../DESIGN.md)、[前端指南](../docs/frontend/dev-guide.md)、[页面规格](../docs/frontend/page-spec.md) |
-| 请求、DTO、会话、权限、错误 | [前端指南](../docs/frontend/dev-guide.md)、[API 契约](../docs/backend/api-spec.md)；接口变化按[变更合同](../docs/standards/api-change-template.md)同步 |
+| 请求、DTO、会话、错误与幂等 | [services 规则](src/services/AGENTS.md) |
+| 合成预览、种子与场景 | [preview 规则](src/preview/AGENTS.md) |
 | 格式、类型、构建配置 | [工程标准](../docs/standards/quality-tooling.md)；实际配置以工程文件为准 |
 
 复用现有组件、设计令牌和 `src/services/` 的传输/会话处理；局部改动不另建组件库、请求层或全局状态体系。
