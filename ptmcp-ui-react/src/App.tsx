@@ -303,8 +303,11 @@ const ME_GROUPS: NavGroup[] = [
       { key: 'me-tokens', label: '个人令牌', icon: <KeyIcon /> },
       { key: 'me-authorizations', label: '授权管理', icon: <ShieldIcon /> },
       { key: 'me-history', label: '查询历史', icon: <ClockIcon /> },
-      { key: 'me-security', label: '账号安全', icon: <CheckboxIcon /> },
     ],
+  },
+  {
+    title: '个人设置',
+    items: [{ key: 'me-security', label: '账号安全', icon: <CheckboxIcon /> }],
   },
 ];
 
