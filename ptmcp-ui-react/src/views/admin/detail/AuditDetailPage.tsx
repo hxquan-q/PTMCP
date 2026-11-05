@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button } from 'antd';
+import { Button, Table } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { Alert, Badge, DrawerFields, PageHeader, StatusDot } from '../../../components/common';
 import { getAudit, listSensitiveAccess, type AuditRow, type SensitiveAccessRow } from '../../../services/access';
 import { LockIcon } from '../../../components/Icons';
@@ -8,6 +9,26 @@ import { useAdminGate } from '../../../adminGateContext';
 import { AuditDecryptDialog } from './AuditDecryptDialog';
 import { BackBar, errorText, useDatasources } from './shared';
 import { formatTaipeiTime as fmt } from '../../../services/dateTime';
+
+const trailColumns: ColumnsType<SensitiveAccessRow> = [
+  {
+    title: '时间',
+    dataIndex: 'createdAt',
+    render: (v: string) => <span style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{fmt(v)}</span>,
+  },
+  { title: '操作者', dataIndex: 'operatorId', render: (v: string) => `用户 ${v}` },
+  { title: '理由', dataIndex: 'reason', render: (v: string) => <span style={{ maxWidth: 360 }}>{v}</span> },
+  {
+    title: '字段',
+    dataIndex: 'fields',
+    render: (v: string[]) =>
+      (v ?? []).map((f) => (
+        <Badge key={f} tone="neutral">
+          {f}
+        </Badge>
+      )),
+  },
+];
 
 export function AuditDetailPage({ id }: { id: string }) {
   const [decryptOpen, setDecryptOpen] = useState(false);
@@ -132,32 +153,7 @@ export function AuditDetailPage({ id }: { id: string }) {
               <p style={{ margin: 0, fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>尚无解密记录。</p>
             ) : null}
             {trail.length ? (
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>时间</th>
-                    <th>操作者</th>
-                    <th>理由</th>
-                    <th>字段</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {trail.map((t) => (
-                    <tr key={t.id}>
-                      <td style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{fmt(t.createdAt)}</td>
-                      <td>用户 {t.operatorId}</td>
-                      <td style={{ maxWidth: 360 }}>{t.reason}</td>
-                      <td>
-                        {(t.fields ?? []).map((f) => (
-                          <Badge key={f} tone="neutral">
-                            {f}
-                          </Badge>
-                        ))}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <Table<SensitiveAccessRow> rowKey="id" size="middle" dataSource={trail} columns={trailColumns} pagination={false} />
             ) : null}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginTop: 14 }}>

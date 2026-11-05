@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { Table } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { Alert, Badge, DrawerFields, EmptyState, PageHeader } from '../../../components/common';
-import type { MetadataObject } from '../../../services/data';
+import type { MetadataColumn, MetadataObject } from '../../../services/data';
 import { mePortalApi } from '../../../services/mePortalApi';
 import { BackBar } from '../../admin/DetailPages';
 
@@ -25,6 +27,25 @@ export function DictionaryDetailPage({ objectId }: { objectId: string }) {
   }, [objectId]);
 
   const dict = obj?.dictionary;
+
+  const columnDefs: ColumnsType<MetadataColumn> = [
+    { title: '#', dataIndex: 'ordinal', width: 40, render: (v: number) => <span style={{ color: 'var(--ptmcp-text-faint)' }}>{v}</span> },
+    { title: '列名', dataIndex: 'name', render: (v: string) => <code style={{ fontSize: 12 }}>{v}</code> },
+    { title: '类型', dataIndex: 'databaseType', render: (v: string) => <span style={{ color: 'var(--ptmcp-text-muted)' }}>{v}</span> },
+    {
+      title: '业务标题',
+      dataIndex: 'name',
+      render: (_v: string, c) => dict?.columns?.find((d) => (d.name ?? '').toLowerCase() === c.name.toLowerCase())?.displayName ?? '—',
+    },
+    {
+      title: '业务说明',
+      dataIndex: 'name',
+      render: (_v: string, c) => {
+        const description = dict?.columns?.find((d) => (d.name ?? '').toLowerCase() === c.name.toLowerCase())?.description;
+        return <span style={{ color: 'var(--ptmcp-text-muted)' }}>{description ?? '—'}</span>;
+      },
+    },
+  ];
 
   return (
     /* 详情页阅读列：860px 在宽屏居中，标题/返回/卡片同列对齐。 */
@@ -62,33 +83,14 @@ export function DictionaryDetailPage({ objectId }: { objectId: string }) {
             </div>
             <div className="table-scroll" role="region" aria-label="列结构" tabIndex={0}>
               {obj.columns?.length ? (
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th style={{ width: 40 }}>#</th>
-                      <th>列名</th>
-                      <th>类型</th>
-                      <th>业务标题</th>
-                      <th>业务说明</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {obj.columns.map((c) => {
-                      const annotation = dict?.columns?.find((d) => (d.name ?? '').toLowerCase() === c.name.toLowerCase());
-                      return (
-                        <tr key={c.ordinal}>
-                          <td style={{ color: 'var(--ptmcp-text-faint)' }}>{c.ordinal}</td>
-                          <td>
-                            <code style={{ fontSize: 12 }}>{c.name}</code>
-                          </td>
-                          <td style={{ color: 'var(--ptmcp-text-muted)' }}>{c.databaseType}</td>
-                          <td>{annotation?.displayName ?? '—'}</td>
-                          <td style={{ color: 'var(--ptmcp-text-muted)' }}>{annotation?.description ?? '—'}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                <Table<MetadataColumn>
+                  rowKey="ordinal"
+                  size="middle"
+                  dataSource={obj.columns}
+                  columns={columnDefs}
+                  pagination={false}
+                  locale={{ emptyText: <span /> }}
+                />
               ) : (
                 <EmptyState title="无列结构信息" description="该对象未同步列结构，请联系管理员触发元数据同步。" />
               )}

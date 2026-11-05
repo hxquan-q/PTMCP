@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Button } from 'antd';
+import { Button, Table } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { Alert, Field, TextInput } from '../../../components/common';
 import { DataRequestError, getMetadataObject, type MetadataObject } from '../../../services/data';
 import { dictionaryDifferences, dictionaryDraft, rebaseDictionaryDraft } from '../../../adapters/edit-conflict';
@@ -7,6 +8,22 @@ import type { ConflictDifference } from '../../../adapters/edit-conflict';
 import { updateDictionary, type DictionaryWrite } from '../../../services/data';
 import { EditIcon } from '../../../components/Icons';
 import { showToast } from '../../../toast';
+
+const conflictColumns: ColumnsType<ConflictDifference> = [
+  {
+    title: '字段',
+    dataIndex: 'label',
+    render: (v: string, r) => (
+      <>
+        <strong>{v}</strong>
+        {r.serverChanged ? <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--ptmcp-orange)' }}>服务端已变</span> : null}
+      </>
+    ),
+  },
+  { title: '我编辑前', dataIndex: 'base', render: (v: string) => <span style={{ color: 'var(--ptmcp-text-muted)' }}>{v}</span> },
+  { title: '服务端最新', dataIndex: 'latest', render: (v: string) => <span style={{ color: 'var(--ptmcp-text-strong)' }}>{v}</span> },
+  { title: '我的草稿', dataIndex: 'draft', render: (v: string) => <span style={{ color: 'var(--ptmcp-blue)' }}>{v}</span> },
+];
 
 export function DictionaryEditor({
   obj,
@@ -28,6 +45,21 @@ export function DictionaryEditor({
   const setColumn = (columnName: string, key: 'title' | 'description', value: string) => {
     setDraft((d) => (d ? { ...d, columns: d.columns.map((c) => (c.columnName === columnName ? { ...c, [key]: value } : c)) } : d));
   };
+
+  /* 可编辑单元格：TextInput 受控于 draft，rowKey=columnName 保证逐键重渲染时输入焦点不丢。 */
+  const draftColumns: ColumnsType<DictionaryWrite['columns'][number]> = [
+    { title: '列', dataIndex: 'columnName', width: 160, render: (v: string) => <code style={{ fontSize: 12 }}>{v}</code> },
+    {
+      title: '业务标题',
+      dataIndex: 'title',
+      render: (v: string, c) => <TextInput value={v} onChange={(next) => setColumn(c.columnName, 'title', next)} maxLength={128} />,
+    },
+    {
+      title: '业务说明',
+      dataIndex: 'description',
+      render: (v: string, c) => <TextInput value={v} onChange={(next) => setColumn(c.columnName, 'description', next)} maxLength={8000} />,
+    },
+  ];
 
   const save = async () => {
     if (!draft) return;
@@ -95,29 +127,14 @@ export function DictionaryEditor({
           </Alert>
           {conflictRows.length ? (
             <div className="table-scroll" role="region" aria-label="字段冲突对比" tabIndex={0} style={{ marginTop: 10 }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>字段</th>
-                    <th>我编辑前</th>
-                    <th>服务端最新</th>
-                    <th>我的草稿</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {conflictRows.map((r) => (
-                    <tr key={r.key}>
-                      <td>
-                        <strong>{r.label}</strong>
-                        {r.serverChanged ? <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--ptmcp-orange)' }}>服务端已变</span> : null}
-                      </td>
-                      <td style={{ color: 'var(--ptmcp-text-muted)' }}>{r.base}</td>
-                      <td style={{ color: 'var(--ptmcp-text-strong)' }}>{r.latest}</td>
-                      <td style={{ color: 'var(--ptmcp-blue)' }}>{r.draft}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <Table<ConflictDifference>
+                rowKey="key"
+                size="middle"
+                dataSource={conflictRows}
+                columns={conflictColumns}
+                pagination={false}
+                locale={{ emptyText: <span /> }}
+              />
             </div>
           ) : null}
           <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
@@ -149,31 +166,16 @@ export function DictionaryEditor({
             </Field>
           </div>
           {draft.columns.length ? (
-            <div className="table-scroll" role="region" aria-label="字典列编辑" tabIndex={0} style={{ marginBottom: 12, maxHeight: 320 }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: 160 }}>列</th>
-                    <th>业务标题</th>
-                    <th>业务说明</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {draft.columns.map((c) => (
-                    <tr key={c.columnName}>
-                      <td>
-                        <code style={{ fontSize: 12 }}>{c.columnName}</code>
-                      </td>
-                      <td>
-                        <TextInput value={c.title} onChange={(v) => setColumn(c.columnName, 'title', v)} maxLength={128} />
-                      </td>
-                      <td>
-                        <TextInput value={c.description} onChange={(v) => setColumn(c.columnName, 'description', v)} maxLength={8000} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="table-scroll" role="region" aria-label="字典列编辑" tabIndex={0} style={{ marginBottom: 12 }}>
+              <Table<DictionaryWrite['columns'][number]>
+                rowKey="columnName"
+                size="middle"
+                dataSource={draft.columns}
+                columns={draftColumns}
+                pagination={false}
+                scroll={{ y: 320 }}
+                locale={{ emptyText: <span /> }}
+              />
             </div>
           ) : (
             <p style={{ margin: '0 0 12px', fontSize: 12.5, color: 'var(--ptmcp-text-muted)' }}>该对象没有列结构信息，仅可编辑对象级字典字段。</p>

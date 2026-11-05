@@ -1,9 +1,22 @@
 import { useEffect, useState } from 'react';
+import { Table } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { Alert, Badge, DrawerFields, PageHeader, StatusDot } from '../../../components/common';
 import { getPlatform, listClients, type ClientRow, type PlatformRow } from '../../../services/access';
 import { getRole, getUser, listDepartments, listRoles, type DepartmentRow, type RoleRow, type UserRow } from '../../../services/orgPortalApi';
 
 import { BackBar } from './shared';
+
+const clientColumns: ColumnsType<ClientRow> = [
+  { title: '名称', dataIndex: 'name', render: (v: string) => <strong>{v}</strong> },
+  { title: 'Client ID', dataIndex: 'clientId', render: (v: string) => <code style={{ fontSize: 12 }}>{v}</code> },
+  { title: '类型', dataIndex: 'type', render: (v: string) => <Badge tone="neutral">{v}</Badge> },
+  {
+    title: '状态',
+    dataIndex: 'status',
+    render: (v: string) => <StatusDot tone={v === 'ACTIVE' ? 'success' : 'neutral'}>{v === 'ACTIVE' ? '启用' : '停用'}</StatusDot>,
+  },
+];
 
 export function UserDetailPage({ id }: { id: string }) {
   const [user, setUser] = useState<UserRow | null>(null);
@@ -165,34 +178,7 @@ export function PlatformDetailPage({ id }: { id: string }) {
           <div className="table-card" style={{ padding: '16px 18px', maxWidth: 720 }}>
             <strong style={{ fontSize: 14, color: 'var(--ptmcp-heading)' }}>关联客户端（{clients.length}）</strong>
             {clients.length ? (
-              <table className="data-table" style={{ marginTop: 10 }}>
-                <thead>
-                  <tr>
-                    <th>名称</th>
-                    <th>Client ID</th>
-                    <th>类型</th>
-                    <th>状态</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clients.map((c) => (
-                    <tr key={c.id}>
-                      <td>
-                        <strong>{c.name}</strong>
-                      </td>
-                      <td>
-                        <code style={{ fontSize: 12 }}>{c.clientId}</code>
-                      </td>
-                      <td>
-                        <Badge tone="neutral">{c.type}</Badge>
-                      </td>
-                      <td>
-                        <StatusDot tone={c.status === 'ACTIVE' ? 'success' : 'neutral'}>{c.status === 'ACTIVE' ? '启用' : '停用'}</StatusDot>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <Table<ClientRow> rowKey="id" size="middle" dataSource={clients} columns={clientColumns} pagination={false} style={{ marginTop: 10 }} />
             ) : (
               <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>暂无关联客户端。</p>
             )}

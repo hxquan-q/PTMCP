@@ -215,9 +215,16 @@ export function Wizard({ onExit }: { onExit: () => void }) {
                     {s.linkLabel ? (
                       <>
                         {'：'}
-                        <a className="link" href={`#${s.linkHash}`}>
+                        <Button
+                          type="link"
+                          size="small"
+                          style={{ padding: 0, height: 'auto' }}
+                          onClick={() => {
+                            if (s.linkHash) window.location.hash = s.linkHash;
+                          }}
+                        >
                           {s.linkLabel}
-                        </a>
+                        </Button>
                       </>
                     ) : null}
                   </div>
@@ -380,9 +387,9 @@ export function Wizard({ onExit }: { onExit: () => void }) {
             {cfgError ? (
               <Alert kind="danger" title="MCP 能力获取失败">
                 {cfgError.message}。未取得服务端能力时不能继续（fail-closed）；已选平台与客户端保持不变。
-                <button className="link" style={{ marginLeft: 8 }} onClick={() => setCfgRetry((n) => n + 1)}>
+                <Button type="link" size="small" style={{ padding: 0, marginLeft: 8 }} onClick={() => setCfgRetry((n) => n + 1)}>
                   重试
-                </button>
+                </Button>
                 {cfgError.requestId ? <RequestIdText requestId={cfgError.requestId} /> : null}
               </Alert>
             ) : null}
@@ -429,9 +436,9 @@ export function Wizard({ onExit }: { onExit: () => void }) {
             ) : null}
             <Alert kind="warning" title="模板包含凭证占位符">
               使用 PAT 时，先创建 PAT，再在客户端配置中替换凭证占位符；使用 OAuth 时由客户端完成授权。完整 PAT 只在创建响应中出现一次，不会写入模板。
-              <button className="link" style={{ marginLeft: 6 }} onClick={() => (window.location.hash = '/me/tokens')}>
+              <Button type="link" size="small" style={{ padding: 0, marginLeft: 6 }} onClick={() => (window.location.hash = '/me/tokens')}>
                 前往创建 PAT →
-              </button>
+              </Button>
             </Alert>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', margin: '14px 0 8px' }}>
               <div className="seg-group" role="radiogroup" aria-label="模板格式">

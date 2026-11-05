@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { Button } from 'antd';
+import { Button, Table } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { Alert, Badge, Dialog, EmptyState, PageHeader, RequestIdText, SearchInput, StatusDot, useDebounced } from '../../components/common';
 import { BuildingIcon, ChevronRightIcon, CloseIcon, EditIcon, PlusIcon, UsersIcon } from '../../components/Icons';
 import {
@@ -301,6 +302,95 @@ export function OrgPage() {
     setDropTarget(null);
   };
 
+  /* 成员表：整行拖动由 onRow 承载，行键用用户 id；操作列链接按钮保留原 aria-label。 */
+  const memberColumns: ColumnsType<UserRow> = [
+    {
+      title: '账号',
+      dataIndex: 'username',
+      width: 190,
+      render: (_v: string, u) => (
+        <span className="org-account">
+          <span className="org-avatar" aria-hidden="true">
+            {initialOf(u)}
+          </span>
+          <code className="org-username">@{u.username}</code>
+        </span>
+      ),
+    },
+    {
+      title: '姓名',
+      dataIndex: 'displayName',
+      width: 170,
+      render: (_v: string, u) => (
+        <span className="cell-stack">
+          <span className="org-member-name">{u.displayName}</span>
+          {selectedId === null ? <span className="org-member-dept">{deptLabel(u.deptId)}</span> : null}
+        </span>
+      ),
+    },
+    {
+      title: '角色',
+      dataIndex: 'roleIds',
+      render: (_v: string[], u) =>
+        rolesFailure ? (
+          <span className="org-muted">{`已分配 ${u.roleIds.length} 个（角色目录未加载）`}</span>
+        ) : u.roleIds.length === 0 ? (
+          <span className="org-muted">未分配</span>
+        ) : (
+          <span className="org-role-tags">
+            {u.roleIds.map((id) => (
+              <Badge key={id} tone="accent">
+                {roleName(id)}
+              </Badge>
+            ))}
+          </span>
+        ),
+    },
+    {
+      title: '状态',
+      dataIndex: 'enabled',
+      width: 96,
+      render: (v: boolean) => <StatusDot tone={v ? 'success' : 'neutral'}>{v ? '启用' : '停用'}</StatusDot>,
+    },
+    {
+      title: '操作',
+      width: 200,
+      align: 'right',
+      render: (_v, u) => (
+        <span className="row-actions org-row-actions">
+          <Button
+            type="link"
+            size="small"
+            style={{ padding: 0 }}
+            disabled={busyUserId === u.id}
+            onClick={() => toggleStatus(u)}
+            aria-label={`${u.enabled ? '禁止' : '开启'}成员 ${memberName(u)}`}
+          >
+            {u.enabled ? '禁止' : '开启'}
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            danger
+            style={{ padding: 0 }}
+            disabled={!canDeleteUser}
+            aria-label={`删除成员 ${memberName(u)}`}
+            title={canDeleteUser ? undefined : '缺少 ptmcp:user:delete 权限'}
+            onClick={() => {
+              setDeletingUser(u);
+              setDeleteFailure(null);
+            }}
+          >
+            删除
+          </Button>
+          <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setEditingUser(u)} aria-label={`更多设置：${memberName(u)}`}>
+            更多
+          </Button>
+        </span>
+      ),
+    },
+  ];
+
   const selectOnKey = (e: KeyboardEvent<HTMLDivElement>, id: string | null) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -478,9 +568,9 @@ export function OrgPage() {
           {deptFailure ? (
             <div className="org-tree-state">
               <p>{deptFailure.message}</p>
-              <button className="link" onClick={reload}>
+              <Button type="link" size="small" style={{ padding: 0 }} onClick={reload}>
                 重新读取
-              </button>
+              </Button>
             </div>
           ) : loading && departments.length === 0 ? (
             <p className="org-tree-state">正在读取部门…</p>
@@ -559,9 +649,9 @@ export function OrgPage() {
                 <Alert kind="danger" title="成员列表加载失败">
                   {usersFailure.message}
                   <RequestIdText requestId={usersFailure.requestId} />
-                  <button className="link" style={{ display: 'inline-flex', marginLeft: 8 }} onClick={reload}>
+                  <Button type="link" size="small" style={{ padding: 0, marginLeft: 8 }} onClick={reload}>
                     重新读取
-                  </button>
+                  </Button>
                 </Alert>
               </div>
             ) : null}
@@ -570,9 +660,9 @@ export function OrgPage() {
                 <Alert kind="warning" title="角色目录加载失败">
                   {rolesFailure.message}；角色列按 ID 显示，成员详情中的角色保存已禁用。
                   <RequestIdText requestId={rolesFailure.requestId} />
-                  <button className="link" style={{ display: 'inline-flex', marginLeft: 8 }} onClick={reload}>
+                  <Button type="link" size="small" style={{ padding: 0, marginLeft: 8 }} onClick={reload}>
                     重新读取
-                  </button>
+                  </Button>
                 </Alert>
               </div>
             ) : null}
@@ -612,102 +702,26 @@ export function OrgPage() {
 
             {!usersFailure && filtered.length > 0 ? (
               <div className="table-scroll org-table-scroll" role="region" aria-label="成员列表" tabIndex={0}>
-                <table className="data-table org-table">
-                  <thead>
-                    <tr>
-                      <th scope="col" style={{ width: 190 }}>
-                        账号
-                      </th>
-                      <th scope="col" style={{ width: 170 }}>
-                        姓名
-                      </th>
-                      <th scope="col">角色</th>
-                      <th scope="col" style={{ width: 96 }}>
-                        状态
-                      </th>
-                      <th scope="col" className="org-actions-col" style={{ width: 200 }}>
-                        操作
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((u) => (
-                      <tr
-                        key={u.id}
-                        className={draggingUserId === u.id ? 'is-dragging' : undefined}
-                        draggable={canMoveUser}
-                        onDragStart={(e) => {
-                          if (!canMoveUser) return;
-                          e.dataTransfer.setData(USER_MIME, u.id);
-                          e.dataTransfer.setData('text/plain', memberName(u));
-                          e.dataTransfer.effectAllowed = 'move';
-                          setDraggingUserId(u.id);
-                        }}
-                        onDragEnd={endDrag}
-                      >
-                        <td>
-                          <span className="org-account">
-                            <span className="org-avatar" aria-hidden="true">
-                              {initialOf(u)}
-                            </span>
-                            <code className="org-username">@{u.username}</code>
-                          </span>
-                        </td>
-                        <td>
-                          <span className="cell-stack">
-                            <span className="org-member-name">{u.displayName}</span>
-                            {selectedId === null ? <span className="org-member-dept">{deptLabel(u.deptId)}</span> : null}
-                          </span>
-                        </td>
-                        <td>
-                          {rolesFailure ? (
-                            <span className="org-muted">{`已分配 ${u.roleIds.length} 个（角色目录未加载）`}</span>
-                          ) : u.roleIds.length === 0 ? (
-                            <span className="org-muted">未分配</span>
-                          ) : (
-                            <span className="org-role-tags">
-                              {u.roleIds.map((id) => (
-                                <Badge key={id} tone="accent">
-                                  {roleName(id)}
-                                </Badge>
-                              ))}
-                            </span>
-                          )}
-                        </td>
-                        <td>
-                          <StatusDot tone={u.enabled ? 'success' : 'neutral'}>{u.enabled ? '启用' : '停用'}</StatusDot>
-                        </td>
-                        <td>
-                          <span className="row-actions org-row-actions">
-                            <button
-                              className="link"
-                              disabled={busyUserId === u.id}
-                              onClick={() => toggleStatus(u)}
-                              aria-label={`${u.enabled ? '禁止' : '开启'}成员 ${memberName(u)}`}
-                            >
-                              {u.enabled ? '禁止' : '开启'}
-                            </button>
-                            <button
-                              className="link link--danger"
-                              disabled={!canDeleteUser}
-                              aria-label={`删除成员 ${memberName(u)}`}
-                              title={canDeleteUser ? undefined : '缺少 ptmcp:user:delete 权限'}
-                              onClick={() => {
-                                setDeletingUser(u);
-                                setDeleteFailure(null);
-                              }}
-                            >
-                              删除
-                            </button>
-                            <button className="link" onClick={() => setEditingUser(u)} aria-label={`更多设置：${memberName(u)}`}>
-                              更多
-                            </button>
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <Table<UserRow>
+                  rowKey="id"
+                  className="org-table"
+                  size="middle"
+                  dataSource={filtered}
+                  columns={memberColumns}
+                  pagination={false}
+                  onRow={(u) => ({
+                    draggable: canMoveUser,
+                    onDragStart: (e) => {
+                      if (!canMoveUser) return;
+                      e.dataTransfer.setData(USER_MIME, u.id);
+                      e.dataTransfer.setData('text/plain', memberName(u));
+                      e.dataTransfer.effectAllowed = 'move';
+                      setDraggingUserId(u.id);
+                    },
+                    onDragEnd: endDrag,
+                    className: draggingUserId === u.id ? 'is-dragging' : undefined,
+                  })}
+                />
               </div>
             ) : null}
           </div>
