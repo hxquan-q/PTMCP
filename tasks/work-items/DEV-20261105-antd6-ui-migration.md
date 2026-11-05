@@ -223,3 +223,12 @@ Updated: 2026-11-05
 - 检查：prettier / eslint（max-warnings 0）/ tsc --noEmit / tests 201/201 / `vite build` / `vite build --config vite.oauth.config.ts` 全过；主构建仍有 index 1,131.77 kB > 500 kB 警告（既有分包项）。OrgPage 889 行（测试口径 890）仍在 900 行预算内，未改阈值。
 - 提交：`fcd5200 refactor(admin-ui): 成员表与详情表迁移 antd Table，收敛行内链接`，已推送 origin dev；仅暂存上述 7 个文件，排除他窗 `src/services/data.ts`、`src/views/admin/dsForm.ts`、`tests/ds-create.test.ts`。
 - 未验证：上述迁移页面的浏览器人工走查（成员表拖拽、ScopeDialog 可编辑行焦点、字典编辑表滚动、详情页表格有数据渲染）；`.link` 死 CSS 清理与 `.btn`/`.input` 引用复核；AppShell 外壳迁移；chunk 分包；Impeccable finish-reviewer/documenter；真实 OAuth 端到端。
+
+### 2026-11-05 清理表格与行内链接遗留死规则
+
+- `src/styles/index.css` 删除已无引用的死规则共 118 行：`.data-table` 全族（基础表、`thead th`、`tbody td`、首列折行、末行/hover/选中态、移动端 min-width 与 nowrap、权限工作区密度三条）、`.link` / `.link:hover` / `.link:not(:disabled)` / `.link:disabled` / `.link--danger` 及 `.data-table .link`、`.org-tree-state .link`、`.btn--link` 族，以及两处 focus 规则里的 `.link:focus-visible`。删除前已全仓核对：原生 `<table>` 与 `className="link"` 零命中，TS/TSX 内 `data-table` / `btn--link` 零引用；`.btn`（AppShell）与 `.input` / `.input-wrap` 仍在使用，保留不动。
+- 同步迁移失效测试：`tests/design-system.test.ts` 原断言 `.btn--link` 存在且 `min-height ≥ 24px`，类删除后按契约改为——断言 `.link` / `.btn--link` 规则为 0、全仓存在 antd `<Button type="link">`，并用 `theme.getDesignToken()` 验证 `controlHeightSM=24` / `controlHeight=32` 均 ≥24（WCAG 2.2 AA 2.5.8）。未放宽阈值、未删断言。
+- 检查：prettier / eslint（max-warnings 0）/ tsc --noEmit / tests 201/201（4905ms）/ `vite build`（877ms）/ `vite build --config vite.oauth.config.ts`（557ms）全过；主构建仍有 index 1,131.77 kB > 500 kB 警告（既有分包项）。
+- 浏览器（真实后端，LAN）：`#/admin/org` 重载后成员表为 `.ant-table-wrapper.org-table`，行 `draggable="true"`（拖拽属性生效），操作列 3 个 antd link 按钮实测高度 24px；页面内 `.link` / `.btn--link` 元素均为 0，`.org-table` 后代样式仍命中。控制台错误仅 2× 已知自授权 403 守卫 + 8× TUN 超时导致的 HMR 重载失败（重载后恢复）。
+- 提交：`98a8802 refactor(styles): 清理表格与链接遗留死规则并同步 WCAG 测试`，已推送 origin dev；仅暂存 `src/styles/index.css`、`tests/design-system.test.ts`，排除他窗三文件。
+- 未验证：PermissionsPage 密度、移动端表格横向滚动等受 CSS 清理影响的页面未逐一走查；AppShell 外壳迁移；chunk 分包；Impeccable finish-reviewer/documenter；真实 OAuth 端到端。
