@@ -78,7 +78,7 @@ Updated: 2026-11-05
 剩余范围（后续切片）：
 
 1. AppShell → antd Layout/Menu/Breadcrumb/Dropdown（含两个 btn--icon 按钮与移动端导航）。
-2. 其余页面原生 `<table>` → antd Table（IntegrationsPage、PermissionsPage、OrgPage、PlatformsPage、MetadataPage、detail 页、me pages）；`.link` 行内链接 → Button type="link" 收敛。
+2. 其余页面原生 `<table>` → antd Table（PermissionsPage、OrgPage、PlatformsPage、MetadataPage、detail 页）；`.link` 行内链接 → Button type="link" 收敛。
 3. CSS 清理：删除已无引用的 .btn/.input/.data-table 等遗留块（现全部仍有未迁移页引用）。
 4. 主构建 chunk 分包（antd manualChunks）。
 5. Impeccable finish-reviewer + documenter（DESIGN.md 与 sidecar 同步）随迁移完成切片执行；本次切片已跑 detect（见下）。
@@ -169,3 +169,12 @@ Updated: 2026-11-05
 - 检查：eslint / prettier / tsc / tests 201/201 / `vite build` / `vite build --config vite.oauth.config.ts` 全过。
 - 浏览器（真实后端，LAN 入口 `http://192.168.1.18:25173`）：授权页空态居中、页脚「已加载 0 条 · 没有更多了」；历史页筛选行单行、空态与页脚正确。期间 dev server CSS 与 `/me/history` 各出现 timeout（已知 LAN/TUN 环境抖动），重试后正常，无产品侧错误。
 - 未验证：两张表的有数据行渲染（dev 库当前 0 条授权、0 条历史）；授权撤销交互。
+
+### 2026-11-05 个人门户 me 页表格迁移（令牌 / 字典 / 接入）
+
+- TokensPage / DictionaryPage / IntegrationsPage 原生 `<table>` → antd Table：列顺序、列宽（80/70/90）与单元格渲染不变，`rowKey`、`size="middle"`、`pagination={false}`；行内 `.link` 链接统一为 `Button type="link"`，保留详情/撤销行为。
+- 游标与总数语义不变：令牌/字典页脚仍为真实「已加载 N 个 / 可能还有更多 / 没有更多了」，不伪造 total；接入页 total 已知，保留原有客户端分页；接入页空态保留「前往创建个人令牌」，实测跳转 `#/me/tokens`。
+- 空态：与授权/历史页一致，表体 `locale.emptyText` 置空、sibling `EmptyState` 承担文案；加载中只显示 antd spinner。
+- 检查：eslint / prettier / tsc / tests 201/201 / `vite build` / `vite build --config vite.oauth.config.ts` 全过。
+- 浏览器（真实后端，LAN `http://192.168.1.18:25173`）：令牌页表头 + 「暂无个人令牌」空态居中 + 页脚「已加载 0 个 · 没有更多了」；字典页未选平台/数据源时表头 + 「请选择平台与数据源」空态；接入页 8 列表头 + 空态 + 动作按钮 + 页脚「共 0 条」。控制台 14 条错误均为 dev server 静态资源 HMR 超时（`ERR_CONNECTION_RESET/TIMED_OUT`），无产品侧错误。
+- 未验证：三表有数据行渲染。dev 库当前 0 条令牌、0 条历史；接入页正常模式无服务端列表（设计如此，样例仅预览模式）；`/me/access-context?level=PLATFORM` 对当前用户返回 `items: []`（无可见数据源授权），字典页无法选择平台/数据源。令牌撤销交互同样未实测。

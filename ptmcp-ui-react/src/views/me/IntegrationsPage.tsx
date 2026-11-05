@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Button } from 'antd';
+import { Button, Table } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import {
   CellIcon,
   Drawer,
@@ -215,6 +216,48 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
   const pageSize = 20;
   const pageRows = rows.slice((page - 1) * pageSize, page * pageSize);
 
+  const columns: ColumnsType<IntegrationRow> = [
+    {
+      title: '接入名称',
+      dataIndex: 'name',
+      render: (_: unknown, r) => (
+        <span className="cell-lead">
+          <CellIcon icon={r.clientIcon} />
+          <span className="cell-stack">
+            <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setDetail(r)}>
+              {r.name}
+            </Button>
+            <span>{r.code}</span>
+          </span>
+        </span>
+      ),
+    },
+    { title: '平台', dataIndex: 'platform' },
+    { title: '客户端类型', dataIndex: 'client' },
+    {
+      title: '传输方式',
+      dataIndex: 'transport',
+      render: (value: string) => <code style={{ fontSize: 12 }}>{value}</code>,
+    },
+    { title: '认证方式', dataIndex: 'auth' },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      render: (_: unknown, r) => <StatusDot tone={r.tone}>{r.status}</StatusDot>,
+    },
+    { title: '创建时间', dataIndex: 'createdAt' },
+    {
+      title: '操作',
+      key: 'action',
+      width: 90,
+      render: (_: unknown, r) => (
+        <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setDetail(r)}>
+          {r.status === '配置中' || r.status === '未验证' ? '继续配置' : '查看'}
+        </Button>
+      ),
+    },
+  ];
+
   return (
     <>
       <PageHeader
@@ -295,67 +338,25 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
         ) : null}
 
         <div className="table-scroll" role="region" aria-label="接入列表" tabIndex={0}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>接入名称</th>
-                <th>平台</th>
-                <th>客户端类型</th>
-                <th>传输方式</th>
-                <th>认证方式</th>
-                <th>状态</th>
-                <th>创建时间</th>
-                <th style={{ width: 90 }}>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pageRows.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <span className="cell-lead">
-                      <CellIcon icon={r.clientIcon} />
-                      <span className="cell-stack">
-                        <button className="link" onClick={() => setDetail(r)}>
-                          {r.name}
-                        </button>
-                        <span>{r.code}</span>
-                      </span>
-                    </span>
-                  </td>
-                  <td>{r.platform}</td>
-                  <td>{r.client}</td>
-                  <td>
-                    <code style={{ fontSize: 12 }}>{r.transport}</code>
-                  </td>
-                  <td>{r.auth}</td>
-                  <td>
-                    <StatusDot tone={r.tone}>{r.status}</StatusDot>
-                  </td>
-                  <td>{r.createdAt}</td>
-                  <td>
-                    <button className="link" onClick={() => setDetail(r)}>
-                      {r.status === '配置中' || r.status === '未验证' ? '继续配置' : '查看'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {pageRows.length === 0 ? (
-                <tr>
-                  <td colSpan={8}>
-                    <EmptyState
-                      title="暂无接入配置"
-                      description={
-                        frontendPreview
-                          ? '当前筛选条件下没有样例接入记录。点击右上角「新建接入」开始配置。'
-                          : '控制台不登记客户端接入状态：服务端只提供按平台与客户端生成的配置模板，是否接入成功由客户端 MCP 握手结果决定。点击「新建接入」生成模板，并在「个人令牌」创建 PAT 后替换占位符。'
-                      }
-                      action={frontendPreview ? undefined : <Button onClick={() => (window.location.hash = '/me/tokens')}>前往创建个人令牌</Button>}
-                    />
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+          <Table<IntegrationRow>
+            rowKey="id"
+            size="middle"
+            dataSource={pageRows}
+            columns={columns}
+            pagination={false}
+            locale={{ emptyText: <span /> }}
+          />
+          {pageRows.length === 0 ? (
+            <EmptyState
+              title="暂无接入配置"
+              description={
+                frontendPreview
+                  ? '当前筛选条件下没有样例接入记录。点击右上角「新建接入」开始配置。'
+                  : '控制台不登记客户端接入状态：服务端只提供按平台与客户端生成的配置模板，是否接入成功由客户端 MCP 握手结果决定。点击「新建接入」生成模板，并在「个人令牌」创建 PAT 后替换占位符。'
+              }
+              action={frontendPreview ? undefined : <Button onClick={() => (window.location.hash = '/me/tokens')}>前往创建个人令牌</Button>}
+            />
+          ) : null}
         </div>
         <div className="table-footer">
           <span>

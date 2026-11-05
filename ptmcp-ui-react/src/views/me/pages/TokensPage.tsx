@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Button } from 'antd';
+import { Button, Table } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { Badge, EmptyState, PageHeader, Select, StatusDot } from '../../../components/common';
 import { PlusIcon } from '../../../components/Icons';
 import { listMyTokens, revokeToken, type TokenRow } from '../../../services/access';
@@ -43,6 +44,62 @@ export function TokensPage() {
       .finally(() => setRevokingId(''));
   };
 
+  const columns: ColumnsType<TokenRow> = [
+    {
+      title: '令牌',
+      dataIndex: 'name',
+      render: (_: unknown, r) => (
+        <span className="cell-stack">
+          <strong>{r.name}</strong>
+          <span>
+            <code style={{ fontSize: 12 }}>{r.prefix ?? ''}•••</code> · ID {r.id}
+          </span>
+        </span>
+      ),
+    },
+    {
+      title: '范围',
+      dataIndex: 'scopes',
+      render: (scopes: string[] | undefined) => (
+        <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
+          {(scopes ?? []).map((s) => (
+            <Badge key={s} tone="neutral">
+              {s}
+            </Badge>
+          ))}
+        </span>
+      ),
+    },
+    {
+      title: '过期时间',
+      dataIndex: 'expiresAt',
+      render: (value: string) => <span style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{fmt(value)}</span>,
+    },
+    {
+      title: '最近使用',
+      dataIndex: 'lastUsedAt',
+      render: (value: string) => <span style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{fmt(value)}</span>,
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      render: (value: string) => <StatusDot tone={value === 'ACTIVE' ? 'success' : 'neutral'}>{value === 'ACTIVE' ? '生效中' : '已撤销'}</StatusDot>,
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 80,
+      render: (_: unknown, r) =>
+        r.status === 'ACTIVE' ? (
+          <Button type="link" size="small" style={{ padding: 0 }} disabled={revokingId === r.id} onClick={() => revoke(r.id)}>
+            {revokingId === r.id ? '撤销中…' : '撤销'}
+          </Button>
+        ) : (
+          <span style={{ color: 'var(--ptmcp-text-faint)', fontSize: 12 }}>—</span>
+        ),
+    },
+  ];
+
   return (
     <>
       <PageHeader
@@ -78,55 +135,15 @@ export function TokensPage() {
           <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>已加载 {rows.length} 个令牌</span>
         </div>
         <div className="table-scroll" role="region" aria-label="个人令牌列表" tabIndex={0}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>令牌</th>
-                <th>范围</th>
-                <th>过期时间</th>
-                <th>最近使用</th>
-                <th>状态</th>
-                <th style={{ width: 80 }}>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <span className="cell-stack">
-                      <strong>{r.name}</strong>
-                      <span>
-                        <code style={{ fontSize: 12 }}>{r.prefix ?? ''}•••</code> · ID {r.id}
-                      </span>
-                    </span>
-                  </td>
-                  <td>
-                    <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
-                      {(r.scopes ?? []).map((s) => (
-                        <Badge key={s} tone="neutral">
-                          {s}
-                        </Badge>
-                      ))}
-                    </span>
-                  </td>
-                  <td style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{fmt(r.expiresAt)}</td>
-                  <td style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{fmt(r.lastUsedAt)}</td>
-                  <td>
-                    <StatusDot tone={r.status === 'ACTIVE' ? 'success' : 'neutral'}>{r.status === 'ACTIVE' ? '生效中' : '已撤销'}</StatusDot>
-                  </td>
-                  <td>
-                    {r.status === 'ACTIVE' ? (
-                      <button className="link" disabled={revokingId === r.id} onClick={() => revoke(r.id)}>
-                        {revokingId === r.id ? '撤销中…' : '撤销'}
-                      </button>
-                    ) : (
-                      <span style={{ color: 'var(--ptmcp-text-faint)', fontSize: 12 }}>—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <Table<TokenRow>
+            rowKey="id"
+            size="middle"
+            loading={loading}
+            dataSource={rows}
+            columns={columns}
+            pagination={false}
+            locale={{ emptyText: <span /> }}
+          />
           {!loading && rows.length === 0 ? <EmptyState title="暂无个人令牌" description="切换状态筛选或新建令牌。" /> : null}
         </div>
         <div className="table-footer" style={{ justifyContent: 'space-between' }}>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Button } from 'antd';
+import { Button, Table } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { Badge, EmptyState, PageHeader, SearchInput, Select, StatusDot, useDebounced } from '../../../components/common';
 import { mePortalApi, type DatasourceItem, type DictionaryItem, type PlatformItem } from '../../../services/mePortalApi';
 
@@ -95,6 +96,58 @@ export function DictionaryPage() {
       .finally(() => setLoadingMore(false));
   };
 
+  const openDetail = (id: string) => (window.location.hash = `/me/dictionary/${encodeURIComponent(id)}`);
+
+  const columns: ColumnsType<DictionaryItem> = [
+    {
+      title: '对象',
+      dataIndex: 'objectName',
+      render: (_: unknown, o) => (
+        <span className="cell-stack">
+          <Button type="link" size="small" style={{ padding: 0 }} onClick={() => openDetail(o.id)}>
+            {o.objectName}
+          </Button>
+          <span>v{o.generation}</span>
+        </span>
+      ),
+    },
+    {
+      title: '库 / Schema',
+      key: 'database',
+      render: (_: unknown, o) => (
+        <span style={{ color: 'var(--ptmcp-text-muted)' }}>
+          {o.databaseName}
+          {o.schemaName ? ` / ${o.schemaName}` : ''}
+        </span>
+      ),
+    },
+    {
+      title: '类型',
+      dataIndex: 'objectType',
+      render: (value: string) => <Badge tone={value === 'TABLE' ? 'accent' : 'neutral'}>{value}</Badge>,
+    },
+    {
+      title: '业务标题',
+      dataIndex: 'dictionaryTitle',
+      render: (value: string | undefined) => <span style={{ color: 'var(--ptmcp-text-muted)' }}>{value ?? '—'}</span>,
+    },
+    {
+      title: '授权',
+      dataIndex: 'authorized',
+      render: (value: boolean) => <StatusDot tone={value ? 'success' : 'neutral'}>{value ? '已授权' : '未授权'}</StatusDot>,
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 70,
+      render: (_: unknown, o) => (
+        <Button type="link" size="small" style={{ padding: 0 }} onClick={() => openDetail(o.id)}>
+          详情
+        </Button>
+      ),
+    },
+  ];
+
   return (
     <>
       <PageHeader title="我的数据字典" description="当前账号可见的库表结构与业务字典。" />
@@ -131,48 +184,15 @@ export function DictionaryPage() {
           <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>已加载 {rows.length} 个对象</span>
         </div>
         <div className="table-scroll" role="region" aria-label="我的数据字典对象列表" tabIndex={0}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>对象</th>
-                <th>库 / Schema</th>
-                <th>类型</th>
-                <th>业务标题</th>
-                <th>授权</th>
-                <th style={{ width: 70 }}>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((o) => (
-                <tr key={o.id}>
-                  <td>
-                    <span className="cell-stack">
-                      <button className="link" onClick={() => (window.location.hash = `/me/dictionary/${encodeURIComponent(o.id)}`)}>
-                        {o.objectName}
-                      </button>
-                      <span>v{o.generation}</span>
-                    </span>
-                  </td>
-                  <td style={{ color: 'var(--ptmcp-text-muted)' }}>
-                    {o.databaseName}
-                    {o.schemaName ? ` / ${o.schemaName}` : ''}
-                  </td>
-                  <td>
-                    <Badge tone={o.objectType === 'TABLE' ? 'accent' : 'neutral'}>{o.objectType}</Badge>
-                  </td>
-                  <td style={{ color: 'var(--ptmcp-text-muted)' }}>{o.dictionaryTitle ?? '—'}</td>
-                  <td>
-                    <StatusDot tone={o.authorized ? 'success' : 'neutral'}>{o.authorized ? '已授权' : '未授权'}</StatusDot>
-                  </td>
-                  <td>
-                    <button className="link" onClick={() => (window.location.hash = `/me/dictionary/${encodeURIComponent(o.id)}`)}>
-                      详情
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <Table<DictionaryItem>
+            rowKey="id"
+            size="middle"
+            loading={loading}
+            dataSource={rows}
+            columns={columns}
+            pagination={false}
+            locale={{ emptyText: <span /> }}
+          />
           {!loading && rows.length === 0 ? (
             <EmptyState
               title={platformId && datasourceId ? '暂无可见对象' : '请选择平台与数据源'}
