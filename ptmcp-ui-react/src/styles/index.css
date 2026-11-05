@@ -2394,6 +2394,15 @@ textarea:focus-visible {
   font-size: 13px;
   color: var(--ptmcp-text-muted);
 }
+/* 路由懒加载占位：只占内容区，不遮住导航。 */
+.route-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 0;
+  font-size: 13px;
+  color: var(--ptmcp-text-muted);
+}
 .boot-mark {
   width: 26px;
   height: 26px;

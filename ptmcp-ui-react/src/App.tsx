@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { Button } from 'antd';
 import { AppShell, type NavGroup } from './layouts/AppShell';
 import {
@@ -15,38 +15,37 @@ import {
   BoltIcon,
   LinkIcon,
 } from './components/Icons';
-import { IntegrationsPage } from './views/me/IntegrationsPage';
-import { DatasourcesPage } from './views/admin/DatasourcesPage';
-import { PermissionsPage } from './views/admin/PermissionsPage';
-import { OrgPage } from './views/admin/OrgPage';
-import { RolesPage } from './views/admin/RolesPage';
-import { PlatformsPage } from './views/admin/PlatformsPage';
-import { AuditPage } from './views/admin/AuditPage';
-import { MetadataPage } from './views/admin/MetadataPage';
-import {
-  AuthorizationsPage,
-  DictionaryDetailPage,
-  DictionaryPage,
-  HistoryDetailPage,
-  HistoryPage,
-  SecurityPage,
-  TokensPage,
-} from './views/me/MePages';
-import {
-  AuditDetailPage,
-  DatasourceDetailPage,
-  JobDetailPage,
-  MetadataDetailPage,
-  PlatformDetailPage,
-  RoleDetailPage,
-  UserDetailPage,
-} from './views/admin/DetailPages';
 import { LoginPage } from './views/auth/LoginPage';
 import { getSession, logout, type SessionInfo } from './services/session';
 import { onSessionExpired } from './services/http';
 import { firstAccessibleNavPath, ME_HOME_PATH, resolveRoute, routeAllowed, safeReturnTo } from './navigation';
 import { AdminGateContext, createAdminGateValue } from './adminGateContext';
 import { ToastContainer } from './components/Toast';
+/* 页面按路由懒加载：首屏只下载导航骨架与命中页，升级业务视图不再让用户重下整包。 */
+const IntegrationsPage = lazy(() => import('./views/me/IntegrationsPage').then((m) => ({ default: m.IntegrationsPage })));
+const DatasourcesPage = lazy(() => import('./views/admin/DatasourcesPage').then((m) => ({ default: m.DatasourcesPage })));
+const PermissionsPage = lazy(() => import('./views/admin/PermissionsPage').then((m) => ({ default: m.PermissionsPage })));
+const OrgPage = lazy(() => import('./views/admin/OrgPage').then((m) => ({ default: m.OrgPage })));
+const RolesPage = lazy(() => import('./views/admin/RolesPage').then((m) => ({ default: m.RolesPage })));
+const PlatformsPage = lazy(() => import('./views/admin/PlatformsPage').then((m) => ({ default: m.PlatformsPage })));
+const AuditPage = lazy(() => import('./views/admin/AuditPage').then((m) => ({ default: m.AuditPage })));
+const MetadataPage = lazy(() => import('./views/admin/MetadataPage').then((m) => ({ default: m.MetadataPage })));
+const mePages = () => import('./views/me/MePages');
+const AuthorizationsPage = lazy(() => mePages().then((m) => ({ default: m.AuthorizationsPage })));
+const DictionaryDetailPage = lazy(() => mePages().then((m) => ({ default: m.DictionaryDetailPage })));
+const DictionaryPage = lazy(() => mePages().then((m) => ({ default: m.DictionaryPage })));
+const HistoryDetailPage = lazy(() => mePages().then((m) => ({ default: m.HistoryDetailPage })));
+const HistoryPage = lazy(() => mePages().then((m) => ({ default: m.HistoryPage })));
+const SecurityPage = lazy(() => mePages().then((m) => ({ default: m.SecurityPage })));
+const TokensPage = lazy(() => mePages().then((m) => ({ default: m.TokensPage })));
+const detailPages = () => import('./views/admin/DetailPages');
+const AuditDetailPage = lazy(() => detailPages().then((m) => ({ default: m.AuditDetailPage })));
+const DatasourceDetailPage = lazy(() => detailPages().then((m) => ({ default: m.DatasourceDetailPage })));
+const JobDetailPage = lazy(() => detailPages().then((m) => ({ default: m.JobDetailPage })));
+const MetadataDetailPage = lazy(() => detailPages().then((m) => ({ default: m.MetadataDetailPage })));
+const PlatformDetailPage = lazy(() => detailPages().then((m) => ({ default: m.PlatformDetailPage })));
+const RoleDetailPage = lazy(() => detailPages().then((m) => ({ default: m.RoleDetailPage })));
+const UserDetailPage = lazy(() => detailPages().then((m) => ({ default: m.UserDetailPage })));
 
 /* 轻量 hash 路由:#/me/integrations、#/admin/datasources …；空 hash 视为 `/`，由会话权限决定落地页。 */
 function useHashRoute(): [string, (path: string) => void] {
@@ -460,7 +459,16 @@ export function App() {
           }}
           user={session ? { displayName: session.displayName, department: session.department?.name ?? '' } : undefined}
         >
-          {route ? route.element(resolved.match === 'prefix' ? resolved.id : undefined) : null}
+          <Suspense
+            fallback={
+              <div className="route-loading" role="status">
+                <span className="boot-mark" aria-hidden="true" />
+                <span>正在加载页面…</span>
+              </div>
+            }
+          >
+            {route ? route.element(resolved.match === 'prefix' ? resolved.id : undefined) : null}
+          </Suspense>
         </AppShell>
       </AdminGateContext.Provider>
       <ToastContainer />
