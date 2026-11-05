@@ -163,11 +163,19 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   return { data: data as T, etag, requestId };
 }
 
+/* 服务端 403 不返回 message 时，code 是唯一能说明原因的信息。 */
+const forbiddenMessages: Record<string, string> = {
+  CSRF_INVALID: '安全校验已失效，请刷新页面后重试。',
+  MANAGEMENT_SCOPE_DENIED: '当前账号没有该管理范围的权限。',
+  TABLE_NOT_AUTHORIZED: '当前账号未获授权访问该数据表。',
+  SELF_PRIVILEGE_ESCALATION: '不能给当前登录账号授予其尚未拥有的访问权限。',
+};
+
 function failureMessage(status: number, code: string, root: Record<string, unknown> | null, nested: Record<string, unknown> | null): string {
   const message = typeof nested?.message === 'string' ? nested.message : typeof root?.message === 'string' ? root.message : null;
   if (message) return message;
   if (status === 401) return '会话已过期，请重新登录。';
-  if (status === 403) return '没有执行该操作的权限。';
+  if (status === 403) return forbiddenMessages[code] ?? '没有执行该操作的权限。';
   if (status === 404) return '请求的资源不存在。';
   if (status === 409 || status === 412) return '数据已被他人修改，请刷新后重试。';
   if (status >= 500) return '服务暂时不可用，请稍后重试。';

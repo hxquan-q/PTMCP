@@ -164,3 +164,33 @@ test('queryString drops empty values and keeps meaningful ones', () => {
 test('rejects non-REST paths before touching the network', async () => {
   await assert.rejects(() => request('https://evil.example/api'), /same-origin/);
 });
+
+test('403 without a server message falls back to the error code meaning', async () => {
+  setCsrfToken('csrf');
+  await withFetch(
+    async () =>
+      new Response(JSON.stringify({ code: 'SELF_PRIVILEGE_ESCALATION', codeNumber: 140005, retryable: false }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    async () => {
+      await assert.rejects(
+        () => request('/api/v1/admin/acl/grants', { method: 'POST', body: {} }),
+        (error: unknown) => error instanceof ApiError && error.code === 'SELF_PRIVILEGE_ESCALATION' && error.message.includes('授予其尚未拥有'),
+      );
+    },
+  );
+  await withFetch(
+    async () =>
+      new Response(JSON.stringify({ code: 'SOMETHING_ELSE', retryable: false }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    async () => {
+      await assert.rejects(
+        () => request('/api/v1/admin/acl/grants'),
+        (error: unknown) => error instanceof ApiError && error.message === '没有执行该操作的权限。',
+      );
+    },
+  );
+});

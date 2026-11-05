@@ -134,3 +134,11 @@ Updated: 2026-11-05
 检查：前端 eslint / prettier / tsc / 199 单测 / `vite build` / `vite build --config vite.oauth.config.ts` 全过；后端 `DatasourceApiTest` 12/12 通过（走 WSL relay `tcp://127.0.0.1:12476` + `.docker-ptmcp` 证书，直连 12376 已失效）。未验证：其余后端模块测试、LAN IP 入口（本轮浏览器会话仅 127.0.0.1 可达）。
 
 路由走查结果：其余页面（数据源/元数据/授权矩阵/人员组织/角色/平台/审计/操作日志/个人门户 6 页）无 4xx/5xx、无控制台错误。数据源详情「连接未知」为设计行为：健康证据只认 5 分钟内的 ACTIVE_PROBE，过期即 UNKNOWN。
+
+### 2026-11-05 全量后端回归与权限页 403 诊断
+
+1. **后端 `ptmcp-admin` 全量测试**：13 个测试类，surefire 聚合 `tests=201 failures=0 errors=0 skipped=0`，此前「未验证：其余后端模块测试」在本模块范围收窄。
+2. **权限页「新增授权规则」真实环境 403 诊断**：前端请求体契约正确（raw `resourceId` + `resourceGeneration` + subject/action/effect/includeDescendants/validFrom/validTo/reason），后端返回 `{"code":"SELF_PRIVILEGE_ESCALATION","codeNumber":140005,"retryable":false}`。根因是 `SelfEscalationGuard` 设计：受授予对象（user 1）即当前操作者，新增 READ 触发自我提权拦截，**不是前后端契约缺陷**。dev 库只有一个用户/角色/部门，所有候选主体都等于操作者，因此本环境无法完成授权创建/撤销的端到端验证；该 HTTP 契约由 `AdminApiTest`（自授予→403 且授权列表仍为空；第二用户授予→创建成功→撤销）覆盖。
+3. **前端缺陷修复（`src/services/http.ts`）**：后端 403 响应体不含 `message`，前端原先一律显示「没有执行该操作的权限。」。新增按 `code` 的中文映射（CSRF_INVALID / MANAGEMENT_SCOPE_DENIED / TABLE_NOT_AUTHORIZED / SELF_PRIVILEGE_ESCALATION），未知 code 保留通用文案；`tests/http-contract.test.ts` 新增对应单测。
+   验证：前端单测 200/200 通过；eslint / prettier / tsc / `vite build` / `vite build --config vite.oauth.config.ts` 全过。真实页面（权限页）探针复验返回 `{"status":403,"code":"SELF_PRIVILEGE_ESCALATION","message":"不能给当前登录账号授予其尚未拥有的访问权限。"}`。
+4. **排障注意**：`GET /api/v1/session/csrf` 对已认证会话会轮换 CSRF token（`AdminSessionService.issueCsrf`），用 curl 直接探测会使页面内 token 失效并出现一次 `CSRF_INVALID`，刷新页面即可恢复；非缺陷。
