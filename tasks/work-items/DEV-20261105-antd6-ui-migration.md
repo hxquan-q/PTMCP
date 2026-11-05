@@ -80,7 +80,7 @@ Updated: 2026-11-05
 1. AppShell → antd Layout/Menu/Breadcrumb/Dropdown（含两个 btn--icon 按钮与移动端导航）。
 2. 其余页面原生 `<table>` → antd Table（PermissionsPage、OrgPage、PlatformsPage、MetadataPage、detail 页）；`.link` 行内链接 → Button type="link" 收敛。
 3. CSS 清理：删除已无引用的 .btn/.input/.data-table 等遗留块（现全部仍有未迁移页引用）。
-4. 主构建 chunk 分包（antd manualChunks）。
+4. ~~主构建 chunk 分包（antd manualChunks）~~ 已完成，改用路由懒加载（见末节实证）。
 5. Impeccable finish-reviewer + documenter（DESIGN.md 与 sidecar 同步）随迁移完成切片执行；本次切片已跑 detect（见下）。
 6. 真实接口/权限/OAuth 端到端验证。
 
@@ -232,3 +232,14 @@ Updated: 2026-11-05
 - 浏览器（真实后端，LAN）：`#/admin/org` 重载后成员表为 `.ant-table-wrapper.org-table`，行 `draggable="true"`（拖拽属性生效），操作列 3 个 antd link 按钮实测高度 24px；页面内 `.link` / `.btn--link` 元素均为 0，`.org-table` 后代样式仍命中。控制台错误仅 2× 已知自授权 403 守卫 + 8× TUN 超时导致的 HMR 重载失败（重载后恢复）。
 - 提交：`98a8802 refactor(styles): 清理表格与链接遗留死规则并同步 WCAG 测试`，已推送 origin dev；仅暂存 `src/styles/index.css`、`tests/design-system.test.ts`，排除他窗三文件。
 - 未验证：PermissionsPage 密度、移动端表格横向滚动等受 CSS 清理影响的页面未逐一走查；AppShell 外壳迁移；chunk 分包；Impeccable finish-reviewer/documenter；真实 OAuth 端到端。
+
+### 2026-11-05 主构建分包：路由懒加载替代 manualChunks
+
+- 现象：主构建只有单个 index chunk（1,131.77 kB），触发 >500 kB 警告，首屏为下载全部 26 个页面买单。
+- 试过 `build.rolldownOptions.codeSplitting.groups`（Vite 8 / Rolldown 1.2.15；`advancedChunks` 已废弃）按 react / antd / pro / icons 分组。把 antd 组加 `maxSize` 细分成 22–26 个 chunk 后产物白屏：preview 打开报 `TypeError: Ke is not a function`，`#root` 子节点 0。对照实验——默认自动分包产物正常；antd 单块（不设 maxSize）也正常——判定 `maxSize` 拆分会破坏 antd/rc-* 跨块初始化顺序，不能用于 antd。相关配置实践后已 `git restore vite.config.ts`，最终方案不依赖手动分包。
+- 改为路由级 `React.lazy` + `<Suspense>`：`MePages` / `DetailPages` 用共享 `mePages()` / `detailPages()` loader，同模块页面落同一 chunk；fallback 为 `.route-loading`（`role="status"`，复用 `.boot-mark` 旋转标识），只占内容区不遮导航。
+- 构建结果（`vite build` 846ms，无 >500 kB 警告）：`index-ChSRnrkT.js 39.82 kB`（原 1,131.77 kB）、`RolesPage-CGC5Qxg5.js 487.70 kB`、`jsx-runtime-DGWJQ6ih.js 285.79 kB`、`table-DqgNK0my.js 223.95 kB`、`http-RlN7yqg8.js 144.04 kB`、`index-CZB61BLP.css 63.12 kB`，共 102 个 JS 文件。文件数变多来自模块级自动分包，HTTP/2 下可接受。
+- 浏览器（构建产物 preview，`http://192.168.1.18:25176`）：`#/admin/roles` 重载后按需加载 `RolesPage-CGC5Qxg5.js`，ProTable/Table 均渲染，控制台无错误；切到 `#/admin/datasources` 重载只加载 `DatasourcesPage-GfdMSlh0.js` + `table-*.js`，`RolesPage` chunk 未加载，确认按路由按需下载。preview 无后端代理，接口 502 属预期。
+- 检查：prettier / eslint（max-warnings 0）/ tsc --noEmit / tests 201/201 / `vite build` / `vite build --config vite.oauth.config.ts`（447ms）全过。
+- 提交：`c28b500 perf(routes): 页面路由懒加载并拆出角色页重包`，已推送 origin dev；仅暂存 `src/App.tsx`、`src/styles/index.css`，排除他窗三文件与全部未跟踪文件。
+- 未验证：真实慢网/弱网下 Suspense 占位的观感与兜底；26 条懒加载路由未逐一走查（只抽查 roles / datasources）；OAuth 入口构建产物未做浏览器验证。
