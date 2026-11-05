@@ -1318,40 +1318,27 @@ input[type='checkbox'] {
   padding: 0 12px;
   font-size: 12.5px;
 }
-/* 顶栏账户菜单：定位在“⋯”下方，宽度随文案，不遮挡搜索框。 */
+/* 顶栏账户菜单：定位、点外部关闭与 Esc 由 antd Dropdown 负责，这里只把弹层调成设计稿的卡片观感。 */
 .topbar-more {
-  position: relative;
   flex: none;
 }
-.topbar-menu {
-  position: absolute;
-  top: 38px;
-  right: 0;
-  z-index: 50;
+.topbar-menu .ant-dropdown-menu {
   min-width: 156px;
   padding: 4px;
   border: 1px solid var(--ptmcp-border);
   border-radius: var(--ptmcp-radius-panel);
   background: var(--ptmcp-surface);
   box-shadow: var(--ptmcp-shadow-pop);
-  transform-origin: top right;
-  animation: ptmcp-pop-in var(--ptmcp-dur-base) var(--ptmcp-ease-out) both;
 }
-.topbar-menu-item {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  height: 34px;
+.topbar-menu .ant-dropdown-menu-item {
+  min-height: 34px;
   padding: 0 10px;
-  border: 0;
   border-radius: var(--ptmcp-radius-control);
-  background: none;
   color: var(--ptmcp-text);
   font-size: 13px;
-  text-align: left;
 }
-.topbar-menu-item:hover,
-.topbar-menu-item:focus-visible {
+.topbar-menu .ant-dropdown-menu-item:hover,
+.topbar-menu .ant-dropdown-menu-item-active {
   background: var(--ptmcp-hover);
   color: var(--ptmcp-text-strong);
 }
@@ -2551,16 +2538,6 @@ textarea:focus-visible {
   from {
     opacity: 0;
     transform: translateY(-8px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-@keyframes ptmcp-pop-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px) scale(0.96);
   }
   to {
     opacity: 1;

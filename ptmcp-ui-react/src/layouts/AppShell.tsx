@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Dropdown } from 'antd';
 import { LogoIcon, SearchIcon, UserIcon } from '../components/Icons';
 import { GlobalSearch, useFocusTrap } from '../components/common';
 import { ChevronRightIcon, CloseIcon, DocumentIcon, DotsIcon } from '../components/Icons';
@@ -48,8 +49,6 @@ export function AppShell({
   onSwitchRealm?: (realm: 'admin' | 'me') => void;
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const moreRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -57,17 +56,9 @@ export function AppShell({
         e.preventDefault();
         setSearchOpen(true);
       }
-      if (e.key === 'Escape') setMoreOpen(false);
-    };
-    const onPointer = (e: PointerEvent) => {
-      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
     };
     window.addEventListener('keydown', onKey);
-    window.addEventListener('pointerdown', onPointer);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('pointerdown', onPointer);
-    };
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
   return (
     <div className="app-shell">
@@ -115,26 +106,18 @@ export function AppShell({
           </span>
         </span>
         {onLogout ? (
-          <div className="topbar-more" ref={moreRef}>
-            {/* 稿面右上角是“⋯”而不是一个醒目的退出按钮：账户级动作收进菜单，顶栏只留身份与检索。 */}
-            <button
-              type="button"
-              className="btn btn--icon"
-              aria-label="更多账户操作"
-              aria-haspopup="menu"
-              aria-expanded={moreOpen}
-              onClick={() => setMoreOpen((v) => !v)}
-            >
+          /* 稿面右上角是“⋯”而不是一个醒目的退出按钮：账户级动作收进菜单，顶栏只留身份与检索。
+             弹出定位、点外部关闭、Esc 与菜单内键盘导航交给 antd Dropdown，不再自维护监听。 */
+          <Dropdown
+            trigger={['click']}
+            placement="bottomRight"
+            classNames={{ root: 'topbar-menu' }}
+            menu={{ items: [{ key: 'logout', label: '退出登录', onClick: () => onLogout() }] }}
+          >
+            <button type="button" className="btn btn--icon topbar-more" aria-label="更多账户操作" aria-haspopup="menu">
               <DotsIcon />
             </button>
-            {moreOpen ? (
-              <div className="topbar-menu" role="menu" aria-label="账户操作">
-                <button type="button" role="menuitem" className="topbar-menu-item" onClick={onLogout}>
-                  退出登录
-                </button>
-              </div>
-            ) : null}
-          </div>
+          </Dropdown>
         ) : null}
       </header>
       <div className="app-shell-body">
