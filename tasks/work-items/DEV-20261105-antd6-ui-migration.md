@@ -195,3 +195,11 @@ Updated: 2026-11-05
 - 检查：eslint / prettier / tsc / tests 201/201 / `vite build` / `vite build --config vite.oauth.config.ts` 全过。
 - 浏览器（真实后端，LAN `http://192.168.1.18:25173/#/admin/metadata`）：默认数据源 20 行渲染，7 列表头与单元格（对象名 + ID、库名、TABLE Badge、代次、授权/可见）正常；点行内「详情」跳转 `#/admin/metadata/809`；返回后「加载更多」由 20 → 40 行，工具栏与页脚计数同步，服务端仍有更多。控制台仍为 dev server HMR/`me/history` 超时噪声，无产品侧错误。
 - 未验证：授权/可见为布尔时的彩色 StatusDot 分支（当前列表服务端未回该字段，显示「未知」）；详情页本身未改动。
+
+### 2026-11-05 管理端详情页表格迁移（元数据列结构 / 数据源冲突对比）
+
+- MetadataDetailPage 列结构原生 `<table>`（# / 列名 / 类型 / 可空 / 键 / 注释）→ antd Table：`rowKey="ordinal"`、`size="middle"`、`pagination={false}`；字典 `displayName` 附注于列名、`sensitiveTags` 仍以 Badge 渲染、数据源与注释回退（`dictCol?.description ?? c.comment ?? '—'`）不变；`locale.emptyText` 置空，空态由既有 `EmptyState`（「该对象没有列信息」）承担。
+- DatasourceDetailPage 状态冲突对比表（字段 / 我编辑前 / 服务端最新 / 我的草稿）→ antd Table：`rowKey="key"`、`size="middle"`、`pagination={false}`；`serverChanged → orange 600`、`draftChanged → blue 600` 的高亮规则不变；外层 `table-scroll` 区域与 `aria-label="字段冲突对比"` 保留，空差异仍走「字段一致，仅版本号推进。」Alert 分支。
+- 检查：eslint（max-warnings 0）/ prettier / tsc --noEmit / tests 201/201 / `vite build` / `vite build --config vite.oauth.config.ts` 全过。
+- 浏览器（真实后端，LAN `http://192.168.1.18:25173`）：`#/admin/metadata/809` 列结构 6 列表头 + 5 行渲染（id/月份/供应商/报告类型/文件，字典描述与类型徽标正常）；`#/admin/datasources/1` 详情表单加载正常；控制台仅 dev server HMR 与密码字段 DOM 提示噪声，无产品侧错误。
+- 未验证：冲突对比表的真实渲染（需构造版本冲突；本切片未对 dev 数据制造冲突）；真实环境大列结构表（如 800+ 对象表）的行数与滚动未逐页走查。

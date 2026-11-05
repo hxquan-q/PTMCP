@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { Table } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { Alert, Badge, DrawerFields, EmptyState, PageHeader, StatusDot } from '../../../components/common';
-import { getMetadataObject, type MetadataObject } from '../../../services/data';
+import { getMetadataObject, type MetadataColumn, type MetadataObject } from '../../../services/data';
 
 import { DictionaryEditor } from './DictionaryEditor';
 import { BackBar, errorText, useDatasources } from './shared';
@@ -31,6 +33,76 @@ export function MetadataDetailPage({ id }: { id: string }) {
   }, [id]);
 
   const dict = obj?.dictionary;
+
+  const columnDefs: ColumnsType<MetadataColumn> = [
+    {
+      title: '#',
+      dataIndex: 'ordinal',
+      width: 40,
+      render: (v: number) => <span style={{ color: 'var(--ptmcp-text-faint)' }}>{v}</span>,
+    },
+    {
+      title: '列名',
+      dataIndex: 'name',
+      render: (_: unknown, c) => {
+        const dictCol = dict?.columns?.find((d) => d.name === c.name);
+        return (
+          <>
+            <code style={{ fontSize: 12 }}>{c.name}</code>
+            {dictCol?.displayName ? (
+              <span style={{ marginLeft: 6, fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>{dictCol.displayName}</span>
+            ) : null}
+          </>
+        );
+      },
+    },
+    {
+      title: '类型',
+      dataIndex: 'databaseType',
+      render: (_: unknown, c) => (
+        <Badge tone="neutral">
+          {c.databaseType}
+          {c.precision != null ? `(${c.precision}${c.scale != null ? `,${c.scale}` : ''})` : ''}
+        </Badge>
+      ),
+    },
+    {
+      title: '可空',
+      dataIndex: 'nullable',
+      render: (v: boolean) => <span style={{ color: 'var(--ptmcp-text-muted)' }}>{v ? '是' : '否'}</span>,
+    },
+    {
+      title: '键',
+      key: 'keys',
+      render: (_: unknown, c) => (
+        <>
+          {c.primaryKey ? <Badge tone="accent">PK</Badge> : null}
+          {c.foreignKey ? <Badge tone="neutral">FK</Badge> : null}
+        </>
+      ),
+    },
+    {
+      title: '注释',
+      key: 'comment',
+      render: (_: unknown, c) => {
+        const dictCol = dict?.columns?.find((d) => d.name === c.name);
+        return (
+          <span style={{ color: 'var(--ptmcp-text-muted)' }}>
+            {dictCol?.description ?? c.comment ?? '—'}
+            {dictCol?.sensitiveTags?.length ? (
+              <span style={{ marginLeft: 6 }}>
+                {dictCol.sensitiveTags.map((t) => (
+                  <Badge key={t} tone="warning">
+                    {t}
+                  </Badge>
+                ))}
+              </span>
+            ) : null}
+          </span>
+        );
+      },
+    },
+  ];
 
   return (
     /* 详情页阅读列：860px 在宽屏居中，标题/返回/卡片同列对齐。 */
@@ -90,57 +162,14 @@ export function MetadataDetailPage({ id }: { id: string }) {
             </div>
             <div className="table-scroll" role="region" aria-label="列结构" tabIndex={0}>
               {obj.columns?.length ? (
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th style={{ width: 40 }}>#</th>
-                      <th>列名</th>
-                      <th>类型</th>
-                      <th>可空</th>
-                      <th>键</th>
-                      <th>注释</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {obj.columns.map((c) => {
-                      const dictCol = dict?.columns?.find((d) => d.name === c.name);
-                      return (
-                        <tr key={c.ordinal}>
-                          <td style={{ color: 'var(--ptmcp-text-faint)' }}>{c.ordinal}</td>
-                          <td>
-                            <code style={{ fontSize: 12 }}>{c.name}</code>
-                            {dictCol?.displayName ? (
-                              <span style={{ marginLeft: 6, fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>{dictCol.displayName}</span>
-                            ) : null}
-                          </td>
-                          <td>
-                            <Badge tone="neutral">
-                              {c.databaseType}
-                              {c.precision != null ? `(${c.precision}${c.scale != null ? `,${c.scale}` : ''})` : ''}
-                            </Badge>
-                          </td>
-                          <td style={{ color: 'var(--ptmcp-text-muted)' }}>{c.nullable ? '是' : '否'}</td>
-                          <td>
-                            {c.primaryKey ? <Badge tone="accent">PK</Badge> : null}
-                            {c.foreignKey ? <Badge tone="neutral">FK</Badge> : null}
-                          </td>
-                          <td style={{ color: 'var(--ptmcp-text-muted)' }}>
-                            {dictCol?.description ?? c.comment ?? '—'}
-                            {dictCol?.sensitiveTags?.length ? (
-                              <span style={{ marginLeft: 6 }}>
-                                {dictCol.sensitiveTags.map((t) => (
-                                  <Badge key={t} tone="warning">
-                                    {t}
-                                  </Badge>
-                                ))}
-                              </span>
-                            ) : null}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                <Table<MetadataColumn>
+                  rowKey="ordinal"
+                  size="middle"
+                  dataSource={obj.columns}
+                  columns={columnDefs}
+                  pagination={false}
+                  locale={{ emptyText: <span /> }}
+                />
               ) : (
                 <EmptyState title="该对象没有列信息" />
               )}

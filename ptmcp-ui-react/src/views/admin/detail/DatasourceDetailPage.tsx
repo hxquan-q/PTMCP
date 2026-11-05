@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button } from 'antd';
+import { Button, Table } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { Alert, Dialog, DrawerFields, EmptyState, Field, PageHeader, Select, StatusDot, TextInput } from '../../../components/common';
 import { testDatasource } from '../../../services/access';
 import {
@@ -11,7 +12,7 @@ import {
   type DatasourceRead,
   type DatasourceWrite,
 } from '../../../services/data';
-import { datasourceDifferences, isVersionConflict } from '../../../adapters/edit-conflict';
+import { datasourceDifferences, isVersionConflict, type ConflictDifference } from '../../../adapters/edit-conflict';
 import { DATASOURCE_STATUSES, dsForm, dsValidate, type DsForm } from '../dsForm';
 import { useAdminGate } from '../../../adminGateContext';
 import { newUuid } from '../../../services/uuid';
@@ -274,6 +275,47 @@ export function DatasourceDetailPage({ id }: { id: string }) {
   );
   const formDisabled = saving || actionLoading || conflictRequired;
 
+  const conflictColumns: ColumnsType<ConflictDifference> = [
+    {
+      title: '字段',
+      dataIndex: 'label',
+      render: (v: string) => <strong>{v}</strong>,
+    },
+    {
+      title: '我编辑前',
+      dataIndex: 'base',
+      render: (v: string) => <span style={{ color: 'var(--ptmcp-text-muted)' }}>{v}</span>,
+    },
+    {
+      title: '服务端最新',
+      dataIndex: 'latest',
+      render: (v: string, r) => (
+        <span
+          style={{
+            color: r.serverChanged ? 'var(--ptmcp-orange)' : 'var(--ptmcp-text-muted)',
+            fontWeight: r.serverChanged ? 600 : 400,
+          }}
+        >
+          {v}
+        </span>
+      ),
+    },
+    {
+      title: '我的草稿',
+      dataIndex: 'draft',
+      render: (v: string, r) => (
+        <span
+          style={{
+            color: r.draftChanged ? 'var(--ptmcp-blue)' : 'var(--ptmcp-text-muted)',
+            fontWeight: r.draftChanged ? 600 : 400,
+          }}
+        >
+          {v}
+        </span>
+      ),
+    },
+  ];
+
   return (
     /* 详情页阅读列：860px 在宽屏居中，标题/返回/卡片同列对齐，不再顶左留大片空白。 */
     <div style={{ maxWidth: 860, marginInline: 'auto' }}>
@@ -337,42 +379,14 @@ export function DatasourceDetailPage({ id }: { id: string }) {
             <>
               {conflictRows.length ? (
                 <div className="table-scroll" role="region" aria-label="字段冲突对比" tabIndex={0} style={{ marginBottom: 12 }}>
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>字段</th>
-                        <th>我编辑前</th>
-                        <th>服务端最新</th>
-                        <th>我的草稿</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {conflictRows.map((r) => (
-                        <tr key={r.key}>
-                          <td>
-                            <strong>{r.label}</strong>
-                          </td>
-                          <td style={{ color: 'var(--ptmcp-text-muted)' }}>{r.base}</td>
-                          <td
-                            style={{
-                              color: r.serverChanged ? 'var(--ptmcp-orange)' : 'var(--ptmcp-text-muted)',
-                              fontWeight: r.serverChanged ? 600 : 400,
-                            }}
-                          >
-                            {r.latest}
-                          </td>
-                          <td
-                            style={{
-                              color: r.draftChanged ? 'var(--ptmcp-blue)' : 'var(--ptmcp-text-muted)',
-                              fontWeight: r.draftChanged ? 600 : 400,
-                            }}
-                          >
-                            {r.draft}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <Table<ConflictDifference>
+                    rowKey="key"
+                    size="middle"
+                    dataSource={conflictRows}
+                    columns={conflictColumns}
+                    pagination={false}
+                    locale={{ emptyText: <span /> }}
+                  />
                 </div>
               ) : (
                 <Alert kind="info">字段一致，仅版本号推进。</Alert>
