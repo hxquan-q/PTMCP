@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { Button } from 'antd';
 import { Alert, Badge, Dialog, EmptyState, PageHeader, RequestIdText, SearchInput, StatusDot, useDebounced } from '../../components/common';
 import { BuildingIcon, ChevronRightIcon, CloseIcon, EditIcon, PlusIcon, UsersIcon } from '../../components/Icons';
 import {
@@ -434,22 +435,21 @@ export function OrgPage() {
         description="左侧选择部门，右侧管理成员；拖动部门或成员即可调整归属。"
         actions={
           <>
-            <button
-              className="btn btn--secondary"
+            <Button
               onClick={() => setCreatingDept({ parentId: selectedId })}
               disabled={!canCreateDept}
               title={canCreateDept ? undefined : '缺少 ptmcp:department:create 权限'}
             >
               <PlusIcon /> 新建部门
-            </button>
-            <button
-              className="btn btn--primary"
+            </Button>
+            <Button
+              type="primary"
               onClick={() => setCreatingUser(true)}
               disabled={!canCreateUser}
               title={canCreateUser ? undefined : '缺少 ptmcp:user:create 权限'}
             >
               <PlusIcon /> 新建成员
-            </button>
+            </Button>
           </>
         }
       />
@@ -600,13 +600,11 @@ export function OrgPage() {
                 }
                 action={
                   debounced ? (
-                    <button className="btn btn--secondary" onClick={() => setKeyword('')}>
-                      清除搜索
-                    </button>
+                    <Button onClick={() => setKeyword('')}>清除搜索</Button>
                   ) : canCreateUser ? (
-                    <button className="btn btn--primary" onClick={() => setCreatingUser(true)}>
+                    <Button type="primary" onClick={() => setCreatingUser(true)}>
                       <PlusIcon /> 新建成员
-                    </button>
+                    </Button>
                   ) : undefined
                 }
               />
@@ -766,8 +764,7 @@ export function OrgPage() {
         width={440}
         footer={
           <>
-            <button
-              className="btn btn--secondary"
+            <Button
               onClick={() => {
                 setDeletingUser(null);
                 setDeleteFailure(null);
@@ -775,9 +772,9 @@ export function OrgPage() {
               disabled={busy}
             >
               取消
-            </button>
-            <button
-              className="btn btn--primary"
+            </Button>
+            <Button
+              type="primary"
               style={{ background: 'var(--ptmcp-red)' }}
               disabled={busy || !canDeleteUser}
               onClick={async () => {
@@ -797,7 +794,7 @@ export function OrgPage() {
               }}
             >
               {busy ? '删除中…' : '确认删除'}
-            </button>
+            </Button>
           </>
         }
       >
@@ -825,8 +822,7 @@ export function OrgPage() {
         width={440}
         footer={
           <>
-            <button
-              className="btn btn--secondary"
+            <Button
               onClick={() => {
                 setDeletingDept(null);
                 setDeleteFailure(null);
@@ -834,9 +830,9 @@ export function OrgPage() {
               disabled={busy}
             >
               取消
-            </button>
-            <button
-              className="btn btn--primary"
+            </Button>
+            <Button
+              type="primary"
               style={{ background: 'var(--ptmcp-red)' }}
               disabled={busy || !canDeleteDept || (deletingDept ? !!deptDeleteBlock(deletingDept) : true)}
               onClick={async () => {
@@ -856,7 +852,7 @@ export function OrgPage() {
               }}
             >
               {busy ? '删除中…' : '确认删除'}
-            </button>
+            </Button>
           </>
         }
       >

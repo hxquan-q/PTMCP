@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Button } from 'antd';
 import { Alert, Badge, Field, PageHeader, TextInput } from '../../../components/common';
 import { KeyIcon, LockIcon, MonitorIcon, ShieldIcon, UserIcon } from '../../../components/Icons';
 import { formatTaipeiTime } from '../../../services/dateTime';
@@ -114,9 +115,9 @@ export function SecurityPage() {
             <span className="security-session-value">—</span>
           )}
           <span className="security-session-note">到期后需重新登录</span>
-          <button type="button" className="btn btn--secondary security-logout" onClick={signOut} disabled={signingOut}>
+          <Button onClick={signOut} disabled={signingOut}>
             {signingOut ? '正在退出…' : '退出当前会话'}
-          </button>
+          </Button>
         </div>
       </section>
 
@@ -171,17 +172,12 @@ export function SecurityPage() {
               修改后需使用新密码重新登录
             </span>
             <div className="form-actions">
-              <button
-                type="button"
-                className="btn btn--secondary"
-                onClick={() => setPwForm({ oldPassword: '', newPassword: '', confirmPassword: '' })}
-                disabled={pwSaving}
-              >
+              <Button onClick={() => setPwForm({ oldPassword: '', newPassword: '', confirmPassword: '' })} disabled={pwSaving}>
                 清空
-              </button>
-              <button type="submit" className="btn btn--primary" disabled={pwSaving}>
+              </Button>
+              <Button type="primary" htmlType="submit" disabled={pwSaving}>
                 {pwSaving ? '提交中…' : '修改密码'}
-              </button>
+              </Button>
             </div>
           </footer>
         </form>

@@ -17,6 +17,8 @@ import {
   Tabs,
   useDebounced,
 } from '../../components/common';
+import { Button, Table } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { CheckboxIcon, DatabaseIcon, DotsIcon, EditIcon, PlusIcon } from '../../components/Icons';
 import { fmtTime as fmt, healthOf, statusOf } from './datasourceStatus';
 import { DATASOURCE_ENGINES, DATASOURCE_STATUSES, dsCreateValidate, emptyDsForm, type DsForm } from './dsForm';
@@ -73,14 +75,99 @@ export function DatasourcesPage() {
   const filtered = rows;
   const pageSize = 20;
   const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
-  const toggle = (id: string) =>
-    setSelected((s) => {
-      const next = new Set(s);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  const toggleAll = () => setSelected((s) => (s.size === pageRows.length ? new Set() : new Set(pageRows.map((r) => r.id))));
+
+  const columns: ColumnsType<DatasourceRead> = [
+    {
+      title: '数据源名称 / 编码',
+      key: 'name',
+      render: (_, r) => (
+        <span className="cell-lead">
+          <CellIcon icon={DatabaseIcon} engine={r.engine} />
+          <span className="cell-stack">
+            <Button
+              type="link"
+              size="small"
+              style={{ padding: 0, height: 'auto' }}
+              onClick={() => {
+                setDetail(r);
+                setDetailTab('base');
+              }}
+            >
+              {r.name}
+            </Button>
+            <span>
+              {r.code} · ID {r.id}
+            </span>
+          </span>
+        </span>
+      ),
+    },
+    { title: '引擎', dataIndex: 'engine', render: (v) => <span style={{ color: 'var(--ptmcp-text-muted)' }}>{v}</span> },
+    { title: '数据库', dataIndex: 'databaseName' },
+    {
+      title: '状态',
+      key: 'status',
+      render: (_, r) => {
+        const st = statusOf(r.status);
+        return <StatusDot tone={st.tone}>{st.label}</StatusDot>;
+      },
+    },
+    {
+      title: '健康',
+      key: 'health',
+      render: (_, r) => {
+        const hl = healthOf(r.health);
+        return <StatusDot tone={hl.tone}>{hl.label}</StatusDot>;
+      },
+    },
+    {
+      title: '最近同步',
+      key: 'lastSyncAt',
+      render: (_, r) => (
+        <span className="cell-stack">
+          <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--ptmcp-text-strong)', fontSize: 12 }}>{fmt(r.lastSyncAt)}</span>
+          {r.lastSyncResult ? (
+            <StatusDot tone={r.lastSyncResult === 'FAILED' ? 'danger' : 'success'}>{r.lastSyncResult === 'FAILED' ? '失败' : '成功'}</StatusDot>
+          ) : null}
+        </span>
+      ),
+    },
+    { title: '连接池上限', dataIndex: 'poolMax', render: (v) => <span style={{ fontVariantNumeric: 'tabular-nums' }}>{v}</span> },
+    {
+      title: '活动快照',
+      dataIndex: 'activeSnapshotId',
+      render: (v) => <span style={{ color: 'var(--ptmcp-text-muted)' }}>{v ?? '待同步'}</span>,
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      width: 96,
+      render: (_, r) => (
+        <span style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+          <Button
+            type="link"
+            size="small"
+            style={{ padding: 0 }}
+            onClick={() => {
+              setDetail(r);
+              setDetailTab('base');
+            }}
+          >
+            查看
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            style={{ padding: 0, color: 'var(--ptmcp-text-muted)' }}
+            aria-label={`打开 ${r.name} 详情页`}
+            onClick={() => (window.location.hash = `/admin/datasources/${encodeURIComponent(r.id)}`)}
+          >
+            <DotsIcon />
+          </Button>
+        </span>
+      ),
+    },
+  ];
 
   return (
     <>
@@ -88,9 +175,9 @@ export function DatasourcesPage() {
         title="数据源"
         description="管理受控数据连接、健康状态和元数据同步。"
         actions={
-          <button className="btn btn--primary" onClick={() => isAdmin && setCreating(true)} disabled={!isAdmin}>
-            <PlusIcon /> 新建数据源
-          </button>
+          <Button type="primary" icon={<PlusIcon />} onClick={() => isAdmin && setCreating(true)} disabled={!isAdmin}>
+            新建数据源
+          </Button>
         }
       />
       <div className="table-card filter-card">
@@ -127,11 +214,11 @@ export function DatasourcesPage() {
         />
         <div className="filter-actions">
           {/* 筛选在输入时已即时生效，查询按钮重新向服务端取一次当前筛选下的列表。 */}
-          <button className="btn btn--tinted" onClick={() => setReloadTick((t) => t + 1)}>
+          <Button color="primary" variant="filled" onClick={() => setReloadTick((t) => t + 1)}>
             查询
-          </button>
-          <button
-            className="btn btn--ghost"
+          </Button>
+          <Button
+            variant="text"
             onClick={() => {
               setKeyword('');
               setEngine('');
@@ -140,7 +227,7 @@ export function DatasourcesPage() {
             }}
           >
             重置
-          </button>
+          </Button>
         </div>
       </div>
       <div className="table-card" style={{ flex: 1, minHeight: 0 }}>
@@ -152,106 +239,29 @@ export function DatasourcesPage() {
             </span>
           </strong>
           <span className="caption-actions">
-            <button className="btn btn--secondary" disabled={selected.size === 0} onClick={() => setSelected(new Set())}>
-              <CheckboxIcon /> {selected.size > 0 ? `已选 ${selected.size} 项` : '批量操作'}
-            </button>
+            <Button icon={<CheckboxIcon />} disabled={selected.size === 0} onClick={() => setSelected(new Set())}>
+              {selected.size > 0 ? `已选 ${selected.size} 项` : '批量操作'}
+            </Button>
           </span>
         </div>
         <div className="table-scroll" role="region" aria-label="数据源列表" tabIndex={0}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th style={{ width: 34 }}>
-                  <input type="checkbox" checked={pageRows.length > 0 && selected.size === pageRows.length} onChange={toggleAll} aria-label="全选" />
-                </th>
-                <th>数据源名称 / 编码</th>
-                <th>引擎</th>
-                <th>数据库</th>
-                <th>状态</th>
-                <th>健康</th>
-                <th>最近同步</th>
-                <th>连接池上限</th>
-                <th>活动快照</th>
-                <th style={{ width: 80 }}>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pageRows.map((r) => {
-                const st = statusOf(r.status);
-                const hl = healthOf(r.health);
-                return (
-                  <tr key={r.id} className={selected.has(r.id) ? 'is-selected' : undefined}>
-                    <td>
-                      <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} aria-label={`选择 ${r.name}`} />
-                    </td>
-                    <td>
-                      <span className="cell-lead">
-                        <CellIcon icon={DatabaseIcon} engine={r.engine} />
-                        <span className="cell-stack">
-                          <button
-                            className="link"
-                            onClick={() => {
-                              setDetail(r);
-                              setDetailTab('base');
-                            }}
-                          >
-                            {r.name}
-                          </button>
-                          <span>
-                            {r.code} · ID {r.id}
-                          </span>
-                        </span>
-                      </span>
-                    </td>
-                    <td style={{ color: 'var(--ptmcp-text-muted)' }}>{r.engine}</td>
-                    <td>{r.databaseName}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <StatusDot tone={st.tone}>{st.label}</StatusDot>
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <StatusDot tone={hl.tone}>{hl.label}</StatusDot>
-                    </td>
-                    <td>
-                      <span className="cell-stack">
-                        <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--ptmcp-text-strong)', fontSize: 12 }}>
-                          {fmt(r.lastSyncAt)}
-                        </span>
-                        {r.lastSyncResult ? (
-                          <span style={{ color: r.lastSyncResult === 'FAILED' ? 'var(--ptmcp-red)' : 'var(--ptmcp-green)' }}>
-                            {r.lastSyncResult === 'FAILED' ? '失败' : '成功'}
-                          </span>
-                        ) : null}
-                      </span>
-                    </td>
-                    <td style={{ fontVariantNumeric: 'tabular-nums' }}>{r.poolMax}</td>
-                    <td style={{ color: 'var(--ptmcp-text-muted)' }}>{r.activeSnapshotId ?? '待同步'}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <button
-                        className="link"
-                        onClick={() => {
-                          setDetail(r);
-                          setDetailTab('base');
-                        }}
-                      >
-                        查看
-                      </button>
-                      <button
-                        className="link"
-                        aria-label={`打开 ${r.name} 详情页`}
-                        style={{ marginLeft: 10, color: 'var(--ptmcp-text-muted)' }}
-                        onClick={() => (window.location.hash = `/admin/datasources/${encodeURIComponent(r.id)}`)}
-                      >
-                        <DotsIcon />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {!loading && pageRows.length === 0 ? (
-            <EmptyState kind="filtered" title="暂无数据源" description="调整筛选条件，或新建一个数据源连接。" />
-          ) : null}
+          <Table<DatasourceRead>
+            rowKey="id"
+            size="middle"
+            loading={loading}
+            dataSource={pageRows}
+            columns={columns}
+            pagination={false}
+            rowSelection={{
+              selectedRowKeys: [...selected],
+              onChange: (keys) => setSelected(new Set(keys as string[])),
+              columnWidth: 34,
+              getCheckboxProps: (r) => ({ 'aria-label': `选择 ${r.name}` }),
+            }}
+            locale={{
+              emptyText: <EmptyState kind="filtered" title="暂无数据源" description="调整筛选条件，或新建一个数据源连接。" />,
+            }}
+          />
         </div>
         <div className="table-footer">
           <span>{selected.size > 0 ? `已选择 ${selected.size} 项` : ' '}</span>
@@ -288,12 +298,10 @@ export function DatasourcesPage() {
         }
         footer={
           <>
-            <button className="btn btn--secondary" onClick={() => setDetail(null)}>
-              关闭
-            </button>
-            <button className="btn btn--primary">
-              <EditIcon /> 编辑
-            </button>
+            <Button onClick={() => setDetail(null)}>关闭</Button>
+            <Button type="primary" icon={<EditIcon />}>
+              编辑
+            </Button>
           </>
         }
       >
@@ -449,12 +457,12 @@ function DsCreateDialog({ onClose, onCreated }: { onClose: () => void; onCreated
       ) : null}
       {submitError ? <Alert kind="danger">{submitError}</Alert> : null}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
-        <button className="btn btn--secondary" onClick={onClose} disabled={saving}>
+        <Button onClick={onClose} disabled={saving}>
           取消
-        </button>
-        <button className="btn btn--primary" onClick={submit} disabled={saving}>
+        </Button>
+        <Button type="primary" onClick={submit} disabled={saving}>
           {saving ? '创建中…' : '创建数据源'}
-        </button>
+        </Button>
       </div>
     </Dialog>
   );

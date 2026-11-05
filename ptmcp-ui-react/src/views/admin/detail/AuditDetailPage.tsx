@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Button } from 'antd';
 import { Alert, Badge, DrawerFields, PageHeader, StatusDot } from '../../../components/common';
 import { getAudit, listSensitiveAccess, type AuditRow, type SensitiveAccessRow } from '../../../services/access';
 import { LockIcon } from '../../../components/Icons';
@@ -89,9 +90,9 @@ export function AuditDetailPage({ id }: { id: string }) {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                 <strong style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>SQL（脱敏）</strong>
                 {isAdmin ? (
-                  <button className="btn btn--secondary" onClick={() => setDecryptOpen(true)}>
+                  <Button onClick={() => setDecryptOpen(true)}>
                     <LockIcon /> 解密查看
-                  </button>
+                  </Button>
                 ) : null}
               </div>
               <pre

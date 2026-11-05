@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Button } from 'antd';
 import { EmptyState, PageHeader, StatusDot } from '../../../components/common';
 import { listMyAuthorizations, revokeAuthorization, type AuthorizationRow } from '../../../services/access';
 import { showToast } from '../../../toast';
@@ -98,8 +99,7 @@ export function AuthorizationsPage() {
             已加载 {rows.length} 条{nextCursor ? ' · 可能还有更多' : ''}
           </span>
           {loading ? null : nextCursor ? (
-            <button
-              className="btn btn--secondary"
+            <Button
               disabled={loadingMore}
               onClick={() => {
                 if (!nextCursor || loadingMore) return;
@@ -114,7 +114,7 @@ export function AuthorizationsPage() {
               }}
             >
               {loadingMore ? '加载中…' : '加载更多'}
-            </button>
+            </Button>
           ) : (
             <span style={{ fontSize: 12, color: 'var(--ptmcp-text-faint)' }}>没有更多了</span>
           )}

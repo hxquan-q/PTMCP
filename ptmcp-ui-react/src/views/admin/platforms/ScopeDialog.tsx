@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Button } from 'antd';
 import { Alert, Dialog, EmptyState, Select, TextInput } from '../../../components/common';
 import { getPlatformScopes, savePlatformScopes, type ScopeRule, type PlatformRow } from '../../../services/access';
 import { scopeChangeText, scopeChanges, scopeKey, scopeRuleText } from '../scopeDiff';
@@ -143,8 +144,7 @@ export function ScopeDialog({ platform, onClose, onSaved }: { platform: Platform
               </tbody>
             </table>
           </div>
-          <button
-            className="btn btn--secondary"
+          <Button
             onClick={() =>
               setRules((rs) => [
                 ...rs,
@@ -153,7 +153,7 @@ export function ScopeDialog({ platform, onClose, onSaved }: { platform: Platform
             }
           >
             添加规则
-          </button>
+          </Button>
 
           {confirming ? (
             <div style={{ marginTop: 12 }}>
@@ -187,22 +187,22 @@ export function ScopeDialog({ platform, onClose, onSaved }: { platform: Platform
                 </table>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
-                <button className="btn btn--secondary" onClick={() => setConfirming(false)} disabled={saving}>
+                <Button onClick={() => setConfirming(false)} disabled={saving}>
                   再想想
-                </button>
-                <button className="btn btn--primary" onClick={save} disabled={saving}>
+                </Button>
+                <Button type="primary" onClick={save} disabled={saving}>
                   {saving ? '保存中…' : '确认保存'}
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 12 }}>
-              <button className="btn btn--secondary" onClick={onClose} disabled={saving}>
+              <Button onClick={onClose} disabled={saving}>
                 关闭
-              </button>
-              <button className="btn btn--primary" disabled={!dirty || saving} onClick={() => setConfirming(true)}>
+              </Button>
+              <Button type="primary" disabled={!dirty || saving} onClick={() => setConfirming(true)}>
                 保存（需确认差异）
-              </button>
+              </Button>
             </div>
           )}
         </>

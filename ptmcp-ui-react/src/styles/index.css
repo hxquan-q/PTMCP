@@ -1,3 +1,7 @@
+/* Ant Design 6 × Tailwind 4 共存：antd 样式（StyleProvider layer 注入）排在 Tailwind base 之后、
+   components/utilities 之前——preflight 不再削 antd，Tailwind 工具类仍能覆盖 antd。
+   本文件的自研遗留样式未分层，优先级高于所有 layer，迁移期间继续生效，逐片删除。 */
+@layer theme, base, antd, components, utilities;
 @import 'tailwindcss';
 
 *,
@@ -35,13 +39,15 @@ body {
 .cell-stack code {
   font-variant-numeric: tabular-nums;
 }
-button {
+/* 遗留 reset 未分层、优先级高于 antd layer：必须排除 antd 组件，否则会覆盖
+   antd 主按钮的白字与输入框 token 色（表现为蓝底上深灰字）。 */
+button:not(.ant-btn) {
   font: inherit;
   color: inherit;
   cursor: pointer;
 }
-input,
-select {
+input:not([class*='ant-']),
+select:not([class*='ant-']) {
   font: inherit;
   color: inherit;
 }

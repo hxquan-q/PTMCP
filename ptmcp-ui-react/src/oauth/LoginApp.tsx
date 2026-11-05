@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from 'antd';
 import { Alert, Field, useMagnetic } from '../components/common';
 import { loadLoginContext } from './context';
 import { loginNotice } from './model';
@@ -56,9 +57,9 @@ export function LoginApp() {
         </Field>
         {/* 磁吸挂在包裹层：按钮自身的 hover/active/入场动画不被内联 transform 干扰。 */}
         <div className="login-submit-wrap" ref={magnetRef}>
-          <button className="btn btn--primary login-submit" type="submit" disabled={submitting}>
+          <Button type="primary" htmlType="submit" disabled={submitting}>
             {submitting ? '登录中…' : '登录'}
-          </button>
+          </Button>
         </div>
         <p className="login-footnote">凭证由管理员签发，不开放自助注册 · 连续多次失败会临时锁定登录，锁定时长以服务端提示为准</p>
       </form>

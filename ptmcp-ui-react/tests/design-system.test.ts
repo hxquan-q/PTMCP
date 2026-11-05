@@ -341,5 +341,6 @@ test('空态结构固定：图标容器 aria-hidden + 标题段落', () => {
     assert.equal(cssBlocks(`.empty-state--${variant} .empty-state-mark`).length, 1, `缺少 .empty-state--${variant} 图标语气`);
   }
   const common = readFileSync(join(SRC, 'components/common.tsx'), 'utf8');
-  assert.match(common, /<span className="empty-state-mark" aria-hidden="true">/, '空态图标容器必须 aria-hidden');
+  /* antd Empty 承载布局后，图标容器 className 变为模板字符串（带 kind 语气），aria-hidden 契约不变。 */
+  assert.match(common, /className=\{`empty-state-mark empty-state--\$\{kind\}`\}\s*aria-hidden="true"/, '空态图标容器必须 aria-hidden');
 });

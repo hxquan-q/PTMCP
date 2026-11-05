@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { Button } from 'antd';
 import { Alert, CharReveal, Field, LoginBackdrop, RequestIdText, TextInput, useMagnetic } from '../../components/common';
 import { LogoIcon } from '../../components/Icons';
 import { readFailure, type Failure } from '../../services/http';
@@ -133,9 +134,9 @@ export function LoginPage({ onLoggedIn, reason }: { onLoggedIn: () => void; reas
         ) : null}
         {/* 磁吸挂在包裹层：按钮自身的 hover/active/入场动画不被内联 transform 干扰。 */}
         <div className="login-submit-wrap" ref={magnetRef}>
-          <button className="btn btn--primary login-submit" type="submit" disabled={busy}>
+          <Button type="primary" htmlType="submit" disabled={busy}>
             {busy ? '登录中…' : '登录'}
-          </button>
+          </Button>
         </div>
         <p className="login-footnote">权限管控型 MCP 网关 · 连续多次失败会临时锁定登录，锁定时长以服务端提示为准</p>
       </form>

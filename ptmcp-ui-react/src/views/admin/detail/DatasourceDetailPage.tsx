@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Button } from 'antd';
 import { Alert, Dialog, DrawerFields, EmptyState, Field, PageHeader, Select, StatusDot, TextInput } from '../../../components/common';
 import { testDatasource } from '../../../services/access';
 import {
@@ -282,20 +283,16 @@ export function DatasourceDetailPage({ id }: { id: string }) {
         actions={
           datasource ? (
             <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                className="btn btn--secondary"
-                disabled={saving || actionLoading || conflictRequired || !isAdmin}
-                onClick={() => isAdmin && void runTest()}
-              >
+              <Button disabled={saving || actionLoading || conflictRequired || !isAdmin} onClick={() => isAdmin && void runTest()}>
                 {actionLoading ? '处理中…' : '测试连接'}
-              </button>
-              <button
-                className="btn btn--primary"
+              </Button>
+              <Button
+                type="primary"
                 disabled={datasource.status !== 'ACTIVE' || saving || actionLoading || conflictRequired || !isAdmin}
                 onClick={() => void runSync()}
               >
                 同步元数据
-              </button>
+              </Button>
             </div>
           ) : undefined
         }
@@ -310,9 +307,9 @@ export function DatasourceDetailPage({ id }: { id: string }) {
           {error}
           {requestId ? <div style={{ marginTop: 6, fontSize: 12, color: 'var(--ptmcp-text-faint)' }}>请求编号:{requestId}</div> : null}
           {!datasource ? (
-            <button className="btn btn--secondary" style={{ marginTop: 8 }} onClick={() => void load()}>
+            <Button style={{ marginTop: 8 }} onClick={() => void load()}>
               重新读取
-            </button>
+            </Button>
           ) : null}
         </Alert>
       ) : null}
@@ -330,9 +327,9 @@ export function DatasourceDetailPage({ id }: { id: string }) {
           {!conflict && !conflictLoading ? (
             <Alert kind="warning" title="保存被服务端拒绝">
               此数据源在你编辑期间已被他人修改。请读取最新版本后再提交。
-              <button className="btn btn--secondary" style={{ marginLeft: 8 }} disabled={conflictLoading} onClick={() => void readConflict()}>
+              <Button style={{ marginLeft: 8 }} disabled={conflictLoading} onClick={() => void readConflict()}>
                 读取最新
-              </button>
+              </Button>
             </Alert>
           ) : null}
           {conflict ? (
@@ -381,12 +378,12 @@ export function DatasourceDetailPage({ id }: { id: string }) {
               )}
               <Alert kind="warning">凭据已清空。选择处理方式后请重新输入并再次保存。</Alert>
               <div style={{ display: 'flex', gap: 10 }}>
-                <button className="btn btn--secondary" disabled={conflictLoading || saving || actionLoading} onClick={() => resolveConflict(false)}>
+                <Button disabled={conflictLoading || saving || actionLoading} onClick={() => resolveConflict(false)}>
                   用最新版本覆盖草稿
-                </button>
-                <button className="btn btn--primary" disabled={conflictLoading || saving || actionLoading} onClick={() => resolveConflict(true)}>
+                </Button>
+                <Button type="primary" disabled={conflictLoading || saving || actionLoading} onClick={() => resolveConflict(true)}>
                   保留我的草稿(重新保存)
-                </button>
+                </Button>
               </div>
             </>
           ) : null}
@@ -425,9 +422,9 @@ export function DatasourceDetailPage({ id }: { id: string }) {
             </StatusDot>
             <span>凭据:{datasource.credentialConfigured ? '已配置' : '未配置'}</span>
             {datasource.activeSnapshotId ? (
-              <button className="btn btn--link" onClick={() => (window.location.hash = `/admin/metadata`)}>
+              <Button type="link" onClick={() => (window.location.hash = `/admin/metadata`)}>
                 查看元数据
-              </button>
+              </Button>
             ) : null}
           </div>
           <div className="table-card" style={{ padding: '16px 18px', maxWidth: 860, marginBottom: 14 }}>
@@ -476,17 +473,12 @@ export function DatasourceDetailPage({ id }: { id: string }) {
             </div>
             <Alert kind="info">TLS 固定为 VERIFY_FULL。凭据不回显,留空表示保持现有值。</Alert>
             <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-              <button className="btn btn--primary" disabled={formDisabled} onClick={() => void save()}>
+              <Button type="primary" disabled={formDisabled} onClick={() => void save()}>
                 {saving ? '保存中…' : '保存更改'}
-              </button>
-              <button
-                className="btn btn--secondary"
-                style={{ color: 'var(--ptmcp-red)' }}
-                disabled={formDisabled || !isAdmin}
-                onClick={isAdmin ? remove : undefined}
-              >
+              </Button>
+              <Button style={{ color: 'var(--ptmcp-red)' }} disabled={formDisabled || !isAdmin} onClick={isAdmin ? remove : undefined}>
                 删除数据源
-              </button>
+              </Button>
             </div>
           </div>
           <div className="table-card" style={{ padding: '16px 18px', maxWidth: 860 }}>
@@ -512,11 +504,9 @@ export function DatasourceDetailPage({ id }: { id: string }) {
           onClose={() => setConfirm(null)}
           footer={
             <>
-              <button className="btn btn--secondary" onClick={() => setConfirm(null)}>
-                取消
-              </button>
-              <button
-                className="btn btn--primary"
+              <Button onClick={() => setConfirm(null)}>取消</Button>
+              <Button
+                type="primary"
                 style={confirm.danger ? { background: 'var(--ptmcp-red)', borderColor: 'var(--ptmcp-red)' } : undefined}
                 onClick={() => {
                   const run = confirm.run;
@@ -525,7 +515,7 @@ export function DatasourceDetailPage({ id }: { id: string }) {
                 }}
               >
                 确认
-              </button>
+              </Button>
             </>
           }
         >

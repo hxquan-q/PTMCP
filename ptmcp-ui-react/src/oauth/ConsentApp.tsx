@@ -1,4 +1,5 @@
 import { Fragment, useId, useMemo, useState } from 'react';
+import { Button } from 'antd';
 import { Alert } from '../components/common';
 import { loadConsentContext } from './context';
 import {
@@ -114,15 +115,15 @@ function ConsentCard({ context }: { context: ConsentContext }) {
         <div className="oauth-actions">
           <form method="post" action={context.denyAction} onSubmit={() => setSubmitting('deny')} aria-label="拒绝授权">
             <HiddenFields fields={deny} />
-            <button className="btn btn--secondary login-submit" type="submit" disabled={submitting !== null}>
+            <Button htmlType="submit" disabled={submitting !== null}>
               {submitting === 'deny' ? '正在拒绝…' : '拒绝'}
-            </button>
+            </Button>
           </form>
           <form method="post" action={context.action} onSubmit={() => setSubmitting('allow')} aria-label="允许授权">
             <HiddenFields fields={allow} />
-            <button className="btn btn--primary login-submit" type="submit" disabled={!canAllow || submitting !== null}>
+            <Button type="primary" htmlType="submit" disabled={!canAllow || submitting !== null}>
               {submitting === 'allow' ? '正在授权…' : '允许'}
-            </button>
+            </Button>
           </form>
         </div>
         <p className="login-footnote">已授权的权限会保留且不可在此取消，本次只调整新增权限；授权后可在平台侧撤销。</p>

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Button } from 'antd';
 import {
   CellIcon,
   Drawer,
@@ -220,9 +221,9 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
         title="MCP 接入配置"
         description="配置并管理本人的 MCP 客户端接入，快速获取配置模板并完成接入。是否连通仍由客户端握手验证。"
         actions={
-          <button className="btn btn--primary" onClick={onCreate}>
+          <Button type="primary" onClick={onCreate}>
             <PlusIcon /> 新建接入配置
-          </button>
+          </Button>
         }
       />
       {frontendPreview ? (
@@ -277,8 +278,8 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
                 width={120}
                 options={STATUS_FILTER_OPTIONS}
               />
-              <button
-                className="btn btn--ghost"
+              <Button
+                variant="text"
                 onClick={() => {
                   setTab('all');
                   setKeyword('');
@@ -288,7 +289,7 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
                 }}
               >
                 重置
-              </button>
+              </Button>
             </div>
           </>
         ) : null}
@@ -348,13 +349,7 @@ function IntegrationList({ onCreate }: { onCreate: () => void }) {
                           ? '当前筛选条件下没有样例接入记录。点击右上角「新建接入」开始配置。'
                           : '控制台不登记客户端接入状态：服务端只提供按平台与客户端生成的配置模板，是否接入成功由客户端 MCP 握手结果决定。点击「新建接入」生成模板，并在「个人令牌」创建 PAT 后替换占位符。'
                       }
-                      action={
-                        frontendPreview ? undefined : (
-                          <button className="btn btn--secondary" onClick={() => (window.location.hash = '/me/tokens')}>
-                            前往创建个人令牌
-                          </button>
-                        )
-                      }
+                      action={frontendPreview ? undefined : <Button onClick={() => (window.location.hash = '/me/tokens')}>前往创建个人令牌</Button>}
                     />
                   </td>
                 </tr>

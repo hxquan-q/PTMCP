@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Button } from 'antd';
 import { Alert, Dialog, Field, Select, TextInput } from '../../../components/common';
 import { CopyIcon } from '../../../components/Icons';
 import { createToken, type TokenCreated } from '../../../services/access';
@@ -68,9 +69,9 @@ export function TokenDialog({ onClose, onSaved }: { onClose: () => void; onSaved
         onClose={onClose}
         width={560}
         footer={
-          <button className="btn btn--primary" onClick={onSaved}>
+          <Button type="primary" onClick={onSaved}>
             我已保存，关闭
-          </button>
+          </Button>
         }
       >
         <Alert kind="warning" title="令牌仅此一次展示">
@@ -91,9 +92,9 @@ export function TokenDialog({ onClose, onSaved }: { onClose: () => void; onSaved
           >
             {created.token}
           </code>
-          <button className="btn btn--secondary" onClick={() => navigator.clipboard?.writeText(created.token).catch(() => undefined)}>
+          <Button onClick={() => navigator.clipboard?.writeText(created.token).catch(() => undefined)}>
             <CopyIcon /> 复制
-          </button>
+          </Button>
         </div>
       </Dialog>
     );
@@ -132,12 +133,12 @@ export function TokenDialog({ onClose, onSaved }: { onClose: () => void; onSaved
       </Field>
       {formError ? <Alert kind="danger">{formError}</Alert> : null}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
-        <button className="btn btn--secondary" onClick={onClose} disabled={saving}>
+        <Button onClick={onClose} disabled={saving}>
           取消
-        </button>
-        <button className="btn btn--primary" onClick={submit} disabled={saving}>
+        </Button>
+        <Button type="primary" onClick={submit} disabled={saving}>
           {saving ? '创建中…' : '创建令牌'}
-        </button>
+        </Button>
       </div>
     </Dialog>
   );

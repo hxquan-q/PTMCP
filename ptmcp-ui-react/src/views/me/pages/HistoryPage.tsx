@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Button } from 'antd';
 import { Badge, EmptyState, PageHeader, Select, StatusDot, TextInput } from '../../../components/common';
 import { listMyHistory, type AuditRow } from '../../../services/access';
 import { formatTaipeiTime as fmt } from '../../../services/dateTime';
@@ -113,11 +114,8 @@ export function HistoryPage() {
               { value: 'DENY', label: '拒绝' },
             ]}
           />
-          <button className="btn btn--secondary" onClick={() => setQueryTick((t) => t + 1)}>
-            查询
-          </button>
-          <button
-            className="btn btn--secondary"
+          <Button onClick={() => setQueryTick((t) => t + 1)}>查询</Button>
+          <Button
             onClick={() => {
               setFrom(new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10));
               setTo(new Date().toISOString().slice(0, 10));
@@ -128,7 +126,7 @@ export function HistoryPage() {
             }}
           >
             重置
-          </button>
+          </Button>
         </div>
         <div className="table-scroll" role="region" aria-label="查询历史列表" tabIndex={0}>
           <table className="data-table">
@@ -178,9 +176,9 @@ export function HistoryPage() {
             已加载 {rows.length} 条{nextCursor ? ' · 可能还有更多' : ''}
           </span>
           {loading ? null : nextCursor ? (
-            <button className="btn btn--secondary" onClick={loadMore} disabled={loadingMore}>
+            <Button onClick={loadMore} disabled={loadingMore}>
               {loadingMore ? '加载中…' : '加载更多'}
-            </button>
+            </Button>
           ) : (
             <span style={{ fontSize: 12, color: 'var(--ptmcp-text-faint)' }}>没有更多了</span>
           )}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Button } from 'antd';
 import { Alert, Dialog, Field } from '../../../components/common';
 import { decryptAudit, type AuditDecryptResult } from '../../../services/access';
 import { showToast } from '../../../toast';
@@ -70,23 +71,22 @@ export function AuditDecryptDialog({
       width={640}
       footer={
         result ? (
-          <button
-            className="btn btn--secondary"
+          <Button
             onClick={() => {
               reset();
               onClose();
             }}
           >
             关闭并清除明文
-          </button>
+          </Button>
         ) : (
           <>
-            <button className="btn btn--secondary" onClick={reset} disabled={loading}>
+            <Button onClick={reset} disabled={loading}>
               重置
-            </button>
-            <button className="btn btn--primary" onClick={submit} disabled={loading || !valid}>
+            </Button>
+            <Button type="primary" onClick={submit} disabled={loading || !valid}>
               {loading ? '解密中…' : '确认解密'}
-            </button>
+            </Button>
           </>
         )
       }

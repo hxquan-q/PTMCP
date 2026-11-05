@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { Button } from 'antd';
 import { AppShell, type NavGroup } from './layouts/AppShell';
 import {
   BarChartIcon,
@@ -491,9 +492,9 @@ function StaticErrorCard({ code, title, description, onBack }: { code: string; t
           {title}
         </h1>
         <p className="error-desc">{description}</p>
-        <button type="button" className="btn btn--primary" onClick={onBack}>
+        <Button type="primary" onClick={onBack}>
           返回首页
-        </button>
+        </Button>
       </div>
     </main>
   );

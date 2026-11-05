@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Button } from 'antd';
 import { Badge, EmptyState, PageHeader, SearchInput, Select, StatusDot, useDebounced } from '../../../components/common';
 import { mePortalApi, type DatasourceItem, type DictionaryItem, type PlatformItem } from '../../../services/mePortalApi';
 
@@ -184,9 +185,9 @@ export function DictionaryPage() {
             已加载 {rows.length} 个{nextCursor ? ' · 可能还有更多' : ''}
           </span>
           {loading ? null : nextCursor ? (
-            <button className="btn btn--secondary" onClick={loadMore} disabled={loadingMore}>
+            <Button onClick={loadMore} disabled={loadingMore}>
               {loadingMore ? '加载中…' : '加载更多'}
-            </button>
+            </Button>
           ) : (
             <span style={{ fontSize: 12, color: 'var(--ptmcp-text-faint)' }}>没有更多了</span>
           )}

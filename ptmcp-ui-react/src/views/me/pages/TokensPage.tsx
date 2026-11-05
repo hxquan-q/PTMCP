@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Button } from 'antd';
 import { Badge, EmptyState, PageHeader, Select, StatusDot } from '../../../components/common';
 import { PlusIcon } from '../../../components/Icons';
 import { listMyTokens, revokeToken, type TokenRow } from '../../../services/access';
@@ -48,9 +49,9 @@ export function TokensPage() {
         title="个人令牌"
         description="用于脚本与工具访问的访问令牌，可随时撤销。"
         actions={
-          <button className="btn btn--primary" onClick={() => setCreating(true)}>
+          <Button type="primary" onClick={() => setCreating(true)}>
             <PlusIcon /> 新建令牌
-          </button>
+          </Button>
         }
       />
       <div className="table-card" style={{ flex: 1, minHeight: 0 }}>
@@ -133,8 +134,7 @@ export function TokensPage() {
             已加载 {rows.length} 个{nextCursor ? ' · 可能还有更多' : ''}
           </span>
           {loading ? null : nextCursor ? (
-            <button
-              className="btn btn--secondary"
+            <Button
               disabled={loadingMore}
               onClick={() => {
                 if (!nextCursor || loadingMore) return;
@@ -149,7 +149,7 @@ export function TokensPage() {
               }}
             >
               {loadingMore ? '加载中…' : '加载更多'}
-            </button>
+            </Button>
           ) : (
             <span style={{ fontSize: 12, color: 'var(--ptmcp-text-faint)' }}>没有更多了</span>
           )}

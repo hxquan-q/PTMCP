@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Button } from 'antd';
 import { Alert, CharReveal, LoginBackdrop, RequestIdText } from '../components/common';
 import { LogoIcon } from '../components/Icons';
 import type { OAuthPageError } from './model';
@@ -52,15 +53,13 @@ export function OAuthErrorCard({ error, heading }: { error: OAuthPageError; head
           {error.message}
           <RequestIdText requestId={error.requestId} />
         </Alert>
-        <button
-          type="button"
-          className="btn btn--secondary login-submit"
+        <Button
           onClick={() => {
             window.location.reload();
           }}
         >
           重新加载
-        </button>
+        </Button>
         <p className="login-footnote">如果问题持续，请关闭本页并从客户端重新发起授权。</p>
       </div>
     </OAuthShell>

@@ -1,4 +1,5 @@
 import { useId, useMemo, useState } from 'react';
+import { Button } from 'antd';
 import { Alert, Badge, Dialog, Drawer, Field, RequestIdText, Select, StatusDot, TextInput } from '../../components/common';
 import {
   createDepartment,
@@ -223,17 +224,17 @@ function MemberEditor({ user, defaultDeptId, roles, rolesFailure, depts, deptsFa
         </Alert>
       ) : null}
       <div className="form-actions">
-        <button className="btn btn--secondary" onClick={onClose} disabled={saving}>
+        <Button onClick={onClose} disabled={saving}>
           取消
-        </button>
-        <button
-          className="btn btn--primary"
+        </Button>
+        <Button
+          type="primary"
           onClick={submit}
           disabled={saving || saveBlocked}
           title={saveBlocked ? '角色 / 部门目录未完整加载，禁止保存' : undefined}
         >
           {saving ? '保存中…' : user ? '保存修改' : '创建成员'}
-        </button>
+        </Button>
       </div>
       {showReset && user ? (
         <ResetPasswordSection
@@ -315,12 +316,12 @@ function ResetPasswordSection({ user, onDone }: { user: UserRow; onDone: () => v
         </Alert>
       ) : null}
       <div className="form-actions">
-        <button className="btn btn--secondary" onClick={clear} disabled={saving}>
+        <Button onClick={clear} disabled={saving}>
           清空
-        </button>
-        <button className="btn btn--primary" onClick={submit} disabled={saving}>
+        </Button>
+        <Button type="primary" onClick={submit} disabled={saving}>
           {saving ? '重置中…' : '重置密码'}
-        </button>
+        </Button>
       </div>
     </section>
   );
@@ -461,12 +462,12 @@ export function DeptDialog({
         </Alert>
       ) : null}
       <div className="form-actions">
-        <button className="btn btn--secondary" onClick={onClose} disabled={saving}>
+        <Button onClick={onClose} disabled={saving}>
           取消
-        </button>
-        <button className="btn btn--primary" onClick={submit} disabled={saving}>
+        </Button>
+        <Button type="primary" onClick={submit} disabled={saving}>
           {saving ? '保存中…' : dept ? '保存修改' : '创建部门'}
-        </button>
+        </Button>
       </div>
     </Dialog>
   );

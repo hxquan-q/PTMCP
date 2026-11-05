@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Button } from 'antd';
 import {
   Alert,
   Badge,
@@ -382,14 +383,14 @@ export function PermissionsPage() {
         title="权限矩阵"
         description="选择主体与资源，管理规则并计算平台范围内的有效权限。"
         actions={
-          <button
-            className="btn btn--primary"
+          <Button
+            type="primary"
             disabled={!subjectId || !!metadataError || !isAdmin}
             title={metadataError ? '资源树读取失败，重新读取成功后才能提交规则' : undefined}
             onClick={openGrantDialog}
           >
             + 新增规则
-          </button>
+          </Button>
         }
       />
       <div
@@ -417,9 +418,9 @@ export function PermissionsPage() {
                   <Alert kind="danger" title="主体目录读取失败">
                     {subjectsError}
                     <div style={{ marginTop: 8 }}>
-                      <button className="btn btn--secondary" onClick={() => setSubjectsTick((t) => t + 1)}>
+                      <Button onClick={() => setSubjectsTick((t) => t + 1)}>
                         <RefreshIcon /> 重新读取
-                      </button>
+                      </Button>
                     </div>
                   </Alert>
                 </div>
@@ -522,18 +523,17 @@ export function PermissionsPage() {
           subtitle={subject ? `${subject.name} 的直接规则` : '选择左侧主体查看规则'}
           headerExtra={
             <span style={{ display: 'inline-flex', gap: 8 }}>
-              <button className="btn btn--secondary" style={{ padding: '5px 10px' }} onClick={() => void refreshGrants()}>
+              <Button style={{ padding: '5px 10px' }} onClick={() => void refreshGrants()}>
                 <RefreshIcon /> 刷新
-              </button>
-              <button
-                className="btn btn--secondary"
+              </Button>
+              <Button
                 style={{ padding: '5px 10px' }}
                 title={focus ? '退出专注模式' : '专注模式:规则表占满工作区'}
                 aria-pressed={focus}
                 onClick={() => setFocus((f) => !f)}
               >
                 <ExpandIcon />
-              </button>
+              </Button>
             </span>
           }
           footer={
@@ -563,9 +563,9 @@ export function PermissionsPage() {
                 <Alert kind="danger" title="规则读取失败">
                   {grantsError}
                   <div style={{ marginTop: 8 }}>
-                    <button className="btn btn--secondary" onClick={() => void refreshGrants()}>
+                    <Button onClick={() => void refreshGrants()}>
                       <RefreshIcon /> 重新读取
-                    </button>
+                    </Button>
                   </div>
                 </Alert>
               </div>
@@ -709,8 +709,8 @@ export function PermissionsPage() {
                   />
                 </span>
               </label>
-              <button
-                className="btn btn--primary"
+              <Button
+                type="primary"
                 disabled={!previewSubjectSupported || !subjectId || !platformId || !allObjectIds.length || previewLoading || !!encodedObjects.error}
                 title={previewSubjectSupported ? undefined : '服务端预览接口只支持用户主体；角色/部门预览暂不可用'}
                 onClick={() => {
@@ -733,7 +733,7 @@ export function PermissionsPage() {
                 }}
               >
                 <BarChartIcon /> {previewLoading ? '计算中…' : '计算有效权限'}
-              </button>
+              </Button>
             </div>
             {!previewSubjectSupported ? (
               <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
@@ -812,12 +812,12 @@ export function PermissionsPage() {
         onClose={() => !grantSubmitting && setGrantDialogOpen(false)}
         footer={
           <>
-            <button className="btn btn--secondary" disabled={grantSubmitting} onClick={() => setGrantDialogOpen(false)}>
+            <Button disabled={grantSubmitting} onClick={() => setGrantDialogOpen(false)}>
               取消
-            </button>
-            <button className="btn btn--primary" disabled={!formResourceId || grantSubmitting} onClick={submitGrant}>
+            </Button>
+            <Button type="primary" disabled={!formResourceId || grantSubmitting} onClick={submitGrant}>
               {grantSubmitting ? '保存中…' : '保存规则'}
-            </button>
+            </Button>
           </>
         }
       >

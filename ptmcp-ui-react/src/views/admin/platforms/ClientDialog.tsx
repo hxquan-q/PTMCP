@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from 'antd';
 import { Alert, Dialog, Field, Select, TextInput } from '../../../components/common';
 import { createClient, updateClient, type ClientCreated, type ClientRow, type PlatformRow } from '../../../services/access';
 import { CLIENT_AUTH_METHODS, CLIENT_SCOPES, parseRedirectUris, toClientWrite, validateClientForm } from '../clientForm';
@@ -209,12 +210,12 @@ export function ClientDialog({
       </Field>
       {formError ? <Alert kind="danger">{formError}</Alert> : null}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
-        <button className="btn btn--secondary" onClick={onClose} disabled={saving}>
+        <Button onClick={onClose} disabled={saving}>
           取消
-        </button>
-        <button className="btn btn--primary" onClick={submit} disabled={saving}>
+        </Button>
+        <Button type="primary" onClick={submit} disabled={saving}>
           {saving ? '保存中…' : editing ? '保存修改' : '创建客户端'}
-        </button>
+        </Button>
       </div>
     </Dialog>
   );

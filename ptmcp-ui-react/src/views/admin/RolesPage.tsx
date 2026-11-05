@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
+import { Button } from 'antd';
+import { ProTable, type ProColumns } from '@ant-design/pro-components';
 import {
   Alert,
   Dialog,
@@ -7,6 +9,7 @@ import {
   PageHeader,
   RequestIdText,
   SearchInput,
+  Select,
   StatusDot,
   TextInput,
   useDebounced,
@@ -52,6 +55,59 @@ export function RolesPage() {
 
   const reload = () => setRetryTick((t) => t + 1);
 
+  const roleColumns: ProColumns<RoleRow>[] = [
+    {
+      title: '角色',
+      render: (_, r) => (
+        <span className="cell-lead">
+          <span className="cell-stack">
+            <Button
+              type="link"
+              size="small"
+              style={{ padding: 0, height: 'auto' }}
+              onClick={() => (window.location.hash = `/admin/roles/${encodeURIComponent(r.id)}`)}
+            >
+              {r.name}
+            </Button>
+            <span>ID {r.id}</span>
+          </span>
+        </span>
+      ),
+    },
+    { title: '编码', render: (_, r) => <code style={{ fontSize: 12 }}>{r.key}</code> },
+    {
+      title: '状态',
+      render: (_, r) => <StatusDot tone={r.enabled ? 'success' : 'neutral'}>{r.enabled ? '启用' : '停用'}</StatusDot>,
+    },
+    {
+      title: '操作',
+      width: 150,
+      render: (_, r) => (
+        <span className="row-actions">
+          <Button type="link" size="small" icon={<EditIcon />} style={{ padding: 0 }} onClick={() => setEditing(r)} aria-label={`编辑角色 ${r.name}`}>
+            编辑
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            danger
+            icon={<CloseIcon />}
+            style={{ padding: 0 }}
+            disabled={!isAdmin}
+            title={isAdmin ? undefined : '缺少角色删除权限'}
+            onClick={() => {
+              setDeleteFailure(null);
+              setDeleting(r);
+            }}
+            aria-label={`删除角色 ${r.name}`}
+          >
+            删除
+          </Button>
+        </span>
+      ),
+    },
+  ];
+
   const filtered = useMemo(
     () =>
       rows.filter(
@@ -72,17 +128,14 @@ export function RolesPage() {
         title="角色管理"
         description="角色是挂到用户的数据权限模板；具体资源授权在「授权管理」维护。"
         actions={
-          <button className="btn btn--primary" onClick={() => isAdmin && setCreating(true)} disabled={!isAdmin}>
-            <PlusIcon /> 新建角色
-          </button>
+          <Button type="primary" icon={<PlusIcon />} onClick={() => isAdmin && setCreating(true)} disabled={!isAdmin}>
+            新建角色
+          </Button>
         }
       />
       <div className="table-card" style={{ flex: 1, minHeight: 0 }}>
-        <div className="table-toolbar">
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
           <SearchInput value={keyword} onChange={setKeyword} label="搜索角色名称或编码" placeholder="搜索角色名称或编码…" width={260} />
-          <span className="toolbar-status" aria-hidden="true">
-            {loading ? '加载中…' : `已加载 ${filtered.length} 个`}
-          </span>
         </div>
         <p className="sr-only" aria-live="polite">
           {loading ? '正在加载角色列表' : loadError ? '角色列表加载失败' : `已加载 ${filtered.length} 个角色`}
@@ -92,96 +145,37 @@ export function RolesPage() {
             <Alert kind="danger" title="角色列表加载失败">
               {loadError.message}
               <RequestIdText requestId={loadError.requestId} />
-              <button className="link" style={{ display: 'inline-flex', marginLeft: 8 }} onClick={reload}>
+              <Button type="link" size="small" style={{ marginLeft: 8 }} onClick={reload}>
                 重新读取
-              </button>
+              </Button>
             </Alert>
           </div>
         ) : null}
-        <div className="table-scroll" role="region" aria-label="角色列表" tabIndex={0}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th scope="col">角色</th>
-                <th scope="col">编码</th>
-                <th scope="col">状态</th>
-                <th scope="col" style={{ width: 150 }}>
-                  操作
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && rows.length === 0 ? (
-                <tr>
-                  <td colSpan={4}>
-                    <p className="table-state">正在加载角色…</p>
-                  </td>
-                </tr>
-              ) : null}
-              {filtered.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <span className="cell-lead">
-                      <span className="cell-stack">
-                        <button className="link" onClick={() => (window.location.hash = `/admin/roles/${encodeURIComponent(r.id)}`)}>
-                          {r.name}
-                        </button>
-                        <span>ID {r.id}</span>
-                      </span>
-                    </span>
-                  </td>
-                  <td>
-                    <code style={{ fontSize: 12 }}>{r.key}</code>
-                  </td>
-                  <td>
-                    <StatusDot tone={r.enabled ? 'success' : 'neutral'}>{r.enabled ? '启用' : '停用'}</StatusDot>
-                  </td>
-                  <td>
-                    <span className="row-actions">
-                      <button className="link" onClick={() => setEditing(r)} aria-label={`编辑角色 ${r.name}`}>
-                        <EditIcon /> 编辑
-                      </button>
-                      <button
-                        className="link link--danger"
-                        disabled={!isAdmin}
-                        title={isAdmin ? undefined : '缺少角色删除权限'}
-                        onClick={() => {
-                          setDeleteFailure(null);
-                          setDeleting(r);
-                        }}
-                        aria-label={`删除角色 ${r.name}`}
-                      >
-                        <CloseIcon /> 删除
-                      </button>
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {filtered.length === 0 && !loading ? (
-                <tr>
-                  <td colSpan={4}>
-                    {loadError ? (
-                      <EmptyState kind="error" title="角色加载失败" description="请按上方的「重新读取」重试；失败时不显示为空列表。" />
-                    ) : debounced ? (
-                      <EmptyState
-                        kind="filtered"
-                        title="没有匹配的角色"
-                        description={`没有名称或编码包含「${debounced}」的角色。`}
-                        action={
-                          <button className="btn btn--secondary" onClick={() => setKeyword('')}>
-                            清空搜索
-                          </button>
-                        }
-                      />
-                    ) : (
-                      <EmptyState title="暂无角色" description="点击右上角「新建角色」创建第一个角色。" />
-                    )}
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+        <ProTable<RoleRow>
+          rowKey="id"
+          columns={roleColumns}
+          dataSource={filtered}
+          loading={loading}
+          search={false}
+          options={false}
+          dateFormatter={false}
+          cardProps={{ style: { border: 'none', boxShadow: 'none', padding: 0 } }}
+          pagination={{ pageSize: 20, showSizeChanger: false, showTotal: (t) => `共 ${t} 条` }}
+          locale={{
+            emptyText: loadError ? (
+              <EmptyState kind="error" title="角色加载失败" description="请按上方的「重新读取」重试；失败时不显示为空列表。" />
+            ) : debounced ? (
+              <EmptyState
+                kind="filtered"
+                title="没有匹配的角色"
+                description={`没有名称或编码包含「${debounced}」的角色。`}
+                action={<Button onClick={() => setKeyword('')}>清空搜索</Button>}
+              />
+            ) : (
+              <EmptyState title="暂无角色" description="点击右上角「新建角色」创建第一个角色。" />
+            ),
+          }}
+        />
       </div>
 
       {creating || editing ? (
@@ -205,8 +199,7 @@ export function RolesPage() {
         width={420}
         footer={
           <>
-            <button
-              className="btn btn--secondary"
+            <Button
               onClick={() => {
                 setDeleting(null);
                 setDeleteFailure(null);
@@ -214,10 +207,10 @@ export function RolesPage() {
               disabled={busy}
             >
               取消
-            </button>
-            <button
-              className="btn btn--primary"
-              style={{ background: 'var(--ptmcp-red)' }}
+            </Button>
+            <Button
+              color="danger"
+              variant="solid"
               disabled={busy || !isAdmin}
               onClick={async () => {
                 if (!deleting) return;
@@ -237,7 +230,7 @@ export function RolesPage() {
               }}
             >
               {busy ? '删除中…' : '确认删除'}
-            </button>
+            </Button>
           </>
         }
       >
@@ -321,9 +314,9 @@ function RoleDialog({ role, onClose, onSaved }: { role: RoleRow | null; onClose:
       {conflict ? (
         <Alert kind="warning" title="版本冲突">
           {conflict}
-          <button className="link" style={{ marginLeft: 8 }} onClick={() => window.location.reload()}>
+          <Button type="link" size="small" style={{ marginLeft: 8 }} onClick={() => window.location.reload()}>
             刷新页面
-          </button>
+          </Button>
         </Alert>
       ) : null}
       <Field label="角色编码" hint={role ? '编码创建后不可修改' : '小写字母开头，1–100字符'}>
@@ -343,15 +336,18 @@ function RoleDialog({ role, onClose, onSaved }: { role: RoleRow | null; onClose:
         />
       </Field>
       <Field label="状态">
-        <select
+        {/* antd Select：布尔状态以字符串编码， onChange 解码回布尔。 */}
+        <Select
+          ariaLabel="状态"
           disabled={uncertain || saving}
           value={values.enabled ? '1' : '0'}
-          onChange={(e) => setValues((s) => ({ ...s, enabled: e.target.value === '1' }))}
-          style={{ width: 160 }}
-        >
-          <option value="1">启用</option>
-          <option value="0">停用</option>
-        </select>
+          onChange={(v) => setValues((s) => ({ ...s, enabled: v === '1' }))}
+          options={[
+            { value: '1', label: '启用' },
+            { value: '0', label: '停用' },
+          ]}
+          width={160}
+        />
       </Field>
       {uncertain ? (
         <Alert kind="warning" title="操作结果未知">
@@ -365,17 +361,17 @@ function RoleDialog({ role, onClose, onSaved }: { role: RoleRow | null; onClose:
         </Alert>
       ) : null}
       <div className="form-actions">
-        <button className="btn btn--secondary" onClick={onClose} disabled={saving}>
+        <Button onClick={onClose} disabled={saving}>
           取消
-        </button>
-        <button
-          className="btn btn--primary"
+        </Button>
+        <Button
+          type="primary"
           onClick={submit}
           disabled={saving || !!errors || (uncertain && !!role)}
           title={uncertain && role ? '编辑不是幂等写：请关闭对话框并刷新列表核对最新版本后再操作' : undefined}
         >
           {saving ? '保存中…' : uncertain ? (role ? '请关闭并刷新核对' : uncertainActionLabel('create')) : role ? '保存修改' : '创建角色'}
-        </button>
+        </Button>
       </div>
     </Dialog>
   );

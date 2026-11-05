@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Button } from 'antd';
 import { Alert, OptionCard, PageHeader, RequestIdText, Stepper } from '../../../components/common';
 import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, CopyIcon, DesktopIcon } from '../../../components/Icons';
 import { mePortalApi, type McpConfig, type PlatformItem } from '../../../services/mePortalApi';
@@ -157,12 +158,12 @@ export function Wizard({ onExit }: { onExit: () => void }) {
             </p>
           </div>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 22, flexWrap: 'wrap' }}>
-            <button className="btn btn--primary" onClick={copy} disabled={!template}>
+            <Button type="primary" onClick={copy} disabled={!template}>
               <CopyIcon /> {copied === 'ok' ? '已复制到剪贴板' : '复制配置'}
-            </button>
-            <button className="btn btn--secondary" onClick={() => (window.location.hash = '/me/tokens')}>
+            </Button>
+            <Button onClick={() => (window.location.hash = '/me/tokens')}>
               <ArrowRightIcon /> 前往创建个人令牌
-            </button>
+            </Button>
           </div>
           {copied === 'fail' ? (
             <Alert kind="warning" title="复制失败">
@@ -226,18 +227,16 @@ export function Wizard({ onExit }: { onExit: () => void }) {
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24, flexWrap: 'wrap' }}>
-            <button className="btn btn--secondary" onClick={onExit}>
-              查看我的接入
-            </button>
-            <button
-              className="btn btn--primary"
+            <Button onClick={onExit}>查看我的接入</Button>
+            <Button
+              type="primary"
               onClick={() => {
                 setDone(false);
                 setStep(0);
               }}
             >
               配置另一个接入
-            </button>
+            </Button>
           </div>
         </div>
       </>
@@ -284,9 +283,9 @@ export function Wizard({ onExit }: { onExit: () => void }) {
               ))}
             </div>
             {platformCursor ? (
-              <button className="btn btn--secondary" style={{ marginTop: 10 }} onClick={loadMorePlatforms} disabled={platformLoading}>
+              <Button style={{ marginTop: 10 }} onClick={loadMorePlatforms} disabled={platformLoading}>
                 {platformLoading ? '加载中…' : '加载更多平台'}
-              </button>
+              </Button>
             ) : null}
             <Alert kind="info" title="平台说明">
               不同平台的资源隔离、配额和访问策略不同，请根据实际使用场景选择合适的平台环境。
@@ -448,9 +447,9 @@ export function Wizard({ onExit }: { onExit: () => void }) {
                 <span aria-live="polite" style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
                   {copied === 'ok' ? '已复制到剪贴板' : copied === 'fail' ? '复制失败，请手动选中复制' : ''}
                 </span>
-                <button className="btn btn--secondary" onClick={copy} disabled={!template}>
+                <Button onClick={copy} disabled={!template}>
                   <CopyIcon /> 复制模板
-                </button>
+                </Button>
               </div>
             </div>
             {template ? (
@@ -481,22 +480,22 @@ export function Wizard({ onExit }: { onExit: () => void }) {
             borderTop: '1px solid var(--ptmcp-border)',
           }}
         >
-          <button className="btn btn--secondary" onClick={() => (step === 0 ? onExit() : setStep(step - 1))}>
+          <Button onClick={() => (step === 0 ? onExit() : setStep(step - 1))}>
             <ArrowLeftIcon /> 上一步
-          </button>
+          </Button>
           {step < STEPS.length - 1 ? (
-            <button className="btn btn--primary" disabled={!canNext} onClick={() => setStep(step + 1)}>
+            <Button type="primary" disabled={!canNext} onClick={() => setStep(step + 1)}>
               下一步 <ArrowRightIcon />
-            </button>
+            </Button>
           ) : (
-            <button
-              className="btn btn--primary"
+            <Button
+              type="primary"
               disabled={!templateReady}
               title={templateReady ? undefined : '未取得服务端模板，不能完成配置'}
               onClick={() => setDone(true)}
             >
               完成并查看后续步骤 <ArrowRightIcon />
-            </button>
+            </Button>
           )}
         </div>
       </div>

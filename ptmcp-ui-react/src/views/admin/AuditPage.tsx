@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Button, Table } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { Badge, EmptyState, PageHeader, Select, StatusDot, Tabs, TextInput } from '../../components/common';
 import { listAudit, listOperations, type AuditRow, type OperationRow } from '../../services/access';
 import { OPERATION_AGGREGATE_TYPES, operationActionText, operationAggregateText } from '../../services/operationLabels';
@@ -124,6 +126,88 @@ export function AuditPage({
     return (id: string) => m.get(id) ?? `数据源 ${id}`;
   }, [datasources]);
 
+  /* 游标分页：表格固定 pagination=false，「加载更多」按真实 nextCursor 续拉，不伪造总页数。 */
+  const auditColumns: ColumnsType<AuditRow> = [
+    { title: '时间', render: (_, r) => <span style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{fmt(r.startedAt)}</span> },
+    { title: '用户', render: (_, r) => <span style={{ color: 'var(--ptmcp-text-muted)' }}>用户 {r.userId}</span> },
+    { title: '数据源', render: (_, r) => <span style={{ color: 'var(--ptmcp-text-muted)' }}>{dsName(r.datasourceId)}</span> },
+    { title: '工具', render: (_, r) => <Badge tone="neutral">{r.tool}</Badge> },
+    {
+      title: '耗时',
+      render: (_, r) => <span style={{ color: 'var(--ptmcp-text-muted)' }}>{r.durationMs != null ? `${r.durationMs} ms` : '—'}</span>,
+    },
+    {
+      title: '结果',
+      render: (_, r) => (
+        <StatusDot tone={r.result === 'SUCCESS' ? 'success' : r.result === 'ERROR' ? 'danger' : 'warning'}>
+          {r.result === 'SUCCESS' ? '成功' : r.result === 'ERROR' ? '失败' : '进行中'}
+        </StatusDot>
+      ),
+    },
+    {
+      title: '判定',
+      render: (_, r) =>
+        r.verdict ? (
+          <Badge tone={r.verdict === 'ALLOW' ? 'success' : 'danger'}>{r.verdict}</Badge>
+        ) : (
+          <span style={{ color: 'var(--ptmcp-text-faint)', fontSize: 12 }}>—</span>
+        ),
+    },
+    {
+      title: '操作',
+      width: 60,
+      render: (_, r) => (
+        <Button
+          type="link"
+          size="small"
+          style={{ padding: 0 }}
+          onClick={() => {
+            rememberAuditQuery({
+              filters: { ...filters },
+              rows: audit,
+              nextCursor,
+              quickId,
+              scrollTop: tableScrollRef.current?.scrollTop ?? 0,
+            });
+            window.location.hash = `/admin/audit/${encodeURIComponent(r.requestId)}`;
+          }}
+        >
+          详情
+        </Button>
+      ),
+    },
+  ];
+
+  const opsColumns: ColumnsType<OperationRow> = [
+    { title: '时间', render: (_, r) => <span style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{fmt(r.occurredAt)}</span> },
+    { title: '操作者', render: (_, r) => <span style={{ color: 'var(--ptmcp-text-muted)' }}>用户 {r.actorId}</span> },
+    { title: '动作', render: (_, r) => <strong style={{ color: 'var(--ptmcp-heading)' }}>{operationActionText(r.action)}</strong> },
+    {
+      title: '聚合对象',
+      render: (_, r) => (
+        <Badge tone="neutral">
+          {operationAggregateText(r.aggregateType)} · {r.aggregateId}
+        </Badge>
+      ),
+    },
+    {
+      title: '动作码',
+      render: (_, r) => (
+        <span style={{ color: 'var(--ptmcp-text-muted)', fontSize: 12 }}>
+          <code>{r.action}</code>
+        </span>
+      ),
+    },
+    {
+      title: '请求 ID',
+      render: (_, r) => (
+        <span title={r.requestId} style={{ color: 'var(--ptmcp-text-muted)', fontSize: 12 }}>
+          {r.requestId.slice(0, 10)}…
+        </span>
+      ),
+    },
+  ];
+
   return (
     <>
       <PageHeader title={title} description={description} />
@@ -215,22 +299,21 @@ export function AuditPage({
               <span style={{ color: 'var(--ptmcp-text-faint)' }}>→</span>
               <TextInput value={filters.to} onChange={setF('to')} type="date" width={150} label="止" />
             </span>
-            <button className="btn btn--tinted" onClick={() => setQueryTick((t) => t + 1)}>
+            <Button color="primary" variant="filled" onClick={() => setQueryTick((t) => t + 1)}>
               查询
-            </button>
-            <button
-              className="btn btn--ghost"
+            </Button>
+            <Button
+              variant="text"
               onClick={() => {
                 setFilters({ userId: '', platformId: '', datasourceId: '', tool: '', result: '', verdict: '', errorCode: '', from: '', to: '' });
                 setQueryTick((t) => t + 1);
               }}
             >
               重置
-            </button>
+            </Button>
             <span style={{ flex: 1 }} />
             <TextInput value={quickId} onChange={setQuickId} placeholder="按 requestId 定位" width={280} />
-            <button
-              className="btn btn--secondary"
+            <Button
               disabled={!quickId.trim()}
               onClick={() => {
                 rememberAuditQuery({
@@ -244,102 +327,30 @@ export function AuditPage({
               }}
             >
               查看
-            </button>
+            </Button>
           </div>
         ) : null}
         <div className="table-scroll" role="region" aria-label="审计记录列表" tabIndex={0} ref={tableScrollRef}>
           {tab === 'audit' ? (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>时间</th>
-                  <th>用户</th>
-                  <th>数据源</th>
-                  <th>工具</th>
-                  <th>耗时</th>
-                  <th>结果</th>
-                  <th>判定</th>
-                  <th style={{ width: 60 }}>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {audit.map((r) => (
-                  <tr key={r.requestId}>
-                    <td style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{fmt(r.startedAt)}</td>
-                    <td style={{ color: 'var(--ptmcp-text-muted)' }}>用户 {r.userId}</td>
-                    <td style={{ color: 'var(--ptmcp-text-muted)' }}>{dsName(r.datasourceId)}</td>
-                    <td>
-                      <Badge tone="neutral">{r.tool}</Badge>
-                    </td>
-                    <td style={{ color: 'var(--ptmcp-text-muted)' }}>{r.durationMs != null ? `${r.durationMs} ms` : '—'}</td>
-                    <td>
-                      <StatusDot tone={r.result === 'SUCCESS' ? 'success' : r.result === 'ERROR' ? 'danger' : 'warning'}>
-                        {r.result === 'SUCCESS' ? '成功' : r.result === 'ERROR' ? '失败' : '进行中'}
-                      </StatusDot>
-                    </td>
-                    <td>
-                      {r.verdict ? (
-                        <Badge tone={r.verdict === 'ALLOW' ? 'success' : 'danger'}>{r.verdict}</Badge>
-                      ) : (
-                        <span style={{ color: 'var(--ptmcp-text-faint)', fontSize: 12 }}>—</span>
-                      )}
-                    </td>
-                    <td>
-                      <button
-                        className="link"
-                        onClick={() => {
-                          rememberAuditQuery({
-                            filters: { ...filters },
-                            rows: audit,
-                            nextCursor,
-                            quickId,
-                            scrollTop: tableScrollRef.current?.scrollTop ?? 0,
-                          });
-                          window.location.hash = `/admin/audit/${encodeURIComponent(r.requestId)}`;
-                        }}
-                      >
-                        详情
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <Table<AuditRow>
+              rowKey="requestId"
+              size="middle"
+              loading={loading}
+              dataSource={audit}
+              columns={auditColumns}
+              pagination={false}
+              locale={{ emptyText: <span /> }}
+            />
           ) : (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>时间</th>
-                  <th>操作者</th>
-                  <th>动作</th>
-                  <th>聚合对象</th>
-                  <th>动作码</th>
-                  <th>请求 ID</th>
-                </tr>
-              </thead>
-              <tbody>
-                {operations.map((r) => (
-                  <tr key={r.id}>
-                    <td style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{fmt(r.occurredAt)}</td>
-                    <td style={{ color: 'var(--ptmcp-text-muted)' }}>用户 {r.actorId}</td>
-                    <td>
-                      <strong style={{ color: 'var(--ptmcp-heading)' }}>{operationActionText(r.action)}</strong>
-                    </td>
-                    <td>
-                      <Badge tone="neutral">
-                        {operationAggregateText(r.aggregateType)} · {r.aggregateId}
-                      </Badge>
-                    </td>
-                    <td style={{ color: 'var(--ptmcp-text-muted)', fontSize: 12 }}>
-                      <code>{r.action}</code>
-                    </td>
-                    <td title={r.requestId} style={{ color: 'var(--ptmcp-text-muted)', fontSize: 12 }}>
-                      {r.requestId.slice(0, 10)}…
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <Table<OperationRow>
+              rowKey="id"
+              size="middle"
+              loading={loading}
+              dataSource={operations}
+              columns={opsColumns}
+              pagination={false}
+              locale={{ emptyText: <span /> }}
+            />
           )}
           {!loading && tab === 'jobs' && operations.length === 0 ? (
             opsUnavailable ? (
@@ -358,8 +369,7 @@ export function AuditPage({
               已加载 {audit.length} 条{nextCursor ? ' · 可能还有更多' : ''}
             </span>
             {loading ? null : nextCursor ? (
-              <button
-                className="btn btn--secondary"
+              <Button
                 disabled={loadingMore}
                 onClick={() => {
                   if (!nextCursor || loadingMore) return;
@@ -374,7 +384,7 @@ export function AuditPage({
                 }}
               >
                 {loadingMore ? '加载中…' : '加载更多'}
-              </button>
+              </Button>
             ) : (
               <span style={{ fontSize: 12, color: 'var(--ptmcp-text-faint)' }}>没有更多了</span>
             )}
@@ -386,8 +396,7 @@ export function AuditPage({
               已加载 {operations.length} 条{opsCursor ? ' · 可能还有更多' : ''}
             </span>
             {opsCursor ? (
-              <button
-                className="btn btn--secondary"
+              <Button
                 onClick={() => {
                   listOperations({ aggregateType: aggregateFilter || undefined, cursor: opsCursor, pageSize: 20 })
                     .then((p) => {
@@ -398,7 +407,7 @@ export function AuditPage({
                 }}
               >
                 加载更多
-              </button>
+              </Button>
             ) : (
               <span style={{ fontSize: 12, color: 'var(--ptmcp-text-faint)' }}>没有更多了</span>
             )}

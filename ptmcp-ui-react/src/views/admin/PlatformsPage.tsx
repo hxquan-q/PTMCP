@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Button } from 'antd';
 import { Alert, Badge, Dialog, EmptyState, PageHeader, StatusDot, Tabs } from '../../components/common';
 import { CloseIcon, CopyIcon, EditIcon, PlusIcon } from '../../components/Icons';
 import {
@@ -75,13 +76,13 @@ export function PlatformsPage() {
         description="接入平台的层级、目录模式与关联 OAuth 客户端。"
         actions={
           tab === 'platforms' ? (
-            <button className="btn btn--primary" onClick={() => setPlatformDialog({ mode: 'create' })}>
+            <Button type="primary" onClick={() => setPlatformDialog({ mode: 'create' })}>
               <PlusIcon /> 新建平台
-            </button>
+            </Button>
           ) : (
-            <button className="btn btn--primary" onClick={() => setClientDialog({ mode: 'create' })}>
+            <Button type="primary" onClick={() => setClientDialog({ mode: 'create' })}>
               <PlusIcon /> 新建客户端
-            </button>
+            </Button>
           )
         }
       />
@@ -253,11 +254,11 @@ export function PlatformsPage() {
         width={440}
         footer={
           <>
-            <button className="btn btn--secondary" onClick={() => setDeleting(null)} disabled={busy}>
+            <Button onClick={() => setDeleting(null)} disabled={busy}>
               取消
-            </button>
-            <button
-              className="btn btn--primary"
+            </Button>
+            <Button
+              type="primary"
               style={{ background: 'var(--ptmcp-red)' }}
               disabled={busy}
               onClick={async () => {
@@ -279,7 +280,7 @@ export function PlatformsPage() {
               }}
             >
               {busy ? '删除中…' : '确认删除'}
-            </button>
+            </Button>
           </>
         }
       >
@@ -299,9 +300,9 @@ export function PlatformsPage() {
         onClose={() => setSecretCreated(null)}
         width={520}
         footer={
-          <button className="btn btn--primary" onClick={() => setSecretCreated(null)}>
+          <Button type="primary" onClick={() => setSecretCreated(null)}>
             我已保存，关闭
-          </button>
+          </Button>
         }
       >
         <Alert kind="warning" title="密钥仅此一次展示">
@@ -322,12 +323,9 @@ export function PlatformsPage() {
           >
             {secretCreated?.clientSecret}
           </code>
-          <button
-            className="btn btn--secondary"
-            onClick={() => navigator.clipboard?.writeText(secretCreated?.clientSecret ?? '').catch(() => undefined)}
-          >
+          <Button onClick={() => navigator.clipboard?.writeText(secretCreated?.clientSecret ?? '').catch(() => undefined)}>
             <CopyIcon /> 复制
-          </button>
+          </Button>
         </div>
       </Dialog>
     </>

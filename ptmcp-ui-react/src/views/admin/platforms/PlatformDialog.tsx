@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from 'antd';
 import { Alert, Dialog, Field, Select, TextInput } from '../../../components/common';
 import { createPlatform, updatePlatform, type PlatformRow } from '../../../services/access';
 import { showToast } from '../../../toast';
@@ -139,8 +140,7 @@ export function PlatformDialog({
       {replacementRequired && !requiresReload ? (
         <Alert kind="warning" title="证明替换尚未完成">
           新材料已清空，请重新填写；留空不会被视为保留旧证明。
-          <button
-            className="btn btn--secondary"
+          <Button
             disabled={saving}
             onClick={() => {
               setReplacementRequired(false);
@@ -149,17 +149,17 @@ export function PlatformDialog({
             }}
           >
             取消本次证明替换
-          </button>
+          </Button>
         </Alert>
       ) : null}
       {formError ? <Alert kind="danger">{formError}</Alert> : null}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
-        <button className="btn btn--secondary" onClick={onClose} disabled={saving}>
+        <Button onClick={onClose} disabled={saving}>
           取消
-        </button>
-        <button className="btn btn--primary" onClick={submit} disabled={saving || requiresReload}>
+        </Button>
+        <Button type="primary" onClick={submit} disabled={saving || requiresReload}>
           {saving ? '保存中…' : editing ? '保存修改' : '创建平台'}
-        </button>
+        </Button>
       </div>
     </Dialog>
   );

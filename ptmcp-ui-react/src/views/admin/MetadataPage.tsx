@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Button } from 'antd';
 import { Alert, Badge, EmptyState, PageHeader, RequestIdText, SearchInput, Select, StatusDot, useDebounced } from '../../components/common';
 import { listDatasources, listMetadata, type DatasourceRead, type MetadataObject } from '../../services/data';
 import { readFailure, type Failure } from '../../services/http';
@@ -107,20 +108,16 @@ export function MetadataPage() {
             <Alert kind="danger" title="数据源目录读取失败">
               {dsFailure.message}
               <RequestIdText requestId={dsFailure.requestId} />
-              <button className="btn btn--secondary" style={{ marginTop: 8 }} onClick={() => setDsRetry((n) => n + 1)}>
+              <Button style={{ marginTop: 8 }} onClick={() => setDsRetry((n) => n + 1)}>
                 重新读取
-              </button>
+              </Button>
             </Alert>
           ) : null}
           {!dsLoading && !dsFailure && datasources.length === 0 ? (
             <EmptyState
               title="还没有登记的数据源"
               description="元数据按数据源浏览；请先在数据源页登记数据源并完成同步。"
-              action={
-                <button className="btn btn--secondary" onClick={() => (window.location.hash = '/admin/datasources')}>
-                  前往数据源页
-                </button>
-              }
+              action={<Button onClick={() => (window.location.hash = '/admin/datasources')}>前往数据源页</Button>}
             />
           ) : null}
 
@@ -129,9 +126,9 @@ export function MetadataPage() {
             <Alert kind="danger" title="元数据读取失败">
               列表当前不可信，请勿据此判断对象是否已授权。{failure.message}
               <RequestIdText requestId={failure.requestId} />
-              <button className="btn btn--secondary" style={{ marginTop: 8 }} onClick={() => setMetaRetry((n) => n + 1)}>
+              <Button style={{ marginTop: 8 }} onClick={() => setMetaRetry((n) => n + 1)}>
                 重新读取
-              </button>
+              </Button>
             </Alert>
           ) : null}
           {datasourceId && !loading && !failure && rows.length === 0 ? (
@@ -140,21 +137,13 @@ export function MetadataPage() {
                 kind="filtered"
                 title={`没有匹配「${debounced.trim()}」的元数据对象`}
                 description="搜索在服务端按对象名或表名过滤；清空关键字可回到该数据源的完整列表。"
-                action={
-                  <button className="btn btn--secondary" onClick={() => setKeyword('')}>
-                    清空搜索
-                  </button>
-                }
+                action={<Button onClick={() => setKeyword('')}>清空搜索</Button>}
               />
             ) : (
               <EmptyState
                 title="该数据源暂无元数据对象"
                 description="可能尚未同步或快照未发布；本页面不代替服务端触发同步。"
-                action={
-                  <button className="btn btn--secondary" onClick={() => (window.location.hash = '/admin/datasources')}>
-                    前往数据源页同步
-                  </button>
-                }
+                action={<Button onClick={() => (window.location.hash = '/admin/datasources')}>前往数据源页同步</Button>}
               />
             )
           ) : null}
@@ -224,8 +213,7 @@ export function MetadataPage() {
             </span>
           ) : null}
           {datasourceId && !loading && !failure && nextCursor ? (
-            <button
-              className="btn btn--secondary"
+            <Button
               disabled={moreLoading}
               onClick={() => {
                 if (!nextCursor || moreLoading) return;
@@ -241,7 +229,7 @@ export function MetadataPage() {
               }}
             >
               {moreLoading ? '加载中…' : moreFailure ? '重试续读' : '加载更多'}
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from 'antd';
 import { Alert, Field, TextInput } from '../../../components/common';
 import { DataRequestError, getMetadataObject, type MetadataObject } from '../../../services/data';
 import { dictionaryDifferences, dictionaryDraft, rebaseDictionaryDraft } from '../../../adapters/edit-conflict';
@@ -81,9 +82,9 @@ export function DictionaryEditor({
         {draft ? (
           <span style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>编辑中 · 字典版本 {obj.dictionary?.version ?? '—'}</span>
         ) : (
-          <button className="btn btn--secondary" onClick={() => setDraft(dictionaryDraft(obj))}>
+          <Button onClick={() => setDraft(dictionaryDraft(obj))}>
             <EditIcon /> 编辑字典
-          </button>
+          </Button>
         )}
       </div>
 
@@ -120,12 +121,10 @@ export function DictionaryEditor({
             </div>
           ) : null}
           <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
-            <button className="btn btn--secondary" onClick={discardDraft}>
-              放弃本地修改
-            </button>
-            <button className="btn btn--primary" onClick={adoptServerAndRebase}>
+            <Button onClick={discardDraft}>放弃本地修改</Button>
+            <Button type="primary" onClick={adoptServerAndRebase}>
               采纳服务端结构并保留我的注释
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}
@@ -181,12 +180,12 @@ export function DictionaryEditor({
           )}
           {saveError ? <Alert kind="danger">{saveError}</Alert> : null}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-            <button className="btn btn--secondary" onClick={discardDraft} disabled={saving}>
+            <Button onClick={discardDraft} disabled={saving}>
               取消
-            </button>
-            <button className="btn btn--primary" onClick={save} disabled={saving}>
+            </Button>
+            <Button type="primary" onClick={save} disabled={saving}>
               {saving ? '保存中…' : '保存字典'}
-            </button>
+            </Button>
           </div>
         </>
       ) : (

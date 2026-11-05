@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Button } from 'antd';
 import { listDatasources, type DatasourceRead } from '../../../services/data';
 import { ApiError } from '../../../services/http';
 
@@ -23,9 +24,9 @@ export function useDatasources(): [DatasourceRead[], (id: string | null | undefi
 export function BackBar({ to, label }: { to: string; label: string }) {
   return (
     <div style={{ marginBottom: 10 }}>
-      <button className="btn btn--link" style={{ padding: 0 }} onClick={() => (window.location.hash = to)}>
+      <Button type="link" style={{ padding: 0 }} onClick={() => (window.location.hash = to)}>
         ‹ {label}
-      </button>
+      </Button>
     </div>
   );
 }
