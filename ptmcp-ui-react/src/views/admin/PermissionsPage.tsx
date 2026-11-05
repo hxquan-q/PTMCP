@@ -11,17 +11,14 @@ import {
   Pagination,
   SearchInput,
   Select,
-  StatusDot,
   Tabs,
   useDebounced,
 } from '../../components/common';
 import {
   BarChartIcon,
-  BuildingIcon,
   ChevronRightIcon,
   ClockIcon,
   DatabaseIcon,
-  DocumentIcon,
   ExpandIcon,
   ListIcon,
   RefreshIcon,
@@ -30,14 +27,15 @@ import {
   UsersIcon,
 } from '../../components/Icons';
 import { createGrant, deleteGrant, listGrants, previewAccess, type Grant, type Preview, type SubjectType } from '../../services/access';
-import { decodeResourceId, encodeObjectIds } from '../../services/resourceIds';
+import { encodeObjectIds } from '../../services/resourceIds';
 import { listDatasources, type DatasourceRead, type MetadataObject } from '../../services/data';
 import { buildTree, type ResourceNode } from './resourceTree';
 import { useAdminGate } from '../../adminGateContext';
 import { resizeColumns } from './columnResize';
 import { mePortalApi, type PlatformItem } from '../../services/mePortalApi';
 import { listDepartments, listRoles, listUsers, type DepartmentRow, type RoleRow, type UserRow } from '../../services/orgPortalApi';
-import { findNode, fmtStamp, validityLabel, Pane, Resizer, TreeBranch } from './permissions/parts';
+import { findNode, fmtStamp, Pane, Resizer, TreeBranch } from './permissions/parts';
+import { GrantsTable, PreviewTable } from './permissions/tables';
 import { SUBJECT_TABS, type SubjectItem } from './permissions/shared';
 import { listAllMetadata } from './permissions/metadataLoader';
 
@@ -578,64 +576,7 @@ export function PermissionsPage() {
                 description={selectedResource ? `该主体在“${selectedResource.label}”下还没有直接规则。` : '该主体还没有直接规则。'}
               />
             ) : (
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>资源名称</th>
-                    <th>类型</th>
-                    <th>权限</th>
-                    <th>效果</th>
-                    <th>含下级</th>
-                    <th>有效期</th>
-                    <th>状态</th>
-                    <th style={{ width: 90 }}>操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {grantPageRows.map((g) => {
-                    const obj = metadataObjects.find((o) => o.id === g.resourceId);
-                    const display = obj?.objectName ?? obj?.tableName ?? g.resourceId;
-                    return (
-                      <tr key={g.id}>
-                        <td>
-                          <span className="cell-lead">
-                            <CellIcon
-                              icon={g.resourceType === 'OBJECT' ? DocumentIcon : g.resourceType === 'NAMESPACE' ? BuildingIcon : DatabaseIcon}
-                            />
-                            <span className="cell-stack">
-                              <strong>{display}</strong>
-                              <span>
-                                ID {g.id} · 资源 {g.resourceId}
-                              </span>
-                            </span>
-                          </span>
-                        </td>
-                        <td style={{ color: 'var(--ptmcp-text-muted)' }}>{g.resourceType}</td>
-                        <td>
-                          <Badge tone={g.action === 'READ' ? 'accent' : 'neutral'}>{g.action}</Badge>
-                        </td>
-                        <td>
-                          <StatusDot tone={g.effect === 'ALLOW' ? 'success' : 'danger'}>{g.effect === 'ALLOW' ? '允许' : '拒绝'}</StatusDot>
-                        </td>
-                        <td style={{ color: 'var(--ptmcp-text-muted)' }}>{g.includeDescendants ? '是' : '否'}</td>
-                        <td style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{validityLabel(g.validTo)}</td>
-                        <td>
-                          <StatusDot tone={g.status === 'ACTIVE' ? 'success' : 'neutral'}>{g.status === 'ACTIVE' ? '生效中' : '已撤销'}</StatusDot>
-                        </td>
-                        <td>
-                          {g.status === 'ACTIVE' ? (
-                            <button className="link" disabled={revokingId === g.id} onClick={() => revokeGrant(g.id)}>
-                              {revokingId === g.id ? '撤销中…' : '撤销'}
-                            </button>
-                          ) : (
-                            <span style={{ color: 'var(--ptmcp-text-faint)', fontSize: 12 }}>—</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <GrantsTable rows={grantPageRows} metadataObjects={metadataObjects} revokingId={revokingId} onRevoke={revokeGrant} />
             )}
           </div>
         </Pane>
@@ -771,38 +712,8 @@ export function PermissionsPage() {
                   <span>{previewResult.nextBoundaryAt ? `下一次权限边界 ${fmtStamp(previewResult.nextBoundaryAt)}` : '无待生效的权限边界'}</span>
                   {previewIsFuture ? <Badge tone="warning">未来时点模拟，不可据此执行查询</Badge> : null}
                 </p>
-                <div style={{ marginTop: 8, overflowX: 'auto' }}>
-                  <table className="data-table" style={{ width: '100%', minWidth: 480 }}>
-                    <thead>
-                      <tr>
-                        <th style={{ textAlign: 'left' }}>资源</th>
-                        <th style={{ textAlign: 'center', width: 90 }}>META</th>
-                        <th style={{ textAlign: 'center', width: 90 }}>READ</th>
-                        <th style={{ textAlign: 'left' }}>依据</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {previewResult.decisions.map((d) => {
-                        const decoded = decodeResourceId(d.resourceId);
-                        const obj = decoded?.type === 'OBJECT' ? metadataObjects.find((o) => o.id === decoded.tableId) : undefined;
-                        const label = obj?.objectName ?? obj?.tableName ?? `${decoded?.type ?? 'RESOURCE'} #${decoded?.tableId ?? d.resourceId}`;
-                        return (
-                          <tr key={d.resourceId}>
-                            <td style={{ fontWeight: 500 }}>{label}</td>
-                            <td style={{ textAlign: 'center' }}>
-                              <StatusDot tone={d.meta ? 'success' : 'danger'}>{d.meta ? '允许' : '拒绝'}</StatusDot>
-                            </td>
-                            <td style={{ textAlign: 'center' }}>
-                              <StatusDot tone={d.read ? 'success' : 'danger'}>{d.read ? '允许' : '拒绝'}</StatusDot>
-                            </td>
-                            <td style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>
-                              {d.sourceGrantIds.length ? `授权 ${d.sourceGrantIds.join(', ')}` : '无命中规则'}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                <div style={{ marginTop: 8 }}>
+                  <PreviewTable decisions={previewResult.decisions} metadataObjects={metadataObjects} />
                 </div>
               </>
             ) : null}

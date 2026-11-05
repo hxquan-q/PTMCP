@@ -203,3 +203,14 @@ Updated: 2026-11-05
 - 检查：eslint（max-warnings 0）/ prettier / tsc --noEmit / tests 201/201 / `vite build` / `vite build --config vite.oauth.config.ts` 全过。
 - 浏览器（真实后端，LAN `http://192.168.1.18:25173`）：`#/admin/metadata/809` 列结构 6 列表头 + 5 行渲染（id/月份/供应商/报告类型/文件，字典描述与类型徽标正常）；`#/admin/datasources/1` 详情表单加载正常；控制台仅 dev server HMR 与密码字段 DOM 提示噪声，无产品侧错误。
 - 未验证：冲突对比表的真实渲染（需构造版本冲突；本切片未对 dev 数据制造冲突）；真实环境大列结构表（如 800+ 对象表）的行数与滚动未逐页走查。
+
+### 2026-11-05 管理端授权矩阵表格迁移（规则表 / 预览决策表）
+
+- PermissionsPage 授权规则表（资源名称 / 类型 / 权限 / 效果 / 含下级 / 有效期 / 状态 / 操作，操作列宽 90）与有效权限预览决策表（资源 / META / READ / 依据）原生 `<table>` → antd Table：`rowKey` 分别为 `id` / `resourceId`、`size="middle"`、`pagination={false}`；预览表补 `scroll={{ x: 480 }}`。分页仍由 Pane footer 控制、只渲染当前页，游标/total 语义未变。
+- 行内「撤销」`.link` → `<Button type="link" size="small" style={{ padding: 0 }}>`，撤销中置 `disabled` 并显示「撤销中…」；`locale.emptyText` 置空，空态仍由 sibling `EmptyState` 承担；单元格类名（`cell-lead` / `cell-stack`）与图标分支不变。
+- 文件体量预算：迁移后页面一度到 923 行，触发 `tests/design-system.test.ts` 的 900 行上限。按测试意图拆分而非放宽阈值——新建 `src/views/admin/permissions/tables.tsx`（`GrantsTable` / `PreviewTable`，140 行），页面降至 806 行（测试口径）。未改阈值、未删断言。
+- 检查：prettier / eslint（max-warnings 0）/ tsc --noEmit / tests 201/201 / `vite build` / `vite build --config oauth` 全过。主构建仍有 >500 kB 分包警告（既有待分包项）。
+- 浏览器（真实后端，LAN `http://192.168.1.18:25173/#/admin/permissions`）：同一 hash 的 `goto` 不会重载（需 `location.reload()`）；强制重载后主体列表 1 个、资源树 1 个数据源 808 个对象正常，规则页脚「共 0 条规则」与「暂无授权规则」空态正确（当前角色与用户主体均无直接规则），预览区按契约提示角色主体不可计算。
+- 尝试用「+ 新增规则」造一条临时规则验证有数据行与撤销按钮，被服务端 403 拒绝（`/admin/api/v1/admin/acl/grants`），提示为不能给当前登录账号授予其尚未拥有的权限——自授权防提权守卫按预期生效，非迁移缺陷；未对 dev 数据做任何写入。
+- 未验证：规则表有数据行渲染与「撤销」交互；预览决策表渲染（dev 平台下拉为空，按钮保持 disabled）；两次提交的 403 属预期守卫，未做绕过。
+- 环境备注：期间控制台错误均为 `ERR_CONNECTION_RESET` / `ERR_CONNECTION_TIMED_OUT`（已知 LAN/TUN 抖动），页面失败标记不自动重试，重载后恢复，无产品侧错误。
