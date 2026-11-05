@@ -31,7 +31,6 @@ body {
 :where(input, textarea, select) {
   caret-color: var(--ptmcp-blue);
 }
-.data-table,
 .stat-card-value,
 .page-btn,
 .pagination,
@@ -393,17 +392,6 @@ select:not([class*='ant-']) {
 .btn--secondary:active {
   background: var(--ptmcp-band);
 }
-.btn--link {
-  min-height: 24px;
-  padding: 0 2px;
-  border: none;
-  background: none;
-  color: var(--ptmcp-blue-text);
-  font-weight: 600;
-}
-.btn--link:hover {
-  text-decoration: underline;
-}
 /* 图标按钮：字形 17px → 视觉 36×36 → 热区 44×44（::after 继承 .btn 的规则）。 */
 .btn--icon {
   width: 36px;
@@ -432,8 +420,7 @@ select:not([class*='ant-']) {
 }
 .btn:focus-visible,
 .input:focus-visible,
-.select:focus-visible,
-.link:focus-visible {
+.select:focus-visible {
   outline: 2px solid var(--ptmcp-blue);
   outline-offset: 1px;
 }
@@ -512,37 +499,6 @@ input[type='checkbox'] {
    各页的 flex:1 写在行内样式里，这里只能用 !important 覆盖。 */
 .table-card:has(.empty-state) {
   flex: 0 0 auto !important;
-}
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  color: var(--ptmcp-text);
-}
-.data-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  padding: 0 14px;
-  height: 40px;
-  background: var(--ptmcp-surface);
-  border-bottom: 1px solid var(--ptmcp-border);
-  color: var(--ptmcp-text-muted);
-  font-size: 12.5px;
-  font-weight: 600;
-  text-align: left;
-  white-space: nowrap;
-}
-.data-table tbody td {
-  padding: 8px 14px;
-  border-bottom: 1px solid var(--ptmcp-border-row);
-  vertical-align: middle;
-  white-space: nowrap;
-}
-/* 名称列允许折行，其余列保持单行：稿面里的「允许/生效」曾被挤成竖排。 */
-.data-table tbody td:first-child,
-.data-table td.cell-lead {
-  white-space: normal;
 }
 .page-header {
   display: flex;
@@ -711,15 +667,6 @@ input[type='checkbox'] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.data-table tbody tr:last-child td {
-  border-bottom: 0;
-}
-.data-table tbody tr:hover {
-  background: var(--ptmcp-hover);
-}
-.data-table tbody tr.is-selected {
-  background: var(--ptmcp-selected);
 }
 .table-scroll {
   flex: 1;
@@ -924,29 +871,6 @@ input[type='checkbox'] {
   font-size: 12px;
   color: var(--ptmcp-red);
 }
-.link {
-  color: var(--ptmcp-blue-text);
-  font-weight: 600;
-  background: none;
-  border: none;
-  padding: 0;
-}
-.link:hover {
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-/* 禁用态必须与可用态肉眼可辨：此前禁用「删除」与可用「删除」样式一致。 */
-.link:not(:disabled) {
-  cursor: pointer;
-}
-.link:disabled {
-  color: var(--ptmcp-text-faint);
-  cursor: not-allowed;
-  text-decoration: none;
-}
-.link--danger {
-  color: var(--ptmcp-red);
-}
 /* 行内操作组：用 gap 取代逐个字段的 marginLeft。 */
 .row-actions {
   display: inline-flex;
@@ -990,21 +914,6 @@ input[type='checkbox'] {
   padding: 6px;
   font-size: 12px;
   color: var(--ptmcp-text-muted);
-}
-/* 表格行内主链接：行高保持紧凑，但把可点高度抬到 24px。
-   按钮默认 white-space: normal，窄屏会把名称折成两行，这里显式保持单行。 */
-.data-table .link {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  white-space: nowrap;
-}
-.data-table tbody tr {
-  transition: background 0.12s ease;
-}
-/* 悬停时首列亮起一道 2px 蓝色定位线：比整行变色更轻，也不干扰选中态的浅蓝底。 */
-.data-table tbody tr:hover td:first-child {
-  box-shadow: inset 2px 0 0 var(--ptmcp-blue);
 }
 /* 分页：nav 让读屏能在 landmark 列表里直达；页码与箭头统一 28×28，避免只有 13px 的图标点击区。 */
 .pagination {
@@ -1623,17 +1532,9 @@ input[type='checkbox'] {
   .app-shell-top {
     gap: 8px !important;
   }
-  /* 窄屏下表格保持最小可读宽度，横向滚动而不是把列压成竖排 */
-  .table-scroll .data-table {
-    min-width: 720px;
-  }
   /* 统计卡 2 列；pill 单个不换行；单元格不压成竖排，整表横向滚动 */
   .stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  }
-  .data-table th,
-  .data-table td {
-    white-space: nowrap;
   }
   .pill-tabs {
     flex-wrap: wrap;
@@ -1645,7 +1546,6 @@ input[type='checkbox'] {
 
 /* ─── 键盘可达性：统一可见焦点（WCAG 2.2 AA 2.4.7） ─── */
 .btn:focus-visible,
-.link:focus-visible,
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
@@ -1685,19 +1585,6 @@ textarea:focus-visible {
 /* 主体行用圆形头像，与稿面一致；资源树仍用方形引擎色块。 */
 .subject-row .cell-icon {
   border-radius: var(--ptmcp-radius-circle);
-}
-/* 三栏里的表格比全页表格更密，否则 8~9 列会把状态列挤到横向滚动之外。 */
-.perm-workspace .data-table thead th {
-  padding: 0 6px;
-  height: 38px;
-  font-size: 12px;
-}
-.perm-workspace .data-table tbody td {
-  padding: 6px;
-  font-size: 12px;
-}
-.perm-workspace .data-table .cell-stack > span {
-  font-size: 11px;
 }
 /* 栏宽有限，效果列胶囊不能因为内边距被挤出可视区。 */
 .perm-workspace .pill {
@@ -3186,9 +3073,6 @@ textarea:focus-visible {
   font-size: 12.5px;
   line-height: 1.6;
   color: var(--ptmcp-text-muted);
-}
-.org-tree-state .link {
-  margin-top: 6px;
 }
 .org-tree-row {
   display: flex;

@@ -131,17 +131,15 @@ test('定义 44px 触控热区令牌，并让按钮把热区撑到 44px', () => 
   assert.match(iconAfter[0]!, /var\(--ptmcp-hit\)/, '.btn--icon::after 必须用 --ptmcp-hit 定宽');
 });
 
-test('文字链接按钮不低于 24px 高（WCAG 2.2 AA 2.5.8）', () => {
-  const blocks = cssBlocks('.btn--link');
-  assert.ok(blocks.length >= 1, '缺少 .btn--link 规则');
-  const minHeights = blocks
-    .join('\n')
-    .match(/min-height:\s*(\d+)px/g)
-    ?.map((s) => Number(s.match(/\d+/)![0]));
-  assert.ok(
-    minHeights?.some((n) => n >= 24),
-    '.btn--link 需要 min-height >= 24px',
-  );
+test('行内文字按钮统一走 antd Button（≥24px 由库尺寸 token 保证，WCAG 2.2 AA 2.5.8）', async () => {
+  assert.equal(cssBlocks('.link').length, 0, '遗留 .link 规则应已移除');
+  assert.equal(cssBlocks('.btn--link').length, 0, '遗留 .btn--link 规则应已移除');
+  const linkButtons = tsxFiles.filter((f) => /<Button[^>]*\btype="link"/s.test(readFileSync(f, 'utf8')));
+  assert.ok(linkButtons.length > 0, '未找到 antd 文字链接按钮');
+  const { theme } = await import('antd');
+  const token = theme.getDesignToken();
+  assert.ok(token.controlHeightSM >= 24, `antd 小号控件高度 ${token.controlHeightSM}px 低于 24px`);
+  assert.ok(token.controlHeight >= 24, `antd 默认控件高度 ${token.controlHeight}px 低于 24px`);
 });
 
 test('触控设备（pointer: coarse）把导航与切换控件抬到 44px 热区', () => {
