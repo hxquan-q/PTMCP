@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Button } from 'antd';
+import { Button, Table } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { Badge, EmptyState, PageHeader, Select, StatusDot, TextInput } from '../../../components/common';
 import { listMyHistory, type AuditRow } from '../../../services/access';
 import { formatTaipeiTime as fmt } from '../../../services/dateTime';
@@ -64,6 +65,57 @@ export function HistoryPage() {
       .finally(() => setLoadingMore(false));
   };
 
+  const columns: ColumnsType<AuditRow> = [
+    {
+      title: '时间',
+      dataIndex: 'startedAt',
+      render: (value: string, r) => (
+        <Button
+          type="link"
+          size="small"
+          style={{ padding: 0, whiteSpace: 'nowrap' }}
+          onClick={() => (window.location.hash = `/me/history/${encodeURIComponent(r.requestId)}`)}
+          aria-label={`查看请求 ${r.requestId} 详情：${fmt(r.startedAt)}`}
+        >
+          {fmt(value)}
+        </Button>
+      ),
+    },
+    {
+      title: '工具',
+      dataIndex: 'tool',
+      render: (value: string) => <Badge tone="neutral">{value}</Badge>,
+    },
+    {
+      title: 'SQL(脱敏)',
+      dataIndex: 'sqlMasked',
+      render: (value: string | undefined) => (
+        <span style={{ color: 'var(--ptmcp-text-muted)', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <code style={{ fontSize: 12 }}>{value ?? '—'}</code>
+        </span>
+      ),
+    },
+    {
+      title: '行数',
+      dataIndex: 'rowsReturned',
+      render: (value: number | null | undefined) => <span style={{ color: 'var(--ptmcp-text-muted)' }}>{value ?? '—'}</span>,
+    },
+    {
+      title: '耗时',
+      dataIndex: 'durationMs',
+      render: (value: number | null | undefined) => <span style={{ color: 'var(--ptmcp-text-muted)' }}>{value != null ? `${value} ms` : '—'}</span>,
+    },
+    {
+      title: '结果',
+      dataIndex: 'result',
+      render: (value: string) => (
+        <StatusDot tone={value === 'SUCCESS' ? 'success' : value === 'ERROR' ? 'danger' : 'warning'}>
+          {value === 'SUCCESS' ? '成功' : value === 'ERROR' ? '失败' : '进行中'}
+        </StatusDot>
+      ),
+    },
+  ];
+
   return (
     <>
       <PageHeader title="查询历史" description="你的 MCP 查询与工具调用记录。" />
@@ -79,9 +131,9 @@ export function HistoryPage() {
             flexWrap: 'wrap',
           }}
         >
-          <TextInput label="开始日期" value={from} onChange={setFrom} type="date" />
+          <TextInput label="开始日期" value={from} onChange={setFrom} type="date" width={150} />
           <span style={{ color: 'var(--ptmcp-text-faint)' }}>→</span>
-          <TextInput label="结束日期" value={to} onChange={setTo} type="date" />
+          <TextInput label="结束日期" value={to} onChange={setTo} type="date" width={150} />
           <Select
             value={tool}
             onChange={setTool}
@@ -129,46 +181,15 @@ export function HistoryPage() {
           </Button>
         </div>
         <div className="table-scroll" role="region" aria-label="查询历史列表" tabIndex={0}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>时间</th>
-                <th>工具</th>
-                <th>SQL(脱敏)</th>
-                <th>行数</th>
-                <th>耗时</th>
-                <th>结果</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.requestId}>
-                  <td style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>
-                    <button
-                      className="link"
-                      onClick={() => (window.location.hash = `/me/history/${encodeURIComponent(r.requestId)}`)}
-                      aria-label={`查看请求 ${r.requestId} 详情：${fmt(r.startedAt)}`}
-                    >
-                      {fmt(r.startedAt)}
-                    </button>
-                  </td>
-                  <td>
-                    <Badge tone="neutral">{r.tool}</Badge>
-                  </td>
-                  <td style={{ color: 'var(--ptmcp-text-muted)', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    <code style={{ fontSize: 12 }}>{r.sqlMasked ?? '—'}</code>
-                  </td>
-                  <td style={{ color: 'var(--ptmcp-text-muted)' }}>{r.rowsReturned ?? '—'}</td>
-                  <td style={{ color: 'var(--ptmcp-text-muted)' }}>{r.durationMs != null ? `${r.durationMs} ms` : '—'}</td>
-                  <td>
-                    <StatusDot tone={r.result === 'SUCCESS' ? 'success' : r.result === 'ERROR' ? 'danger' : 'warning'}>
-                      {r.result === 'SUCCESS' ? '成功' : r.result === 'ERROR' ? '失败' : '进行中'}
-                    </StatusDot>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <Table<AuditRow>
+            rowKey="requestId"
+            size="middle"
+            loading={loading}
+            dataSource={rows}
+            columns={columns}
+            pagination={false}
+            locale={{ emptyText: <span /> }}
+          />
           {!loading && rows.length === 0 ? <EmptyState title="暂无查询历史" description="调整时间范围或筛选条件后重试。" /> : null}
         </div>
         <div className="table-footer" style={{ justifyContent: 'space-between' }}>

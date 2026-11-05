@@ -160,3 +160,12 @@ Updated: 2026-11-05
 安全注意：本轮登录脚本曾一次性包含本机 dev 账号口令并被 Playwright 工具回显到会话记录（脚本已删除，仓库与本工作项均未写入口令值）。建议轮换本机 dev 管理员口令；该操作属安全关键，需用户授权后执行。
 
 未验证：权限写操作端到端（dev 库单用户触发 SelfEscalationGuard，由 `AdminApiTest` 覆盖）、OAuth 真实端到端、AppShell 与其余原生表格迁移。
+
+### 2026-11-05 个人门户 me 页表格迁移与两处迁移回归修复
+
+- AuthorizationsPage / HistoryPage 原生 `<table>` → antd Table：`rowKey`、`size="middle"`、`pagination={false}`，游标语义不变（footer 仍为真实「已加载 N 条 / 可能还有更多 / 没有更多了」，不伪造 total）；空态由 sibling `EmptyState` 承担。历史页「时间」跳转由 `.link` → `Button type="link"`，保留 `aria-label` 与详情路由。
+- 回归修复 1（全站空态）：EmptyState 换 antd Empty 后，`.empty-state-desc/.hint` 的 `max-width: 400` 块在块级 description 容器内左对齐，文案偏离标题中线；CSS 改为 `margin: 0 auto`。实测授权页 desc/title/empty 三处中心均为 1070px。
+- 回归修复 2（历史页筛选行）：日期 `TextInput` 未传 `width`，antd Input 默认 `width: 100%` 在 flex 筛选行里独占整行并换行；补 `width={150}`，与 AuditPage 日期筛选一致。实测两个日期框同排（y=192）、各 150px。
+- 检查：eslint / prettier / tsc / tests 201/201 / `vite build` / `vite build --config vite.oauth.config.ts` 全过。
+- 浏览器（真实后端，LAN 入口 `http://192.168.1.18:25173`）：授权页空态居中、页脚「已加载 0 条 · 没有更多了」；历史页筛选行单行、空态与页脚正确。期间 dev server CSS 与 `/me/history` 各出现 timeout（已知 LAN/TUN 环境抖动），重试后正常，无产品侧错误。
+- 未验证：两张表的有数据行渲染（dev 库当前 0 条授权、0 条历史）；授权撤销交互。

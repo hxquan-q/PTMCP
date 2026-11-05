@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Button } from 'antd';
+import { Button, Table } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { EmptyState, PageHeader, StatusDot } from '../../../components/common';
 import { listMyAuthorizations, revokeAuthorization, type AuthorizationRow } from '../../../services/access';
 import { showToast } from '../../../toast';
@@ -38,6 +39,52 @@ export function AuthorizationsPage() {
       .finally(() => setRevokingId(''));
   };
 
+  const columns: ColumnsType<AuthorizationRow> = [
+    {
+      title: '客户端',
+      dataIndex: 'clientName',
+      render: (_: unknown, r) => (
+        <>
+          <strong>{r.clientName}</strong>
+          <span style={{ marginLeft: 8, color: 'var(--ptmcp-text-faint)', fontSize: 12 }}>ID {r.id}</span>
+        </>
+      ),
+    },
+    {
+      title: '签发时间',
+      dataIndex: 'issuedAt',
+      render: (value: string) => <span style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{fmt(value)}</span>,
+    },
+    {
+      title: '最近使用',
+      dataIndex: 'lastUsedAt',
+      render: (value: string | null) => <span style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{fmt(value)}</span>,
+    },
+    {
+      title: '过期时间',
+      dataIndex: 'absoluteExpiresAt',
+      render: (value: string) => <span style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{fmt(value)}</span>,
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      render: (value: string) => <StatusDot tone={value === 'ACTIVE' ? 'success' : 'neutral'}>{value === 'ACTIVE' ? '生效中' : '已撤销'}</StatusDot>,
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 80,
+      render: (_: unknown, r) =>
+        r.status === 'ACTIVE' ? (
+          <Button type="link" size="small" style={{ padding: 0 }} disabled={revokingId === r.id} onClick={() => revoke(r.id)}>
+            {revokingId === r.id ? '撤销中…' : '撤销'}
+          </Button>
+        ) : (
+          <span style={{ color: 'var(--ptmcp-text-faint)', fontSize: 12 }}>—</span>
+        ),
+    },
+  ];
+
   return (
     <>
       <PageHeader title="授权管理" description="第三方客户端对你的账号授权,可随时收回。" />
@@ -55,43 +102,15 @@ export function AuthorizationsPage() {
           <span style={{ fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>共 {rows.length} 条授权</span>
         </div>
         <div className="table-scroll" role="region" aria-label="授权列表" tabIndex={0}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>客户端</th>
-                <th>签发时间</th>
-                <th>最近使用</th>
-                <th>过期时间</th>
-                <th>状态</th>
-                <th style={{ width: 80 }}>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <strong>{r.clientName}</strong>
-                    <span style={{ marginLeft: 8, color: 'var(--ptmcp-text-faint)', fontSize: 12 }}>ID {r.id}</span>
-                  </td>
-                  <td style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{fmt(r.issuedAt)}</td>
-                  <td style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{fmt(r.lastUsedAt)}</td>
-                  <td style={{ color: 'var(--ptmcp-text-muted)', whiteSpace: 'nowrap' }}>{fmt(r.absoluteExpiresAt)}</td>
-                  <td>
-                    <StatusDot tone={r.status === 'ACTIVE' ? 'success' : 'neutral'}>{r.status === 'ACTIVE' ? '生效中' : '已撤销'}</StatusDot>
-                  </td>
-                  <td>
-                    {r.status === 'ACTIVE' ? (
-                      <button className="link" disabled={revokingId === r.id} onClick={() => revoke(r.id)}>
-                        {revokingId === r.id ? '撤销中…' : '撤销'}
-                      </button>
-                    ) : (
-                      <span style={{ color: 'var(--ptmcp-text-faint)', fontSize: 12 }}>—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <Table<AuthorizationRow>
+            rowKey="id"
+            size="middle"
+            loading={loading}
+            dataSource={rows}
+            columns={columns}
+            pagination={false}
+            locale={{ emptyText: <span /> }}
+          />
           {!loading && rows.length === 0 ? <EmptyState title="暂无授权记录" description="授权由客户端 OAuth 流程产生，可在客户端发起。" /> : null}
         </div>
         <div className="table-footer" style={{ justifyContent: 'space-between' }}>
