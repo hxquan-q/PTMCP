@@ -177,6 +177,7 @@ Updated: 2026-11-05
 - 空态：与授权/历史页一致，表体 `locale.emptyText` 置空、sibling `EmptyState` 承担文案；加载中只显示 antd spinner。
 - 检查：eslint / prettier / tsc / tests 201/201 / `vite build` / `vite build --config vite.oauth.config.ts` 全过。
 - 浏览器（真实后端，LAN `http://192.168.1.18:25173`）：令牌页表头 + 「暂无个人令牌」空态居中 + 页脚「已加载 0 个 · 没有更多了」；字典页未选平台/数据源时表头 + 「请选择平台与数据源」空态；接入页 8 列表头 + 空态 + 动作按钮 + 页脚「共 0 条」。控制台 14 条错误均为 dev server 静态资源 HMR 超时（`ERR_CONNECTION_RESET/TIMED_OUT`），无产品侧错误。
+- 未验证：三表有数据行渲染。dev 库当前 0 条令牌、0 条历史；接入页正常模式无服务端列表（设计如此，样例仅预览模式）；`/me/access-context?level=PLATFORM` 对当前用户返回 `items: []`（无可见数据源授权），字典页无法选择平台/数据源。令牌撤销交互同样未实测。
 
 ### 2026-11-05 管理端平台与客户端表格迁移
 
@@ -187,4 +188,10 @@ Updated: 2026-11-05
 - 浏览器（真实后端，LAN `http://192.168.1.18:25173`）：平台页签表头 7 列 + 「暂无平台」空态；切到客户端页签表头 6 列（客户端/Client ID/所属平台/类型/状态/操作）+ 「暂无客户端」空态；控制台错误仍为 dev server HMR 超时噪声，无产品侧错误。
 - 未验证：有数据行的单元格渲染与 Scope/编辑/删除交互（dev 库当前 0 平台、0 客户端）。
 
-- 未验证：三表有数据行渲染。dev 库当前 0 条令牌、0 条历史；接入页正常模式无服务端列表（设计如此，样例仅预览模式）；`/me/access-context?level=PLATFORM` 对当前用户返回 `items: []`（无可见数据源授权），字典页无法选择平台/数据源。令牌撤销交互同样未实测。
+### 2026-11-05 管理端元数据表格迁移
+
+- MetadataPage 原生 `<table>`（对象 / 库 Schema / 类型 / 代次 / 授权 / 可见 / 操作，操作列宽 60）→ antd Table：`rowKey="id"`、`size="middle"`、`pagination={false}`，列顺序与单元格渲染不变；`locale.emptyText` 置空，空态仍由既有 Alert / EmptyState 承担。表体不传 `loading`，避免「加载更多」追加行时整表闪烁，加载态继续由 sibling `table-state` 文案承担。
+- 行内 `.link` → `<Button type="link" size="small">`，保留 `aria-label`（查看…详情）与详情路由；游标语义不变：页脚仍为真实「已加载 N 个 · 服务端仍有更多 / 已到末尾（契约未返回总数）」，「加载更多」只追加行、不伪造 total。
+- 检查：eslint / prettier / tsc / tests 201/201 / `vite build` / `vite build --config vite.oauth.config.ts` 全过。
+- 浏览器（真实后端，LAN `http://192.168.1.18:25173/#/admin/metadata`）：默认数据源 20 行渲染，7 列表头与单元格（对象名 + ID、库名、TABLE Badge、代次、授权/可见）正常；点行内「详情」跳转 `#/admin/metadata/809`；返回后「加载更多」由 20 → 40 行，工具栏与页脚计数同步，服务端仍有更多。控制台仍为 dev server HMR/`me/history` 超时噪声，无产品侧错误。
+- 未验证：授权/可见为布尔时的彩色 StatusDot 分支（当前列表服务端未回该字段，显示「未知」）；详情页本身未改动。

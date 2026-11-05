@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Button } from 'antd';
+import { Button, Table } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { Alert, Badge, EmptyState, PageHeader, RequestIdText, SearchInput, Select, StatusDot, useDebounced } from '../../components/common';
 import { listDatasources, listMetadata, type DatasourceRead, type MetadataObject } from '../../services/data';
 import { readFailure, type Failure } from '../../services/http';
@@ -82,6 +83,65 @@ export function MetadataPage() {
           ? '元数据读取失败'
           : `已加载 ${rows.length} 个元数据对象`;
 
+  const columns: ColumnsType<MetadataObject> = [
+    {
+      title: '对象',
+      dataIndex: 'objectName',
+      render: (_: unknown, r) => (
+        <span className="cell-stack">
+          <strong>{r.objectName ?? r.tableName}</strong>
+          <span>{r.tableComment || `ID ${r.id}`}</span>
+        </span>
+      ),
+    },
+    {
+      title: '库 / Schema',
+      key: 'namespace',
+      render: (_: unknown, r) => (
+        <span style={{ color: 'var(--ptmcp-text-muted)' }}>
+          {r.databaseName}
+          {r.schemaName ? ` / ${r.schemaName}` : ''}
+        </span>
+      ),
+    },
+    {
+      title: '类型',
+      dataIndex: 'objectType',
+      render: (v: string) => <Badge tone={v === 'TABLE' ? 'accent' : 'neutral'}>{v}</Badge>,
+    },
+    {
+      title: '代次',
+      dataIndex: 'generation',
+      render: (v: MetadataObject['generation']) => <span style={{ color: 'var(--ptmcp-text-muted)' }}>v{v}</span>,
+    },
+    {
+      title: '授权',
+      dataIndex: 'authorized',
+      render: (v: boolean | null | undefined) => <StateDot value={v} yes="已授权" no="未授权" />,
+    },
+    {
+      title: '可见',
+      dataIndex: 'metadataVisible',
+      render: (v: boolean | null | undefined) => <StateDot value={v} yes="可见" no="隐藏" noTone="warning" />,
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 60,
+      render: (_: unknown, r) => (
+        <Button
+          type="link"
+          size="small"
+          style={{ padding: 0 }}
+          onClick={() => (window.location.hash = `/admin/metadata/${r.id}`)}
+          aria-label={`查看 ${r.objectName ?? r.tableName} 详情`}
+        >
+          详情
+        </Button>
+      ),
+    },
+  ];
+
   return (
     <>
       <PageHeader title="元数据与字典" description="按数据源浏览元数据对象；授权与可见状态来自服务端交集判定。" />
@@ -149,56 +209,14 @@ export function MetadataPage() {
           ) : null}
 
           {rows.length > 0 ? (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th scope="col">对象</th>
-                  <th scope="col">库 / Schema</th>
-                  <th scope="col">类型</th>
-                  <th scope="col">代次</th>
-                  <th scope="col">授权</th>
-                  <th scope="col">可见</th>
-                  <th scope="col" style={{ width: 60 }}>
-                    操作
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id}>
-                    <td>
-                      <span className="cell-stack">
-                        <strong>{r.objectName ?? r.tableName}</strong>
-                        <span>{r.tableComment || `ID ${r.id}`}</span>
-                      </span>
-                    </td>
-                    <td style={{ color: 'var(--ptmcp-text-muted)' }}>
-                      {r.databaseName}
-                      {r.schemaName ? ` / ${r.schemaName}` : ''}
-                    </td>
-                    <td>
-                      <Badge tone={r.objectType === 'TABLE' ? 'accent' : 'neutral'}>{r.objectType}</Badge>
-                    </td>
-                    <td style={{ color: 'var(--ptmcp-text-muted)' }}>v{r.generation}</td>
-                    <td>
-                      <StateDot value={r.authorized} yes="已授权" no="未授权" />
-                    </td>
-                    <td>
-                      <StateDot value={r.metadataVisible} yes="可见" no="隐藏" noTone="warning" />
-                    </td>
-                    <td>
-                      <button
-                        className="link"
-                        onClick={() => (window.location.hash = `/admin/metadata/${r.id}`)}
-                        aria-label={`查看 ${r.objectName ?? r.tableName} 详情`}
-                      >
-                        详情
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <Table<MetadataObject>
+              rowKey="id"
+              size="middle"
+              dataSource={rows}
+              columns={columns}
+              pagination={false}
+              locale={{ emptyText: <span /> }}
+            />
           ) : null}
         </div>
 
