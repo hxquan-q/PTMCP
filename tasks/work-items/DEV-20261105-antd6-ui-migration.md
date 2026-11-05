@@ -5,7 +5,7 @@ Status: in_progress
 Owner: current-agent
 Acceptance: pending
 Verification: NOT_RUN
-Updated: 2026-11-05
+Updated: 2026-11-06
 
 ## 目标与边界
 
@@ -42,7 +42,7 @@ Updated: 2026-11-05
 | StatusDot / Badge | Tag（颜色映射保对比度） |
 | Toast 栈 | notification（duration=0 + 自管定时器保暂停语义；danger 组 role=alert 保留） |
 | 原生表格（各页面） | Table / ProTable（total 已知的客户端分页表用 ProTable；cursor 表禁 total） |
-| AppShell 导航 | Layout + Menu + Breadcrumb + Dropdown；Ctrl+K 搜索浮层保留自研 combobox 语义 |
+| AppShell 导航 | 账户菜单用 Dropdown；导航与面包屑保留原生 nav（语义与样式契约已满足，见 2026-11-06 决策）；Ctrl+K 搜索浮层保留自研 combobox 语义 |
 
 保留为业务组合（非控件，Tailwind/token 样式）：Field、PageHeader、StatCard、CellIcon、DrawerFields、GlobalSearch、OptionCard、CharReveal、LoginBackdrop、useMagnetic 等按需逐步收敛。
 
@@ -52,7 +52,7 @@ Updated: 2026-11-05
 
 1. S1 基础：依赖安装、main.tsx（StyleProvider layer + ConfigProvider zh_CN + theme colorPrimary #0f62d6）、index.css layer 声明与旧样式清理。
 2. S2 控件：common.tsx 内部换 antd 实现（保持对外 API），Toast.tsx 换 notification 适配。
-3. S3 外壳：AppShell 换 Layout/Menu/Breadcrumb/Dropdown，保留视角切换/Ctrl+K/skip-link 语义。
+3. S3 外壳：AppShell 换 Layout/Menu/Breadcrumb/Dropdown，保留视角切换/Ctrl+K/skip-link 语义（实际只迁 Dropdown，导航与面包屑保留原生，见 2026-11-06 决策）。
 4. S4 页面：逐页原生 table/button 换 Table/Button；total 已知列表试点 ProTable。
 5. 验证：`pnpm test`、`pnpm check`（lint/format/typecheck/build/build:oauth）、根 `python scripts/check.py`；浏览器桌面/移动截图、键盘与弹层抽查（预览模式合成数据，真实接口联调另计）。
 6. Impeccable 收尾：detect --json 一次 → finish-reviewer（独立只读）→ documenter 同步 DESIGN.md 与 sidecar。
@@ -77,7 +77,7 @@ Updated: 2026-11-05
 
 剩余范围（后续切片）：
 
-1. AppShell → antd Layout/Menu/Breadcrumb/Dropdown（含两个 btn--icon 按钮与移动端导航）。
+1. ~~AppShell → antd Layout/Menu/Breadcrumb/Dropdown~~ 已完成账户菜单 Dropdown；导航与面包屑按 2026-11-06 切片决策保留原生。
 2. 其余页面原生 `<table>` → antd Table（PermissionsPage、OrgPage、PlatformsPage、MetadataPage、detail 页）；`.link` 行内链接 → Button type="link" 收敛。
 3. CSS 清理：删除已无引用的 .btn/.input/.data-table 等遗留块（现全部仍有未迁移页引用）。
 4. ~~主构建 chunk 分包（antd manualChunks）~~ 已完成，改用路由懒加载（见末节实证）。
@@ -243,3 +243,13 @@ Updated: 2026-11-05
 - 检查：prettier / eslint（max-warnings 0）/ tsc --noEmit / tests 201/201 / `vite build` / `vite build --config vite.oauth.config.ts`（447ms）全过。
 - 提交：`c28b500 perf(routes): 页面路由懒加载并拆出角色页重包`，已推送 origin dev；仅暂存 `src/App.tsx`、`src/styles/index.css`，排除他窗三文件与全部未跟踪文件。
 - 未验证：真实慢网/弱网下 Suspense 占位的观感与兜底；26 条懒加载路由未逐一走查（只抽查 roles / datasources）；OAuth 入口构建产物未做浏览器验证。
+
+### 2026-11-06 AppShell 账户菜单迁移（Dropdown）与外壳迁移范围收敛
+
+- 范围：只迁顶栏“⋯”账户菜单到 antd `Dropdown`，原生 `<nav>` 导航与手写 `<nav>/<ol>` 面包屑保留。删除自研 `moreOpen`/`moreRef` 与全局 `pointerdown`/`Escape` 监听；弹出定位、点外部关闭、Esc、焦点归还由 antd 接管（`trigger="click"`、`placement="bottomRight"`、`classNames={{ root: 'topbar-menu' }}`）。
+- 设计决策：① 不迁 Layout/Menu——现有导航已满足 DESIGN.md 的 60/220px 壳层、38px 行高、2px 选中竖条、分组标题与 `aria-current`；antd Menu 需重写同等 CSS，且 `@rc-component/menu@1.6.1` 无 `autoFocus`（ArrowDown 不从 trigger 进菜单），键盘收益要另写代码，改动面大于收益。② 不迁 Breadcrumb——`ol/li + aria-current="page"` 已让读屏报出“第 n 项，共 m 项”，antd 无行为增益且需重写 `.crumb-link`/`.crumb-sep` 样式。③ 不整壳换 Layout——`.app-shell-scroll` 是本页唯一纵向滚动容器与 skip-link 落点，换 Sider/Header 会改变既有 region 与滚动契约。
+- 样式：`.topbar-menu` 旧的绝对定位/top/right/z-index/transform-origin/`ptmcp-pop-in` 动画全部删除，改为只调 antd 弹层卡片（156px 宽、4px 内边距、1px 边框、12px 圆角、白底、双层阴影、34px 项高、13px 字号）；同时删除已无引用的 `@keyframes ptmcp-pop-in`。弹层根类实测为 `ant-dropdown ... topbar-menu ant-dropdown-placement-bottomRight`，项为 `.ant-dropdown-menu-item`，active 态是 `-active` 而非 `-selected`；关闭后弹层留在 DOM 并加 `ant-dropdown-hidden`。
+- 检查：prettier / eslint（max-warnings 0）/ tsc --noEmit / tests 201/201（6815ms）/ `vite build`（1.09s，`index-DUmmlXt9.js 39.53 kB`、CSS 62.83 kB，无 >500 kB 警告）/ `vite build --config vite.oauth.config.ts`（557ms）全过。
+- 浏览器（LAN dev `http://192.168.1.18:25173`，Playwright）：桌面弹层右下与 trigger 对齐（menu right 1896 = trigger right 1896）；Esc 关闭、点外部关闭、再次点击可开；Tab 可进入菜单项（`-active`），Esc 关闭后焦点回 trigger；hover 背景 `rgb(244,246,249)`、文字 `rgb(29,41,57)`；Ctrl+K 仍打开全局搜索且焦点在输入框；控制台无错误。390px 下菜单完整可见（right=390）；触发按钮 2px 出视口为既有裁边（迁移前 `s5-mobile-roles.png` 同样存在，`.app-shell` `overflow-x:hidden` 下无横向滚动），非本切片回归，未修。
+- 提交：`4805bed refactor(shell): 顶栏账户菜单迁移到 antd Dropdown`。仅暂存 `src/layouts/AppShell.tsx`、`src/styles/index.css`，排除他窗三文件与全部未跟踪截图。
+- 未验证：未点击“退出登录”项（会注销当前 dev 会话且无法安全重登）；`onLogout` 传递链未变且 tsc 通过，动作本身待人工验收。ArrowDown 不从 trigger 进入菜单为 antd 6 现状，未自研补充。
