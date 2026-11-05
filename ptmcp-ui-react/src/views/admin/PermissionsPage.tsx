@@ -31,7 +31,7 @@ import {
 } from '../../components/Icons';
 import { createGrant, deleteGrant, listGrants, previewAccess, type Grant, type Preview, type SubjectType } from '../../services/access';
 import { decodeResourceId, encodeObjectIds } from '../../services/resourceIds';
-import { listDatasources, listMetadata, type DatasourceRead, type MetadataObject } from '../../services/data';
+import { listDatasources, type DatasourceRead, type MetadataObject } from '../../services/data';
 import { buildTree, type ResourceNode } from './resourceTree';
 import { useAdminGate } from '../../adminGateContext';
 import { resizeColumns } from './columnResize';
@@ -39,6 +39,7 @@ import { mePortalApi, type PlatformItem } from '../../services/mePortalApi';
 import { listDepartments, listRoles, listUsers, type DepartmentRow, type RoleRow, type UserRow } from '../../services/orgPortalApi';
 import { findNode, fmtStamp, validityLabel, Pane, Resizer, TreeBranch } from './permissions/parts';
 import { SUBJECT_TABS, type SubjectItem } from './permissions/shared';
+import { listAllMetadata } from './permissions/metadataLoader';
 
 /* ─── 资源树 ─── */
 
@@ -148,14 +149,15 @@ export function PermissionsPage() {
       return;
     }
     let cancelled = false;
+    const controller = new AbortController();
     setMetadataLoading(true);
     setMetadataError('');
-    listMetadata({ datasourceId, pageSize: 200 })
-      .then(({ data }) => {
+    listAllMetadata(datasourceId, controller.signal)
+      .then((items) => {
         if (cancelled) return;
-        setMetadataObjects(data.items);
+        setMetadataObjects(items);
         // 默认展开第一个 schema，并让树里始终有一个可 Tab 进入的行
-        const first = data.items[0];
+        const first = items[0];
         const firstKey = first ? `schema:${first.schemaName ?? first.databaseName ?? 'default'}` : '';
         if (firstKey) setExpanded(new Set([firstKey]));
         setTreeActiveKey(firstKey);
@@ -169,6 +171,7 @@ export function PermissionsPage() {
       .finally(() => !cancelled && setMetadataLoading(false));
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [datasourceId]);
 

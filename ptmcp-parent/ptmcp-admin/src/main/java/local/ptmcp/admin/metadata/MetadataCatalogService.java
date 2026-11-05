@@ -45,10 +45,12 @@ public final class MetadataCatalogService {
 
     public record Item(
             String id,
+            String datasourceId,
             String namespaceId,
             String databaseName,
             String schemaName,
             String objectName,
+            String tableName,
             String objectType,
             String tableComment,
             String generation,
@@ -81,10 +83,12 @@ public final class MetadataCatalogService {
 
     public record Detail(
             String id,
+            String datasourceId,
             String namespaceId,
             String databaseName,
             String schemaName,
             String objectName,
+            String tableName,
             String objectType,
             String tableComment,
             String physicalIdentity,
@@ -127,7 +131,7 @@ public final class MetadataCatalogService {
                 snapshots.requireUsableActiveSnapshot(datasourceId);
         StringBuilder sql =
                 new StringBuilder(
-                        "SELECT o.id, n.id, n.catalog_raw, n.schema_raw, o.object_raw, o.kind, "
+                        "SELECT o.id, n.datasource_id, n.id, n.catalog_raw, n.schema_raw, o.object_raw, o.kind, "
                                 + "so.table_comment, o.generation, o.object_norm "
                                 + "FROM snapshot_object so "
                                 + "JOIN resource_object o ON o.id = so.object_id "
@@ -172,17 +176,19 @@ public final class MetadataCatalogService {
             try (ResultSet result = statement.executeQuery()) {
                 while (result.next()) {
                     long id = result.getLong(1);
-                    cursors.add(new Cursor(result.getString(9), id));
+                    cursors.add(new Cursor(result.getString(10), id));
                     rows.add(
                             new Item(
                                     Long.toString(id),
                                     Long.toString(result.getLong(2)),
-                                    result.getString(3),
+                                    Long.toString(result.getLong(3)),
                                     result.getString(4),
                                     result.getString(5),
                                     result.getString(6),
+                                    result.getString(6),
                                     result.getString(7),
-                                    Long.toString(result.getLong(8)),
+                                    result.getString(8),
+                                    Long.toString(result.getLong(9)),
                                     Long.toString(active.snapshotId()),
                                     Long.toString(active.resourceVersion())));
                 }
@@ -207,9 +213,11 @@ public final class MetadataCatalogService {
             Dictionary dictionary = dictionary(connection, objectId, columns);
             return new Detail(
                     Long.toString(row.id()),
+                    Long.toString(row.datasourceId()),
                     Long.toString(row.namespaceId()),
                     row.databaseName(),
                     row.schemaName(),
+                    row.objectName(),
                     row.objectName(),
                     row.kind(),
                     snapshot.tableComment(),

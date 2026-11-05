@@ -58,8 +58,19 @@ export function MetadataDetailPage({ id }: { id: string }) {
                 { label: '类型', value: <Badge tone={obj.objectType === 'TABLE' ? 'accent' : 'neutral'}>{obj.objectType}</Badge> },
                 { label: '代次', value: `v${obj.generation}` },
                 { label: '快照', value: obj.snapshotId ? `#${obj.snapshotId}` : '—' },
-                { label: '授权', value: <StatusDot tone={obj.authorized ? 'success' : 'neutral'}>{obj.authorized ? '已授权' : '未授权'}</StatusDot> },
-                { label: '字典可见', value: obj.metadataVisible ? '可见' : '隐藏' },
+                {
+                  label: '授权',
+                  value:
+                    typeof obj.authorized === 'boolean' ? (
+                      <StatusDot tone={obj.authorized ? 'success' : 'neutral'}>{obj.authorized ? '已授权' : '未授权'}</StatusDot>
+                    ) : (
+                      <StatusDot tone="neutral">未知</StatusDot>
+                    ),
+                },
+                {
+                  label: '字典可见',
+                  value: typeof obj.metadataVisible === 'boolean' ? (obj.metadataVisible ? '可见' : '隐藏') : '未知',
+                },
                 { label: '表注释', value: obj.tableComment ?? '—' },
               ]}
             />

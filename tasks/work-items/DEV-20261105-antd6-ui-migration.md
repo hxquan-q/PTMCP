@@ -120,3 +120,17 @@ Updated: 2026-11-05
 - admin 服务以 dev.env 全量环境重启（`.local/dev/run/admin.out.log` 落盘）；前端 25173 以正常模式（非 frontend-preview）运行。
 
 遗留：该测试类 Testcontainers 运行结果见提交前记录；dev.env 与 hosts/信任库属本机私有环境（`.local/` 未入库）。
+
+### 2026-11-05 真实接口联调：前后端契约缺口修复
+
+用真实后端（ASD Cloud Base，808 对象）逐页走查管理端与个人门户，发现并修复三处真实断裂：
+
+1. **元数据列表/详情缺字段（后端契约）**：前端 `MetadataObject` 要求 `tableName` 与 `datasourceId`，admin 元数据 API 的 `Item`/`Detail` 都未返回 → 详情页「表名」「数据源」空白，列表按 `undefined` 渲染。修复：`MetadataCatalogService` 列表 SQL 增选 `n.datasource_id`，两个 DTO 补 `datasourceId`、`tableName`；`DatasourceApiTest` 增两条 jsonPath 断言。真实接口验证：列表 200（`datasourceId:"1"`、`tableName:"###t_audit_report"`），详情 200 且 UI 显示对象名/表名/数据源/5 列列结构。
+2. **权限矩阵资源树整页 400（前端越界参数）**：`PermissionsPage` 请求 `pageSize=200`，后端 `MAX_PAGE=100` 直接 400，资源树空且报「资源树加载失败」；即使不报错，单页也只能看到 100 个对象。修复：新增 `permissions/metadataLoader.ts` 的 `listAllMetadata`，按 `nextCursor` 续拉到末尾（100/页，50 页防御上限），组件用 `AbortController` 在卸载/切数据源时中断。真实环境验证：809 个 treeitem 全部加载，无 4xx。
+3. **favicon 404**：`index.html` 无 icon 引用。补 `public/favicon.svg`（复用 LogoIcon 六边形）与 `<link rel="icon">`，硬刷新后控制台无 404。
+
+同时把详情页「授权/字典可见」由布尔缺失时显示「隐藏/未授权」改为「未知」，避免把未返回的字段说成否定状态。
+
+检查：前端 eslint / prettier / tsc / 199 单测 / `vite build` / `vite build --config vite.oauth.config.ts` 全过；后端 `DatasourceApiTest` 12/12 通过（走 WSL relay `tcp://127.0.0.1:12476` + `.docker-ptmcp` 证书，直连 12376 已失效）。未验证：其余后端模块测试、LAN IP 入口（本轮浏览器会话仅 127.0.0.1 可达）。
+
+路由走查结果：其余页面（数据源/元数据/授权矩阵/人员组织/角色/平台/审计/操作日志/个人门户 6 页）无 4xx/5xx、无控制台错误。数据源详情「连接未知」为设计行为：健康证据只认 5 分钟内的 ACTIVE_PROBE，过期即 UNKNOWN。

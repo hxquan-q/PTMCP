@@ -364,7 +364,7 @@ export function OptionCard({
 export function Alert({ kind, title, id, children }: { kind: 'info' | 'warning' | 'danger'; title?: string; id?: string; children?: ReactNode }) {
   /* danger→error 映射保持「失败必须可感知」；antd Alert 自带 role=alert 播报。 */
   return (
-    <AntdAlert id={id} type={kind === 'danger' ? 'error' : kind === 'warning' ? 'warning' : 'info'} showIcon message={title} description={children} />
+    <AntdAlert id={id} type={kind === 'danger' ? 'error' : kind === 'warning' ? 'warning' : 'info'} showIcon title={title} description={children} />
   );
 }
 
