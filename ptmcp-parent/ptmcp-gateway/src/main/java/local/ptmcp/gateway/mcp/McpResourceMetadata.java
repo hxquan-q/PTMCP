@@ -15,6 +15,8 @@ import java.util.Map;
 @Component
 public final class McpResourceMetadata {
     static final String ROOT_PATH = "/.well-known/oauth-protected-resource";
+    private static final List<String> SUPPORTED_SCOPES =
+            List.of("mcp:catalog", "mcp:schema", "mcp:query");
     private final String metadataUri;
     private final Map<String, Object> document;
 
@@ -47,9 +49,14 @@ public final class McpResourceMetadata {
         }
         document =
                 Map.of(
-                        "resource", canonicalResource,
-                        "authorization_servers", List.of(issuer),
-                        "bearer_methods_supported", List.of("header"));
+                        "resource",
+                        canonicalResource,
+                        "authorization_servers",
+                        List.of(issuer),
+                        "scopes_supported",
+                        SUPPORTED_SCOPES,
+                        "bearer_methods_supported",
+                        List.of("header"));
     }
 
     Map<String, Object> document() {
@@ -58,7 +65,13 @@ public final class McpResourceMetadata {
 
     String challenge() {
         return "Bearer realm=\"PTMCP\""
-                + (document.isEmpty() ? "" : ", resource_metadata=\"" + metadataUri + "\"");
+                + (document.isEmpty()
+                        ? ""
+                        : ", resource_metadata=\""
+                                + metadataUri
+                                + "\", scope=\""
+                                + String.join(" ", SUPPORTED_SCOPES)
+                                + "\"");
     }
 
     private static URI trustedUri(String value) {

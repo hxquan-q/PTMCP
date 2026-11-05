@@ -222,10 +222,12 @@ Cookie 管理写的 Origin/Referer 必须与请求的 scheme/host/port 一致；
 
 ### HTTP 安全边界与工具元信息
 
-协议固定 `2025-06-18`，不是升级到 `2025-11-25`。按 [2025-06-18 transport 规范](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)处理版本头：
+协议接受 `2025-06-18`（legacy）与 `2026-07-28`（modern stateless）。按各版本 transport 规范处理版本头：
 
 - `initialize` 在正文协商，允许不带 `MCP-Protocol-Version`；如显式提供，仍须单个且等于 `2025-06-18`。无状态服务返回自身支持的版本，由客户端判断是否继续，不保存跨请求协商状态。
-- 其余有效 JSON-RPC 请求（包括通知、取消）须带单个 `MCP-Protocol-Version: 2025-06-18`。无头且无会话信息时规范建议默认 `2025-03-26`，本端未支持该版本，因此返回 HTTP 400；空值、重复头、非法及不支持版本同样 400，不进入工具。带合法版本头的正文 parse error / invalid request 继续使用 JSON-RPC 错误；无头的非法正文也保留已有 JSON-RPC 错误处理。
+- 其余有效 JSON-RPC 请求（包括通知、取消）须带单个 `MCP-Protocol-Version: 2025-06-18` 或 `2026-07-28`。无头且无会话信息时规范建议默认 `2025-03-26`，本端未支持该版本，因此返回 HTTP 400；空值、重复头、非法及不支持版本同样 400，不进入工具。带合法版本头的正文 parse error / invalid request 继续使用 JSON-RPC 错误；无头的非法正文也保留已有 JSON-RPC 错误处理。
+- modern `2026-07-28` 请求：`server/discover` 方法返回 `supportedVersions` 与 capabilities；`tools/list` 外层含 `resultType:"complete"`、`ttlMs:300000`、`cacheScope:"private"`。modern 路径不处理 `initialize`/`ping`/`notifications/cancelled`（取消由客户端关闭响应流承载），也不改变认证、guard、审计或审批语义。
+- legacy `initialize` 请求版本协商：正文 `params.protocolVersion` 为受支持版本时回显该版本，否则回显 `2025-06-18`；不保存跨请求协商状态。
 - `/mcp` 所有方法在认证前验证 Origin：无 Origin 可继续认证；有 Origin 时必须只有一个合法 http(s) origin，命中部署配置 `ptmcp.gateway.allowed-origins`（逗号分隔，默认空）。scheme/host 忽略大小写，默认端口规范化；不允许 `null`、通配符、列表/重复头、用户信息、路径（包括末尾 `/`）、query、fragment 或非法端口。配置非法时启动失败；请求非法或不在白名单时 HTTP 403。
 - Origin 白名单**不从 Host、Forwarded、X-Forwarded-* 推导**，也不是 CORS、平台身份或 ACL。允许 Origin 和无 Origin 均不免除原有每请求 Bearer / 平台 proof / 当前身份检查。拒绝的 400/403 使用空 HTTP 正文，保留 `X-Request-ID` 和 `Cache-Control: no-store`，不附 REST 外壳或反射输入。
 - `tools/list` 的四工具新增稳定 `title`，以及 `annotations={readOnlyHint:true,destructiveHint:false,openWorldHint:false}`。这是只读、受配置资源约束的客户端提示，不代替 scope、实时资源 ACL、guard 或审计，也不承诺查询结果恒定。原工具名、description 和 inputSchema 不变；完整定义以 [机器契约](mcp-tools.json)及契约回归为准。

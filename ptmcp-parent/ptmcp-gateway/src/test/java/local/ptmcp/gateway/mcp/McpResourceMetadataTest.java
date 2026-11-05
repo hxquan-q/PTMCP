@@ -10,6 +10,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
+import java.util.List;
+
 class McpResourceMetadataTest {
     private static final String RESOURCE = "https://gateway.example/mcp";
     private static final String ISSUER = "https://auth.example";
@@ -106,5 +108,13 @@ class McpResourceMetadataTest {
                 () -> new McpResourceMetadata(RESOURCE, "ptmcp-mcp", ISSUER, METADATA));
         var metadata = new McpResourceMetadata(RESOURCE, RESOURCE, ISSUER, METADATA);
         assertEquals(RESOURCE, metadata.document().get("resource"));
+        assertEquals(
+                List.of("mcp:catalog", "mcp:schema", "mcp:query"),
+                metadata.document().get("scopes_supported"));
+        assertEquals(
+                "Bearer realm=\"PTMCP\","
+                        + " resource_metadata=\"https://gateway.example/.well-known/oauth-protected-resource\","
+                        + " scope=\"mcp:catalog mcp:schema mcp:query\"",
+                metadata.challenge());
     }
 }

@@ -1,6 +1,6 @@
 {
-  "version": "1.1-design",
-  "date": "2026-11-02",
+  "version": "1.2-design",
+  "date": "2026-11-05",
   "status": "input-contract-implemented",
   "transport": "streamable-http",
   "endpoint": "/mcp",

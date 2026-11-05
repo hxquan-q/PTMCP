@@ -70,6 +70,10 @@ final class McpToolService {
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_ROWS_LIMIT = 500;
     static final String PROTOCOL_VERSION = "2025-06-18";
+    static final String MODERN_PROTOCOL_VERSION = "2026-07-28";
+    static final Set<String> SUPPORTED_PROTOCOL_VERSIONS =
+            Set.of(PROTOCOL_VERSION, MODERN_PROTOCOL_VERSION);
+    private static final int LIST_TTL_MS = 300_000;
     private static final Set<String> TOOLS =
             Set.of(
                     "list_datasources",
@@ -172,9 +176,10 @@ final class McpToolService {
             return Outcome.json(rpcError(null, -32600, "Invalid Request"));
         }
         return switch (method) {
-            case "initialize" -> Outcome.json(envelope(id, initializeResult()));
+            case "initialize" -> Outcome.json(envelope(id, initializeResult(root.path("params"))));
             case "ping" -> Outcome.json(envelope(id, Map.of()));
-            case "tools/list" -> Outcome.json(envelope(id, Map.of("tools", toolDescriptors())));
+            case "server/discover" -> Outcome.json(envelope(id, cacheableList(discoverResult())));
+            case "tools/list" -> Outcome.json(envelope(id, cacheableList(listResult())));
             case "tools/call" -> callTool(identity, root.path("params"), id, boundaryRequestId);
             default -> Outcome.json(rpcError(id, -32601, "Method not found"));
         };
@@ -1112,11 +1117,12 @@ final class McpToolService {
     }
 
     private static RelationColumns relationColumns(PublishedSnapshotReader.Published published) {
-        return relation -> {
-            for (PublishedSnapshotReader.Namespace namespace : published.namespaces()) {
-                for (PublishedSnapshotReader.TableObject object : namespace.objects()) {
-                    if (object.id() == relation.objectId().value()) {
-                        return object.columns().stream()
+        Map<Long, List<ColumnDef>> byObjectId = new LinkedHashMap<>();
+        for (PublishedSnapshotReader.Namespace namespace : published.namespaces()) {
+            for (PublishedSnapshotReader.TableObject object : namespace.objects()) {
+                byObjectId.put(
+                        object.id(),
+                        object.columns().stream()
                                 .map(
                                         column ->
                                                 new ColumnDef(
@@ -1124,9 +1130,13 @@ final class McpToolService {
                                                         column.columnNorm(),
                                                         column.dataType(),
                                                         column.nullable()))
-                                .toList();
-                    }
-                }
+                                .toList());
+            }
+        }
+        return relation -> {
+            List<ColumnDef> columns = byObjectId.get(relation.objectId().value());
+            if (columns != null) {
+                return columns;
             }
             throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
         };
@@ -1414,17 +1424,46 @@ final class McpToolService {
                 "structuredContent", structured);
     }
 
-    private static Map<String, Object> initializeResult() {
+    private static Map<String, Object> initializeResult(JsonNode params) {
+        String requested = params.path("protocolVersion").asText(PROTOCOL_VERSION);
+        String version =
+                SUPPORTED_PROTOCOL_VERSIONS.contains(requested) ? requested : PROTOCOL_VERSION;
         Map<String, Object> serverInfo = new LinkedHashMap<>();
         serverInfo.put("name", "ptmcp-gateway");
         serverInfo.put("version", "0.1.0");
         Map<String, Object> capabilities = new LinkedHashMap<>();
         capabilities.put("tools", Map.of("listChanged", false));
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("protocolVersion", PROTOCOL_VERSION);
+        result.put("protocolVersion", version);
         result.put("capabilities", capabilities);
         result.put("serverInfo", serverInfo);
         return result;
+    }
+
+    /** Wraps a list result with the MCP 2026-07-28 cacheable-result hints. */
+    private static Map<String, Object> cacheableList(Map<String, Object> inner) {
+        Map<String, Object> result = new LinkedHashMap<>(inner);
+        result.put("resultType", "complete");
+        result.put("ttlMs", LIST_TTL_MS);
+        result.put("cacheScope", "private");
+        return result;
+    }
+
+    private static Map<String, Object> discoverResult() {
+        Map<String, Object> capabilities = new LinkedHashMap<>();
+        capabilities.put("tools", Map.of("listChanged", false));
+        Map<String, Object> serverInfo = new LinkedHashMap<>();
+        serverInfo.put("name", "ptmcp-gateway");
+        serverInfo.put("version", "0.1.0");
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("supportedVersions", List.copyOf(SUPPORTED_PROTOCOL_VERSIONS));
+        result.put("capabilities", capabilities);
+        result.put("io.modelcontextprotocol/serverInfo", serverInfo);
+        return result;
+    }
+
+    private static Map<String, Object> listResult() {
+        return Map.of("tools", toolDescriptors());
     }
 
     private static String envelope(JsonNode id, Object result) {

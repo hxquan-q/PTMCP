@@ -53,7 +53,8 @@ class McpResourceMetadataHttpTest {
                             HttpResponse.BodyHandlers.ofString());
             assertEquals(401, response.statusCode());
             assertEquals(
-                    "Bearer realm=\"PTMCP\", resource_metadata=\"https://gateway.example/.well-known/oauth-protected-resource\"",
+                    "Bearer realm=\"PTMCP\", resource_metadata=\"https://gateway.example/.well-known/oauth-protected-resource\","
+                            + " scope=\"mcp:catalog mcp:schema mcp:query\"",
                     response.headers().firstValue("WWW-Authenticate").orElse(""));
         }
     }

@@ -50,7 +50,7 @@ final class McpHttpPolicy {
         var versions = Collections.list(request.getHeaders("MCP-Protocol-Version"));
         if (!versions.isEmpty()) {
             return versions.size() == 1
-                    && McpToolService.PROTOCOL_VERSION.equals(versions.getFirst());
+                    && McpToolService.SUPPORTED_PROTOCOL_VERSIONS.contains(versions.getFirst());
         }
         // Stateless transport has no negotiated session to recover. The missing-header default
         // 2025-03-26 is unsupported; only the initial negotiation may omit the header.

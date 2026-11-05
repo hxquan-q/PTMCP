@@ -38,7 +38,14 @@ import java.util.Set;
         properties = "ptmcp.gateway.allowed-origins=https://client.invalid")
 class McpTransportHttpTest {
     private static final String VERSION = "2025-06-18";
+    private static final String MODERN_VERSION = "2026-07-28";
     private static final String LIST = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}";
+    private static final String MODERN_LIST =
+            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\","
+                    + "\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\"}}";
+    private static final String DISCOVER =
+            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"server/discover\","
+                    + "\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\"}}";
     private static final String INITIALIZE =
             "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\","
                     + "\"params\":{\"protocolVersion\":\"2025-06-18\"}}";
@@ -158,13 +165,38 @@ class McpTransportHttpTest {
                         version);
             }
         }
+        verifyNoInteractions(tools);
+    }
+
+    @Test
+    void modernVersionReachesDispatcherAndUnsupportedVersionStillRejected() throws Exception {
+        // Modern tools/list with correct 2026-07-28 header reaches the mocked dispatcher.
+        assertEquals(
+                200,
+                send(authorized(MODERN_LIST)
+                                .header("MCP-Protocol-Version", MODERN_VERSION)
+                                .header("Accept", "application/json, text/event-stream"))
+                        .statusCode());
+        // Modern server/discover reaches the dispatcher under the modern header.
+        assertEquals(
+                200,
+                send(authorized(DISCOVER)
+                                .header("MCP-Protocol-Version", MODERN_VERSION)
+                                .header("Accept", "application/json, text/event-stream"))
+                        .statusCode());
+        // Unknown version still rejected before the dispatcher.
+        assertEquals(
+                400,
+                send(authorized(MODERN_LIST)
+                                .header("MCP-Protocol-Version", "2025-11-25")
+                                .header("Accept", "application/json, text/event-stream"))
+                        .statusCode());
         assertEquals(
                 400,
                 send(authorized(LIST)
                                 .header("MCP-Protocol-Version", VERSION)
                                 .header("MCP-Protocol-Version", VERSION))
                         .statusCode());
-        verifyNoInteractions(tools);
     }
 
     @Test
