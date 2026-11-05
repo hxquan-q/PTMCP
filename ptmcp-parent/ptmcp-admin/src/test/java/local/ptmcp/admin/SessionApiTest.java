@@ -213,7 +213,6 @@ class SessionApiTest {
                             "schema_snapshot",
                             "acl_grant",
                             "platform_scope",
-                            "admin_delegation",
                             "sys_user_role",
                             "sys_user_profile",
                             "sys_user_login_name",

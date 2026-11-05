@@ -99,7 +99,6 @@ class DatasourceTargetIsolationTest {
                             "datasource_candidate",
                             "acl_grant",
                             "platform_scope",
-                            "admin_delegation",
                             "resource_column",
                             "snapshot_object",
                             "resource_object",
@@ -145,13 +144,6 @@ class DatasourceTargetIsolationTest {
                         connection,
                         "INSERT INTO platform_scope (platform_id,resource_type,resource_id,resource_generation,action,include_descendants,"
                                 + "create_time,update_time,created_by,updated_by) VALUES (11,?,?,1,'READ',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),1,1)",
-                        type,
-                        id);
-                execute(
-                        connection,
-                        "INSERT INTO admin_delegation (user_id,department_root_id,resource_type,resource_id,resource_generation,allowed_actions,"
-                                + "valid_from,status,create_time,update_time,created_by,updated_by) VALUES (7,1,?,?,1,JSON_ARRAY('META','READ'),"
-                                + "UTC_TIMESTAMP(6),'ACTIVE',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),1,1)",
                         type,
                         id);
             }
@@ -268,7 +260,6 @@ class DatasourceTargetIsolationTest {
                 text("SELECT status FROM schema_snapshot WHERE id=?", source.activeSnapshotId()));
         assertEquals(0, scalar("SELECT COUNT(*) FROM acl_grant WHERE status='ACTIVE'"));
         assertEquals(0, scalar("SELECT COUNT(*) FROM platform_scope"));
-        assertEquals(0, scalar("SELECT COUNT(*) FROM admin_delegation WHERE status='ACTIVE'"));
         assertEquals(2, scalar("SELECT scope_version FROM platform_registry WHERE id=11"));
         assertEquals(2, scalar("SELECT security_version FROM platform_registry WHERE id=11"));
         assertEquals(2, scalar("SELECT MIN(version) FROM acl_grant"));
@@ -296,7 +287,6 @@ class DatasourceTargetIsolationTest {
         assertEquals("ACTIVE", text("SELECT status FROM resource_object WHERE id=?", objectId));
         assertEquals(3, scalar("SELECT COUNT(*) FROM acl_grant WHERE status='ACTIVE'"));
         assertEquals(3, scalar("SELECT COUNT(*) FROM platform_scope"));
-        assertEquals(3, scalar("SELECT COUNT(*) FROM admin_delegation WHERE status='ACTIVE'"));
         assertEquals(epoch + 1, scalar("SELECT policy_epoch FROM sys_security_state"));
     }
 
@@ -360,7 +350,6 @@ class DatasourceTargetIsolationTest {
         assertEquals("ACTIVE", text("SELECT status FROM resource_object WHERE id=?", objectId));
         assertEquals(3, scalar("SELECT COUNT(*) FROM acl_grant WHERE status='ACTIVE'"));
         assertEquals(3, scalar("SELECT COUNT(*) FROM platform_scope"));
-        assertEquals(3, scalar("SELECT COUNT(*) FROM admin_delegation WHERE status='ACTIVE'"));
         assertEquals(2, scalar("SELECT policy_epoch FROM sys_security_state"));
         assertEquals(1, scalar("SELECT COUNT(*) FROM sys_security_event"));
         assertEquals(
@@ -445,7 +434,6 @@ class DatasourceTargetIsolationTest {
         assertEquals("RETIRED", text("SELECT status FROM resource_object WHERE id=?", objectId));
         assertEquals(0, scalar("SELECT COUNT(*) FROM acl_grant WHERE status='ACTIVE'"));
         assertEquals(0, scalar("SELECT COUNT(*) FROM platform_scope"));
-        assertEquals(0, scalar("SELECT COUNT(*) FROM admin_delegation WHERE status='ACTIVE'"));
         assertEquals(
                 1,
                 scalar(
@@ -663,11 +651,6 @@ class DatasourceTargetIsolationTest {
                     "INSERT INTO platform_scope (platform_id,resource_type,resource_id,resource_generation,action,include_descendants,"
                             + "create_time,update_time,created_by,updated_by) VALUES (11,'DATASOURCE',?,1,'READ',1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),1,1)",
                     other.id());
-            execute(
-                    connection,
-                    "INSERT INTO admin_delegation (user_id,department_root_id,resource_type,resource_id,resource_generation,allowed_actions,valid_from,"
-                            + "status,create_time,update_time,created_by,updated_by) VALUES (7,1,'DATASOURCE',?,1,JSON_ARRAY('META'),UTC_TIMESTAMP(6),'ACTIVE',UTC_TIMESTAMP(6),UTC_TIMESTAMP(6),1,1)",
-                    other.id());
         }
         store.update(
                 source.id(),
@@ -678,7 +661,6 @@ class DatasourceTargetIsolationTest {
                 1);
         assertEquals(1, scalar("SELECT COUNT(*) FROM acl_grant WHERE status='ACTIVE'"));
         assertEquals(1, scalar("SELECT COUNT(*) FROM platform_scope"));
-        assertEquals(1, scalar("SELECT COUNT(*) FROM admin_delegation WHERE status='ACTIVE'"));
         assertEquals(other.configVersion(), store.get(other.id()).configVersion());
         assertEquals(other.resourceVersion(), store.get(other.id()).resourceVersion());
         assertEquals(other.databaseName(), store.get(other.id()).databaseName());
@@ -724,7 +706,6 @@ class DatasourceTargetIsolationTest {
         assertEquals("ACTIVE", text("SELECT status FROM resource_object WHERE id=?", objectId));
         assertEquals(3, scalar("SELECT COUNT(*) FROM acl_grant WHERE status='ACTIVE'"));
         assertEquals(3, scalar("SELECT COUNT(*) FROM platform_scope"));
-        assertEquals(3, scalar("SELECT COUNT(*) FROM admin_delegation WHERE status='ACTIVE'"));
         assertEquals(2, scalar("SELECT policy_epoch FROM sys_security_state"));
         assertEquals(1, scalar("SELECT COUNT(*) FROM sys_security_event"));
         assertEquals(0, scalar("SELECT COUNT(*) FROM admin_operation_log"));

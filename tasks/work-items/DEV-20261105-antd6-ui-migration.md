@@ -101,3 +101,22 @@ Updated: 2026-11-05
 5. 访问审计筛选行/主体搜索（Segmented+Input）复验无缺陷，为控件换 antd 后的正常观感。
 
 验证：lint/tsc/prettier/build/build:oauth 全过、tests 199/199；playwright 复验数据源与元数据详情居中、状态胶囊、权限页。
+
+### 2026-11-05 真实测试库接入（S4 回归修复 + 环境排障）
+
+用户要求停用演示数据、接真实测试库（121.15.172.251:23306 / asd_cloud_base）。排查链与修复：
+
+1. **S4 回归（后端真 bug）**：V20 迁移已 `DROP TABLE admin_delegation`，但 `DatasourceTargetIsolation.retire()` 仍执行 `UPDATE admin_delegation ...` → 目标变更事务 SQLException→DEPENDENCY_UNAVAILABLE(503)→整体回滚，**数据源永远无法改 host/端口/库名**。修复：删除该语句；同步清理 `DatasourceTargetIsolationTest`（truncate 列表、两处委派 INSERT、5 处委派断言）与 `SessionApiTest` truncate 列表。该测试类自 S4 起即因删表而坏（seed 直接 DELETE 不存在的表）。
+2. **环境缺口**：`allowed-ports` 默认仅 `3306,5432`，dev.env 补 `PTMCP_ADMIN_DATASOURCE_ALLOWEDPORTS='23306'`。
+3. **TLS 主机名机制**：该库为 MySQL 自动生成证书（无 IP SAN），VERIFY_FULL 必须用证书 CN 作 host，由 `.local/dev/hosts`（`-Djdk.net.hosts.file`）钉到 IP。原 host 字段本就是 CN，**不是笔误**；中途改成 IP 反而触发 DRIVER_ERROR，已恢复。
+4. **Cursor 端口劫持**：Cursor 在 127.0.0.1/[::1] 上二次监听 25173/28080-82，loopback 请求被转发器截走，导致前端登录间歇 401/429/空响应（curl 直连正常、代理路径诡异失败）。绕过：走 LAN IP `http://192.168.1.18:25173`；2026-11-05 起本机验证均用该地址。
+5. **UI_PUBLIC**：dev.env 置 `PTMCP_UI_PUBLIC='true'` 与 25173 公网端口一致。
+
+结果（API + UI 双重确认）：
+
+- `PUT /admin/datasources/1` 200（configVersion 4→6）；
+- `POST .../test` → job SUCCEEDED，health=**HEALTHY**；界面「运行中 · 连接正常 · 凭据已配置」；
+- `POST .../sync` → job SUCCEEDED，processed **808** 对象，快照 #3 发布；
+- admin 服务以 dev.env 全量环境重启（`.local/dev/run/admin.out.log` 落盘）；前端 25173 以正常模式（非 frontend-preview）运行。
+
+遗留：该测试类 Testcontainers 运行结果见提交前记录；dev.env 与 hosts/信任库属本机私有环境（`.local/` 未入库）。

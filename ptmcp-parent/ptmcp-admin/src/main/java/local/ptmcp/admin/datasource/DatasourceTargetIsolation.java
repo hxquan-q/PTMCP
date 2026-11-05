@@ -48,16 +48,9 @@ final class DatasourceTargetIsolation {
             bindSource(statement, 2, datasourceId);
             statement.executeUpdate();
         }
-        try (PreparedStatement statement =
-                AdminSql.statement(
-                        connection,
-                        "UPDATE admin_delegation a SET a.status = 'REVOKED', a.version = a.version + 1, "
-                                + "a.update_time = UTC_TIMESTAMP(6), a.updated_by = ? WHERE a.status = 'ACTIVE' AND "
-                                + TARGET)) {
-            statement.setLong(1, actorId);
-            bindSource(statement, 2, datasourceId);
-            statement.executeUpdate();
-        }
+        /* S4（V20）已删除 admin_delegation 表：委派面不存在，目标变更不再有委派授权可撤销。
+        此处曾保留一条 UPDATE admin_delegation 语句，导致目标变更事务在表缺失时
+        SQLException→DEPENDENCY_UNAVAILABLE 整体回滚，数据源永远无法改目标地址。 */
         try (PreparedStatement statement =
                 AdminSql.statement(
                         connection,
