@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button } from 'antd';
+import { Button, Table } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { Alert, Badge, Dialog, EmptyState, PageHeader, StatusDot, Tabs } from '../../components/common';
 import { CloseIcon, CopyIcon, EditIcon, PlusIcon } from '../../components/Icons';
 import {
@@ -69,6 +70,149 @@ export function PlatformsPage() {
     return m;
   }, [clients]);
 
+  const platformColumns: ColumnsType<PlatformRow> = [
+    {
+      title: '平台',
+      dataIndex: 'name',
+      render: (_: unknown, p) => (
+        <span className="cell-stack">
+          <Button
+            type="link"
+            size="small"
+            style={{ padding: 0, height: 'auto' }}
+            onClick={() => (window.location.hash = `/admin/platforms/${encodeURIComponent(p.id)}`)}
+          >
+            {p.name}
+          </Button>
+          <span>
+            {p.code} · ID {p.id}
+          </span>
+        </span>
+      ),
+    },
+    {
+      title: '层级',
+      dataIndex: 'tier',
+      render: (tier: PlatformRow['tier']) => <Badge tone="neutral">{TIER_LABEL[tier] ?? `T${tier}`}</Badge>,
+    },
+    { title: '目录模式', dataIndex: 'catalogMode', render: (v: string) => <span style={{ color: 'var(--ptmcp-text-muted)' }}>{v}</span> },
+    {
+      title: '凭证',
+      key: 'proof',
+      render: (_: unknown, p) => (
+        <span style={{ color: 'var(--ptmcp-text-muted)' }}>{p.proofConfigured ? `${p.proofMode}（已配置）` : p.proofMode}</span>
+      ),
+    },
+    {
+      title: '客户端数',
+      key: 'clientCount',
+      render: (_: unknown, p) => <Badge tone="accent">{clientCount.get(p.id) ?? 0}</Badge>,
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      render: (_: unknown, p) => (
+        <StatusDot tone={p.status === 'ACTIVE' ? 'success' : 'neutral'}>{p.status === 'ACTIVE' ? '启用' : '停用'}</StatusDot>
+      ),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 150,
+      render: (_: unknown, p) => (
+        <span className="row-actions">
+          <Button
+            type="link"
+            size="small"
+            style={{ padding: 0 }}
+            onClick={() => setScopePlatform(p)}
+            disabled={!isAdmin}
+            aria-label={`Scope 授权范围：${p.name}`}
+          >
+            Scope
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            icon={<EditIcon />}
+            style={{ padding: 0 }}
+            disabled={loading}
+            onClick={() => setPlatformDialog({ mode: 'edit', row: p })}
+          >
+            编辑
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            danger
+            icon={<CloseIcon />}
+            style={{ padding: 0 }}
+            onClick={() => setDeleting({ kind: 'platform', row: p })}
+            aria-label={`删除平台 ${p.name}`}
+          >
+            删除
+          </Button>
+        </span>
+      ),
+    },
+  ];
+
+  const clientColumns: ColumnsType<ClientRow> = [
+    {
+      title: '客户端',
+      dataIndex: 'name',
+      render: (_: unknown, c) => (
+        <span>
+          <strong>{c.name}</strong>
+          <span style={{ marginLeft: 8, color: 'var(--ptmcp-text-faint)', fontSize: 12 }}>ID {c.id}</span>
+        </span>
+      ),
+    },
+    {
+      title: 'Client ID',
+      dataIndex: 'clientId',
+      render: (v: string) => <code style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>{v}</code>,
+    },
+    {
+      title: '所属平台',
+      dataIndex: 'platformId',
+      render: (_: unknown, c) => (
+        <span style={{ color: 'var(--ptmcp-text-muted)' }}>{platforms.find((p) => p.id === c.platformId)?.name ?? c.platformId}</span>
+      ),
+    },
+    { title: '类型', dataIndex: 'type', render: (v: string) => <Badge tone="neutral">{v}</Badge> },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      render: (_: unknown, c) => (
+        <StatusDot tone={c.status === 'ACTIVE' ? 'success' : 'neutral'}>{c.status === 'ACTIVE' ? '启用' : '停用'}</StatusDot>
+      ),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 150,
+      render: (_: unknown, c) => (
+        <span className="row-actions">
+          <Button type="link" size="small" icon={<EditIcon />} style={{ padding: 0 }} onClick={() => setClientDialog({ mode: 'edit', row: c })}>
+            编辑
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            danger
+            icon={<CloseIcon />}
+            style={{ padding: 0 }}
+            onClick={() => setDeleting({ kind: 'client', row: c })}
+            aria-label={`删除客户端 ${c.name}`}
+          >
+            删除
+          </Button>
+        </span>
+      ),
+    },
+  ];
+
   return (
     <>
       <PageHeader
@@ -99,118 +243,25 @@ export function PlatformsPage() {
         </div>
         <div className="table-scroll" role="region" aria-label="平台列表" tabIndex={0}>
           {tab === 'platforms' ? (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>平台</th>
-                  <th>层级</th>
-                  <th>目录模式</th>
-                  <th>凭证</th>
-                  <th>客户端数</th>
-                  <th>状态</th>
-                  <th style={{ width: 150 }}>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {platforms.map((p) => (
-                  <tr key={p.id}>
-                    <td>
-                      <span className="cell-stack">
-                        <button className="link" onClick={() => (window.location.hash = `/admin/platforms/${encodeURIComponent(p.id)}`)}>
-                          {p.name}
-                        </button>
-                        <span>
-                          {p.code} · ID {p.id}
-                        </span>
-                      </span>
-                    </td>
-                    <td>
-                      <Badge tone="neutral">{TIER_LABEL[p.tier] ?? `T${p.tier}`}</Badge>
-                    </td>
-                    <td style={{ color: 'var(--ptmcp-text-muted)' }}>{p.catalogMode}</td>
-                    <td style={{ color: 'var(--ptmcp-text-muted)' }}>{p.proofConfigured ? `${p.proofMode}（已配置）` : p.proofMode}</td>
-                    <td>
-                      <Badge tone="accent">{clientCount.get(p.id) ?? 0}</Badge>
-                    </td>
-                    <td>
-                      <StatusDot tone={p.status === 'ACTIVE' ? 'success' : 'neutral'}>{p.status === 'ACTIVE' ? '启用' : '停用'}</StatusDot>
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <button
-                        className="link"
-                        onClick={() => isAdmin && setScopePlatform(p)}
-                        disabled={!isAdmin}
-                        aria-label={`Scope 授权范围：${p.name}`}
-                      >
-                        Scope
-                      </button>
-                      <button
-                        className="link"
-                        style={{ marginLeft: 10 }}
-                        disabled={loading}
-                        onClick={() => setPlatformDialog({ mode: 'edit', row: p })}
-                      >
-                        <EditIcon /> 编辑
-                      </button>
-                      <button
-                        className="link"
-                        style={{ marginLeft: 10, color: 'var(--ptmcp-red)' }}
-                        onClick={() => setDeleting({ kind: 'platform', row: p })}
-                        aria-label={`删除平台 ${p.name}`}
-                      >
-                        <CloseIcon /> 删除
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <Table<PlatformRow>
+              rowKey="id"
+              size="middle"
+              loading={loading}
+              dataSource={platforms}
+              columns={platformColumns}
+              pagination={false}
+              locale={{ emptyText: <span /> }}
+            />
           ) : (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>客户端</th>
-                  <th>Client ID</th>
-                  <th>所属平台</th>
-                  <th>类型</th>
-                  <th>状态</th>
-                  <th style={{ width: 150 }}>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {clients.map((c) => (
-                  <tr key={c.id}>
-                    <td>
-                      <strong>{c.name}</strong>
-                      <span style={{ marginLeft: 8, color: 'var(--ptmcp-text-faint)', fontSize: 12 }}>ID {c.id}</span>
-                    </td>
-                    <td>
-                      <code style={{ fontSize: 12, color: 'var(--ptmcp-text-muted)' }}>{c.clientId}</code>
-                    </td>
-                    <td style={{ color: 'var(--ptmcp-text-muted)' }}>{platforms.find((p) => p.id === c.platformId)?.name ?? c.platformId}</td>
-                    <td>
-                      <Badge tone="neutral">{c.type}</Badge>
-                    </td>
-                    <td>
-                      <StatusDot tone={c.status === 'ACTIVE' ? 'success' : 'neutral'}>{c.status === 'ACTIVE' ? '启用' : '停用'}</StatusDot>
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <button className="link" onClick={() => setClientDialog({ mode: 'edit', row: c })}>
-                        <EditIcon /> 编辑
-                      </button>
-                      <button
-                        className="link"
-                        style={{ marginLeft: 10, color: 'var(--ptmcp-red)' }}
-                        onClick={() => setDeleting({ kind: 'client', row: c })}
-                        aria-label={`删除客户端 ${c.name}`}
-                      >
-                        <CloseIcon /> 删除
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <Table<ClientRow>
+              rowKey="id"
+              size="middle"
+              loading={loading}
+              dataSource={clients}
+              columns={clientColumns}
+              pagination={false}
+              locale={{ emptyText: <span /> }}
+            />
           )}
           {!loading && tab === 'platforms' && platforms.length === 0 ? (
             <EmptyState title="暂无平台" description="点击右上角「新建平台」创建。" />

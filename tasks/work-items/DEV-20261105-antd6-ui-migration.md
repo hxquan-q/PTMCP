@@ -177,4 +177,14 @@ Updated: 2026-11-05
 - 空态：与授权/历史页一致，表体 `locale.emptyText` 置空、sibling `EmptyState` 承担文案；加载中只显示 antd spinner。
 - 检查：eslint / prettier / tsc / tests 201/201 / `vite build` / `vite build --config vite.oauth.config.ts` 全过。
 - 浏览器（真实后端，LAN `http://192.168.1.18:25173`）：令牌页表头 + 「暂无个人令牌」空态居中 + 页脚「已加载 0 个 · 没有更多了」；字典页未选平台/数据源时表头 + 「请选择平台与数据源」空态；接入页 8 列表头 + 空态 + 动作按钮 + 页脚「共 0 条」。控制台 14 条错误均为 dev server 静态资源 HMR 超时（`ERR_CONNECTION_RESET/TIMED_OUT`），无产品侧错误。
+
+### 2026-11-05 管理端平台与客户端表格迁移
+
+- PlatformsPage 两张原生 `<table>`（平台 7 列 / 客户端 6 列）→ antd Table：列顺序与「操作」列宽 150 不变，`rowKey="id"`、`size="middle"`、`pagination={false}`；数据仍由 `listPlatforms({pageSize:100})` + 逐平台 `listClients` 一次载入，无游标、无 total，不新增分页。
+- 行内操作 `.link` → `Button type="link" size="small"`，收敛到 `.row-actions` 的 10px gap：平台行 Scope（非管理员禁用）/ 编辑（加载中禁用）/ 删除（danger）；客户端行 编辑 / 删除（danger）。保留 `aria-label`（Scope 授权范围、删除平台/客户端）与详情路由。
+- 空态：表体 `locale.emptyText` 置空、sibling `EmptyState` 承担（「暂无平台」/「暂无客户端」）；表体新增 `loading={loading}`，加载中显示 antd spinner（原实现加载中只剩空表头）。
+- 检查：eslint / prettier / tsc / tests 201/201 / `vite build` / `vite build --config vite.oauth.config.ts` 全过。
+- 浏览器（真实后端，LAN `http://192.168.1.18:25173`）：平台页签表头 7 列 + 「暂无平台」空态；切到客户端页签表头 6 列（客户端/Client ID/所属平台/类型/状态/操作）+ 「暂无客户端」空态；控制台错误仍为 dev server HMR 超时噪声，无产品侧错误。
+- 未验证：有数据行的单元格渲染与 Scope/编辑/删除交互（dev 库当前 0 平台、0 客户端）。
+
 - 未验证：三表有数据行渲染。dev 库当前 0 条令牌、0 条历史；接入页正常模式无服务端列表（设计如此，样例仅预览模式）；`/me/access-context?level=PLATFORM` 对当前用户返回 `items: []`（无可见数据源授权），字典页无法选择平台/数据源。令牌撤销交互同样未实测。
