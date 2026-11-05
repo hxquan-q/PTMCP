@@ -214,3 +214,12 @@ Updated: 2026-11-05
 - 尝试用「+ 新增规则」造一条临时规则验证有数据行与撤销按钮，被服务端 403 拒绝（`/admin/api/v1/admin/acl/grants`），提示为不能给当前登录账号授予其尚未拥有的权限——自授权防提权守卫按预期生效，非迁移缺陷；未对 dev 数据做任何写入。
 - 未验证：规则表有数据行渲染与「撤销」交互；预览决策表渲染（dev 平台下拉为空，按钮保持 disabled）；两次提交的 403 属预期守卫，未做绕过。
 - 环境备注：期间控制台错误均为 `ERR_CONNECTION_RESET` / `ERR_CONNECTION_TIMED_OUT`（已知 LAN/TUN 抖动），页面失败标记不自动重试，重载后恢复，无产品侧错误。
+
+### 2026-11-05 管理端组织成员表、详情页表格迁移与行内链接收敛
+
+- OrgPage 成员表（账号 / 姓名 / 角色 / 状态 / 操作，操作列宽 200）→ antd Table：`rowKey="id"`、`size="middle"`、`pagination={false}`；整行拖拽改由 `onRow` 承载（`draggable`、`onDragStart` 写 `USER_MIME`、`onDragEnd`、`is-dragging` class），`canMoveUser` 门控与落点高亮逻辑不变；操作列补 `align: 'right'` 对应原 `.org-table td:last-child` 右对齐。`.org-table` 挂在 antd Table wrapper 上，`tbody tr` / `td:last-child` 后代选择器仍生效（已核对 `src/styles/index.css`）；无 CSS 定义的 `.org-actions-col` 随之移除。
+- 详情页表格迁移：AuditDetailPage 敏感访问轨迹表、DictionaryEditor 冲突表与字典列编辑表（编辑表 `scroll={{ y: 320 }}`）、OrgDetailPages 平台详情关联客户端表、DictionaryDetailPage 个人字典列结构表（保留 `EmptyState` 空态）均换 antd Table，`rowKey`/`size="middle"`/`pagination={false}` 一致；ScopeDialog 授权范围规则表（可编辑，`rowKey=index` 保证编辑 resourceId 时输入焦点不丢，`scroll={{ y: 280 }}`）与变更对比表（`showHeader={false}`、`scroll={{ y: 160 }}`）。
+- 行内链接收敛：OrgPage 三处、Wizard 三处、ScopeDialog 一处 `.link` → `Button type="link" size="small" style={{ padding: 0 }}`，保留既有 `aria-label`；全仓已无 `className="link"` 引用，`.link` / `.link--danger` 仅剩 CSS 死规则（清理留待专门切片）。
+- 检查：prettier / eslint（max-warnings 0）/ tsc --noEmit / tests 201/201 / `vite build` / `vite build --config vite.oauth.config.ts` 全过；主构建仍有 index 1,131.77 kB > 500 kB 警告（既有分包项）。OrgPage 889 行（测试口径 890）仍在 900 行预算内，未改阈值。
+- 提交：`fcd5200 refactor(admin-ui): 成员表与详情表迁移 antd Table，收敛行内链接`，已推送 origin dev；仅暂存上述 7 个文件，排除他窗 `src/services/data.ts`、`src/views/admin/dsForm.ts`、`tests/ds-create.test.ts`。
+- 未验证：上述迁移页面的浏览器人工走查（成员表拖拽、ScopeDialog 可编辑行焦点、字典编辑表滚动、详情页表格有数据渲染）；`.link` 死 CSS 清理与 `.btn`/`.input` 引用复核；AppShell 外壳迁移；chunk 分包；Impeccable finish-reviewer/documenter；真实 OAuth 端到端。
