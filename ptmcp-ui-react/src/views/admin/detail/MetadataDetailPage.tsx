@@ -33,7 +33,8 @@ export function MetadataDetailPage({ id }: { id: string }) {
   const dict = obj?.dictionary;
 
   return (
-    <>
+    /* 详情页阅读列：860px 在宽屏居中，标题/返回/卡片同列对齐。 */
+    <div style={{ maxWidth: 860, marginInline: 'auto' }}>
       <BackBar to="/admin/metadata" label="返回元数据与字典" />
       <PageHeader
         title={obj ? (dict?.title ?? obj.objectName) : '元数据详情'}
@@ -136,7 +137,7 @@ export function MetadataDetailPage({ id }: { id: string }) {
           </div>
         </>
       ) : null}
-    </>
+    </div>
   );
 }
 

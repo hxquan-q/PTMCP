@@ -275,7 +275,8 @@ export function DatasourceDetailPage({ id }: { id: string }) {
   const formDisabled = saving || actionLoading || conflictRequired;
 
   return (
-    <>
+    /* 详情页阅读列：860px 在宽屏居中，标题/返回/卡片同列对齐，不再顶左留大片空白。 */
+    <div style={{ maxWidth: 860, marginInline: 'auto' }}>
       <BackBar to="/admin/datasources" label="返回数据源" />
       <PageHeader
         title={datasource ? datasource.name : '数据源详情'}
@@ -522,7 +523,7 @@ export function DatasourceDetailPage({ id }: { id: string }) {
           <p style={{ margin: 0, fontSize: 13, color: 'var(--ptmcp-text)' }}>{confirm.text}</p>
         </Dialog>
       ) : null}
-    </>
+    </div>
   );
 }
 

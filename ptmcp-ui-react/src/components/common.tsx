@@ -128,7 +128,19 @@ export function CellIcon({ icon: Icon, engine, large }: { icon: IconComponent; e
 type Tone = 'success' | 'warning' | 'danger' | 'neutral' | 'accent';
 
 /* antd Tag 的预设色文字对比度不达 AA，沿用调色板里为 AA 校准过的组合。
-   alignSelf 防止在 .cell-stack 等 flex column 容器里被拉伸成横条。 */
+   alignSelf 防止在 .cell-stack 等 flex column 容器里被拉伸成横条；
+   胶囊几何沿用旧 .pill（圆角、内边距、加粗小字号）——浅色底 (#fffaeb/#f2f4f7)
+   只有配上胶囊形状才在白卡上可辨识。 */
+const TAG_PILL: CSSProperties = {
+  marginInlineEnd: 0,
+  alignSelf: 'flex-start',
+  borderRadius: 999,
+  paddingInline: 10,
+  fontWeight: 600,
+  fontSize: 12.5,
+  lineHeight: '22px',
+};
+
 const TAG_TONE: Record<Tone, { color: string; background: string }> = {
   success: { color: 'var(--ptmcp-green)', background: 'var(--ptmcp-bg-success)' },
   warning: { color: 'var(--ptmcp-orange)', background: 'var(--ptmcp-bg-warning)' },
@@ -139,16 +151,12 @@ const TAG_TONE: Record<Tone, { color: string; background: string }> = {
 
 export function StatusDot({ tone, children }: { tone: Tone; children: ReactNode }) {
   const t = TAG_TONE[tone];
-  return (
-    <Tag style={{ marginInlineEnd: 0, alignSelf: 'flex-start', color: t.color, background: t.background, borderColor: t.background }}>{children}</Tag>
-  );
+  return <Tag style={{ ...TAG_PILL, color: t.color, background: t.background, borderColor: t.background }}>{children}</Tag>;
 }
 
 export function Badge({ tone, children }: { tone: Tone; children: ReactNode }) {
   const t = TAG_TONE[tone];
-  return (
-    <Tag style={{ marginInlineEnd: 0, alignSelf: 'flex-start', color: t.color, background: t.background, borderColor: t.background }}>{children}</Tag>
-  );
+  return <Tag style={{ ...TAG_PILL, color: t.color, background: t.background, borderColor: t.background }}>{children}</Tag>;
 }
 
 export function PageHeader({ title, description, actions }: { title: string; description?: string; actions?: ReactNode }) {

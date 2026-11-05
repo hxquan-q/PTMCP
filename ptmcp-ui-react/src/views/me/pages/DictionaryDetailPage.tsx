@@ -27,7 +27,8 @@ export function DictionaryDetailPage({ objectId }: { objectId: string }) {
   const dict = obj?.dictionary;
 
   return (
-    <>
+    /* 详情页阅读列：860px 在宽屏居中，标题/返回/卡片同列对齐。 */
+    <div style={{ maxWidth: 860, marginInline: 'auto' }}>
       <BackBar to="/me/dictionary" label="返回我的数据字典" />
       <PageHeader
         title={obj ? (dict?.title ?? obj.objectName) : '字典详情'}
@@ -95,6 +96,6 @@ export function DictionaryDetailPage({ objectId }: { objectId: string }) {
           </div>
         </>
       ) : null}
-    </>
+    </div>
   );
 }

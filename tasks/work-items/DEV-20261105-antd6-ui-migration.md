@@ -89,3 +89,15 @@ Updated: 2026-11-05
 - 版本结论：ProComponents latest 2.8.10 不支持 antd 6，必须用 beta 3.1.15-9；这是本工作项的关键前提。
 - 既有历史 note（2026-10-29 react-app-bootstrap「不引入组件库」）被本请求显式覆盖。
 - 设计方向：用户固定 Ant Design，不再提问技术/风格；Impeccable 方向合同待随 S1 记录。
+
+### 2026-11-05 用户反馈修复（S4 后补丁）
+
+用户截图反馈四处异常，逐一定位：
+
+1. **详情页右侧大片空白**（数据源/元数据详情）：卡片自带 `maxWidth: 860` 且左对齐为迁移前既有样式（HEAD~1 已存在），但宽屏上观感破损。修复：DatasourceDetailPage / MetadataDetailPage / AuditDetailPage / HistoryDetailPage / DictionaryDetailPage 五个详情页内容列包 `maxWidth: 860 + marginInline: auto`，标题/返回/卡片/页头按钮同列对齐。
+2. **状态胶囊丢底色观感**（详情页「运行中/连接未知」）：底色变量都有定义（bg-warning #fffaeb 等极浅），但 antd Tag 默认 4px 圆角+窄内边距让浅色底不可辨识（旧 .pill 是 24px 高胶囊）。修复：StatusDot/Badge 恢复旧 pill 几何（borderRadius 999、paddingInline 10、fontWeight 600、fontSize 12.5、lineHeight 22px）。
+3. **Alert 文案居中**（权限矩阵空态）：Alert 作为 EmptyState action 传入，antd Empty 的 children 区 `text-align: center` 被 Alert 继承（旧 .empty-state 是 flex 居中、不设 text-align，无此问题）。修复：PermissionsPage 中 Alert 移出 action，独立成行并包 `textAlign: left` 容器。
+4. **操作日志空表**：真实环境无操作记录时 antd Table 空表头照常渲染，属正常空态（预览环境验证有数据路径正常）；空态文案走 sibling EmptyState。
+5. 访问审计筛选行/主体搜索（Segmented+Input）复验无缺陷，为控件换 antd 后的正常观感。
+
+验证：lint/tsc/prettier/build/build:oauth 全过、tests 199/199；playwright 复验数据源与元数据详情居中、状态胶囊、权限页。

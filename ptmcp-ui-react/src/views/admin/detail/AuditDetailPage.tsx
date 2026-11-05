@@ -52,7 +52,8 @@ export function AuditDetailPage({ id }: { id: string }) {
   const uncertain = row && (row.result === 'UNKNOWN' || row.result === 'START');
 
   return (
-    <>
+    /* 详情页阅读列：860px 在宽屏居中，标题/返回/卡片同列对齐。 */
+    <div style={{ maxWidth: 860, marginInline: 'auto' }}>
       <BackBar to="/admin/audit" label="返回审计记录" />
       <PageHeader title={row ? `请求 ${row.requestId}` : '审计详情'} description="单次 MCP 请求的判定证据与执行指标。" />
       {error ? (
@@ -183,7 +184,7 @@ export function AuditDetailPage({ id }: { id: string }) {
           ) : null}
         </div>
       ) : null}
-    </>
+    </div>
   );
 }
 

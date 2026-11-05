@@ -547,15 +547,15 @@ export function PermissionsPage() {
         >
           <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
             {!subjectId ? (
-              <EmptyState
-                title="尚未选择授权主体"
-                description="先在左侧选择主体，再读取直接规则。"
-                action={
+              /* antd Empty 的 children 区是 text-align:center，说明文字左对齐的 Alert 不能塞进 action，独立成行。 */
+              <div style={{ padding: '16px 0' }}>
+                <EmptyState title="尚未选择授权主体" description="先在左侧选择主体，再读取直接规则。" />
+                <div style={{ width: '100%', maxWidth: 640, margin: '0 auto', textAlign: 'left' }}>
                   <Alert kind="info">
                     规则列表展示直接配置；有效权限还受平台范围、继承、DENY 和有效期约束。READ ALLOW 隐含 META，META DENY 阻断 READ。
                   </Alert>
-                }
-              />
+                </div>
+              </div>
             ) : grantsLoading ? (
               <p style={{ padding: 20, fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>加载规则中…</p>
             ) : grantsError ? (

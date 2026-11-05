@@ -31,7 +31,8 @@ export function HistoryDetailPage({ requestId }: { requestId: string }) {
         : '如需排障或核对完整 SQL，请使用 requestId 联系管理员（个人视角仅展示脱敏语句）。';
 
   return (
-    <>
+    /* 详情页阅读列：860px 在宽屏居中，标题/返回/卡片同列对齐。 */
+    <div style={{ maxWidth: 860, marginInline: 'auto' }}>
       <BackBar to="/me/history" label="返回查询历史" />
       <PageHeader title={row?.requestId ?? '查询详情'} description={row ? `${fmt(row.startedAt)} · ${row.tool}` : '单次工具调用详情。'} />
       {error ? (
@@ -100,7 +101,7 @@ export function HistoryDetailPage({ requestId }: { requestId: string }) {
           </Alert>
         </>
       ) : null}
-    </>
+    </div>
   );
 }
 
