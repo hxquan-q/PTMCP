@@ -193,10 +193,19 @@ export interface Failure {
   requestId: string;
 }
 
+/* data 层把 ApiError 重新包装成 DataRequestError 以脱离 http 细节；按 name 识别避免 http→data 循环依赖，
+   message/requestId 仍是 ApiError 里已归一化的服务端说明。 */
+function wrappedFailure(error: unknown): Failure | null {
+  if (typeof error !== 'object' || error === null) return null;
+  const value = error as { name?: unknown; message?: unknown; requestId?: unknown };
+  if (value.name !== 'DataRequestError' || typeof value.message !== 'string' || !value.message) return null;
+  return { message: value.message, requestId: typeof value.requestId === 'string' ? value.requestId : '' };
+}
+
 /** 读取失败的可展示归一化：服务端错误保留原消息与 requestId，网络/取消只给页面级说明。 */
 export function readFailure(error: unknown, fallback: string): Failure {
   if (error instanceof ApiError) return { message: error.message, requestId: error.requestId ?? '' };
-  return { message: fallback, requestId: '' };
+  return wrappedFailure(error) ?? { message: fallback, requestId: '' };
 }
 
 export function idempotencyKey(): string {

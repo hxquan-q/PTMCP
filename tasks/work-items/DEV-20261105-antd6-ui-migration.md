@@ -142,3 +142,21 @@ Updated: 2026-11-05
 3. **前端缺陷修复（`src/services/http.ts`）**：后端 403 响应体不含 `message`，前端原先一律显示「没有执行该操作的权限。」。新增按 `code` 的中文映射（CSRF_INVALID / MANAGEMENT_SCOPE_DENIED / TABLE_NOT_AUTHORIZED / SELF_PRIVILEGE_ESCALATION），未知 code 保留通用文案；`tests/http-contract.test.ts` 新增对应单测。
    验证：前端单测 200/200 通过；eslint / prettier / tsc / `vite build` / `vite build --config vite.oauth.config.ts` 全过。真实页面（权限页）探针复验返回 `{"status":403,"code":"SELF_PRIVILEGE_ESCALATION","message":"不能给当前登录账号授予其尚未拥有的访问权限。"}`。
 4. **排障注意**：`GET /api/v1/session/csrf` 对已认证会话会轮换 CSRF token（`AdminSessionService.issueCsrf`），用 curl 直接探测会使页面内 token 失效并出现一次 `CSRF_INVALID`，刷新页面即可恢复；非缺陷。
+
+### 2026-11-05 真实接口全路由走查与续读失败缺陷修复
+
+以已登录会话在 `http://192.168.1.18:25173` 走查（真实后端 + ASD Cloud Base 808 对象）：
+
+- 管理端列表：数据源、元数据、权限矩阵、人员组织、角色、平台、访问审计、操作日志；个人门户 6 页（字典/接入/令牌/授权/历史/安全）。全部标题正确、无 4xx/5xx、无控制台错误（仅应用启动时 2 次未登录 `session/me` 401，属会话探测预期）。
+- 详情路由真实数据：数据源 #1（测试连接/同步元数据/保存更改齐全）、元数据 #809（对象名/表名/数据源已回填，验证前一契约修复）、角色 #1（Platform Admin）。权限矩阵 809 个 treeitem，点选折叠/展开为树控件行为；组织页成员行内编辑面板正常；审计 0 条时查看按钮按 requestId 输入禁用，属预期。
+- 元数据游标续读：`加载更多` 20 → 40 行，footer 显示真实「服务端仍有更多」，未伪造总数。首次续读请求出现一次 `net::ERR_CONNECTION_TIMED_OUT`（环境网络瞬断），页面进入「重试续读」态，点击后成功补齐 40 行，重试路径有效。
+- 全局搜索（Ctrl+K）：输入「数据源」返回导航命中「数据源导航」，浮层与键盘语义正常。
+
+走查中发现并修复一处真实缺陷：
+
+- **data 层错误被 `readFailure` 丢弃**：`dataRequest` 把 `ApiError` 包装为 `DataRequestError`（保留 message/requestId），但 `readFailure` 只识别 `ApiError`，导致所有经 data.ts 的失败（含 403 文案映射、网络错误）只显示页面兜底文案，且丢失 requestId。实测元数据续读失败显示为「续读失败：续读失败，可再次点击重试」。修复：`http.ts` 增加按 `name === 'DataRequestError'` 的结构识别（避免 http→data 循环依赖），保留服务端消息与 requestId；`MetadataPage` 兜底文案改为「可再次点击重试」消除重复前缀。
+- 测试：`tests/http-contract.test.ts` 新增 `readFailure keeps the server message and requestId of data-layer wrappers`，覆盖 DataRequestError（含/不含 requestId）、ApiError 与普通 Error。前端 201/201 通过；eslint / prettier / tsc / `vite build` / `vite build --config vite.oauth.config.ts` 全过。
+
+安全注意：本轮登录脚本曾一次性包含本机 dev 账号口令并被 Playwright 工具回显到会话记录（脚本已删除，仓库与本工作项均未写入口令值）。建议轮换本机 dev 管理员口令；该操作属安全关键，需用户授权后执行。
+
+未验证：权限写操作端到端（dev 库单用户触发 SelfEscalationGuard，由 `AdminApiTest` 覆盖）、OAuth 真实端到端、AppShell 与其余原生表格迁移。

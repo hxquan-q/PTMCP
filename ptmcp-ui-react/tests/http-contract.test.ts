@@ -9,7 +9,8 @@ const sourceImports = registerHooks({
     return nextResolve(extensionlessSource ? `${specifier}.ts` : specifier, context);
   },
 });
-const { ApiError, errorText, parseApiJson, queryString, request, setCsrfToken } = await import('../src/services/http.ts');
+const { ApiError, errorText, parseApiJson, queryString, readFailure, request, setCsrfToken } = await import('../src/services/http.ts');
+const { DataRequestError } = await import('../src/services/data.ts');
 sourceImports.deregister();
 
 function withFetch(impl: typeof fetch, fn: () => Promise<void>): Promise<void> {
@@ -193,4 +194,17 @@ test('403 without a server message falls back to the error code meaning', async 
       );
     },
   );
+});
+
+test('readFailure keeps the server message and requestId of data-layer wrappers', () => {
+  const wrapped = new DataRequestError('不能给当前登录账号授予其尚未拥有的访问权限。', 403, {
+    code: 'SELF_PRIVILEGE_ESCALATION',
+    requestId: 'req-9',
+  });
+  assert.deepEqual(readFailure(wrapped, '保存失败'), { message: '不能给当前登录账号授予其尚未拥有的访问权限。', requestId: 'req-9' });
+  const anonymous = new DataRequestError('无法连接服务，请检查后端服务是否启动。', 0, { code: 'NETWORK_ERROR' });
+  assert.deepEqual(readFailure(anonymous, '续读失败'), { message: '无法连接服务，请检查后端服务是否启动。', requestId: '' });
+  const api = new ApiError(503, 'TEMPORARY_FAILURE', '服务暂时不可用，请稍后重试。', 'req-1');
+  assert.deepEqual(readFailure(api, '保存失败'), { message: '服务暂时不可用，请稍后重试。', requestId: 'req-1' });
+  assert.deepEqual(readFailure(new Error('boom'), '续读失败'), { message: '续读失败', requestId: '' });
 });

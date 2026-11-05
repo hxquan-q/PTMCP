@@ -224,7 +224,7 @@ export function MetadataPage() {
                     setRows((prev) => [...prev, ...data.items]);
                     setNextCursor(data.nextCursor);
                   })
-                  .catch((error: unknown) => setMoreFailure(readFailure(error, '续读失败，可再次点击重试')))
+                  .catch((error: unknown) => setMoreFailure(readFailure(error, '可再次点击重试')))
                   .finally(() => setMoreLoading(false));
               }}
             >
