@@ -353,14 +353,12 @@ select:not([class*='ant-']) {
 .icon-btn:hover {
   color: var(--ptmcp-text-strong);
 }
-.input:focus-visible,
-.select:focus-visible {
+.input:focus-visible {
   outline: 2px solid var(--ptmcp-blue);
   outline-offset: 1px;
 }
 
-.input,
-.select {
+.input {
   height: 34px;
   padding: 0 10px;
   border: 1px solid var(--ptmcp-border-input);
@@ -371,22 +369,19 @@ select:not([class*='ant-']) {
     border-color 0.15s ease,
     box-shadow 0.15s ease;
 }
-.input:hover:not(:disabled),
-.select:hover:not(:disabled) {
+.input:hover:not(:disabled) {
   border-color: var(--ptmcp-text-faint);
 }
 /* 此处原本写着 outline:none，与上面的 .input:focus-visible 同权重却排在更后，把键盘焦点环整条抹掉了。
    柔和光晕对比度不足，不能单独充当 WCAG 2.4.7 的可见焦点，所以焦点环交回 :focus-visible 负责。 */
-.input:focus,
-.select:focus {
+.input:focus {
   border-color: var(--ptmcp-blue);
   box-shadow: 0 0 0 3px var(--ptmcp-blue-bg);
 }
 .input::placeholder {
   color: var(--ptmcp-text-faint);
 }
-.input:disabled,
-.select:disabled {
+.input:disabled {
   background: var(--ptmcp-chrome);
   color: var(--ptmcp-text-muted);
   cursor: not-allowed;

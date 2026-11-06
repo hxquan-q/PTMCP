@@ -77,6 +77,7 @@ export function TextInput({
   describedBy,
   inputRef,
   width,
+  min,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -91,6 +92,8 @@ export function TextInput({
   inputRef?: Ref<HTMLInputElement>;
   /* 筛选项需要固定宽度；表单里的输入框仍默认铺满所在单元格。 */
   width?: number | string;
+  /* datetime-local 的下限。不传则不加约束。 */
+  min?: string;
 }) {
   /* 可见名由外层 <label> 或 aria-label 提供，这里只补可编程标识（自动填充、按 id 关联的脚本）。 */
   const autoId = useId();
@@ -109,6 +112,7 @@ export function TextInput({
       maxLength={maxLength}
       autoComplete={autoComplete}
       placeholder={placeholder}
+      min={min}
       aria-label={label}
       aria-invalid={invalid || undefined}
       aria-describedby={describedBy}
@@ -276,15 +280,19 @@ type SelectBaseProps = {
   options: { value: string; label: string }[];
   width?: number | string;
   disabled?: boolean;
+  /* 选项很多时打开按标签过滤。默认按 value 过滤会搜到内部 id，这里固定按可见标签。 */
+  showSearch?: boolean;
 };
 type SelectNameProps = { label: string; ariaLabel?: string } | { label?: undefined; ariaLabel: string };
 
-export function Select({ value, onChange, options, width, label, ariaLabel, disabled }: SelectBaseProps & SelectNameProps) {
+export function Select({ value, onChange, options, width, label, ariaLabel, disabled, showSearch }: SelectBaseProps & SelectNameProps) {
   const control = (
     <AntdSelect
       value={value}
       disabled={disabled}
       options={options}
+      showSearch={showSearch}
+      optionFilterProp={showSearch ? 'label' : undefined}
       style={width !== undefined ? { width } : undefined}
       onChange={(v) => onChange(v)}
       {...(label ? {} : { 'aria-label': ariaLabel })}

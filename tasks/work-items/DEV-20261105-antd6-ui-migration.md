@@ -262,3 +262,13 @@ Updated: 2026-11-06
 - 检查（`ptmcp-ui-react`，直跑 `node_modules/.bin`，未走 pnpm 脚本）：eslint `src --max-warnings 0`、prettier `--check src tests`、tsc（build 与 oauth 各一次）、`node --experimental-strip-types --test tests/*.test.ts` 203/203、`vite build`、`vite build --config vite.oauth.config.ts` 全过。
 - 浏览器（LAN dev `http://192.168.1.18:25173/#/me`，Playwright，视口 1920×889，`pointer: coarse` 为 false）：会话 401，页面停在登录卡，壳层按钮未挂载，未输入密码。向 `document.body` 注入并随即移除一个 `button.icon-btn`，`getComputedStyle` 为 width/height/minWidth `36px`、padding `0px`、position `relative`；`::after` content 空串、44×44、absolute，top/left `18px`（50%），transform `translate(-22px, -22px)`；`--ptmcp-hit` 为 `44px`。
 - 未验证：登录后的菜单打开、Ctrl+K 搜索关闭、焦点与 Esc（会话过期，未点击「退出登录」，也未读取本地密码）；粗指针媒体查询只由静态测试覆盖，浏览器未模拟 `pointer: coarse`。人工视觉接受未做。评审类型：自审。
+
+### 2026-11-06 授权表单与只读字段改用 antd 控件
+
+- 范围：权限页「新增授权规则」里最后一处原生 `<select class="select">`（资源对象）以及旁边仍用 `.input` 的单行字段，改为已有的 antd `Select` / `TextInput`。数据源详情里只读的「编码」「引擎」同样改为禁用的 `TextInput`。多行文本、复选框、单选、OAuth 表单提交和命令面板输入未动；`.input` / `.input-wrap` 仍留给这些原生控件。
+- `Select` 增加可选 `showSearch`。打开时 `optionFilterProp="label"`，避免几百个元数据对象按内部 id 过滤；默认关闭，其它下拉行为不变。资源对象、权限动作、效果都放在既有 `Field` 里，只传 `ariaLabel`，不另套 `label`。空值选项「选择资源对象」保留。保存仍在 `!formResourceId || grantSubmitting` 时禁用。
+- `TextInput` 增加可选 `min` 并传给 antd Input。授权「有效期至」继续带 `validToMin`（当前时间加 60 秒的本地 `YYYY-MM-DDTHH:mm`）。预览「计算时点」与有效期去掉时钟图标包裹，与审计页日期字段一致；计算时点不传 `label`，避免 `aria-label` 盖住外层可见标签。
+- 全仓 TSX 已无 `className="select"` / `<select`。删除 `.select` 的焦点、尺寸、hover、disabled 规则。`select:not([class*='ant-'])` 重置保留。`.org-icon-btn` 未动。
+- 检查（`ptmcp-ui-react`，直跑 `node_modules/.bin`，未走 pnpm 脚本）：eslint `src --max-warnings 0`、prettier `--check src tests`、tsc --noEmit 在控件改动后通过；删 `.select` 后再跑 prettier（`src/styles/index.css`）与全量 `node --experimental-strip-types --test tests/*.test.ts` 203/203（7443ms，含 design-system 的 900 行页预算与下拉可访问名）。`vite build` 在删 CSS 后复跑，1.11s，`index-DUfEtzbW.js 39.51 kB`、`index-wRrzXNoV.css 61.18 kB`，无 >500 kB 警告。`vite build --config vite.oauth.config.ts` 在删 CSS 前已通过（oauth 入口不引用这段 `.select`）。
+- 浏览器（LAN dev `http://192.168.1.18:25173/#/admin/permissions`，Playwright）：`/backend/admin/api/v1/session/me` 两次 401，页面停在登录卡（「需要重新登录」）。授权对话框与数据源详情未挂载。未输入密码，未点击「保存规则」或「退出登录」。
+- 未验证：登录后资源下拉是否按可见标签过滤、`datetime-local` 的 `min` 是否生效、编码/引擎禁用态观感；授权写入仍受 SelfEscalationGuard（单用户环境下创建会 403），本切片未提交授权。真实 API / OAuth / 权限端到端未跑。人工视觉接受未做。评审类型：自审。

@@ -12,12 +12,12 @@ import {
   SearchInput,
   Select,
   Tabs,
+  TextInput,
   useDebounced,
 } from '../../components/common';
 import {
   BarChartIcon,
   ChevronRightIcon,
-  ClockIcon,
   DatabaseIcon,
   ExpandIcon,
   ListIcon,
@@ -642,16 +642,7 @@ export function PermissionsPage() {
               />
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--ptmcp-text)' }}>
                 计算时点（留空为当前）
-                <span className="input-wrap" style={{ width: 180 }}>
-                  <ClockIcon className="input-icon" />
-                  <input
-                    className="input"
-                    style={{ width: '100%' }}
-                    type="datetime-local"
-                    value={previewAt}
-                    onChange={(e) => setPreviewAt(e.target.value)}
-                  />
-                </span>
+                <TextInput type="datetime-local" value={previewAt} onChange={setPreviewAt} width={180} />
               </label>
               <Button
                 type="primary"
@@ -739,62 +730,50 @@ export function PermissionsPage() {
           <span style={{ fontSize: 13 }}>{subject?.name ?? '—'}</span>
         </Field>
         <Field label="资源对象">
-          <select className="select" style={{ width: '100%' }} value={formResourceId} onChange={(e) => setFormResourceId(e.target.value)}>
-            <option value="">选择资源对象</option>
-            {metadataObjects.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.objectName ?? o.tableName}({o.objectType})
-              </option>
-            ))}
-          </select>
+          <Select
+            ariaLabel="资源对象"
+            width="100%"
+            showSearch
+            value={formResourceId}
+            onChange={setFormResourceId}
+            options={[
+              { value: '', label: '选择资源对象' },
+              ...metadataObjects.map((o) => ({ value: o.id, label: `${o.objectName ?? o.tableName}(${o.objectType})` })),
+            ]}
+          />
         </Field>
         <Alert kind="info">对象级规则不含下级资源。READ ALLOW 隐含 META；META DENY 阻断 READ，且 DENY 始终优先于同资源的 ALLOW。</Alert>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Field label="权限动作">
-            <select
-              className="select"
-              style={{ width: '100%' }}
+            <Select
+              ariaLabel="权限动作"
+              width="100%"
               value={formAction}
-              onChange={(e) => setFormAction(e.target.value as 'META' | 'READ')}
-            >
-              <option value="META">META</option>
-              <option value="READ">READ</option>
-            </select>
+              onChange={(v) => setFormAction(v as 'META' | 'READ')}
+              options={[
+                { value: 'META', label: 'META' },
+                { value: 'READ', label: 'READ' },
+              ]}
+            />
           </Field>
           <Field label="效果">
-            <select
-              className="select"
-              style={{ width: '100%' }}
+            <Select
+              ariaLabel="效果"
+              width="100%"
               value={formEffect}
-              onChange={(e) => setFormEffect(e.target.value as 'ALLOW' | 'DENY')}
-            >
-              <option value="ALLOW">允许</option>
-              <option value="DENY">拒绝</option>
-            </select>
+              onChange={(v) => setFormEffect(v as 'ALLOW' | 'DENY')}
+              options={[
+                { value: 'ALLOW', label: '允许' },
+                { value: 'DENY', label: '拒绝' },
+              ]}
+            />
           </Field>
         </div>
         <Field label="有效期至（留空为永久）" hint="生效区间左闭右开，到期时间须晚于当前时间">
-          <span className="input-wrap" style={{ width: '100%' }}>
-            <ClockIcon className="input-icon" />
-            <input
-              className="input"
-              style={{ width: '100%' }}
-              type="datetime-local"
-              value={formValidTo}
-              min={validToMin}
-              onChange={(e) => setFormValidTo(e.target.value)}
-            />
-          </span>
+          <TextInput type="datetime-local" value={formValidTo} min={validToMin} onChange={setFormValidTo} />
         </Field>
         <Field label="授权理由" hint="会写入规则与审计，建议记录业务依据">
-          <input
-            className="input"
-            style={{ width: '100%' }}
-            value={formReason}
-            maxLength={500}
-            onChange={(e) => setFormReason(e.target.value)}
-            placeholder="可选，记录授权原因"
-          />
+          <TextInput value={formReason} maxLength={500} onChange={setFormReason} placeholder="可选，记录授权原因" />
         </Field>
         {grantFormError ? <Alert kind="danger">{grantFormError}</Alert> : null}
       </Dialog>

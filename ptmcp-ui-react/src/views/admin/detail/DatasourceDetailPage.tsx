@@ -451,13 +451,13 @@ export function DatasourceDetailPage({ id }: { id: string }) {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px 16px' }}>
               <Field label="编码">
-                <input className="input" style={{ width: '100%' }} value={form.code} disabled />
+                <TextInput value={form.code} onChange={() => undefined} disabled />
               </Field>
               <Field label="名称" hint={fieldErrors.name}>
                 <TextInput value={form.name} onChange={(v) => !formDisabled && update({ name: v })} />
               </Field>
               <Field label="引擎">
-                <input className="input" style={{ width: '100%' }} value={form.engine} disabled />
+                <TextInput value={form.engine} onChange={() => undefined} disabled />
               </Field>
               <Field label="状态" hint={fieldErrors.status}>
                 <Select ariaLabel="状态" value={form.status} onChange={(v) => !formDisabled && update({ status: v })} options={DATASOURCE_STATUSES} />
