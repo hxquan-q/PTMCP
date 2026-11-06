@@ -923,3 +923,23 @@ WSL 内 dockerd 与证书链正常，改用 WSL 内 TCP 透传 `127.0.0.1:12476 
 - T19-e 仍 blocked：缺外部输入，真实客户端 OAuth/PAT 联调未执行，不能由本地协议测试替代。
 - 部署证据（镜像/Compose/manifest/迁移包/恢复演练）未交付，见 [部署手册](../../docs/ops/deploy.md#3-发布包交付契约)。
 - 多副本共享配额与取消寻址未实现，T15-c S5 保持 pending；当前只按单副本声明并发与取消语义。
+
+## 2026-11-06 MCP 数据库访问端到端演示与两个新发现
+
+应用户要求实测“作为数据库 MCP 对外提供访问服务”的效果。未改产品代码；环境新增可回滚演示件（见末尾）。
+
+**实测链路（全部真实服务，非 preview）**：管理端 API 建 demo 平台（tier3/DISCOVER）并把数据源 1 绑入平台范围（DATASOURCE READ 含子级）；建用户 mcp_demo 并授予数据源级 READ（授给他人才通过 SelfEscalationGuard）；该用户签发三 scope PAT；对网关 `POST /mcp` 走 JSON-RPC（Streamable HTTP，需 `MCP-Protocol-Version: 2025-06-18` 头）：
+
+- `initialize`/`tools/list` 正常；工具为 list_datasources、list_databases_and_tables、get_table_schema、execute_readonly_sql。
+- `list_databases_and_tables(keyword=labelprint)` 返回 8 张表，全部 authorized:true（快照 v3）。
+- `get_table_schema` 返回列级元数据（含业务注释，如 F_id“主键ID（自增）”）。
+- `SELECT COUNT(*) FROM t_mes_labelprint_packing` 执行成功（rows [[0]]，1.77s，含列元数据与 truncation 信息）。
+- 反例全部按设计拒绝：`DELETE`→SQL_NOT_READONLY；`information_schema.tables`→TABLE_NOT_AUTHORIZED；`SELECT 1; SELECT 2`→SQL_NOT_READONLY。
+- 撤销时效：删除 ACL 授权后同一 PAT 立即 TABLE_NOT_AUTHORIZED；吊销 PAT 后同 token 立即 HTTP 401。无重启、无缓存残留。
+- 审计链路：每笔 tools/call 在 audit_log 留 START/terminal 行（result/verdict/error_code/sql_masked/duration 齐全，明文 SQL 只以密文留存）。
+
+**发现 1（环境配置）**：`.local/dev/dev.env` 中 `PTMCP_GATEWAY_CREDENTIALKEY` ≠ `PTMCP_ADMIN_CREDENTIALKEY`，网关解不开管理端密封的业务库凭据，所有执行类调用 ~230ms 快速失败 `DEPENDENCY_UNAVAILABLE`，且运行日志零输出、只能靠审计行定位。演示实例以环境变量覆盖为 admin 同款密钥后即通。dev.env 文件未改，待环境侧决策统一密钥来源。
+
+**发现 2（产品缺陷，guard）**：SQL guard 对反引号括起的表名解析失败——``SELECT ... FROM `t_mes_labelprint_packing` ``（普通表名）返回 RESOURCE_NOT_FOUND，去掉反引号即成功；与表名字符无关。后果：真实名为 `###` 前缀的表（本库数百张，`#` 是 MySQL 注释起始符，必须加引号才能引用）经 execute_readonly_sql 全部不可查（不加引号被注释截断，加引号 RESOURCE_NOT_FOUND）。catalog/schema 工具可见这些表，形成“可见不可查”的不一致。归属 SQL guard 表名去引号匹配缺失，待排期修复（不影响本次演示的正例）。
+
+**环境残留（可回滚）**：平台 demo(id=1)、用户 mcp_demo(id=2，两张 PAT 已吊销、授权已删)、演示网关实例 `127.0.0.1:28083`（PID 9852，`PTMCP_GATEWAY_ENABLED=true` + credentialKey 覆盖 + 独立 WAL 目录 `.local/dev/wal-demo`，日志 `.local/dev/gateway-demo.log`；常驻 28082 的网关未动，仍按 enabled=false fail-closed）。如需停掉：`taskkill /PID 9852 /F`。
