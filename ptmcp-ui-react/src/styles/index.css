@@ -402,16 +402,6 @@ input[type='checkbox'] {
   display: inline-flex;
   align-items: center;
 }
-.input-wrap .input {
-  padding-left: 30px;
-}
-.input-wrap > .input-icon {
-  position: absolute;
-  left: 9px;
-  color: var(--ptmcp-text-faint);
-  font-size: 14px;
-  pointer-events: none;
-}
 
 /* ── 表格(Fiori 白表头 + hairline 行) ── */
 .table-card {

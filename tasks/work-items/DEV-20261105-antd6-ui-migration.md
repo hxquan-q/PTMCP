@@ -276,3 +276,16 @@ Updated: 2026-11-06
   - 控制台：登录走查期间无新错误（仅登录前 CSRF 重试刷新产生的两条 session/me 401 旧记录）。
   - 截图：仓库根 `grant-dialog-antd-search.png`、`ds-detail-readonly-antd.png`（按 git 忽略的调试截图约定存放）。
 - 未验证：授权写入（SelfEscalationGuard 单用户环境创建会 403，本切片未提交授权）；真实 OAuth / 权限端到端；窄屏（≤620/390px）下对话框与只读字段观感；人工视觉接受。评审类型：自审。
+
+### 2026-11-06 补记：图标按钮切片登录后复测通过
+
+- 会话恢复后（admin 登录，LAN dev）复测此前记录的未验证项：顶栏「⋯」菜单可开、项为「退出登录」（未点击）；Esc 关闭且焦点归还 trigger（`aria-label="更多账户操作"`，关闭动画长于 400ms 等待导致此前误判未关）；Ctrl+K 打开全局搜索、焦点入输入框、Esc 关闭。全部通过。
+
+### 2026-11-06 最后两个原生 textarea 迁移 antd，删除死 CSS
+
+- 范围：审计解密弹窗「排查理由」（`detail/AuditDecryptDialog.tsx`）与客户端对话框「OAuth 回调地址」（`platforms/ClientDialog.tsx`）由原生 `<textarea class="input">` 改为 `Input.TextArea`（rows=3、宽度铺满、保留 placeholder/maxLength/disabled）。计数标签、10 字下限禁用、一行一地址解析逻辑不变。OAuth 登录页 `LoginApp.tsx` 的两个 `.input` 保留（真实表单 POST 独立构建）。
+- 清理：全仓 TSX 已无 `<textarea>` 与 `input-icon`。删除 `.input-wrap .input`（内嵌 `.input` 已不存在）与 `.input-wrap > .input-icon` 两条死规则；`.input-wrap` 基础规则与窄屏 `.org-table-toolbar .input-wrap` 保留（SearchInput 宽度包裹仍用）。`textarea:focus-visible` 键盘焦点环与现有 antd input 一致，未改。
+- 检查（直跑 `node_modules/.bin`）：eslint / prettier / tsc 通过；tests 203/203（11.8s）；`vite build` 2.03s、`vite build --config vite.oauth.config.ts` 617ms。
+- 浏览器（LAN dev，admin 登录态）：解密弹窗（审计详情 → 解密）textarea 为 `ant-input`、rows=3、maxLength=500、`resize: vertical`、高 76px 宽铺满，Field 标签命名「排查理由（0/500）」；输入 4 字计数联动为（4/500）、「确认解密」保持禁用；经关闭按钮/Esc 关闭，未提交解密。客户端对话框（平台与客户端 → 客户端页签 → 新建客户端）textarea 为 `ant-input`、rows=3、`resize: vertical`、placeholder 完整、Field 标签命名「OAuth 回调地址」+hint；取消关闭未保存。验证用临时平台（uicheck）已删除。期间 dev 代理对 127.0.0.1:28080 出现 502/连接重置抖动（已知 mihomo loopback 问题），页面首拉失败不重试会停在加载态，刷新后恢复，非本切片回归。
+- 未验证：多行溢出（>3 行滚动）、粘贴超长文本截断观感；窄屏两对话框布局；人工视觉接受。评审类型：自审。
+

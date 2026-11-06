@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button } from 'antd';
+import { Button, Input } from 'antd';
 import { Alert, Dialog, Field } from '../../../components/common';
 import { decryptAudit, type AuditDecryptResult } from '../../../services/access';
 import { showToast } from '../../../toast';
@@ -95,10 +95,10 @@ export function AuditDecryptDialog({
         解密属于敏感访问，需要填写排查理由（10～500 字符），系统记录访问人、理由与字段；明文仅短时可见，到期自动清除。
       </Alert>
       <Field label={`排查理由（${reason.length}/500）`} hint="至少 10 个字符">
-        <textarea
-          className="input"
-          style={{ width: '100%', minHeight: 72, resize: 'vertical', fontFamily: 'inherit' }}
+        <Input.TextArea
           value={reason}
+          rows={3}
+          style={{ width: '100%' }}
           maxLength={500}
           disabled={loading || !!result}
           onChange={(e) => setReason(e.target.value)}

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button } from 'antd';
+import { Button, Input } from 'antd';
 import { Alert, Dialog, Field, Select, TextInput } from '../../../components/common';
 import { createClient, updateClient, type ClientCreated, type ClientRow, type PlatformRow } from '../../../services/access';
 import { CLIENT_AUTH_METHODS, CLIENT_SCOPES, parseRedirectUris, toClientWrite, validateClientForm } from '../clientForm';
@@ -193,10 +193,10 @@ export function ClientDialog({
         </div>
       </Field>
       <Field label="OAuth 回调地址" hint="一行一个，最多 10 个；须为 https，或 http 回环地址（localhost/127.x）">
-        <textarea
-          className="input"
-          style={{ width: '100%', minHeight: 66, resize: 'vertical', fontFamily: 'inherit' }}
+        <Input.TextArea
           value={values.redirectUrisText}
+          rows={3}
+          style={{ width: '100%' }}
           onChange={(e) => setValues((s) => ({ ...s, redirectUrisText: e.target.value }))}
           placeholder={'https://client.example.com/callback\nhttp://127.0.0.1:3000/callback'}
         />
