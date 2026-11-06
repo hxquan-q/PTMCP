@@ -4,6 +4,7 @@ import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.common.resource.ResourceNamespace;
 import local.ptmcp.common.resource.ResourceRef;
+import local.ptmcp.guard.DialectIdentifiers;
 
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.ExpressionVisitorAdapter;
@@ -316,16 +317,21 @@ public final class ColumnBinder {
         private ResourceRef takePhysicalRef(Table table) {
             for (int index = 0; index < remainingRelations.size(); index++) {
                 ResourceRef candidate = remainingRelations.get(index);
-                if (!candidate.key().objectName().equals(table.getName())) {
+                if (!candidate
+                        .key()
+                        .objectName()
+                        .equalsIgnoreCase(DialectIdentifiers.unquoteAny(table.getName()))) {
                     continue;
                 }
                 ResourceNamespace namespace = candidate.key().namespace();
                 if (table.getDatabaseName() != null
-                        && !table.getDatabaseName().equals(namespace.catalog())) {
+                        && !DialectIdentifiers.unquoteAny(table.getDatabaseName())
+                                .equalsIgnoreCase(namespace.catalog())) {
                     continue;
                 }
                 if (table.getSchemaName() != null
-                        && !table.getSchemaName().equals(namespace.schema())) {
+                        && !DialectIdentifiers.unquoteAny(table.getSchemaName())
+                                .equalsIgnoreCase(namespace.schema())) {
                     continue;
                 }
                 remainingRelations.remove(index);
@@ -451,7 +457,7 @@ public final class ColumnBinder {
         }
 
         private RangeBinding resolveRange(Table table, Scope scope) {
-            String name = table.getName();
+            String name = DialectIdentifiers.unquoteAny(table.getName());
             if (name == null || name.isEmpty()) {
                 return null;
             }
@@ -479,29 +485,37 @@ public final class ColumnBinder {
         }
 
         private boolean matchesPath(RangeBinding range, Table table) {
-            if (range.resource() == null || !range.alias().equals(table.getName())) {
+            if (range.resource() == null
+                    || !range.alias()
+                            .equalsIgnoreCase(DialectIdentifiers.unquoteAny(table.getName()))) {
                 return false;
             }
             ResourceNamespace namespace = range.resource().key().namespace();
             if (table.getDatabaseName() != null
-                    && !table.getDatabaseName().equals(namespace.catalog())) {
+                    && !DialectIdentifiers.unquoteAny(table.getDatabaseName())
+                            .equalsIgnoreCase(namespace.catalog())) {
                 return false;
             }
             return table.getSchemaName() == null
-                    || table.getSchemaName().equals(namespace.schema());
+                    || DialectIdentifiers.unquoteAny(table.getSchemaName())
+                            .equalsIgnoreCase(namespace.schema());
         }
 
         private ResolvedColumn resolveColumn(Column column, Scope scope, boolean allowOutputAlias) {
             Table qualifier = column.getTable();
-            String tableName = qualifier == null ? null : qualifier.getName();
+            String tableName =
+                    qualifier == null ? null : DialectIdentifiers.unquoteAny(qualifier.getName());
             if (tableName == null || tableName.isEmpty()) {
-                return resolveUnqualified(column.getColumnName(), scope, allowOutputAlias);
+                return resolveUnqualified(
+                        DialectIdentifiers.unquoteAny(column.getColumnName()),
+                        scope,
+                        allowOutputAlias);
             }
             RangeBinding range = resolveRange(qualifier, scope);
             if (range == null) {
                 throw new DomainException(ErrorCode.INVALID_ARGUMENT);
             }
-            return bindToRange(range, column.getColumnName());
+            return bindToRange(range, DialectIdentifiers.unquoteAny(column.getColumnName()));
         }
 
         private ResolvedColumn resolveUnqualified(
@@ -580,7 +594,7 @@ public final class ColumnBinder {
             if (alias == null || alias.isEmpty()) {
                 throw new DomainException(ErrorCode.INVALID_ARGUMENT);
             }
-            return alias;
+            return DialectIdentifiers.unquoteAny(alias);
         }
 
         private static String outputName(SelectItem<?> item, Expression expression, int ordinal) {

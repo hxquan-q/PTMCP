@@ -119,6 +119,15 @@ class QualifiedRewriterTest {
     }
 
     @Test
+    void mysqlBacktickedRelationMatchesTheUnquotedBinderAlias() throws Exception {
+        // 解析器保留反引号；绑定侧别名已去引号，rewrite 侧回退表名必须同样去引号否则拒写。
+        RewrittenSql result =
+                support.rewrite("SELECT COUNT(*) AS c FROM `orders`", RewriteTestSupport.MYSQL);
+
+        assertEquals("SELECT COUNT(*) AS c FROM shop.orders AS __ptmcp_r1", result.text());
+    }
+
+    @Test
     void rewritesWindowOrderingReferences() throws Exception {
         RewrittenSql result =
                 support.rewrite(

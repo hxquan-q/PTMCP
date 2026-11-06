@@ -984,3 +984,27 @@ WSL 内 dockerd 与证书链正常，改用 WSL 内 TCP 透传 `127.0.0.1:12476 
 - 发现 4（CSP form-action）复核降级：直达 /login、302 链到 /login、带端口、绝对 action 五种复刻在真实 Chromium 中均**不再拦截**（表单正常提交并渲染错误态）；首次拦截出现在浏览器网络开始劣化的瞬间，判定为环境瞬时误报，暂不修改 CSP，留观察。
 
 **残留**：同步侧仍统一小写 `*_norm`（与合同字面不一致，但比较侧已按方言语义归一，运行行为正确）；`McpPgQueryFlowTest` 容器启动对资源敏感。演示件清理：28083 停、wal-demo 删除、平台 4/用户 4/授权/PAT 已清；用户 3（mcp_demo2）因锁定态删除 409，保留软状态（无授权、无平台、无 PAT）。
+
+## 2026-11-06 修复：MySQL 限定名与反引号标识符（发现 5/6）
+
+**根因**：
+
+- 发现 5：JSqlParser 把两段式 `db.table` 解析进 `schemaName`（`databaseName` 为空），而 `ResourceNamespace` 契约要求 MySQL schema 必须空串，绑定直接记未解析 → `RESOURCE_NOT_FOUND`。
+- 发现 6：解析器把反引号保留在 `getName()` 中，快照名字不带引号，精确比较必然不中；另在真机验证中发现同层第二个缺陷——`QualifiedRewriter.aliasName` 回退取表名时未去引号，而 `ColumnBinder` 侧别名已去引号，反引号表名在 rewrite 阶段即 `REWRITE_VALIDATION_FAILED`（单元测试先绿、真机才暴露，已同切片修复）。
+
+**修复**（比较与改写侧按方言语义去引号/归一，快照与物理拼写不动）：
+
+- 新增 `guard.DialectIdentifiers`：`unquote(engine, name)`（MySQL 反引号 / PG 双引号，单层、双写转义还原）、`unquoteAny(name)`（列引用无方言上下文时按任一外层引号处理）、`normalizeMysqlRelations(select)`（MySQL 两段式 `schemaName`→`databaseName`，自 `FinalSqlValidator` 私有副本迁出）。
+- `ScopeTableBinder.bind`：MySQL 绑定前统一归一关系；`bindTable` 对 catalog/schema/name 去引号。
+- `ColumnBinder`：限定/非限定列名、表限定符、别名比较全部去引号后忽略大小写；未知列任意拼写仍拒。
+- `QualifiedRewriter`：`aliasName` 回退表名去引号（真机暴露的 rewrite 侧缺陷）；路径匹配同样去引号忽略大小写。
+- `FinalSqlValidator`：复用 `DialectIdentifiers.normalizeMysqlRelations`，删除私有重复实现。
+- 测试：新增 `ScopeTableBinderTest` 2 例、`ColumnBinderTest` 2 例、`QualifiedRewriterTest` 1 例（反引号表名 rewrite 回归）。
+
+**验证**：
+
+- `ptmcp-guard` 224/224、Spotless/Checkstyle 通过；`ptmcp-gateway` 编译打包通过。
+- 首次 `ptmcp-gateway` 全量 137/141，4 个错误均为环境抖动（MySQL 容器通信失败、loopback ConnectException）；重跑中被系统内存回收中断，中断前相关类 `McpAuditResilienceTest` 已绿（40.5s）。**最终代码变更后未完成一次全量网关重跑**（未验证项）；网关运行时行为以真机端到端为准。
+- 真机（重建 jar 的 28083 实例 + 真实 ASD 库，PAT + 数据源级 READ）7/7：`SELECT F_id FROM asd_cloud_base.f_take_over` → success（原 RESOURCE_NOT_FOUND）；`SELECT COUNT(*) AS c FROM \`t_mes_labelprint_packing\`` → success（原 RESOURCE_NOT_FOUND，二次验证中发现 rewrite 别名缺陷并修复）；`COUNT(\`F_id\`)` → success（原 INVALID_ARGUMENT）；`SELECT F_id`、大写表名 `F_TAKE_OVER` → success；未知列 → INVALID_ARGUMENT；三段式 `a.b.c` → RESOURCE_NOT_FOUND（按设计拒绝）。requestId 见 demo 日志与 audit_log。
+
+**残留**：同步侧仍统一小写 `*_norm`（比较侧已按方言语义归一，运行行为正确）；验证后环境件已清：28083 停、wal-demo 与启动脚本删除、平台 qualtest(5)/用户 mcp_fix2(5，删除即吊销其 PAT)/授权撤销；常驻 28082 以新 jar 恢复 fail-closed。

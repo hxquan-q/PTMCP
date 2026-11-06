@@ -5,6 +5,7 @@ import local.ptmcp.common.resource.ResourceId;
 import local.ptmcp.common.resource.ResourceKey;
 import local.ptmcp.common.resource.ResourceNamespace;
 import local.ptmcp.common.resource.ResourceRef;
+import local.ptmcp.guard.DialectIdentifiers;
 
 import net.sf.jsqlparser.expression.ExpressionVisitor;
 import net.sf.jsqlparser.expression.ExpressionVisitorAdapter;
@@ -47,6 +48,10 @@ public final class ScopeTableBinder {
             Select select, ResourceNamespace defaultNamespace, RelationCatalog catalog) {
         if (select == null || defaultNamespace == null || catalog == null) {
             throw new NullPointerException("select, namespace and catalog are required");
+        }
+        // MySQL parses "database.table" into schemaName; the binder must see the catalog form.
+        if (defaultNamespace.engine() == DatabaseEngine.MYSQL) {
+            DialectIdentifiers.normalizeMysqlRelations(select);
         }
         Collector collector = new Collector(select, defaultNamespace, catalog);
         collector.bindTop();
@@ -165,10 +170,11 @@ public final class ScopeTableBinder {
         }
 
         private void bindTable(Table table, Map<String, Boolean> environment) {
-            String catalogName = table.getDatabaseName();
-            String schemaName = table.getSchemaName();
+            DatabaseEngine engine = defaultNamespace.engine();
+            String catalogName = DialectIdentifiers.unquote(engine, table.getDatabaseName());
+            String schemaName = DialectIdentifiers.unquote(engine, table.getSchemaName());
             boolean qualified = catalogName != null || schemaName != null;
-            String name = table.getName();
+            String name = DialectIdentifiers.unquote(engine, table.getName());
             if (!qualified && name != null && environment.containsKey(name)) {
                 // CTE reference: no physical relation is read here.
                 return;

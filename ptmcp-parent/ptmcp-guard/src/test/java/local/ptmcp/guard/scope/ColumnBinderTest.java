@@ -46,10 +46,14 @@ class ColumnBinderTest {
     }
 
     private ColumnBindingResult bind(String sql) throws Exception {
+        return bind(sql, NAMESPACE);
+    }
+
+    private ColumnBindingResult bind(String sql, ResourceNamespace namespace) throws Exception {
         Select select = (Select) CCJSqlParserUtil.parse(sql);
         ScopeTableBinder.BindingResult relations =
                 ScopeTableBinder.bind(
-                        select, NAMESPACE, key -> Optional.ofNullable(catalog.get(key)));
+                        select, namespace, key -> Optional.ofNullable(catalog.get(key)));
         return ColumnBinder.bind(
                 select,
                 relations,
@@ -67,6 +71,10 @@ class ColumnBinderTest {
                                     List.of(
                                             new ColumnDef(0, "id", "BIGINT", false),
                                             new ColumnDef(1, "amount", "DECIMAL", true));
+                            case "f_take_over" ->
+                                    List.of(
+                                            new ColumnDef(0, "f_id", "INT", false),
+                                            new ColumnDef(1, "fpicture", "VARCHAR", true));
                             default -> List.of();
                         });
     }
@@ -151,6 +159,41 @@ class ColumnBinderTest {
                 DomainException.class,
                 () -> bind("SELECT NO_SUCH_COLUMN FROM orders"),
                 "unknown columns in any spelling stay rejected");
+    }
+
+    @Test
+    void mysqlQuotedIdentifiersResolveToSnapshotNames() throws Exception {
+        // 解析器把反引号留在标识符里；快照名字不带引号，绑定必须去引号后按方言语义匹配。
+        ResourceNamespace mysql =
+                new ResourceNamespace(
+                        new ResourceId(2), DatabaseEngine.MYSQL, "asd_cloud_base", "");
+        ResourceKey key = new ResourceKey(mysql, "f_take_over");
+        ResourceRef ref = new ResourceRef(key, new ResourceId(21), 1, 1, 7);
+        catalog.put(key, ref);
+
+        ColumnBindingResult result =
+                bind("SELECT `f_id` FROM `asd_cloud_base`.`f_take_over`", mysql);
+
+        ColumnBinding binding = result.primaryScope().outputs().get(0).sources().get(0);
+        assertEquals(ref, binding.resource());
+        assertEquals(0, binding.ordinal());
+    }
+
+    @Test
+    void mysqlQualifiedAliasColumnBinds() throws Exception {
+        ResourceNamespace mysql =
+                new ResourceNamespace(
+                        new ResourceId(2), DatabaseEngine.MYSQL, "asd_cloud_base", "");
+        ResourceKey key = new ResourceKey(mysql, "f_take_over");
+        ResourceRef ref = new ResourceRef(key, new ResourceId(21), 1, 1, 7);
+        catalog.put(key, ref);
+
+        ColumnBindingResult result =
+                bind("SELECT t.`FPicture` FROM asd_cloud_base.f_take_over t", mysql);
+
+        ColumnBinding binding = result.primaryScope().outputs().get(0).sources().get(0);
+        assertEquals(ref, binding.resource());
+        assertEquals(1, binding.ordinal());
     }
 
     @Test

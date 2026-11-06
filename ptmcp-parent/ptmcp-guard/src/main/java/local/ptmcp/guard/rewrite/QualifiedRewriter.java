@@ -4,6 +4,7 @@ import local.ptmcp.common.error.DomainException;
 import local.ptmcp.common.error.ErrorCode;
 import local.ptmcp.common.resource.ResourceNamespace;
 import local.ptmcp.common.resource.ResourceRef;
+import local.ptmcp.guard.DialectIdentifiers;
 import local.ptmcp.guard.scope.ColumnBinder;
 import local.ptmcp.guard.scope.ColumnBindingResult;
 import local.ptmcp.guard.scope.RangeBinding;
@@ -514,7 +515,7 @@ public final class QualifiedRewriter {
 
     private static String existingAlias(Table table) {
         String alias = table.getAlias() == null ? null : table.getAlias().getName();
-        return alias == null || alias.isEmpty() ? null : alias;
+        return alias == null || alias.isEmpty() ? null : DialectIdentifiers.unquoteAny(alias);
     }
 
     private static String aliasName(Table table) {
@@ -526,18 +527,23 @@ public final class QualifiedRewriter {
         if (name == null || name.isEmpty()) {
             throw failed();
         }
-        return name;
+        return DialectIdentifiers.unquoteAny(name);
     }
 
     private static boolean matchesPath(RangeBinding range, Table table) {
-        if (range.resource() == null || !range.alias().equals(table.getName())) {
+        if (range.resource() == null
+                || !range.alias()
+                        .equalsIgnoreCase(DialectIdentifiers.unquoteAny(table.getName()))) {
             return false;
         }
         ResourceNamespace namespace = range.resource().key().namespace();
         if (table.getDatabaseName() != null
-                && !table.getDatabaseName().equals(namespace.catalog())) {
+                && !DialectIdentifiers.unquoteAny(table.getDatabaseName())
+                        .equalsIgnoreCase(namespace.catalog())) {
             return false;
         }
-        return table.getSchemaName() == null || table.getSchemaName().equals(namespace.schema());
+        return table.getSchemaName() == null
+                || DialectIdentifiers.unquoteAny(table.getSchemaName())
+                        .equalsIgnoreCase(namespace.schema());
     }
 }

@@ -109,4 +109,47 @@ class ScopeTableBinderTest {
                 List.of("orders", "salary"),
                 result.physicalRefs().stream().map(ref -> ref.key().objectName()).toList());
     }
+
+    @Test
+    void mysqlTwoPartQualifierMapsToTheCatalogAndResolves() throws Exception {
+        ResourceNamespace mysql =
+                new ResourceNamespace(
+                        new ResourceId(1), DatabaseEngine.MYSQL, "asd_cloud_base", "");
+        ResourceKey key = new ResourceKey(mysql, "f_take_over");
+        catalog.put(key, new ResourceRef(key, new ResourceId(854), 1, 1, 7));
+
+        ScopeTableBinder.BindingResult result =
+                ScopeTableBinder.bind(
+                        (Select) CCJSqlParserUtil.parse("SELECT * FROM asd_cloud_base.f_take_over"),
+                        mysql,
+                        candidate -> Optional.ofNullable(catalog.get(candidate)));
+
+        assertEquals(1, result.physicalRefs().size());
+        assertEquals(new ResourceId(854), result.physicalRefs().get(0).objectId());
+        assertTrue(result.unresolved().isEmpty());
+    }
+
+    @Test
+    void quotedRelationsResolveToUnquotedSnapshotNames() throws Exception {
+        ResourceNamespace mysql =
+                new ResourceNamespace(
+                        new ResourceId(1), DatabaseEngine.MYSQL, "asd_cloud_base", "");
+        ResourceKey plain = new ResourceKey(mysql, "t_mes_labelprint_packing");
+        catalog.put(plain, new ResourceRef(plain, new ResourceId(1168), 1, 1, 7));
+        ResourceKey qualified = new ResourceKey(mysql, "f_take_over");
+        catalog.put(qualified, new ResourceRef(qualified, new ResourceId(854), 1, 1, 7));
+
+        for (String sql :
+                List.of(
+                        "SELECT * FROM `t_mes_labelprint_packing`",
+                        "SELECT COUNT(*) FROM `asd_cloud_base`.`f_take_over`")) {
+            ScopeTableBinder.BindingResult result =
+                    ScopeTableBinder.bind(
+                            (Select) CCJSqlParserUtil.parse(sql),
+                            mysql,
+                            candidate -> Optional.ofNullable(catalog.get(candidate)));
+            assertEquals(1, result.physicalRefs().size(), sql);
+            assertTrue(result.unresolved().isEmpty(), sql);
+        }
+    }
 }
