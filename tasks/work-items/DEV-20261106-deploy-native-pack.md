@@ -65,6 +65,7 @@ Updated: 2026-11-06
 
 工作树事实：本轮只新增 `deploy/native/**`、更新 `.gitignore` 与 `deploy/README.md`，
 不影响既有 Docker 交付物；`deploy/native/dist/` 为本地构建产物，已忽略。
+提交 `2b36898`（dev，已推送 origin），与容器切片同一提交。
 
 未验证项：
 

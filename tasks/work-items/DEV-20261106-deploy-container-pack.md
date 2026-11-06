@@ -47,6 +47,8 @@ Updated: 2026-11-06
 剩余步骤：修复 `deploy/docker/apps.Dockerfile` 的 `config/quality` 复制、
 用可达代理重建镜像、`docker compose up -d` 验证健康与路由。
 
+提交 `2b36898`（dev，已推送 origin）收存本切片文件；镜像构建失败未修复。
+
 未验证项：
 
 - Windows 原生 Docker Desktop 下未验证（仅在 WSL2 内 Docker Engine 验证）。
