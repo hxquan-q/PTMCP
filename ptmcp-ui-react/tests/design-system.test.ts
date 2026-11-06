@@ -118,17 +118,25 @@ test('TSX 内联间距同样落在偶数网格上', () => {
 
 // ── 触控热区（WCAG 2.2 AAA 2.5.5） ─────────────────────────────────────────
 
-test('定义 44px 触控热区令牌，并让按钮把热区撑到 44px', () => {
+test('定义 44px 触控热区令牌，并让图标按钮把热区撑到 44px', () => {
   assert.match(cssCode, /--ptmcp-hit:\s*44px;/, '缺少 --ptmcp-hit: 44px');
-  for (const block of cssBlocks('.btn')) {
-    assert.match(block, /min-height:\s*(3[6-9]|4[4-9]|[5-9]\d|\d{3,})px/, '.btn 视觉高度不足 36px');
-  }
-  const btnAfter = cssBlocks('.btn::after');
-  assert.equal(btnAfter.length, 1, '缺少 .btn::after 热区扩展规则');
-  assert.match(btnAfter[0]!, /var\(--ptmcp-hit\)/, '.btn::after 必须用 --ptmcp-hit 定高');
-  const iconAfter = cssBlocks('.btn--icon::after');
-  assert.equal(iconAfter.length, 1, '缺少 .btn--icon::after 横向热区扩展');
-  assert.match(iconAfter[0]!, /var\(--ptmcp-hit\)/, '.btn--icon::after 必须用 --ptmcp-hit 定宽');
+  assert.equal(cssBlocks('.btn').length, 0, '遗留 .btn 规则应已移除');
+  assert.equal(cssBlocks('.btn::after').length, 0, '遗留 .btn::after 应已移除');
+  assert.equal(cssBlocks('.btn--icon').length, 0, '遗留 .btn--icon 应已移除');
+  assert.equal(cssBlocks('.btn--icon::after').length, 0, '遗留 .btn--icon::after 应已移除');
+  const icons = cssBlocks('.icon-btn');
+  assert.ok(
+    icons.some((block) => /width:\s*36px/.test(block) && /height:\s*36px/.test(block)),
+    '.icon-btn 视觉尺寸应为 36×36',
+  );
+  assert.ok(
+    icons.some((block) => /width:\s*var\(--ptmcp-hit\)/.test(block) && /height:\s*var\(--ptmcp-hit\)/.test(block)),
+    '粗指针下 .icon-btn 应抬到 --ptmcp-hit',
+  );
+  const iconAfter = cssBlocks('.icon-btn::after');
+  assert.equal(iconAfter.length, 1, '缺少 .icon-btn::after 热区扩展');
+  assert.match(iconAfter[0]!, /width:\s*max\(100%,\s*var\(--ptmcp-hit\)\)/, '.icon-btn::after 必须用 --ptmcp-hit 定宽');
+  assert.match(iconAfter[0]!, /height:\s*max\(100%,\s*var\(--ptmcp-hit\)\)/, '.icon-btn::after 必须用 --ptmcp-hit 定高');
 });
 
 test('行内文字按钮统一走 antd Button（≥24px 由库尺寸 token 保证，WCAG 2.2 AA 2.5.8）', async () => {

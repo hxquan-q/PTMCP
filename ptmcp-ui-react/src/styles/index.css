@@ -330,95 +330,29 @@ select:not([class*='ant-']) {
 }
 
 /* ── 控件 ── */
-/* 触控热区：视觉高度 36px（企业级密度），但热区抬到 44px（WCAG 2.2 AAA 2.5.5）。
-   ::after 只扩热区、不改布局，所以表格与工具栏的间距不会被推大。 */
-.btn {
+/* 触控热区：图标按钮（antd Button type="text"）视觉 36×36（企业级密度），热区抬到 44×44
+   （WCAG 2.2 AAA 2.5.5）。::after 只扩热区、不改布局，也不侵占邻按钮的热区。
+   本文件未分层，优先级高于 antd layer，所以尺寸与颜色能覆盖库默认值。 */
+.icon-btn {
   position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 36px;
-  padding: 0 16px;
-  border: 1px solid transparent;
-  border-radius: var(--ptmcp-radius-control);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 18px;
-  white-space: nowrap;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease,
-    box-shadow 0.15s ease,
-    transform var(--ptmcp-dur-fast) var(--ptmcp-ease-out);
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  color: var(--ptmcp-text-muted);
 }
-.btn::after {
+.icon-btn::after {
   content: '';
   position: absolute;
   top: 50%;
-  right: 0;
-  left: 0;
-  height: max(100%, var(--ptmcp-hit));
-  transform: translateY(-50%);
-}
-.btn--primary {
-  background: var(--ptmcp-blue-strong);
-  color: #fff;
-  box-shadow: 0 1px 2px rgba(15, 98, 214, 0.18);
-}
-/* 主按钮的「浮起」只靠投影，不裁剪按钮：::after 的 44px 热区必须留在外面。 */
-.btn--primary:hover {
-  background: var(--ptmcp-blue-strong-hover);
-  box-shadow: 0 6px 16px rgba(15, 98, 214, 0.26);
-}
-.btn--primary:active {
-  background: var(--ptmcp-blue-strong-hover);
-  box-shadow: 0 1px 2px rgba(15, 98, 214, 0.18);
-  transform: translateY(1px);
-}
-.btn:active:not(:disabled) {
-  transform: translateY(1px);
-}
-.btn--secondary {
-  background: var(--ptmcp-surface);
-  border-color: var(--ptmcp-border-strong);
-  color: var(--ptmcp-text);
-}
-.btn--secondary:hover {
-  background: var(--ptmcp-hover);
-  border-color: var(--ptmcp-text-faint);
-}
-.btn--secondary:active {
-  background: var(--ptmcp-band);
-}
-/* 图标按钮：字形 17px → 视觉 36×36 → 热区 44×44（::after 继承 .btn 的规则）。 */
-.btn--icon {
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--ptmcp-text-muted);
-  border-radius: var(--ptmcp-radius-control);
-}
-/* 图标按钮横向也要到 44px：只在按钮自身范围内外扩，不侵占邻按钮的热区。 */
-.btn--icon::after {
-  right: auto;
   left: 50%;
   width: max(100%, var(--ptmcp-hit));
+  height: max(100%, var(--ptmcp-hit));
   transform: translate(-50%, -50%);
 }
-.btn--icon:hover {
-  background: var(--ptmcp-hover);
+.icon-btn:hover {
   color: var(--ptmcp-text-strong);
-  text-decoration: none;
 }
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.btn:focus-visible,
 .input:focus-visible,
 .select:focus-visible {
   outline: 2px solid var(--ptmcp-blue);
@@ -740,25 +674,6 @@ input[type='checkbox'] {
 .table-caption .caption-actions {
   display: inline-flex;
   gap: 8px;
-}
-.btn--tinted {
-  background: var(--ptmcp-bg-accent);
-  border-color: #b6d4fe;
-  color: var(--ptmcp-blue-text);
-}
-.btn--tinted:hover {
-  background: #e0edff;
-  border-color: var(--ptmcp-blue);
-}
-.btn--ghost {
-  padding: 6px 10px;
-  border-color: transparent;
-  background: none;
-  color: var(--ptmcp-text-muted);
-}
-.btn--ghost:hover {
-  background: var(--ptmcp-hover);
-  color: var(--ptmcp-text-strong);
 }
 .table-toolbar {
   display: flex;
@@ -1532,7 +1447,6 @@ input[type='checkbox'] {
 }
 
 /* ─── 键盘可达性：统一可见焦点（WCAG 2.2 AA 2.4.7） ─── */
-.btn:focus-visible,
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
@@ -2489,8 +2403,9 @@ textarea:focus-visible {
   .tab-btn {
     min-height: var(--ptmcp-hit);
   }
-  .btn--icon {
+  .icon-btn {
     width: var(--ptmcp-hit);
+    min-width: var(--ptmcp-hit);
     height: var(--ptmcp-hit);
   }
 }
@@ -2991,7 +2906,7 @@ textarea:focus-visible {
     align-items: stretch;
     flex-direction: column;
   }
-  .security-card-foot .form-actions .btn {
+  .security-card-foot .form-actions .ant-btn {
     flex: 1;
   }
 }

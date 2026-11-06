@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Dropdown } from 'antd';
+import { Button, Dropdown } from 'antd';
 import { LogoIcon, SearchIcon, UserIcon } from '../components/Icons';
 import { GlobalSearch, useFocusTrap } from '../components/common';
 import { ChevronRightIcon, CloseIcon, DocumentIcon, DotsIcon } from '../components/Icons';
@@ -114,9 +114,7 @@ export function AppShell({
             classNames={{ root: 'topbar-menu' }}
             menu={{ items: [{ key: 'logout', label: '退出登录', onClick: () => onLogout() }] }}
           >
-            <button type="button" className="btn btn--icon topbar-more" aria-label="更多账户操作" aria-haspopup="menu">
-              <DotsIcon />
-            </button>
+            <Button type="text" className="icon-btn topbar-more" icon={<DotsIcon />} aria-label="更多账户操作" aria-haspopup="menu" />
           </Dropdown>
         ) : null}
       </header>
@@ -273,9 +271,7 @@ function SearchOverlay({ onClose, onNavigate, groups }: { onClose: () => void; o
             aria-label="搜索关键词"
             style={{ flex: 1, minWidth: 0, border: 'none', fontSize: 14, background: 'none' }}
           />
-          <button className="btn btn--icon" aria-label="关闭搜索" onClick={onClose}>
-            <CloseIcon />
-          </button>
+          <Button type="text" className="icon-btn" icon={<CloseIcon />} aria-label="关闭搜索" onClick={onClose} />
         </div>
         <div id="cmdk-results" ref={listRef} role="listbox" aria-label="搜索结果" style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
           {hits.length === 0 ? (

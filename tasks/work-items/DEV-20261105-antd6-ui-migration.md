@@ -79,7 +79,7 @@ Updated: 2026-11-06
 
 1. ~~AppShell → antd Layout/Menu/Breadcrumb/Dropdown~~ 已完成账户菜单 Dropdown；导航与面包屑按 2026-11-06 切片决策保留原生。
 2. 其余页面原生 `<table>` → antd Table（PermissionsPage、OrgPage、PlatformsPage、MetadataPage、detail 页）；`.link` 行内链接 → Button type="link" 收敛。
-3. CSS 清理：删除已无引用的 .btn/.input/.data-table 等遗留块（现全部仍有未迁移页引用）。
+3. CSS 清理：`.data-table` / `.link` / `.btn` 族已删除（`.btn` 见 2026-11-06 图标按钮切片）。仍保留 `.input` / `.input-wrap`（表单与 OAuth 仍引用）与 `.org-icon-btn`（OrgPage，24×24，不并入图标热区）。
 4. ~~主构建 chunk 分包（antd manualChunks）~~ 已完成，改用路由懒加载（见末节实证）。
 5. Impeccable finish-reviewer + documenter（DESIGN.md 与 sidecar 同步）随迁移完成切片执行；本次切片已跑 detect（见下）。
 6. 真实接口/权限/OAuth 端到端验证。
@@ -253,3 +253,12 @@ Updated: 2026-11-06
 - 浏览器（LAN dev `http://192.168.1.18:25173`，Playwright）：桌面弹层右下与 trigger 对齐（menu right 1896 = trigger right 1896）；Esc 关闭、点外部关闭、再次点击可开；Tab 可进入菜单项（`-active`），Esc 关闭后焦点回 trigger；hover 背景 `rgb(244,246,249)`、文字 `rgb(29,41,57)`；Ctrl+K 仍打开全局搜索且焦点在输入框；控制台无错误。390px 下菜单完整可见（right=390）；触发按钮 2px 出视口为既有裁边（迁移前 `s5-mobile-roles.png` 同样存在，`.app-shell` `overflow-x:hidden` 下无横向滚动），非本切片回归，未修。
 - 提交：`4805bed refactor(shell): 顶栏账户菜单迁移到 antd Dropdown`。仅暂存 `src/layouts/AppShell.tsx`、`src/styles/index.css`，排除他窗三文件与全部未跟踪截图。
 - 未验证：未点击“退出登录”项（会注销当前 dev 会话且无法安全重登）；`onLogout` 传递链未变且 tsc 通过，动作本身待人工验收。ArrowDown 不从 trigger 进入菜单为 antd 6 现状，未自研补充。
+
+### 2026-11-06 图标按钮改走 antd，删除遗留 `.btn`
+
+- 顶栏「更多账户操作」与搜索浮层「关闭搜索」由原生 `<button class="btn btn--icon">` 改为 `<Button type="text" className="icon-btn">`。视觉 36×36、`padding: 0`、`min-width: 36px`；`::after` 在按钮中心扩到 `max(100%, var(--ptmcp-hit))`（两轴），不改布局。`pointer: coarse` 下按钮本身抬到 `--ptmcp-hit`（44px）。
+- 删除已无 TS/TSX 引用的 `.btn` / `.btn::after` / `.btn--primary` / `.btn--secondary` / `.btn--icon` / `.btn--tinted` / `.btn--ghost` 及对应 hover/active/disabled/focus 规则。`.input:focus-visible` 与键盘块里的 `button:focus-visible` 保留。`.org-icon-btn` 未动。窄屏 `.security-card-foot .form-actions` 选择器由 `.btn` 改为 `.ant-btn`（SecurityPage 已用 antd Button）。
+- 测试：`tests/design-system.test.ts` 原 `.btn` / `.btn--icon` 热区断言改为——`.btn` 族规则为 0，`.icon-btn` 同时存在 36px 与 `var(--ptmcp-hit)` 两档，且恰有一条 `.icon-btn::after` 两轴都是 `max(100%, var(--ptmcp-hit))`。未放宽阈值、未删断言。`.btn--link` 不存在的既有断言仍在。
+- 检查（`ptmcp-ui-react`，直跑 `node_modules/.bin`，未走 pnpm 脚本）：eslint `src --max-warnings 0`、prettier `--check src tests`、tsc（build 与 oauth 各一次）、`node --experimental-strip-types --test tests/*.test.ts` 203/203、`vite build`、`vite build --config vite.oauth.config.ts` 全过。
+- 浏览器（LAN dev `http://192.168.1.18:25173/#/me`，Playwright，视口 1920×889，`pointer: coarse` 为 false）：会话 401，页面停在登录卡，壳层按钮未挂载，未输入密码。向 `document.body` 注入并随即移除一个 `button.icon-btn`，`getComputedStyle` 为 width/height/minWidth `36px`、padding `0px`、position `relative`；`::after` content 空串、44×44、absolute，top/left `18px`（50%），transform `translate(-22px, -22px)`；`--ptmcp-hit` 为 `44px`。
+- 未验证：登录后的菜单打开、Ctrl+K 搜索关闭、焦点与 Esc（会话过期，未点击「退出登录」，也未读取本地密码）；粗指针媒体查询只由静态测试覆盖，浏览器未模拟 `pointer: coarse`。人工视觉接受未做。评审类型：自审。
