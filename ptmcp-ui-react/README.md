@@ -25,11 +25,11 @@ Node 版本随根仓 [开发环境](../docs/ops/development-environment.md)（�
 
 ## 架构
 
-- **路由**：自研 hash 路由（`App.tsx` + `navigation.ts`）：精确 → 前缀（详情页取尾段）→ 404；路由与导航项挂 `permission`，无权渲染 403，菜单按 `session.permissions` 过滤。
+- **路由**：自研 hash 路由（`App.tsx` + `navigation.ts`）：精确 → 前缀（详情页取尾段）→ 404；管理控制台路由与导航整体由 `session.platformAdmin` 把关（S5，不再逐项携带权限码），非管理员访问管理路由渲染 403，落地页回退个人首页。
 - **会话**：`services/session.ts` 探测/登录/登出；`http.ts` 在 401 时广播 `onSessionExpired`（排除 login/csrf 引导），App 切登录页并记录 `safeReturnTo`，重登后回跳。
 - **服务层**：`services/http.ts`（同源 REST、CSRF 引导、大整数 ID 保真、幂等键）；`data.ts` / `access.ts` / `orgPortalApi.ts` / `mePortalApi.ts` 按 `/api/v1` 契约分域；写操作统一 If-Match 乐观并发，412 在页面呈现三方 diff/变基。
 - **preview server**：`src/preview/server.ts` 为纯前端合成后端（与 Vue 版同源分叉），支撑无后端开发与契约测试；测试用 fetch 代理直连实例。
-- **组件**：零第三方 UI 依赖；`components/common.tsx` 提供 Dialog/Drawer（含焦点圈禁）、表格、OptionCard、Stepper 等；样式在 `styles/index.css`（含 ≤900px/≤620px 响应式与 focus-visible）。
+- **组件**：基于 Ant Design 6（`antd`、`@ant-design/pro-components`、`@ant-design/icons`）；`components/common.tsx` 以 antd Modal/Drawer/Steps/Input/Select 等封装 Dialog/Drawer/Stepper 等基础控件，对外 API 保持不变，弹层焦点圈禁由 antd 内建承担（`useFocusTrap` 仅留给 AppShell 搜索浮层）；样式在 `styles/index.css`（含 ≤900px/≤620px 响应式与 focus-visible）。
 
 ## 2026-10-30 迁移记录（历史快照）
 
