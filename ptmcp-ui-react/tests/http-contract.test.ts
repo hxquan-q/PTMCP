@@ -56,6 +56,57 @@ test('adds CSRF to writes and does not retry failed writes', async () => {
   assert.equal(csrf, 'test-csrf');
 });
 
+test('GET 在 502 与网络抖动后自动重试并恢复', async () => {
+  let calls = 0;
+  await withFetch(
+    async () => {
+      calls += 1;
+      if (calls === 1) return new Response('bad gateway', { status: 502 });
+      if (calls === 2) throw new TypeError('connection reset');
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    },
+    async () => {
+      const result = await request<{ ok: boolean }>('/api/v1/admin/test');
+      assert.deepEqual(result.data, { ok: true });
+    },
+  );
+  assert.equal(calls, 3);
+});
+
+test('GET 连续三次传输失败后以 NETWORK_ERROR 放弃', async () => {
+  let calls = 0;
+  await withFetch(
+    async () => {
+      calls += 1;
+      throw new TypeError('connection reset');
+    },
+    async () => {
+      await assert.rejects(
+        () => request('/api/v1/admin/test'),
+        (error: unknown) => error instanceof ApiError && error.status === 0 && error.code === 'NETWORK_ERROR',
+      );
+    },
+  );
+  assert.equal(calls, 3);
+});
+
+test('GET 的确定性拒绝（401）不重试', async () => {
+  let calls = 0;
+  await withFetch(
+    async () => {
+      calls += 1;
+      return new Response(JSON.stringify({ code: 'AUTHENTICATION_REQUIRED' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+    },
+    async () => {
+      await assert.rejects(
+        () => request('/api/v1/admin/test'),
+        (error: unknown) => error instanceof ApiError && error.status === 401,
+      );
+    },
+  );
+  assert.equal(calls, 1);
+});
+
 test('bootstraps CSRF once before a write when no token is in memory', async () => {
   const calls: string[] = [];
   setCsrfToken(null);

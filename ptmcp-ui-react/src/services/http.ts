@@ -122,23 +122,37 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     headers.set('X-CSRF-Token', csrfToken ?? (await refreshCsrf()));
   }
   if (options.body !== undefined) headers.set('Content-Type', 'application/json');
-  let response: Response;
-  try {
-    response =
-      import.meta.env?.DEV && import.meta.env.MODE === 'frontend-preview'
-        ? await (await import('../preview/server')).previewRequest(path, { ...options, method, headers })
-        : await fetch(`${base}${path}`, {
-            method,
-            headers,
-            body: options.body === undefined ? undefined : JSON.stringify(options.body),
-            credentials: 'same-origin',
-            cache: 'no-store',
-            signal: options.signal,
-          });
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') throw error;
-    throw new ApiError(0, 'NETWORK_ERROR', '无法连接服务，请检查后端服务是否启动。');
+  /* 读请求在瞬时传输故障（网络错误或代理 502/503/504）下自动重试，共 3 次、线性退避：
+     首拉失败不应让页面永久停在加载态。写请求从不自动重试——幂等键只覆盖用户显式重提，不代表传输层重发安全；
+     4xx 与其它状态码也不重试，会话过期、越权等确定性拒绝必须立刻上抛。 */
+  const attempts = writes ? 1 : 3;
+  const send = async (): Promise<Response> => {
+    if (import.meta.env?.DEV && import.meta.env.MODE === 'frontend-preview') {
+      const preview = await import('../preview/server');
+      return preview.previewRequest(path, { ...options, method, headers });
+    }
+    return fetch(`${base}${path}`, {
+      method,
+      headers,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      credentials: 'same-origin',
+      cache: 'no-store',
+      signal: options.signal,
+    });
+  };
+  let response: Response | null = null;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      response = await send();
+      if (attempt === attempts || (response.status !== 502 && response.status !== 503 && response.status !== 504)) break;
+      await response.text().catch(() => undefined); /* 重试前消费掉失败响应体，释放连接 */
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') throw error;
+      if (attempt === attempts) throw new ApiError(0, 'NETWORK_ERROR', '无法连接服务，请检查后端服务是否启动。');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
   }
+  if (!response) throw new ApiError(0, 'NETWORK_ERROR', '无法连接服务，请检查后端服务是否启动。');
   const text = await response.text();
   let body: unknown = null;
   if (text) {
