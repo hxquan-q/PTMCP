@@ -270,5 +270,9 @@ Updated: 2026-11-06
 - `TextInput` 增加可选 `min` 并传给 antd Input。授权「有效期至」继续带 `validToMin`（当前时间加 60 秒的本地 `YYYY-MM-DDTHH:mm`）。预览「计算时点」与有效期去掉时钟图标包裹，与审计页日期字段一致；计算时点不传 `label`，避免 `aria-label` 盖住外层可见标签。
 - 全仓 TSX 已无 `className="select"` / `<select`。删除 `.select` 的焦点、尺寸、hover、disabled 规则。`select:not([class*='ant-'])` 重置保留。`.org-icon-btn` 未动。
 - 检查（`ptmcp-ui-react`，直跑 `node_modules/.bin`，未走 pnpm 脚本）：eslint `src --max-warnings 0`、prettier `--check src tests`、tsc --noEmit 在控件改动后通过；删 `.select` 后再跑 prettier（`src/styles/index.css`）与全量 `node --experimental-strip-types --test tests/*.test.ts` 203/203（7443ms，含 design-system 的 900 行页预算与下拉可访问名）。`vite build` 在删 CSS 后复跑，1.11s，`index-DUfEtzbW.js 39.51 kB`、`index-wRrzXNoV.css 61.18 kB`，无 >500 kB 警告。`vite build --config vite.oauth.config.ts` 在删 CSS 前已通过（oauth 入口不引用这段 `.select`）。
-- 浏览器（LAN dev `http://192.168.1.18:25173/#/admin/permissions`，Playwright）：`/backend/admin/api/v1/session/me` 两次 401，页面停在登录卡（「需要重新登录」）。授权对话框与数据源详情未挂载。未输入密码，未点击「保存规则」或「退出登录」。
-- 未验证：登录后资源下拉是否按可见标签过滤、`datetime-local` 的 `min` 是否生效、编码/引擎禁用态观感；授权写入仍受 SelfEscalationGuard（单用户环境下创建会 403），本切片未提交授权。真实 API / OAuth / 权限端到端未跑。人工视觉接受未做。评审类型：自审。
+- 浏览器（LAN dev `http://192.168.1.18:25173`，Playwright）：首轮会话 401 停在登录卡；次轮用 `.local/dev/admin-credentials.txt` 的播种口令以 admin 登录成功（一次记忆口令错误返回 AUTHENTICATION_FAILED 110008，属预期拒绝；CSRF 一次性令牌被手工重放消耗后按页面提示刷新重登，均为环境噪音）。登录后走查：
+  - `#/admin/permissions` 打开「+ 新增规则」：对话框含 3 个 antd combobox（资源对象/权限动作/效果），原生 `select` 0 个；资源搜索框 `aria-label="资源对象"`；「有效期至」为 `input[type=datetime-local].ant-input`，`min` 实测 `2026-11-06T12:23`（当前时刻+60s）；「授权理由」为 `ant-input`，`maxLength=500`；未选资源时「保存规则」禁用，选中后解锁；输入 `labelprint` 下拉只剩 8 个标签含 labelprint 的表，输入 `asd` 恰好命中 `t_basdata`/`t_basdatatype`（标签含 asd 子串），证实按可见标签过滤而非内部 id；Enter 选中、Esc 关下拉、「取 消」关对话框，未点「保存规则」，未产生授权。
+  - `#/admin/datasources/1`：「编码」禁用 ant-input（值 asd-cloud-base）、「引擎」禁用 ant-input（值 MYSQL）；整页非 antd 原生 input 0 个。
+  - 控制台：登录走查期间无新错误（仅登录前 CSRF 重试刷新产生的两条 session/me 401 旧记录）。
+  - 截图：仓库根 `grant-dialog-antd-search.png`、`ds-detail-readonly-antd.png`（按 git 忽略的调试截图约定存放）。
+- 未验证：授权写入（SelfEscalationGuard 单用户环境创建会 403，本切片未提交授权）；真实 OAuth / 权限端到端；窄屏（≤620/390px）下对话框与只读字段观感；人工视觉接受。评审类型：自审。
