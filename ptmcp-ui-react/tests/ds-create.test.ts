@@ -93,6 +93,7 @@ test('dsValidate keeps edit semantics; dsCreateValidate adds code and credential
   assert.match(dsCreateValidate({ ...okForm, code: 'Bad_Code' }).code!, /小写字母/);
   assert.match(dsCreateValidate({ ...okForm, port: 70000 }).port!, /1～65535/);
   assert.match(dsCreateValidate({ ...okForm, poolMax: 9 }).poolMax!, /1～8/);
+  assert.match(dsValidate({ ...okForm, databaseName: 'order db' }).databaseName!, /数据库名只能包含/);
 });
 
 test('datasource create and edit reject engines and statuses outside the current contract', () => {

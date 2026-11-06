@@ -66,6 +66,7 @@ export function dsValidate(form: DsForm): Record<string, string> {
   if (!form.host.trim()) errs.host = '请输入主机';
   else if (form.host.length > 253) errs.host = '主机最多253字符';
   if (!form.databaseName.trim()) errs.databaseName = '请输入数据库名';
+  else if (!/^[A-Za-z0-9_$.-]{1,128}$/.test(form.databaseName)) errs.databaseName = '数据库名只能包含字母、数字、下划线、美元符、点或短横线';
   else if (form.databaseName.length > 128) errs.databaseName = '数据库名最多128字符';
   if (!form.username.trim()) errs.username = '请输入用户名';
   else if (form.username.length > 128) errs.username = '用户名最多128字符';
