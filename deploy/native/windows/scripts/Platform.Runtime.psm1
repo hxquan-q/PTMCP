@@ -30,13 +30,18 @@ function Invoke-PtmcpProcess {
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
     $proc = [System.Diagnostics.Process]::Start($psi)
-    $stdout = $proc.StandardOutput.ReadToEnd()
-    $stderr = $proc.StandardError.ReadToEnd()
-    $proc.WaitForExit()
-    [pscustomobject]@{
-        ExitCode = $proc.ExitCode
-        Output   = $stdout
-        Error    = $stderr
+    try {
+        # 两路并发消费，避免 openssl 进度输出填满 stderr 后与 stdout 等待互锁。
+        $stdout = $proc.StandardOutput.ReadToEndAsync()
+        $stderr = $proc.StandardError.ReadToEndAsync()
+        $proc.WaitForExit()
+        [pscustomobject]@{
+            ExitCode = $proc.ExitCode
+            Output   = $stdout.GetAwaiter().GetResult()
+            Error    = $stderr.GetAwaiter().GetResult()
+        }
+    } finally {
+        $proc.Dispose()
     }
 }
 
@@ -46,6 +51,69 @@ function Get-PtmcpConfigValue {
         return "$($Config[$Key])"
     }
     return $Default
+}
+
+function Get-PtmcpBaseSettings {
+    param([string]$BaseUrl)
+    $invalid = '基址须为无路径/凭证/query/fragment 的 HTTPS URL，或 localhost、127.0.0.1、[::1] 的 HTTP URL；端口为 1..65535'
+    $match = [regex]::Match($BaseUrl, '^(https?)://(\[[0-9a-fA-F:.]+\]|[a-zA-Z0-9.-]+)(:([0-9]{1,5}))?/?$')
+    if (-not $match.Success) { throw $invalid }
+    $scheme = $match.Groups[1].Value
+    $urlHost = $match.Groups[2].Value
+    $uri = $null
+    if (-not [Uri]::TryCreate($BaseUrl, [UriKind]::Absolute, [ref]$uri) -or
+        [Uri]::CheckHostName($urlHost.Trim('[', ']')) -eq [UriHostNameType]::Unknown) { throw $invalid }
+    if (-not $urlHost.StartsWith('[')) {
+        if ($urlHost.Contains('.') -and $urlHost -match '^[0-9.]+$') {
+            $octets = $urlHost.Split('.')
+            if ($octets.Count -ne 4) { throw $invalid }
+            foreach ($octet in $octets) {
+                if ($octet -notmatch '^[0-9]{1,3}$' -or [int]$octet -gt 255) { throw $invalid }
+            }
+        } else {
+            $labels = $urlHost.TrimEnd('.').Split('.')
+            foreach ($label in $labels) {
+                if ($label -notmatch '^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$') { throw $invalid }
+            }
+            if ($labels.Count -gt 1 -and $labels[-1] -notmatch '^[a-zA-Z]') { throw $invalid }
+        }
+    }
+    $port = 80
+    if ($match.Groups[4].Success) {
+        $port = [int]$match.Groups[4].Value
+        if ($port -lt 1 -or $port -gt 65535) { throw $invalid }
+    }
+    if ($scheme -eq 'http') {
+        if ($urlHost -notin @('localhost', '127.0.0.1', '[::1]')) { throw $invalid }
+    } else {
+        # HTTPS 由外部 TLS 入口转到内部 HTTP，不把 443 当作明文监听端口。
+        $port = 8080
+    }
+    [pscustomobject]@{ BaseUrl = $BaseUrl.TrimEnd('/'); HttpPort = $port }
+}
+
+function Set-PtmcpSecretAcl {
+    param([string]$Path)
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent().User
+    $system = New-Object Security.Principal.SecurityIdentifier('S-1-5-18')
+    # 基于现有描述符仅修改 DACL；全新描述符在 PowerShell 5.1 会尝试写 SACL 并要求额外特权。
+    $acl = Get-Acl -LiteralPath $Path
+    if (Test-Path -LiteralPath $Path -PathType Container) {
+        $inherit = [Security.AccessControl.InheritanceFlags]'ContainerInherit,ObjectInherit'
+    } else {
+        $inherit = [Security.AccessControl.InheritanceFlags]::None
+    }
+    $acl.SetAccessRuleProtection($true, $false)
+    foreach ($rule in @($acl.Access)) { $acl.RemoveAccessRuleSpecific($rule) }
+    foreach ($sid in @($identity, $system)) {
+        $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule(
+            $sid, 'FullControl', $inherit, 'None', 'Allow')))
+    }
+    if (Test-Path -LiteralPath $Path -PathType Container) {
+        [IO.Directory]::SetAccessControl($Path, $acl)
+    } else {
+        [IO.File]::SetAccessControl($Path, $acl)
+    }
 }
 
 function Read-PtmcpConfig {
@@ -192,7 +260,11 @@ function Set-PtmcpAppEnvironment {
     $env:PTMCP_ADMIN_CREDENTIALKEY = $c['PTMCP_CREDENTIAL_KEY']
     $env:PTMCP_ADMIN_COOKIESECURE = Get-PtmcpConfigValue $c 'PTMCP_ADMIN_COOKIE_SECURE' 'false'
     $env:PTMCP_ADMIN_DATASOURCE_ALLOWEDCIDRS = Get-PtmcpConfigValue $c 'PTMCP_BUSINESS_ALLOWED_CIDRS' ''
-    $env:PTMCP_ADMIN_DATASOURCE_ALLOWEDPORTS = Get-PtmcpConfigValue $c 'PTMCP_BUSINESS_ALLOWED_PORTS' '3306,5432'
+    $ports = '3306,5432'
+    if ($c.ContainsKey('PTMCP_BUSINESS_ALLOWED_PORTS')) { $ports = "$($c['PTMCP_BUSINESS_ALLOWED_PORTS'])" }
+    # PowerShell 5.1 删掉空环境变量；空白经应用 trim 后仍为空集合，不能退回默认端口。
+    if ($ports.Trim() -eq '') { $ports = ' ' }
+    $env:PTMCP_ADMIN_DATASOURCE_ALLOWEDPORTS = $ports
 
     $env:PTMCP_AUTHZ_DB_URL = $c['PTMCP_METADATA_JDBC_URL']
     $env:PTMCP_AUTHZ_DB_USERNAME = $c['PTMCP_METADATA_DB_USERNAME']
@@ -219,7 +291,7 @@ function Set-PtmcpAppEnvironment {
     $env:PTMCP_GATEWAY_JWKSURI = Get-PtmcpConfigValue $c 'PTMCP_GATEWAY_JWKSURI' "http://127.0.0.1:$(Get-PtmcpServicePort $Context 'authz')/oauth2/jwks"
     $env:PTMCP_GATEWAY_RESOURCEMETADATAURI = Get-PtmcpConfigValue $c 'PTMCP_GATEWAY_RESOURCEMETADATAURI' "$base/.well-known/oauth-protected-resource"
     $env:PTMCP_GATEWAY_ALLOWEDCIDRS = Get-PtmcpConfigValue $c 'PTMCP_BUSINESS_ALLOWED_CIDRS' ''
-    $env:PTMCP_GATEWAY_ALLOWEDPORTS = Get-PtmcpConfigValue $c 'PTMCP_BUSINESS_ALLOWED_PORTS' '3306,5432'
+    $env:PTMCP_GATEWAY_ALLOWEDPORTS = $ports
     $env:PTMCP_MCP_URL = Get-PtmcpConfigValue $c 'PTMCP_MCP_URL' "$base/mcp"
 }
 
@@ -325,7 +397,7 @@ function Write-PtmcpNginxConf {
     }
     foreach ($k in $map.Keys) { $text = $text.Replace($k, $map[$k]) }
     $out = Join-Path $Context.DeployRoot 'run\nginx.conf'
-    Set-Content -LiteralPath $out -Value $text -Encoding UTF8
+    [System.IO.File]::WriteAllText($out, $text, (New-Object System.Text.UTF8Encoding($false)))
     return $out
 }
 
@@ -333,7 +405,10 @@ function Get-PtmcpNginxPid {
     param($Context)
     $pidFile = Join-Path $Context.DeployRoot 'run\nginx.pid'
     if (-not (Test-Path -LiteralPath $pidFile)) { return $null }
-    $v = (Get-Content -LiteralPath $pidFile -Raw).Trim()
+    # nginx 创建文件后才写 PID；空文件在启动轮询中仍表示未就绪。
+    $v = Get-Content -LiteralPath $pidFile -Raw
+    if ([string]::IsNullOrWhiteSpace($v)) { return $null }
+    $v = $v.Trim()
     if ($v -notmatch '^\d+$') { return $null }
     return [int]$v
 }

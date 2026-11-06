@@ -41,7 +41,7 @@ ptmcp-<version>-linux/
 ```bash
 tar -xzf ptmcp-<version>-linux.tar.gz
 cd ptmcp-<version>-linux
-./install.sh http://<对外地址>:8080
+./install.sh http://localhost:8080
 ```
 
 首次运行会生成 `shared/config/app.env` 后退出，要求先填写元库连接：
@@ -122,3 +122,9 @@ current/scripts/platform.sh migrate
 | 启动卡在某个服务 | `current/scripts/platform.sh logs <svc>`；常见是密钥/数据库配置 |
 | nginx 启动失败 | 看 `logs/nginx-error.log` 与 `nginx -t -c run/nginx.conf` 输出 |
 | 端口被占用 | 预检会指出服务；不要直接杀进程，先确认归属 |
+
+OAuth 基址必须是无路径、凭证、query 和 fragment 的 HTTPS URL，或主机严格为
+`localhost`、`127.0.0.1`、`[::1]` 的 HTTP URL；不接受局域网 HTTP。
+直接 HTTP 的监听端口由基址推导（省略端口为 80）；HTTPS 基址需要外部 TLS 入口，
+生成的 nginx 内部 HTTP 监听仍为 8080，外部端口由 TLS 入口发布。
+业务端口白名单未配置时为 `3306,5432`，显式空值拒绝全部；CIDR 空值也拒绝全部。

@@ -20,11 +20,8 @@ case "${2:-}" in
   '') ;;
   *) ptmcp_die "未知参数：$2" ;;
 esac
-case "$BASE" in
-  http://*|https://*) ;;
-  *) ptmcp_die "用法：init-env.sh http://<主机>:<端口> [--force]" ;;
-esac
-BASE=${BASE%/}
+. "$SCRIPT_DIR/base-url.sh"
+ptmcp_parse_base_url "$BASE" || ptmcp_die '基址须为无路径/凭证/query/fragment 的 HTTPS URL，或 localhost、127.0.0.1、[::1] 的 HTTP URL；端口为 1..65535'
 
 ptmcp_ensure_dirs
 CONFIG=$DEPLOY_ROOT/shared/config/app.env
@@ -47,6 +44,7 @@ openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$KEY_FILE" 2>
   || ptmcp_die '生成 OAuth 签名私钥失败'
 
 sed \
+  -e "s|@HTTP_PORT@|$HTTP_PORT|g" \
   -e "s|@PUBLIC_BASE_URL@|$BASE|g" \
   -e "s|@COOKIE_SECURE@|$COOKIE_SECURE|g" \
   -e "s|@CREDENTIAL_KEY@|$CREDENTIAL_KEY|g" \

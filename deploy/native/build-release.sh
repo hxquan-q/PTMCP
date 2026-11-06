@@ -33,7 +33,8 @@ JAR_DIR=$ROOT/ptmcp-parent
 
 if [ "$SKIP_BUILD" -eq 0 ]; then
   echo '[build] 后端（跳过测试）...'
-  ( cd "$ROOT/ptmcp-parent" && mvn -B -Dmaven.test.skip=true \
+  # 下游模块需要 datasource 的 test-jar，仍编译/打包夹具，只跳过执行。
+  ( cd "$ROOT/ptmcp-parent" && mvn -B -DskipTests \
       -pl ptmcp-admin,ptmcp-authz,ptmcp-gateway -am package )
   echo '[build] 前端 ...'
   ( cd "$ROOT" && pnpm --ignore-workspace --dir ptmcp-ui-react run build \
@@ -71,6 +72,7 @@ stage_release() { # <release-root>
 stage_release "$LINUX/releases/$VERSION"
 cp "$HERE/linux/install.sh" "$LINUX/install.sh"
 cp "$HERE/linux/scripts"/*.sh "$HERE/linux/scripts/app.env.example" "$LINUX/releases/$VERSION/scripts/"
+cp "$ROOT/deploy/base-url.sh" "$LINUX/releases/$VERSION/scripts/"
 cp "$HERE/linux/docs/DEPLOY-LINUX.md" "$LINUX/" 2>/dev/null || true
 mkdir -p "$LINUX/shared/config" "$LINUX/run" "$LINUX/logs" "$LINUX/temp"
 chmod +x "$LINUX/install.sh" "$LINUX/releases/$VERSION/scripts"/*.sh

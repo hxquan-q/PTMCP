@@ -39,7 +39,7 @@ ptmcp-<version>-windows\
 ## 一键安装
 
 ```cmd
-0-install.cmd http://<对外地址>:8080
+0-install.cmd http://localhost:8080
 ```
 
 首次运行生成 `shared\config\app.env` 后退出，先填写元库连接，再运行一次
@@ -103,3 +103,14 @@ nginx 通过 `nginx -s quit` 优雅退出，并等待 master/worker 退出。
 | 服务启动即退出 | 看 `logs\<svc>.log` 与 `logs\<svc>.err.log` |
 | nginx 配置校验失败 | `logs\nginx-error.log`；也可手工 `nginx -t -c run\nginx.conf` |
 | 端口被占用 | 预检会列出；先确认占用者，不要盲目结束进程 |
+
+OAuth 基址必须是无路径、凭证、query 和 fragment 的 HTTPS URL，或主机严格为
+`localhost`、`127.0.0.1`、`[::1]` 的 HTTP URL；不接受局域网 HTTP。
+直接 HTTP 的监听端口由基址推导（省略端口为 80）；HTTPS 基址需要外部 TLS 入口，
+生成的 nginx 内部 HTTP 监听仍为 8080，外部端口由 TLS 入口发布。
+业务端口白名单未配置时为 `3306,5432`，显式空值拒绝全部；CIDR 空值也拒绝全部。
+
+首次生成配置及 `-Force` 重建时，脚本在写入前将 `shared/config`、`secrets`
+及现有 app.env/签名 PEM 的 ACL 限定为当前运行身份与 SYSTEM。
+应用应由该身份启动；使用其他服务身份时由管理员明确授予所需读取权限。
+nginx 配置以无 BOM UTF-8 写入，模板中的文件路径已引用，支持含空格安装目录。

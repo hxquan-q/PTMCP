@@ -45,7 +45,7 @@ Write-Host '[2/5] 共享配置 shared\config\app.env ...'
 if (Test-Path -LiteralPath $layout.Config) {
     Write-Host "  已存在，保留：$($layout.Config)"
 } else {
-    if ($BaseUrl -eq '') { Fail '首次安装需要对外基址，例如：0-install.cmd http://192.168.1.10:8080' }
+    if ($BaseUrl -eq '') { Fail '首次安装需要对外基址，例如：0-install.cmd http://localhost:8080' }
     & (Join-Path $PSScriptRoot 'init-env.ps1') -BaseUrl $BaseUrl -DeployRoot $layout.Root
     Fail '请先编辑上面的 app.env：填写 PTMCP_METADATA_* 元库连接，再重新运行 0-install.cmd。'
 }

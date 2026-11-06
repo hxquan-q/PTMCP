@@ -21,7 +21,8 @@
 - **布局**：`releases/<version>/` + `shared/config/app.env` + `current`；
   配置与密钥外置，升级不覆盖。运行期产物在 `run/`、`logs/`、`temp/`。
 - **配置**：单一 `app.env`，启动脚本按应用展开为 `PTMCP_ADMIN_*` /
-  `PTMCP_AUTHZ_*` / `PTMCP_GATEWAY_*`，映射与 `deploy/compose.yaml` 完全一致。
+  `PTMCP_AUTHZ_*` / `PTMCP_GATEWAY_*`，对应相同的应用属性；Compose 另有自动账号分权步骤，
+  原生包仍需 DBA 配置外部元库权限，不包含该步骤。
 - **端口**：nginx 对外 `8080`；admin/authz/gateway 分别 `18080/18081/18082`，
   只监听 `127.0.0.1`。
 - **归属**：启停只操作本包启动记录中的进程（PID + 启动时间 + 命令行标记），
@@ -35,7 +36,7 @@ Linux：
 
 ```bash
 tar -xzf ptmcp-<version>-linux.tar.gz && cd ptmcp-<version>-linux
-./install.sh http://<主机>:8080     # 生成配置后退出
+./install.sh http://localhost:8080     # 生成配置后退出
 vi shared/config/app.env            # 填元库连接
 ./install.sh                        # 预检 → 迁移 → 启动
 ```
@@ -43,7 +44,7 @@ vi shared/config/app.env            # 填元库连接
 Windows：
 
 ```cmd
-0-install.cmd http://<主机>:8080
+0-install.cmd http://localhost:8080
 notepad shared\config\app.env
 0-install.cmd
 ```
@@ -85,3 +86,9 @@ deploy/native/
 - 管理员账号播种、数据库自动发现、依赖自动安装尚未实现（后续切片）。
 - 未提供 systemd/Windows 服务注册、自动升级与回滚。
 - 仅 HTTP 示例；HTTPS 需自行终止 TLS 并调整基址与 Cookie 标志。
+
+OAuth 基址必须是无路径、凭证、query 和 fragment 的 HTTPS URL，或主机严格为
+`localhost`、`127.0.0.1`、`[::1]` 的 HTTP URL；不接受局域网 HTTP。
+直接 HTTP 的监听端口由基址推导（省略端口为 80）；HTTPS 基址需要外部 TLS 入口，
+生成的 nginx 内部 HTTP 监听仍为 8080，外部端口由 TLS 入口发布。
+业务端口白名单未配置时为 `3306,5432`，显式空值拒绝全部；CIDR 空值也拒绝全部。

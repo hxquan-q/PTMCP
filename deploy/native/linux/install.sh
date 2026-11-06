@@ -63,7 +63,7 @@ CONFIG=$ROOT/shared/config/app.env
 if [ -f "$CONFIG" ]; then
   echo "  已存在，保留：$CONFIG"
 else
-  [ -n "$BASE" ] || fail_exit "首次安装需要对外基址，例如：./install.sh http://192.168.1.10:8080"
+  [ -n "$BASE" ] || fail_exit "首次安装需要对外基址，例如：./install.sh http://localhost:8080"
   "$REL/scripts/init-env.sh" "$BASE" || fail_exit '生成配置失败'
   echo
   echo '  请先编辑上面的 app.env：填写 PTMCP_METADATA_* 元库连接，再重新运行 install.sh。'

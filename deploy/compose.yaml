@@ -18,6 +18,29 @@ x-app: &app
     - no-new-privileges:true
 
 services:
+  # 宿主文件保持 0600；准备步骤在应用/数据库专属卷内设置匹配的 UID。
+  prepare-secrets:
+    image: mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69
+    user: "0:0"
+    restart: "no"
+    read_only: true
+    network_mode: none
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: ["no-new-privileges:true"]
+    entrypoint: ["bash", "/prepare-secrets.sh"]
+    secrets:
+      - mysql_root_password
+      - mysql_migrate_password
+      - mysql_admin_password
+      - mysql_authz_password
+      - mysql_gateway_password
+      - oauth_signing_key
+    volumes:
+      - ./docker/prepare-secrets.sh:/prepare-secrets.sh:ro
+      - mysql-secrets:/mysql-secrets
+      - authz-key:/authz-key
+
   mysql:
     image: mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69
     restart: unless-stopped
@@ -26,18 +49,19 @@ services:
       - --collation-server=utf8mb4_0900_ai_ci
     environment:
       MYSQL_DATABASE: ${PTMCP_METADATA_DB_NAME:?deploy/.env 缺少 PTMCP_METADATA_DB_NAME}
-      MYSQL_USER: ${PTMCP_METADATA_DB_USERNAME:?deploy/.env 缺少 PTMCP_METADATA_DB_USERNAME}
-      MYSQL_PASSWORD_FILE: /run/secrets/mysql_app_password
-      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
-    secrets:
-      - mysql_app_password
-      - mysql_root_password
+      MYSQL_USER: ptmcp_migrate
+      MYSQL_PASSWORD_FILE: /mysql-secrets/mysql_migrate_password
+      MYSQL_ROOT_PASSWORD_FILE: /mysql-secrets/mysql_root_password
+    depends_on:
+      prepare-secrets:
+        condition: service_completed_successfully
     volumes:
       - mysql-data:/var/lib/mysql
+      - mysql-secrets:/mysql-secrets:ro
     healthcheck:
       test:
         - CMD-SHELL
-        - MYSQL_PWD="$$(cat /run/secrets/mysql_root_password)" mysqladmin ping -h 127.0.0.1 -uroot --silent
+        - MYSQL_PWD="$$(cat /mysql-secrets/mysql_root_password)" mysqladmin ping -h 127.0.0.1 -uroot --silent
       interval: 10s
       timeout: 5s
       retries: 12
@@ -54,8 +78,8 @@ services:
       - migrate
     environment:
       FLYWAY_URL: ${PTMCP_METADATA_JDBC_URL:?deploy/.env 缺少 PTMCP_METADATA_JDBC_URL}
-      FLYWAY_USER: ${PTMCP_METADATA_DB_USERNAME:?}
-      FLYWAY_PASSWORD: ${PTMCP_METADATA_DB_PASSWORD:?deploy/.env 缺少 PTMCP_METADATA_DB_PASSWORD}
+      FLYWAY_USER: ptmcp_migrate
+      FLYWAY_PASSWORD: ${PTMCP_METADATA_MIGRATION_PASSWORD:?deploy/.env 缺少 PTMCP_METADATA_MIGRATION_PASSWORD}
       FLYWAY_LOCATIONS: filesystem:/flyway/sql
       FLYWAY_CONNECT_RETRIES: "30"
       FLYWAY_CLEAN_DISABLED: "true"
@@ -64,6 +88,26 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+    networks:
+      - data
+
+  # 表级权限只能在迁移建表后授予；失败时应用保持未启动。
+  configure-db:
+    image: mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69
+    user: "999:999"
+    restart: "no"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    entrypoint: ["bash", "/configure-db.sh"]
+    environment:
+      MYSQL_DATABASE: ${PTMCP_METADATA_DB_NAME:?}
+    volumes:
+      - ./docker/mysql-accounts.sh:/configure-db.sh:ro
+      - mysql-secrets:/mysql-secrets:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     networks:
       - data
 
@@ -77,20 +121,20 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
-      migrate:
+      configure-db:
         condition: service_completed_successfully
     environment:
       PTMCP_ADMIN_DATASOURCE_URL: ${PTMCP_METADATA_JDBC_URL:?}
-      PTMCP_ADMIN_DATASOURCE_USERNAME: ${PTMCP_METADATA_DB_USERNAME:?}
-      PTMCP_ADMIN_DATASOURCE_PASSWORD: ${PTMCP_METADATA_DB_PASSWORD:?}
+      PTMCP_ADMIN_DATASOURCE_USERNAME: ptmcp_admin
+      PTMCP_ADMIN_DATASOURCE_PASSWORD: ${PTMCP_METADATA_ADMIN_PASSWORD:?}
       PTMCP_ADMIN_IDENTITY_DATASOURCE_URL: ${PTMCP_METADATA_JDBC_URL:?}
-      PTMCP_ADMIN_IDENTITY_DATASOURCE_USERNAME: ${PTMCP_METADATA_DB_USERNAME:?}
-      PTMCP_ADMIN_IDENTITY_DATASOURCE_PASSWORD: ${PTMCP_METADATA_DB_PASSWORD:?}
+      PTMCP_ADMIN_IDENTITY_DATASOURCE_USERNAME: ptmcp_admin
+      PTMCP_ADMIN_IDENTITY_DATASOURCE_PASSWORD: ${PTMCP_METADATA_ADMIN_PASSWORD:?}
       PTMCP_ADMIN_AUDITKEY: ${PTMCP_AUDIT_KEY:?deploy/.env 缺少 PTMCP_AUDIT_KEY}
       PTMCP_ADMIN_CREDENTIALKEY: ${PTMCP_CREDENTIAL_KEY:?deploy/.env 缺少 PTMCP_CREDENTIAL_KEY}
       PTMCP_ADMIN_COOKIESECURE: ${PTMCP_ADMIN_COOKIE_SECURE:?}
       PTMCP_ADMIN_DATASOURCE_ALLOWEDCIDRS: ${PTMCP_BUSINESS_ALLOWED_CIDRS:-}
-      PTMCP_ADMIN_DATASOURCE_ALLOWEDPORTS: ${PTMCP_BUSINESS_ALLOWED_PORTS:?}
+      PTMCP_ADMIN_DATASOURCE_ALLOWEDPORTS: ${PTMCP_BUSINESS_ALLOWED_PORTS-3306,5432}
       PTMCP_MCP_URL: ${PTMCP_MCP_URL:?}
     mem_limit: 768m
     networks:
@@ -107,19 +151,21 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
-      migrate:
+      configure-db:
+        condition: service_completed_successfully
+      prepare-secrets:
         condition: service_completed_successfully
     environment:
       PTMCP_AUTHZ_DB_URL: ${PTMCP_METADATA_JDBC_URL:?}
-      PTMCP_AUTHZ_DB_USERNAME: ${PTMCP_METADATA_DB_USERNAME:?}
-      PTMCP_AUTHZ_DB_PASSWORD: ${PTMCP_METADATA_DB_PASSWORD:?}
+      PTMCP_AUTHZ_DB_USERNAME: ptmcp_authz
+      PTMCP_AUTHZ_DB_PASSWORD: ${PTMCP_METADATA_AUTHZ_PASSWORD:?}
       PTMCP_OAUTH_ENABLED: ${PTMCP_OAUTH_ENABLED:?}
       PTMCP_OAUTH_ISSUER: ${PTMCP_OAUTH_ISSUER:?}
       PTMCP_OAUTH_AUDIENCE: ${PTMCP_OAUTH_AUDIENCE:?}
-      PTMCP_OAUTH_SIGNING_KEY_FILE: /run/secrets/oauth_signing_key
+      PTMCP_OAUTH_SIGNING_KEY_FILE: /var/lib/ptmcp/signing/oauth-signing.pem
       PTMCP_AS_COOKIE_SECURE: ${PTMCP_AS_COOKIE_SECURE:?}
-    secrets:
-      - oauth_signing_key
+    volumes:
+      - authz-key:/var/lib/ptmcp/signing:ro
     mem_limit: 768m
     networks:
       - edge
@@ -135,13 +181,13 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
-      migrate:
+      configure-db:
         condition: service_completed_successfully
     environment:
       PTMCP_GATEWAY_ENABLED: ${PTMCP_GATEWAY_ENABLED:?}
       PTMCP_GATEWAY_METADATAURL: ${PTMCP_METADATA_JDBC_URL:?}
-      PTMCP_GATEWAY_METADATAUSERNAME: ${PTMCP_METADATA_DB_USERNAME:?}
-      PTMCP_GATEWAY_METADATAPASSWORD: ${PTMCP_METADATA_DB_PASSWORD:?}
+      PTMCP_GATEWAY_METADATAUSERNAME: ptmcp_gateway
+      PTMCP_GATEWAY_METADATAPASSWORD: ${PTMCP_METADATA_GATEWAY_PASSWORD:?}
       PTMCP_GATEWAY_CREDENTIALKEY: ${PTMCP_CREDENTIAL_KEY:?}
       PTMCP_GATEWAY_AUDITKEY: ${PTMCP_AUDIT_KEY:?}
       PTMCP_GATEWAY_WALKEY: ${PTMCP_GATEWAY_WAL_KEY:?deploy/.env 缺少 PTMCP_GATEWAY_WAL_KEY}
@@ -152,7 +198,7 @@ services:
       PTMCP_GATEWAY_JWKSURI: ${PTMCP_GATEWAY_JWKS_URI:?}
       PTMCP_GATEWAY_RESOURCEMETADATAURI: ${PTMCP_GATEWAY_RESOURCE_METADATA_URI:?}
       PTMCP_GATEWAY_ALLOWEDCIDRS: ${PTMCP_BUSINESS_ALLOWED_CIDRS:-}
-      PTMCP_GATEWAY_ALLOWEDPORTS: ${PTMCP_BUSINESS_ALLOWED_PORTS:?}
+      PTMCP_GATEWAY_ALLOWEDPORTS: ${PTMCP_BUSINESS_ALLOWED_PORTS-3306,5432}
     volumes:
       - gateway-wal:/var/lib/ptmcp/wal
     mem_limit: 1g
@@ -185,6 +231,8 @@ services:
 
 volumes:
   mysql-data:
+  mysql-secrets:
+  authz-key:
   gateway-wal:
 
 networks:
@@ -196,7 +244,13 @@ networks:
 secrets:
   mysql_root_password:
     file: ./secrets/mysql_root.txt
-  mysql_app_password:
-    file: ./secrets/mysql_app.txt
+  mysql_migrate_password:
+    file: ./secrets/mysql_migrate.txt
+  mysql_admin_password:
+    file: ./secrets/mysql_admin.txt
+  mysql_authz_password:
+    file: ./secrets/mysql_authz.txt
+  mysql_gateway_password:
+    file: ./secrets/mysql_gateway.txt
   oauth_signing_key:
     file: ./secrets/oauth-signing.pem

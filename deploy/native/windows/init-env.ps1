@@ -13,8 +13,8 @@ $ErrorActionPreference = 'Stop'
 
 $layout = Resolve-PtmcpLayout -ScriptDir $PSScriptRoot -DeployRoot $DeployRoot
 Import-Module $layout.Module -Force
-if ($BaseUrl -notmatch '^https?://') { throw "基址必须以 http:// 或 https:// 开头：$BaseUrl" }
-$BaseUrl = $BaseUrl.TrimEnd('/')
+$baseSettings = Get-PtmcpBaseSettings $BaseUrl
+$BaseUrl = $baseSettings.BaseUrl
 
 $config = $layout.Config
 if ((Test-Path -LiteralPath $config) -and -not $Force) {
@@ -24,7 +24,18 @@ if ((Test-Path -LiteralPath $config) -and -not $Force) {
 $openssl = Get-Command openssl -ErrorAction SilentlyContinue
 if ($null -eq $openssl) { throw '需要 openssl 生成 OAuth 签名私钥；请安装 Git for Windows 或 Win64 OpenSSL 后重试' }
 
-foreach ($d in @('shared\config\secrets', 'shared\data\wal', 'run', 'logs', 'temp')) {
+$configDir = Join-Path $layout.Root 'shared\config'
+New-Item -ItemType Directory -Force -Path $configDir | Out-Null
+Set-PtmcpSecretAcl $configDir
+$secretDir = Join-Path $configDir 'secrets'
+New-Item -ItemType Directory -Force -Path $secretDir | Out-Null
+Set-PtmcpSecretAcl $secretDir
+$keyFile = Join-Path $secretDir 'oauth-signing.pem'
+# -Force 可能覆盖旧文件；显式旧 ACL 也必须先收紧，不能只依靠父目录继承。
+foreach ($path in @($config, $keyFile)) {
+    if (Test-Path -LiteralPath $path) { Set-PtmcpSecretAcl $path }
+}
+foreach ($d in @('shared\data\wal', 'run', 'logs', 'temp')) {
     New-Item -ItemType Directory -Force -Path (Join-Path $layout.Root $d) | Out-Null
 }
 
@@ -38,7 +49,6 @@ function New-PtmcpSecret {
 $credentialKey = New-PtmcpSecret
 $auditKey = New-PtmcpSecret
 $walKey = New-PtmcpSecret
-$keyFile = Join-Path $layout.Root 'shared\config\secrets\oauth-signing.pem'
 $pem = Invoke-PtmcpProcess -FilePath $openssl.Source -Arguments @(
     'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:2048', '-out', $keyFile)
 if ($pem.ExitCode -ne 0) { throw "生成 OAuth 签名私钥失败：$($pem.Error)" }
@@ -49,6 +59,7 @@ if ($BaseUrl -match '^https://') { $cookieSecure = 'true' }
 $tpl = Join-Path $layout.Release 'scripts\app.env.example'
 if (-not (Test-Path -LiteralPath $tpl)) { throw "缺少模板：$tpl" }
 $text = Get-Content -LiteralPath $tpl -Raw
+$text = $text.Replace('@HTTP_PORT@', "$($baseSettings.HttpPort)")
 $text = $text.Replace('@PUBLIC_BASE_URL@', $BaseUrl)
 $text = $text.Replace('@COOKIE_SECURE@', $cookieSecure)
 $text = $text.Replace('@CREDENTIAL_KEY@', $credentialKey)

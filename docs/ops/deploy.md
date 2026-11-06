@@ -4,6 +4,10 @@
 
 依据：[总体方案](../总体方案.md)、[基础设施设计](../architecture/infra.md)与 [运维手册](operation-manual.md)。本文是生产部署目标与退出条件，不是已验证的一键部署指南。仓库已有开发环境与元库迁移源码，但不等于已交付生产镜像、生产 Compose/Helm 清单或经过演练的发布迁移包；Reference 启动脚本不能作为 PTMCP 部署产物。下方端口为早期部署设计值，与本机工程默认端口不同，实施时须由实际配置和发布清单核定。
 
+当前已有 [Compose 源码候选](../../deploy/README.md)与[原生包源码候选](../../deploy/native/README.md)，
+本轮修复及运行验证以[部署评审工作项](../../tasks/work-items/DEV-20261106-deploy-review-fixes.md)为准。
+这些实现与定向验证不代表本手册的生产、真实客户端、性能或恢复退出条件已经满足。
+
 ## 1. 一期部署拓扑
 
 一期采用Linux VM或Docker Compose管理的固定实例。Kubernetes为后续容量/高可用选项，不能把尚未编写的Chart列为现成能力。三Boot进程独立运行、独立安全链、独立服务账号；不将admin与gateway合并为一个JVM。

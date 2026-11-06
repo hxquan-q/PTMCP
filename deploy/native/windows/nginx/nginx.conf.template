@@ -1,23 +1,23 @@
 # PTMCP 单机入口（由 Platform.Runtime.psm1 渲染到 <部署根>\run\nginx.conf）。
 # 三个后端只监听 127.0.0.1；对外只暴露本文件的端口。
 worker_processes 1;
-pid @RUN_DIR@/nginx.pid;
-error_log @LOG_DIR@/nginx-error.log warn;
+pid "@RUN_DIR@/nginx.pid";
+error_log "@LOG_DIR@/nginx-error.log" warn;
 
 events {
     worker_connections 1024;
 }
 
 http {
-    include @NGINX_DIR@/mime.types;
+    include "@NGINX_DIR@/mime.types";
     default_type application/octet-stream;
-    access_log @LOG_DIR@/nginx-access.log;
+    access_log "@LOG_DIR@/nginx-access.log";
 
-    client_body_temp_path @TEMP_DIR@/client_temp;
-    proxy_temp_path @TEMP_DIR@/proxy_temp;
-    fastcgi_temp_path @TEMP_DIR@/fastcgi_temp;
-    uwsgi_temp_path @TEMP_DIR@/uwsgi_temp;
-    scgi_temp_path @TEMP_DIR@/scgi_temp;
+    client_body_temp_path "@TEMP_DIR@/client_temp";
+    proxy_temp_path "@TEMP_DIR@/proxy_temp";
+    fastcgi_temp_path "@TEMP_DIR@/fastcgi_temp";
+    uwsgi_temp_path "@TEMP_DIR@/uwsgi_temp";
+    scgi_temp_path "@TEMP_DIR@/scgi_temp";
 
     sendfile on;
     server_tokens off;
@@ -25,7 +25,7 @@ http {
 
     server {
         listen @HTTP_PORT@;
-        root @FRONTEND_DIR@;
+        root "@FRONTEND_DIR@";
         index index.html;
 
         add_header X-Content-Type-Options nosniff always;
@@ -41,7 +41,7 @@ http {
         location /backend/admin/ {
             proxy_pass http://127.0.0.1:@ADMIN_PORT@/;
             proxy_http_version 1.1;
-            proxy_set_header Host $host;
+            proxy_set_header Host $http_host;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
             proxy_read_timeout 130s;
@@ -53,7 +53,7 @@ http {
         location /backend/authz/ {
             proxy_pass http://127.0.0.1:@AUTHZ_PORT@/;
             proxy_http_version 1.1;
-            proxy_set_header Host $host;
+            proxy_set_header Host $http_host;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
             proxy_read_timeout 130s;
@@ -65,7 +65,7 @@ http {
         location /backend/gateway/ {
             proxy_pass http://127.0.0.1:@GATEWAY_PORT@/;
             proxy_http_version 1.1;
-            proxy_set_header Host $host;
+            proxy_set_header Host $http_host;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
             proxy_read_timeout 130s;
@@ -77,7 +77,24 @@ http {
         location /oauth/ {
             proxy_pass http://127.0.0.1:@AUTHZ_PORT@;
             proxy_http_version 1.1;
-            proxy_set_header Host $host;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Spring Security 表单端点不在 /oauth/ 前缀下。
+        location = /login {
+            proxy_pass http://127.0.0.1:@AUTHZ_PORT@;
+            proxy_http_version 1.1;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location = /logout {
+            proxy_pass http://127.0.0.1:@AUTHZ_PORT@;
+            proxy_http_version 1.1;
+            proxy_set_header Host $http_host;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
@@ -85,7 +102,7 @@ http {
         location /oauth2/ {
             proxy_pass http://127.0.0.1:@AUTHZ_PORT@;
             proxy_http_version 1.1;
-            proxy_set_header Host $host;
+            proxy_set_header Host $http_host;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
@@ -94,7 +111,7 @@ http {
         location = /.well-known/oauth-protected-resource {
             proxy_pass http://127.0.0.1:@GATEWAY_PORT@;
             proxy_http_version 1.1;
-            proxy_set_header Host $host;
+            proxy_set_header Host $http_host;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
@@ -102,7 +119,7 @@ http {
         location /.well-known/ {
             proxy_pass http://127.0.0.1:@AUTHZ_PORT@;
             proxy_http_version 1.1;
-            proxy_set_header Host $host;
+            proxy_set_header Host $http_host;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
@@ -111,7 +128,7 @@ http {
         location /mcp {
             proxy_pass http://127.0.0.1:@GATEWAY_PORT@;
             proxy_http_version 1.1;
-            proxy_set_header Host $host;
+            proxy_set_header Host $http_host;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
             proxy_read_timeout 130s;

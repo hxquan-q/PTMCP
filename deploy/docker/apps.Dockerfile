@@ -23,8 +23,11 @@ RUN pnpm build:oauth
 FROM ${MAVEN_IMAGE} AS build
 WORKDIR /build
 COPY ptmcp-parent/ ./
+# 父 POM 按项目根的 ../config/quality 解析质量配置。
+COPY config/quality/ /config/quality/
+# skipTests 保留下游测试依赖的 test-jar；maven.test.skip 会让干净 reactor 缺少夹具。
 RUN --mount=type=cache,target=/root/.m2 \
-    mvn -B -Dmaven.test.skip=true -pl ptmcp-admin,ptmcp-authz,ptmcp-gateway -am package
+    mvn -B -DskipTests -pl ptmcp-admin,ptmcp-authz,ptmcp-gateway -am package
 # -plain.jar 不匹配该通配，避免把不可执行包带进镜像。
 RUN mkdir -p /out \
  && cp ptmcp-admin/target/ptmcp-admin-*-SNAPSHOT.jar /out/admin.jar \
