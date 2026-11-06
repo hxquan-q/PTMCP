@@ -137,7 +137,7 @@ export interface MetadataColumn {
 
 export interface MetadataObject {
   id: string;
-  datasourceId: string;
+  datasourceId?: string;
   namespaceId: string;
   databaseName: string;
   schemaName: string | null;
@@ -182,11 +182,12 @@ export interface MetadataPage {
   nextCursor: string | null;
 }
 
-function adaptMetadataObject(dto: MetadataObject & { id: string | number }): MetadataObject {
+function adaptMetadataObject(dto: MetadataObject & { id: string | number; datasourceId?: string | number }): MetadataObject {
+  const datasourceId = dto.datasourceId == null || dto.datasourceId === '' ? undefined : identifier(dto.datasourceId);
   return {
     ...dto,
     id: identifier(dto.id),
-    datasourceId: identifier(dto.datasourceId as string | number),
+    datasourceId,
     namespaceId: identifier(dto.namespaceId as string | number),
     generation: String(dto.generation),
     // 字典列读模型统一为 name/displayName；写入 DTO（columnName/title）在服务端保存，读取时归一。
