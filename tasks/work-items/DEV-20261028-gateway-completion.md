@@ -943,3 +943,21 @@ WSL 内 dockerd 与证书链正常，改用 WSL 内 TCP 透传 `127.0.0.1:12476 
 **发现 2（产品缺陷，guard）**：SQL guard 对反引号括起的表名解析失败——``SELECT ... FROM `t_mes_labelprint_packing` ``（普通表名）返回 RESOURCE_NOT_FOUND，去掉反引号即成功；与表名字符无关。后果：真实名为 `###` 前缀的表（本库数百张，`#` 是 MySQL 注释起始符，必须加引号才能引用）经 execute_readonly_sql 全部不可查（不加引号被注释截断，加引号 RESOURCE_NOT_FOUND）。catalog/schema 工具可见这些表，形成“可见不可查”的不一致。归属 SQL guard 表名去引号匹配缺失，待排期修复（不影响本次演示的正例）。
 
 **环境残留（可回滚）**：平台 demo(id=1)、用户 mcp_demo(id=2，两张 PAT 已吊销、授权已删)、演示网关实例 `127.0.0.1:28083`（PID 9852，`PTMCP_GATEWAY_ENABLED=true` + credentialKey 覆盖 + 独立 WAL 目录 `.local/dev/wal-demo`，日志 `.local/dev/gateway-demo.log`；常驻 28082 的网关未动，仍按 enabled=false fail-closed）。如需停掉：`taskkill /PID 9852 /F`。
+
+## 2026-11-06 MCP 二轮真机测试：OAuth 全链路打通 + 列绑定大小写缺陷
+
+以拆分提交（42d8185）重建 jar 的演示实例（28083，enabled=true + credentialKey 对齐 admin）完成第二轮端到端测试。环境件测后清理：平台/用户/授权软删，28083 已停，28082 常驻实例以新 jar 恢复原 fail-closed 配置。
+
+**通过的能力（新证据）**：
+
+- 拆分构建回归：initialize / ping / tools/list（4 工具）/ list_datasources / get_table_schema（17 列含业务注释）/ execute_readonly_sql 真实执行；未知工具与缺参均为 -32602；审计行完整。
+- 分页游标：page_size=5 两页翻页零重叠；全量枚举 808 对象分页拉齐。
+- max_rows 截断语义：max_rows=1 于 16 万行表 → rowsReturned=1、truncated=true、truncationReasons=["ROW_LIMIT"]、cellTruncations=[]。
+- **OAuth 授权码全链路（T19-e 首次真实联调）**：机密客户端（client_secret_basic）→ /oauth2/authorize（PKCE S256 + RFC 8707 resource 指示器，两处必填）→ AS 登录（页面渲染 + CSRF 表单）→ 授权码（state 校验一致）→ /oauth2/token 换 AT（600s）+ RT → **JWT 直调 /mcp 成功**（initialize/tools/list/三工具含真实只读查询）；refresh_token 轮换后新 AT 复验通过。
+- 常量 UNION → SQL_UNSUPPORTED、SELECT * → RESULT_TYPE_UNSUPPORTED：均为设计内拒绝，语义清晰。
+
+**发现 3（缺陷，严重度高于发现 2）——guard 列绑定大小写敏感**：`resource_column.column_norm` 全小写（F_id→f_id），SQL 侧标识符未按 MySQL 大小写不敏感语义归一即与 column_norm 精确比较，导致任何非全小写列名的查询全部 `INVALID_ARGUMENT` 拒绝（`SELECT F_id` 拒 / `SELECT f_id` 过 / `SELECT picture`（本就小写）过 / `COUNT(F_id)` 拒 / `COUNT(*)` 过）。本库绝大多数列 CamelCase，等于核心行查询能力对这类库大面积不可用；错误码误导（INVALID_ARGUMENT 而非列相关错误）。证据 requestId：3cb224a2 / f518c3a2 / e2d19040（2026-11-06 audit_log 可查）。
+
+**发现 4（缺陷，中）——AS 登录页 CSP 阻断自身表单**：OAuthPageController 的 React CSP `form-action 'self'` 在真实浏览器（Playwright Chromium 141）拦截同源 /login 的表单提交，登录按钮永久停留"登录中…"。fetch 提交可绕过（本轮协议联调即走 fetch/curl）。需在真实多浏览器复核并修正 CSP 或提交方式。
+
+**已知残留（环境侧）**：平台软删后其 OAuth 客户端行成为孤儿（oauth2_registered_client 三行，AS 按平台状态过滤后不可用）；如需物理清理走运维路径。dev.env 的 credentialKey 不一致（发现 1）仍未修，本轮依旧用环境变量覆盖绕过。
