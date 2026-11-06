@@ -1074,16 +1074,16 @@ final class McpToolService {
     private static PublishedSnapshotReader.Namespace resolveNamespace(
             PublishedSnapshotReader.Published published, String catalog, String schema) {
         boolean postgres = "POSTGRESQL".equals(published.engine());
-        if (postgres && !published.databaseName().equals(catalog)) {
+        if (postgres && !published.databaseName().equalsIgnoreCase(catalog)) {
             throw new DomainException(ErrorCode.RESOURCE_NOT_FOUND);
         }
         for (PublishedSnapshotReader.Namespace namespace : published.namespaces()) {
             if (postgres) {
-                if (namespace.schemaNorm().equals(schema)) {
+                if (namespace.schemaNorm().equalsIgnoreCase(schema)) {
                     return namespace;
                 }
-            } else if (namespace.catalogNorm().equals(catalog)
-                    && namespace.schemaNorm().equals(schema)) {
+            } else if (namespace.catalogNorm().equalsIgnoreCase(catalog)
+                    && namespace.schemaNorm().equalsIgnoreCase(schema)) {
                 return namespace;
             }
         }
@@ -1101,7 +1101,7 @@ final class McpToolService {
     private static PublishedSnapshotReader.TableObject findObject(
             PublishedSnapshotReader.Namespace namespace, String objectName) {
         for (PublishedSnapshotReader.TableObject object : namespace.objects()) {
-            if (object.objectNorm().equals(objectName)) {
+            if (object.objectNorm().equalsIgnoreCase(objectName)) {
                 return object;
             }
         }
@@ -1116,16 +1116,19 @@ final class McpToolService {
                 engine == DatabaseEngine.POSTGRESQL
                         ? published.databaseName()
                         : namespace.catalogNorm();
+        // 快照侧 catalog/schema/object 均为归一小写，SQL 侧保留作者拼写：MySQL 表名按
+        // lower_case_table_names 组合规则解析、PG 未引号标识符折小写，两侧统一小写比较。
+        // 大小写猜错只能命中快照里真实存在的对象，物理拼写错误仍由执行期兜底。
         return key -> {
             ResourceNamespace expected = key.namespace();
             if (expected.engine() != engine
                     || expected.datasourceId().value() != published.datasourceId()
-                    || !expected.catalog().equals(expectedCatalog)
-                    || !expected.schema().equals(namespace.schemaNorm())) {
+                    || !expected.catalog().equalsIgnoreCase(expectedCatalog)
+                    || !expected.schema().equalsIgnoreCase(namespace.schemaNorm())) {
                 return Optional.empty();
             }
             for (PublishedSnapshotReader.TableObject object : namespace.objects()) {
-                if (object.objectNorm().equals(key.objectName())) {
+                if (object.objectNorm().equalsIgnoreCase(key.objectName())) {
                     return Optional.of(
                             new ResourceRef(
                                     key,

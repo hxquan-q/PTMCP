@@ -555,9 +555,17 @@ public final class ColumnBinder {
             return new ResolvedColumn(usage, sources);
         }
 
+        /**
+         * Column lookup against the snapshot catalog's normalized names. Catalog norms are stored
+         * lowercase, while SQL preserves the author's spelling: MySQL column names are always
+         * case-insensitive and PostgreSQL folds unquoted identifiers to lowercase, so matching any
+         * SQL spelling against the norm is dialect-correct. A wrong-case guess can still only bind
+         * to a column that exists in the published snapshot; physical spelling errors fail later at
+         * execution. Output aliases stay exact: they are query-local, not catalog names.
+         */
         private static int indexOf(List<ColumnDef> columns, String name) {
             for (int index = 0; index < columns.size(); index++) {
-                if (columns.get(index).name().equals(name)) {
+                if (columns.get(index).name().equalsIgnoreCase(name)) {
                     return index;
                 }
             }

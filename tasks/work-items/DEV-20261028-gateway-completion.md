@@ -961,3 +961,26 @@ WSL 内 dockerd 与证书链正常，改用 WSL 内 TCP 透传 `127.0.0.1:12476 
 **发现 4（缺陷，中）——AS 登录页 CSP 阻断自身表单**：OAuthPageController 的 React CSP `form-action 'self'` 在真实浏览器（Playwright Chromium 141）拦截同源 /login 的表单提交，登录按钮永久停留"登录中…"。fetch 提交可绕过（本轮协议联调即走 fetch/curl）。需在真实多浏览器复核并修正 CSP 或提交方式。
 
 **已知残留（环境侧）**：平台软删后其 OAuth 客户端行成为孤儿（oauth2_registered_client 三行，AS 按平台状态过滤后不可用）；如需物理清理走运维路径。dev.env 的 credentialKey 不一致（发现 1）仍未修，本轮依旧用环境变量覆盖绕过。
+
+## 2026-11-06 修复：列绑定大小写敏感（发现 3）与相邻标识符比较
+
+**根因**：`ColumnBinder.indexOf` 用 `equals` 精确比较 SQL 标识符与快照 `column_norm`（同步侧统一小写）。MySQL 列名恒大小写不敏感、PG 未引号标识符折小写，CamelCase 列因此全部误拒且报 `INVALID_ARGUMENT`。违反 sql-guard 合同“normalized 由方言 producer/binder 明确提供，不能统一 lower() 后直接判等”的另一半（同步侧仍统一小写，见残留）。
+
+**修复**（比较侧按方言语义归一，快照与物理拼写不动）：
+
+- `ptmcp-guard` `ColumnBinder.indexOf`：列名比较改 `equalsIgnoreCase`，覆盖非限定、别名限定、谓词与聚合参数中的列引用；输出别名保持精确（查询局部名，非目录名）。错误大小写只能绑定快照中真实存在的列，物理拼写错误仍由执行期兜底。
+- `ptmcp-gateway` `McpToolService`：`relationCatalog` 的 catalog/schema/object 比较、`resolveNamespace` 的 `database_name` 入参比较、`findObject` 的 `table_names` 入参比较均改忽略大小写。
+- 测试：`ColumnBinderTest` 新增 3 例（混合大小写列绑定、限定+谓词列绑定、未知列任意拼写仍拒）。
+
+**验证**：
+
+- `ptmcp-guard` 219/219（含新增 3 例）、Spotless/Checkstyle 通过；`ptmcp-gateway` 140/140 通过（首跑 7 个 `McpPgQueryFlowTest` 错误为 PG 容器启动失败的环境抖动，原样重跑全绿）。
+- 真机（重建 jar 的 28083 实例 + 真实 ASD 库）：`SELECT F_id`（原 INVALID_ARGUMENT）→ success；大写表名 `F_TAKE_OVER` → success；`COUNT(F_id)` → success（160482 行）；`t.F_id` 别名限定、WHERE 引用 → success；未知列仍 INVALID_ARGUMENT。7/7 符合预期。
+
+**修复过程新发现（另切片处理，不混入本次提交）**：
+
+- 发现 5：**MySQL 限定表名整体不可用**（大小写无关）。`db.table` 两段式被 JSqlParser 解析为 schema=db，而 `ResourceNamespace` 契约要求 MySQL schema 必须空串 → 构造抛 IllegalArgumentException → binder 记为未解析 → `RESOURCE_NOT_FOUND`；三段式语义修法需同步 `ScopeTableBinder`/`QualifiedRewriter`/`FinalSqlValidator` 且保持 PG 三段等价，须单独切片与双方言测试。
+- 发现 6：**反引号标识符不可用**（表名 `FROM \`t\`...`、列名 `COUNT(\`F_id\`)` 均拒），与限定名同属标识符解析层问题，同切片处理。
+- 发现 4（CSP form-action）复核降级：直达 /login、302 链到 /login、带端口、绝对 action 五种复刻在真实 Chromium 中均**不再拦截**（表单正常提交并渲染错误态）；首次拦截出现在浏览器网络开始劣化的瞬间，判定为环境瞬时误报，暂不修改 CSP，留观察。
+
+**残留**：同步侧仍统一小写 `*_norm`（与合同字面不一致，但比较侧已按方言语义归一，运行行为正确）；`McpPgQueryFlowTest` 容器启动对资源敏感。演示件清理：28083 停、wal-demo 删除、平台 4/用户 4/授权/PAT 已清；用户 3（mcp_demo2）因锁定态删除 409，保留软状态（无授权、无平台、无 PAT）。

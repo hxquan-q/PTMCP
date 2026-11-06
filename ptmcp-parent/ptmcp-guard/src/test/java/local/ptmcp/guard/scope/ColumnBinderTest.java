@@ -118,6 +118,42 @@ class ColumnBinderTest {
     }
 
     @Test
+    void bindsMixedCaseSpellingsAgainstLowercaseCatalogNorms() throws Exception {
+        // 快照目录列名为归一小写；SQL 保留作者拼写。MySQL 列名恒大小写不敏感、
+        // PG 未引号标识符折小写，两侧必须忽略大小写比较，否则 CamelCase 列全部误拒。
+        ColumnBindingResult result = bind("SELECT Customer_Id FROM orders");
+
+        ColumnBinding binding = result.primaryScope().outputs().get(0).sources().get(0);
+        assertEquals(orders, binding.resource());
+        assertEquals(1, binding.ordinal());
+    }
+
+    @Test
+    void bindsMixedCaseQualifiedAndPredicateColumns() throws Exception {
+        ColumnBindingResult result =
+                bind("SELECT s.AMOUNT FROM salary s WHERE s.AMOUNT IS NOT NULL");
+
+        assertTrue(
+                result.primaryScope().bindings().stream()
+                        .anyMatch(
+                                binding ->
+                                        binding.rangeAlias().equals("s") && binding.ordinal() == 1),
+                "qualified and predicate references must bind case-insensitively");
+    }
+
+    @Test
+    void stillRejectsUnknownColumnsRegardlessOfCase() throws Exception {
+        assertThrows(
+                DomainException.class,
+                () -> bind("SELECT no_such_column FROM orders"),
+                "unknown columns stay rejected after case-insensitive matching");
+        assertThrows(
+                DomainException.class,
+                () -> bind("SELECT NO_SUCH_COLUMN FROM orders"),
+                "unknown columns in any spelling stay rejected");
+    }
+
+    @Test
     void resolvesCorrelatedOuterColumnFromTheParentScope() throws Exception {
         ColumnBindingResult result =
                 bind(
