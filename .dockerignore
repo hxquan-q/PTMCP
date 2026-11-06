@@ -1,0 +1,22 @@
+# 构建上下文 = 仓库根。镜像只需要 Maven 源码与 UI 源码，其余全部排除。
+.git
+.gitignore
+.local
+.agents
+.claude
+.vscode
+.idea
+tasks
+research
+Reference
+docs
+deploy/secrets
+deploy/.env
+
+**/target
+**/node_modules
+**/dist
+**/dist-oauth
+**/.vite
+**/*.log
+**/.DS_Store

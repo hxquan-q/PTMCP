@@ -11,6 +11,14 @@ dist-oauth/
 .env
 .env.*
 !.env.example
+# 部署时本地生成的密钥（init-env.sh），永不入库
+deploy/secrets/
+# 原生部署包的构建产物与运行期目录（配置/密钥/日志/临时文件）
+deploy/native/dist/
+deploy/native/**/run/
+deploy/native/**/logs/
+deploy/native/**/temp/
+deploy/native/**/shared/
 # 自治循环运行日志：本机状态，不作为仓库事实；需要留存时另存摘要
 .auto/*.log
 .auto/log.jsonl

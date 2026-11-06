@@ -1,0 +1,202 @@
+# PTMCP 单机生产栈：自托管元库 + 一次性迁移 + 三个 Boot 进程 + 同源入口。
+#
+#   ./init-env.sh http://<对外地址>     # 首次：生成 deploy/.env 与 deploy/secrets/
+#   docker compose up -d --build
+#
+# 所有密钥来自 deploy/.env 与 deploy/secrets/（均被 git 忽略，权限 600）。
+# 变量缺失时 :? 直接报错，不会静默使用默认凭证。
+name: ptmcp
+
+x-app: &app
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  mysql:
+    image: mysql@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    environment:
+      MYSQL_DATABASE: ${PTMCP_METADATA_DB_NAME:?deploy/.env 缺少 PTMCP_METADATA_DB_NAME}
+      MYSQL_USER: ${PTMCP_METADATA_DB_USERNAME:?deploy/.env 缺少 PTMCP_METADATA_DB_USERNAME}
+      MYSQL_PASSWORD_FILE: /run/secrets/mysql_app_password
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+    secrets:
+      - mysql_app_password
+      - mysql_root_password
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - MYSQL_PWD="$$(cat /run/secrets/mysql_root_password)" mysqladmin ping -h 127.0.0.1 -uroot --silent
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    mem_limit: 1g
+    networks:
+      - data
+
+  # 迁移以一次性容器执行：应用进程不持有 DDL 权限，失败时后续服务不会启动。
+  migrate:
+    image: flyway/flyway@sha256:df06535dfd6559ae5f0628c4761013dfa4ea6a30cf6e34294931d8091f55a18f
+    restart: "no"
+    command:
+      - migrate
+    environment:
+      FLYWAY_URL: ${PTMCP_METADATA_JDBC_URL:?deploy/.env 缺少 PTMCP_METADATA_JDBC_URL}
+      FLYWAY_USER: ${PTMCP_METADATA_DB_USERNAME:?}
+      FLYWAY_PASSWORD: ${PTMCP_METADATA_DB_PASSWORD:?deploy/.env 缺少 PTMCP_METADATA_DB_PASSWORD}
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+      FLYWAY_CONNECT_RETRIES: "30"
+      FLYWAY_CLEAN_DISABLED: "true"
+    volumes:
+      - ../ptmcp-parent/ptmcp-persistence/src/main/resources/db/ptmcp-migration:/flyway/sql:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - data
+
+  admin:
+    <<: *app
+    build:
+      context: ..
+      dockerfile: deploy/docker/apps.Dockerfile
+      target: admin
+    image: ptmcp/admin:${PTMCP_IMAGE_TAG:-0.1.0}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      PTMCP_ADMIN_DATASOURCE_URL: ${PTMCP_METADATA_JDBC_URL:?}
+      PTMCP_ADMIN_DATASOURCE_USERNAME: ${PTMCP_METADATA_DB_USERNAME:?}
+      PTMCP_ADMIN_DATASOURCE_PASSWORD: ${PTMCP_METADATA_DB_PASSWORD:?}
+      PTMCP_ADMIN_IDENTITY_DATASOURCE_URL: ${PTMCP_METADATA_JDBC_URL:?}
+      PTMCP_ADMIN_IDENTITY_DATASOURCE_USERNAME: ${PTMCP_METADATA_DB_USERNAME:?}
+      PTMCP_ADMIN_IDENTITY_DATASOURCE_PASSWORD: ${PTMCP_METADATA_DB_PASSWORD:?}
+      PTMCP_ADMIN_AUDITKEY: ${PTMCP_AUDIT_KEY:?deploy/.env 缺少 PTMCP_AUDIT_KEY}
+      PTMCP_ADMIN_CREDENTIALKEY: ${PTMCP_CREDENTIAL_KEY:?deploy/.env 缺少 PTMCP_CREDENTIAL_KEY}
+      PTMCP_ADMIN_COOKIESECURE: ${PTMCP_ADMIN_COOKIE_SECURE:?}
+      PTMCP_ADMIN_DATASOURCE_ALLOWEDCIDRS: ${PTMCP_BUSINESS_ALLOWED_CIDRS:-}
+      PTMCP_ADMIN_DATASOURCE_ALLOWEDPORTS: ${PTMCP_BUSINESS_ALLOWED_PORTS:?}
+      PTMCP_MCP_URL: ${PTMCP_MCP_URL:?}
+    mem_limit: 768m
+    networks:
+      - edge
+      - data
+
+  authz:
+    <<: *app
+    build:
+      context: ..
+      dockerfile: deploy/docker/apps.Dockerfile
+      target: authz
+    image: ptmcp/authz:${PTMCP_IMAGE_TAG:-0.1.0}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      PTMCP_AUTHZ_DB_URL: ${PTMCP_METADATA_JDBC_URL:?}
+      PTMCP_AUTHZ_DB_USERNAME: ${PTMCP_METADATA_DB_USERNAME:?}
+      PTMCP_AUTHZ_DB_PASSWORD: ${PTMCP_METADATA_DB_PASSWORD:?}
+      PTMCP_OAUTH_ENABLED: ${PTMCP_OAUTH_ENABLED:?}
+      PTMCP_OAUTH_ISSUER: ${PTMCP_OAUTH_ISSUER:?}
+      PTMCP_OAUTH_AUDIENCE: ${PTMCP_OAUTH_AUDIENCE:?}
+      PTMCP_OAUTH_SIGNING_KEY_FILE: /run/secrets/oauth_signing_key
+      PTMCP_AS_COOKIE_SECURE: ${PTMCP_AS_COOKIE_SECURE:?}
+    secrets:
+      - oauth_signing_key
+    mem_limit: 768m
+    networks:
+      - edge
+      - data
+
+  gateway:
+    <<: *app
+    build:
+      context: ..
+      dockerfile: deploy/docker/apps.Dockerfile
+      target: gateway
+    image: ptmcp/gateway:${PTMCP_IMAGE_TAG:-0.1.0}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      PTMCP_GATEWAY_ENABLED: ${PTMCP_GATEWAY_ENABLED:?}
+      PTMCP_GATEWAY_METADATAURL: ${PTMCP_METADATA_JDBC_URL:?}
+      PTMCP_GATEWAY_METADATAUSERNAME: ${PTMCP_METADATA_DB_USERNAME:?}
+      PTMCP_GATEWAY_METADATAPASSWORD: ${PTMCP_METADATA_DB_PASSWORD:?}
+      PTMCP_GATEWAY_CREDENTIALKEY: ${PTMCP_CREDENTIAL_KEY:?}
+      PTMCP_GATEWAY_AUDITKEY: ${PTMCP_AUDIT_KEY:?}
+      PTMCP_GATEWAY_WALKEY: ${PTMCP_GATEWAY_WAL_KEY:?deploy/.env 缺少 PTMCP_GATEWAY_WAL_KEY}
+      PTMCP_GATEWAY_WALDIRECTORY: /var/lib/ptmcp/wal
+      PTMCP_GATEWAY_ISSUER: ${PTMCP_GATEWAY_ISSUER:?}
+      PTMCP_GATEWAY_RESOURCE: ${PTMCP_GATEWAY_RESOURCE:?}
+      PTMCP_GATEWAY_RESOURCEURI: ${PTMCP_GATEWAY_RESOURCE_URI:?}
+      PTMCP_GATEWAY_JWKSURI: ${PTMCP_GATEWAY_JWKS_URI:?}
+      PTMCP_GATEWAY_RESOURCEMETADATAURI: ${PTMCP_GATEWAY_RESOURCE_METADATA_URI:?}
+      PTMCP_GATEWAY_ALLOWEDCIDRS: ${PTMCP_BUSINESS_ALLOWED_CIDRS:-}
+      PTMCP_GATEWAY_ALLOWEDPORTS: ${PTMCP_BUSINESS_ALLOWED_PORTS:?}
+    volumes:
+      - gateway-wal:/var/lib/ptmcp/wal
+    mem_limit: 1g
+    networks:
+      - edge
+      - data
+
+  ui:
+    build:
+      context: ..
+      dockerfile: deploy/docker/ui.Dockerfile
+    image: ptmcp/ui:${PTMCP_IMAGE_TAG:-0.1.0}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "${PTMCP_HTTP_PORT:-8080}:8080"
+    depends_on:
+      - admin
+      - authz
+      - gateway
+    mem_limit: 128m
+    networks:
+      - edge
+
+volumes:
+  mysql-data:
+  gateway-wal:
+
+networks:
+  edge:
+  # 元库与迁移只走没有出口的内部网络。
+  data:
+    internal: true
+
+secrets:
+  mysql_root_password:
+    file: ./secrets/mysql_root.txt
+  mysql_app_password:
+    file: ./secrets/mysql_app.txt
+  oauth_signing_key:
+    file: ./secrets/oauth-signing.pem

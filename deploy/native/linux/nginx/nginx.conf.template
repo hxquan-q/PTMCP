@@ -1,0 +1,131 @@
+# PTMCP 单机入口（由 scripts/lib.sh 渲染到 <部署根>/run/nginx.conf）。
+# 三个后端只监听 127.0.0.1；对外只暴露本文件的端口。
+worker_processes auto;
+pid @RUN_DIR@/nginx.pid;
+error_log @LOG_DIR@/nginx-error.log warn;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include @NGINX_DIR@/mime.types;
+    default_type application/octet-stream;
+    access_log @LOG_DIR@/nginx-access.log;
+
+    client_body_temp_path @TEMP_DIR@/client_temp;
+    proxy_temp_path @TEMP_DIR@/proxy_temp;
+    fastcgi_temp_path @TEMP_DIR@/fastcgi_temp;
+    uwsgi_temp_path @TEMP_DIR@/uwsgi_temp;
+    scgi_temp_path @TEMP_DIR@/scgi_temp;
+
+    sendfile on;
+    server_tokens off;
+    client_max_body_size 2m;
+
+    server {
+        listen @HTTP_PORT@;
+        root @FRONTEND_DIR@;
+        index index.html;
+
+        add_header X-Content-Type-Options nosniff always;
+        add_header Referrer-Policy no-referrer always;
+
+        location = /healthz {
+            access_log off;
+            default_type text/plain;
+            return 200 'ok';
+        }
+
+        # 与前端 vite 代理前缀一致：/backend/<app>/ 去前缀转发。
+        location /backend/admin/ {
+            proxy_pass http://127.0.0.1:@ADMIN_PORT@/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_read_timeout 130s;
+        }
+        location = /backend/admin {
+            return 308 /backend/admin/;
+        }
+
+        location /backend/authz/ {
+            proxy_pass http://127.0.0.1:@AUTHZ_PORT@/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_read_timeout 130s;
+        }
+        location = /backend/authz {
+            return 308 /backend/authz/;
+        }
+
+        location /backend/gateway/ {
+            proxy_pass http://127.0.0.1:@GATEWAY_PORT@/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_read_timeout 130s;
+        }
+        location = /backend/gateway {
+            return 308 /backend/gateway/;
+        }
+
+        location /oauth/ {
+            proxy_pass http://127.0.0.1:@AUTHZ_PORT@;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /oauth2/ {
+            proxy_pass http://127.0.0.1:@AUTHZ_PORT@;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # 受保护资源元数据由 gateway 提供，其余 AS 元数据归 authz。
+        location = /.well-known/oauth-protected-resource {
+            proxy_pass http://127.0.0.1:@GATEWAY_PORT@;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /.well-known/ {
+            proxy_pass http://127.0.0.1:@AUTHZ_PORT@;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Agent 的 MCP 入口。
+        location /mcp {
+            proxy_pass http://127.0.0.1:@GATEWAY_PORT@;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_read_timeout 130s;
+        }
+
+        location /assets/ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+            try_files $uri =404;
+        }
+
+        location / {
+            add_header Cache-Control "no-store";
+            try_files $uri $uri/ /index.html;
+        }
+    }
+}
