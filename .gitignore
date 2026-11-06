@@ -33,3 +33,8 @@ ptmcp-ui-react/public/axe.min.js
 .auto/probe-session.sh
 .auto/smoke-clients.sh
 .auto/start-dbg-mysql.sh
+
+# 根目录调试截图（浏览器/Playwright 临时产物）；需留存的证据归档到 docs/evidence/screenshots/<批次>/
+/*.png
+/*.jpg
+/*.jpeg
