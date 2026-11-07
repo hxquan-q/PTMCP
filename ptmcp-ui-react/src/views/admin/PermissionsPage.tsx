@@ -34,7 +34,7 @@ import { useAdminGate } from '../../adminGateContext';
 import { resizeColumns } from './columnResize';
 import { mePortalApi, type PlatformItem } from '../../services/mePortalApi';
 import { listDepartments, listRoles, listUsers, type DepartmentRow, type RoleRow, type UserRow } from '../../services/orgPortalApi';
-import { findNode, fmtStamp, Pane, Resizer, TreeBranch } from './permissions/parts';
+import { findNode, fmtStamp, Pane, Resizer, SkeletonRows, TreeBranch } from './permissions/parts';
 import { GrantsTable, PreviewTable } from './permissions/tables';
 import { SUBJECT_TABS, type SubjectItem } from './permissions/shared';
 import { listAllMetadata } from './permissions/metadataLoader';
@@ -53,6 +53,7 @@ export function PermissionsPage() {
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [metadataError, setMetadataError] = useState('');
   const [subjectsError, setSubjectsError] = useState('');
+  const [subjectsLoading, setSubjectsLoading] = useState(true);
   const [subjectsTick, setSubjectsTick] = useState(0);
   const [grantsError, setGrantsError] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -86,6 +87,7 @@ export function PermissionsPage() {
   useEffect(() => {
     let cancelled = false;
     setSubjectsError('');
+    setSubjectsLoading(true);
     const load = async (): Promise<SubjectItem[]> => {
       if (subjectType === 'USER') {
         const users = await listUsers();
@@ -103,6 +105,7 @@ export function PermissionsPage() {
         if (cancelled) return;
         setSubjects(items);
         setSubjectId(items[0]?.id ?? '');
+        setSubjectsLoading(false);
       })
       .catch(() => {
         if (cancelled) return;
@@ -110,6 +113,7 @@ export function PermissionsPage() {
         setSubjects([]);
         setSubjectId('');
         setSubjectsError('主体目录加载失败，当前无法确认已有的授权对象。');
+        setSubjectsLoading(false);
       });
     return () => {
       cancelled = true;
@@ -301,12 +305,14 @@ export function PermissionsPage() {
   const previewSubjectSupported = subjectType === 'USER';
   const previewTruncated = rawObjectIds.length > 100;
 
-  /* 拖拽分栏 */
+  /* 拖拽分栏：dragIdx 让被拖分隔条常显强调色，并抑制工作区文本选区 */
   const containerRef = useRef<HTMLDivElement>(null);
   const dragState = useRef<{ index: 0 | 1; startX: number; start: [number, number] } | null>(null);
+  const [dragIdx, setDragIdx] = useState<0 | 1 | null>(null);
   const onResizerDown = useCallback(
     (index: 0 | 1) => (e: React.PointerEvent) => {
       dragState.current = { index, startX: e.clientX, start: [...colWidths] as [number, number] };
+      setDragIdx(index);
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
     },
     [colWidths],
@@ -320,6 +326,7 @@ export function PermissionsPage() {
   }, []);
   const onResizerUp = useCallback(() => {
     dragState.current = null;
+    setDragIdx(null);
   }, []);
 
   /** 键盘调宽：方向键按 4% 步进，交由 resizeColumns 钳制在 [14,50]。 */
@@ -371,6 +378,8 @@ export function PermissionsPage() {
 
   const gridCols = focus ? '1fr' : `${colWidths[0]}% 14px ${colWidths[1]}% 14px 1fr`;
   const previewIsFuture = !!previewRequestedAt && new Date(previewRequestedAt).getTime() > Date.now();
+  const previewReadCount = previewResult?.decisions.filter((d) => d.read).length ?? 0;
+  const previewMetaOnlyCount = previewResult?.decisions.filter((d) => d.meta && !d.read).length ?? 0;
   /** datetime-local 的 min：默认给到下一分钟，减少“刚选好就已在过去”的无效提交。 */
   const validToMin = useMemo(() => {
     const d = new Date(Date.now() + 60_000);
@@ -397,6 +406,7 @@ export function PermissionsPage() {
       <div
         ref={containerRef}
         className="perm-workspace"
+        data-dragging={dragIdx !== null ? 'true' : undefined}
         onPointerMove={onResizerMove}
         onPointerUp={onResizerUp}
         style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 0, flex: 1, minHeight: 360 }}
@@ -413,8 +423,10 @@ export function PermissionsPage() {
               <Tabs tabs={SUBJECT_TABS} active={subjectType} onChange={(k) => setSubjectType(k as SubjectType)} />
               <SearchInput value={subjectKeyword} onChange={setSubjectKeyword} placeholder="搜索主体名称或 ID" width="100%" />
             </div>
-            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 8px 8px' }}>
-              {subjectsError ? (
+            <div key={subjectType} className="pane-swap" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 8px 8px' }}>
+              {subjectsLoading ? (
+                <SkeletonRows variant="subjects" rows={4} />
+              ) : subjectsError ? (
                 <div style={{ padding: '8px 6px' }}>
                   <Alert kind="danger" title="主体目录读取失败">
                     {subjectsError}
@@ -444,14 +456,20 @@ export function PermissionsPage() {
                   </button>
                 ))
               )}
-              {!subjectsError && filteredSubjects.length === 0 ? (
+              {!subjectsLoading && !subjectsError && filteredSubjects.length === 0 ? (
                 <EmptyState kind="filtered" title="没有匹配的主体" description="清除搜索词，或到用户、角色、部门页面确认目录内容。" />
               ) : null}
             </div>
           </Pane>
         ) : null}
         {!focus ? (
-          <Resizer onPointerDown={onResizerDown(0)} onNudge={nudgeColumn(0)} value={colWidths[0]} label="调整“授权主体”与“资源范围”栏宽度" />
+          <Resizer
+            onPointerDown={onResizerDown(0)}
+            onNudge={nudgeColumn(0)}
+            value={colWidths[0]}
+            active={dragIdx === 0}
+            label="调整“授权主体”与“资源范围”栏宽度"
+          />
         ) : null}
         {/* ─── 栏 2:资源范围 ─── */}
         {!focus ? (
@@ -476,13 +494,16 @@ export function PermissionsPage() {
               />
             </div>
             <div
+              key={datasourceId}
+              className="pane-swap"
               role="tree"
               aria-label="资源对象树"
+              aria-busy={metadataLoading}
               onKeyDown={onTreeKeyDown}
               style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 8px 8px' }}
             >
               {metadataLoading ? (
-                <p style={{ padding: '12px 14px', fontSize: 13, color: 'var(--ptmcp-text-faint)' }}>加载元数据…</p>
+                <SkeletonRows variant="tree" rows={5} />
               ) : metadataError ? (
                 <div style={{ padding: '8px 6px' }}>
                   <Alert kind="danger" title="资源树读取失败">
@@ -515,7 +536,13 @@ export function PermissionsPage() {
           </Pane>
         ) : null}
         {!focus ? (
-          <Resizer onPointerDown={onResizerDown(1)} onNudge={nudgeColumn(1)} value={colWidths[1]} label="调整“资源范围”与“授权规则”栏宽度" />
+          <Resizer
+            onPointerDown={onResizerDown(1)}
+            onNudge={nudgeColumn(1)}
+            value={colWidths[1]}
+            active={dragIdx === 1}
+            label="调整“资源范围”与“授权规则”栏宽度"
+          />
         ) : null}
         {/* ─── 栏 3:授权规则 ─── */}
         <Pane
@@ -546,7 +573,7 @@ export function PermissionsPage() {
             </>
           }
         >
-          <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+          <div key={`${subjectType}:${subjectId}`} className="pane-swap" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
             {!subjectId ? (
               /* antd Empty 的 children 区是 text-align:center，说明文字左对齐的 Alert 不能塞进 action，独立成行。 */
               <div style={{ padding: '16px 0' }}>
@@ -558,7 +585,9 @@ export function PermissionsPage() {
                 </div>
               </div>
             ) : grantsLoading ? (
-              <p style={{ padding: 20, fontSize: 13, color: 'var(--ptmcp-text-muted)' }}>加载规则中…</p>
+              <div style={{ padding: '4px 16px 12px' }}>
+                <SkeletonRows variant="table" rows={4} />
+              </div>
             ) : grantsError ? (
               <div style={{ padding: 16 }}>
                 <Alert kind="danger" title="规则读取失败">
@@ -604,15 +633,20 @@ export function PermissionsPage() {
             <span>由服务端计算当前选中资源，不执行查询。</span>
           </span>
           <ChevronRightIcon
-            style={{ transform: previewOpen ? 'rotate(90deg)' : undefined, transition: 'transform .15s', color: 'var(--ptmcp-text-faint)' }}
+            style={{
+              transform: previewOpen ? 'rotate(90deg)' : undefined,
+              transition: 'transform var(--ptmcp-dur-fast) ease',
+              color: 'var(--ptmcp-text-faint)',
+            }}
           />
         </button>
-        {previewOpen ? (
+        <div className="perm-preview-body" data-open={previewOpen ? 'true' : 'false'}>
           <div
             id="perm-preview-panel"
             role="region"
             aria-label="有效权限预览"
-            style={{ borderTop: '1px solid var(--ptmcp-border)', padding: '14px 16px' }}
+            className="perm-preview-inner"
+            inert={!previewOpen}
           >
             <div
               style={{
@@ -646,6 +680,7 @@ export function PermissionsPage() {
               </label>
               <Button
                 type="primary"
+                loading={previewLoading}
                 disabled={!previewSubjectSupported || !subjectId || !platformId || !allObjectIds.length || previewLoading || !!encodedObjects.error}
                 title={previewSubjectSupported ? undefined : '服务端预览接口只支持用户主体；角色/部门预览暂不可用'}
                 onClick={() => {
@@ -667,7 +702,7 @@ export function PermissionsPage() {
                     .finally(() => setPreviewLoading(false));
                 }}
               >
-                <BarChartIcon /> {previewLoading ? '计算中…' : '计算有效权限'}
+                <BarChartIcon /> 计算有效权限
               </Button>
             </div>
             {!previewSubjectSupported ? (
@@ -687,7 +722,8 @@ export function PermissionsPage() {
               </div>
             ) : null}
             {previewResult ? (
-              <>
+              /* 以计算时点为 key：每次重新计算让结论整组重新揭示一次 */
+              <div key={`${previewResult.evaluatedAt}:${previewRequestedAt}`} className="perm-preview-result">
                 <p
                   style={{
                     margin: '12px 0 0',
@@ -701,15 +737,19 @@ export function PermissionsPage() {
                 >
                   <span>服务端计算时点 {fmtStamp(previewResult.evaluatedAt)}</span>
                   <span>{previewResult.nextBoundaryAt ? `下一次权限边界 ${fmtStamp(previewResult.nextBoundaryAt)}` : '无待生效的权限边界'}</span>
+                  <span>
+                    共 {previewResult.decisions.length} 项：READ 可读 {previewReadCount} · 仅 META {previewMetaOnlyCount} · 拒绝{' '}
+                    {previewResult.decisions.length - previewReadCount - previewMetaOnlyCount}
+                  </span>
                   {previewIsFuture ? <Badge tone="warning">未来时点模拟，不可据此执行查询</Badge> : null}
                 </p>
                 <div style={{ marginTop: 8 }}>
                   <PreviewTable decisions={previewResult.decisions} metadataObjects={metadataObjects} />
                 </div>
-              </>
+              </div>
             ) : null}
           </div>
-        ) : null}
+        </div>
       </div>
       <Dialog
         open={grantDialogOpen}

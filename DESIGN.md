@@ -667,3 +667,13 @@ Photographs appear inside `{rounded.lg}` frames, never full-bleed and never crop
 - 覆盖层：遮罩淡入、对话框上浮、抽屉侧滑、Toast 上浮、顶栏菜单从右上角弹出。
 - 按钮：主按钮的浮起只用投影与 `translateY`，**禁止** `overflow: hidden` —— 会裁掉 `::after` 的 44px 触控热区。
 - `prefers-reduced-motion: reduce` 下所有动画与过渡压缩到 0.01ms（含 `animation-delay`），计数直接落位。
+
+### 2026-11-07 权限矩阵工作台状态与联动
+
+本轮只升级权限矩阵工作台这一个表面，复用上述令牌与共享层，不改变三栏结构、文案语义与既有事实。
+
+- 三栏载入骨架：主体行（56px 圆形头像 + 两行）、资源树行（缩进线）、规则表行（方形图标 + 两线）几何与终态一致，`skel-block` 1.2s 呼吸、逐块 120ms 错峰，对 AT 隐藏；主体目录加载完成前不再闪现“没有匹配的主体”空态。
+- 三栏联动：切换主体、数据源或退出专注模式时，栏内容以 120ms 淡入重挂载（`pane-swap`），“规则随主体变化”可感知；规则重载期间显示表行骨架。
+- 有效权限预览：面板常驻挂载，`grid-template-rows 0fr↔1fr` 220ms 折叠展开（padding/边框随折叠归零，`visibility` 延迟到收尾，折叠时容器 `inert`）；计算结果以计算时点为 key 整组 220ms `rise-in` 揭示一次，结论行新增事实计数“共 N 项：READ 可读 X · 仅 META Y · 拒绝 Z”；计算按钮挂 antd `loading`。
+- 分栏拖拽：被拖分隔条常显并转 `--ptmcp-blue`，`scaleY(0.75→1)` 增长而非 height 过渡；拖拽期间工作区禁选文本；缺省色从内联移入类规则，修复存量 hover 蓝条被内联色压住不生效的问题。
+- 资源树：chevron 旋转 120ms 过渡，子级展开整组淡入，折叠即时收起。

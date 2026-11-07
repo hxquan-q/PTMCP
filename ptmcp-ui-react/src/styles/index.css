@@ -1521,6 +1521,8 @@ textarea:focus-visible {
 }
 .perm-resizer > span {
   opacity: 0;
+  /* 缺省色放这里而不是内联：hover/active 的强调色类规则才能覆盖 */
+  background: var(--ptmcp-border-strong);
 }
 .perm-resizer:hover > span,
 .perm-resizer:focus-visible > span {
@@ -1543,6 +1545,90 @@ textarea:focus-visible {
 .perm-resizer:hover > span,
 .perm-resizer:focus-visible > span {
   background: var(--ptmcp-blue);
+}
+/* 拖拽进行中：命中分隔条常显并转强调色，工作区禁选文本避免拖动划选 */
+.perm-resizer[data-active='true'] > span {
+  opacity: 1;
+  background: var(--ptmcp-blue);
+}
+.perm-workspace[data-dragging='true'] {
+  user-select: none;
+}
+
+/* 三栏载入骨架：几何与终态行一致，纯装饰、对 AT 隐藏（aria-hidden 由组件负责） */
+.skel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  margin: 6px 0;
+}
+.skel-block {
+  flex: none;
+  border-radius: var(--ptmcp-radius-xs);
+  background: var(--ptmcp-border);
+  animation: ptmcp-skeleton 1.2s ease-in-out infinite;
+}
+.skel-block:nth-child(2) {
+  animation-delay: 120ms;
+}
+.skel-block:nth-child(3) {
+  animation-delay: 240ms;
+}
+@keyframes ptmcp-skeleton {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+/* 栏内容随状态切换（主体/数据源/专注模式）做一次 120ms 淡入，让三栏联动可感知 */
+.pane-swap {
+  animation: ptmcp-fade-in var(--ptmcp-dur-fast) ease both;
+}
+
+/* 资源树展开：子级挂载时整组淡入，折叠即时收起 */
+.tree-children {
+  animation: ptmcp-fade-in var(--ptmcp-dur-fast) ease both;
+}
+
+/* 有效权限预览：常驻挂载，用 grid-rows 0fr↔1fr 过渡展开/折叠；
+   折叠时内容延迟 visibility 收尾，展开时立即可见。 */
+.perm-preview-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--ptmcp-dur-base) var(--ptmcp-ease-out);
+}
+.perm-preview-body[data-open='false'] {
+  grid-template-rows: 0fr;
+}
+.perm-preview-inner {
+  min-height: 0;
+  overflow: hidden;
+  padding: 14px 16px;
+  border-top: 1px solid var(--ptmcp-border);
+  transition:
+    opacity var(--ptmcp-dur-fast) ease,
+    padding var(--ptmcp-dur-base) var(--ptmcp-ease-out);
+}
+.perm-preview-body[data-open='false'] .perm-preview-inner {
+  opacity: 0;
+  visibility: hidden;
+  /* 0fr 只收轨道，padding/边框须一并归零才能完全折叠 */
+  padding-top: 0;
+  padding-bottom: 0;
+  border-top: none;
+  transition:
+    opacity var(--ptmcp-dur-fast) ease,
+    padding var(--ptmcp-dur-base) var(--ptmcp-ease-out),
+    visibility 0s linear var(--ptmcp-dur-base);
+}
+/* 计算结果落地：结论行与决策表整体 rise-in 一次（220ms，区别于页面级 420ms） */
+.perm-preview-result {
+  animation: ptmcp-rise-in var(--ptmcp-dur-base) var(--ptmcp-ease-out) both;
 }
 
 /* ─── 对话框与详情抽屉：遮罩、标题与滚动都归这一层，页面不再各自写定位 ─── */

@@ -61,11 +61,13 @@ export function Resizer({
   onNudge,
   value,
   label,
+  active,
 }: {
   onPointerDown: (e: React.PointerEvent) => void;
   onNudge: (deltaPct: number) => void;
   value: number;
   label: string;
+  active?: boolean;
 }) {
   const pct = Math.round(value);
   return (
@@ -79,6 +81,7 @@ export function Resizer({
       aria-valuetext={`左侧栏 ${pct}%`}
       tabIndex={0}
       className="perm-resizer"
+      data-active={active ? 'true' : undefined}
       onPointerDown={onPointerDown}
       onKeyDown={(e) => {
         if (e.key === 'ArrowLeft') {
@@ -91,7 +94,48 @@ export function Resizer({
       }}
       style={{ cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
     >
-      <span style={{ width: 3, height: 36, borderRadius: 'var(--ptmcp-radius-xs)', background: 'var(--ptmcp-border-strong)' }} />
+      <span
+        style={{
+          width: 3,
+          height: 48,
+          borderRadius: 'var(--ptmcp-radius-xs)',
+          transform: active ? undefined : 'scaleY(0.75)',
+          transition: 'transform var(--ptmcp-dur-fast) ease, background-color var(--ptmcp-dur-fast) ease',
+        }}
+      />
+    </div>
+  );
+}
+
+/** 载入骨架：几何与终态行一致（主体行 56px / 树行 28px / 表行 44px），纯装饰、对 AT 隐藏。 */
+export function SkeletonRows({ variant, rows = 4 }: { variant: 'subjects' | 'tree' | 'table'; rows?: number }) {
+  return (
+    <div aria-hidden style={variant === 'subjects' ? { padding: '0 8px 8px' } : undefined}>
+      {Array.from({ length: rows }, (_, i) =>
+        variant === 'subjects' ? (
+          <div
+            key={i}
+            className="skel-row"
+            style={{ border: '1px solid var(--ptmcp-border)', borderRadius: 'var(--ptmcp-radius-panel)', minHeight: 56, padding: '10px 12px' }}
+          >
+            <span className="skel-block" style={{ width: 32, height: 32, borderRadius: 'var(--ptmcp-radius-circle)' }} />
+            <span style={{ display: 'grid', gap: 6, flex: 1 }}>
+              <span className="skel-block" style={{ width: '48%', height: 12 }} />
+              <span className="skel-block" style={{ width: '34%', height: 10 }} />
+            </span>
+          </div>
+        ) : variant === 'tree' ? (
+          <div key={i} className="skel-row" style={{ padding: '4px 8px', paddingLeft: 8 + (i % 3) * 18, margin: 0 }}>
+            <span className="skel-block" style={{ width: 148 - (i % 3) * 24, height: 10 }} />
+          </div>
+        ) : (
+          <div key={i} className="skel-row" style={{ minHeight: 44, padding: '10px 12px' }}>
+            <span className="skel-block" style={{ width: 24, height: 24, borderRadius: 'var(--ptmcp-radius-control)' }} />
+            <span className="skel-block" style={{ width: 176, height: 12 }} />
+            <span className="skel-block" style={{ width: 64, height: 10, marginLeft: 'auto' }} />
+          </div>
+        ),
+      )}
     </div>
   );
 }
@@ -145,6 +189,7 @@ export function TreeBranch({
             fontSize: 12,
             color: 'var(--ptmcp-text-faint)',
             transform: open ? 'rotate(90deg)' : undefined,
+            transition: 'transform var(--ptmcp-dur-fast) ease',
             visibility: branch ? 'visible' : 'hidden',
           }}
         />
@@ -157,7 +202,7 @@ export function TreeBranch({
         {node.sub ? <Badge tone="neutral">{node.sub}</Badge> : null}
       </button>
       {open && node.children ? (
-        <div role="group">
+        <div role="group" className="tree-children">
           {node.children.map((c) => (
             <TreeBranch
               key={c.key}
